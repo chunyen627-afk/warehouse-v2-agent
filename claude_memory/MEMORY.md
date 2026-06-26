@@ -1,0 +1,10 @@
+- [改完程式碼要列出變更檔案清單](feedback_changelog.md) — 用戶需要變更清單方便更新到 RPI5
+- [長時間訓練 Claude 幫忙跑、但要附給 user 看畫面的 PowerShell 指令](foreground_training_pref.md) — Claude 幫跑 + user 也能 PowerShell tail log 雙保險，避免像 v3.4 第一次空轉 10h
+- [跑完即清的 temp 檔不留檔](cleanup_temp_files.md) — 訓練完 / debug 完 Claude 主動清 `_ft*.log` / `_scan_*.py` 等暫存產物，不佔硬碟
+- [PPT 字體大小 ≥ 12 pt](ppt_font_size_pref.md) — 所有 build_*pptx.py 內 add_row_table / add_code_block / add_kpi_row / set_notes 字級至少 12 pt（之前預設 11 pt 讀者看不清）
+- [PPT 字體中文用微軟正黑體、英文用 Arial](ppt_font_family_pref.md) — 中文 Microsoft JhengHei、英文/數字/code 改用 Arial(不再用 Consolas);下次改 PPT 時把 FONT_EN 換成 "Arial"
+- [倉管 v2 真 Agent 改造](warehouse_v2_project.md) — 新工作區 warehouse_v2/、三金剛+多檔資料層、架構決策與進度
+- [雷:import finetune_local 會直接啟動訓練](finetune_import_triggers_training.md) — 取常數用 regex 解析、絕不 import;loss 落點在 ~/.cache/.../runs tfevents
+- [業界邊緣 Agent 模型尺寸定位](edge_agent_model_size.md) — 主流 3B-8B、270M 是路由器不是決策者;v2.0 架構正是業界正解
+- [改完倉管 CODE 自動重啟 server](feedback_auto_restart_server.md) — 改完 server.py/tools_v2/index.html 後自動 Start-Process 重啟，不等使用者要求
+- [禁止 taskkill/Stop-Process -Name python 重啟 server](feedback_no_kill_python.md) — 會殺 Headroom proxy；只能用 port 8000 找 PID 殺目標程序

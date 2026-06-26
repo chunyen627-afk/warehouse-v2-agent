@@ -1,0 +1,2170 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>倉管助理 Demo</title>
+<style>
+  :root {
+    --bg:        #f5f7fa;
+    --card:      #ffffff;
+    --primary:   #2c5282;   /* 深藍 */
+    --primary-2: #4299e1;   /* 中藍 */
+    --accent:    #ed8936;   /* 出貨橘 */
+    --success:   #38a169;   /* 進貨綠 */
+    --warning:   #e53e3e;   /* 缺貨紅 */
+    --gold:      #d69e2e;   /* TOP 3 金 */
+    --muted:     #718096;
+    --border:    #e2e8f0;
+    --text:      #1a202c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    background: var(--primary);
+    color: white;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.1);
+  }
+  header .icon { font-size: 22px; }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  header .sub { font-size: 12px; opacity: .8; margin-left: auto; }
+
+  #chips-bar {
+    background: white;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chip {
+    flex-shrink: 0;
+    background: white;
+    color: var(--primary);
+    border: 1px solid var(--primary-2);
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .chip:active { transform: scale(.95); }
+  .chip.primary { background: var(--primary); color: white; }
+  .chip.warning { background: var(--warning); color: white; border-color: var(--warning); }
+  .chip.gold    { background: var(--gold);    color: white; border-color: var(--gold); }
+
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .msg {
+    margin-bottom: 14px;
+    max-width: 88%;
+  }
+  .msg.user {
+    margin-left: auto;
+    background: var(--primary-2);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 18px 18px 4px 18px;
+  }
+  .msg.bot {
+    background: white;
+    padding: 12px 14px;
+    border-radius: 18px 18px 18px 4px;
+    border: 1px solid var(--border);
+    white-space: pre-wrap;
+    line-height: 1.6;
+  }
+  .msg.bot.guide { background: #ebf8ff; border-color: var(--primary-2); }
+  .msg.bot.rejected { background: #fff5f5; border-color: var(--warning); color: #742a2a; }
+
+  /* view card */
+  .view-card {
+    margin-top: 8px;
+    padding: 14px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .view-card .kpi {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 6px 0;
+  }
+  .view-card .kpi.warning { color: var(--warning); }
+  .view-card .kpi.success { color: var(--success); }
+  .view-card .label { font-size: 12px; color: var(--muted); }
+  .view-card .label.agent-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .view-card .sub-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* 三倉橫條 */
+  .wh-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .wh-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .wh-bar .wh-name { width: 60px; color: var(--muted); }
+  .wh-bar .bar-track {
+    flex: 1; height: 18px; background: #edf2f7; border-radius: 9px; overflow: hidden;
+  }
+  .wh-bar .bar-fill {
+    height: 100%; background: var(--primary-2);
+    border-radius: 9px; transition: width .4s;
+  }
+  .wh-bar .wh-qty { width: 60px; text-align: right; font-weight: 600; }
+
+  /* 警示表格 */
+  .alert-table {
+    width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px;
+  }
+  .alert-table th { background: #fff5f5; color: var(--warning); padding: 8px; text-align: left; font-weight: 600; }
+  .alert-table td { padding: 8px; border-top: 1px solid var(--border); }
+  .alert-table tr.critical td { background: #fff5f5; }
+  .shortage-bar {
+    height: 8px; background: #edf2f7; border-radius: 4px; overflow: hidden; margin-top: 3px;
+  }
+  .shortage-bar .fill { height: 100%; background: var(--warning); }
+
+  /* 排行榜 */
+  .rank-list { margin-top: 8px; }
+  .rank-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px;
+  }
+  .rank-row:first-child { border-top: none; }
+  .rank-row .num {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #edf2f7; color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px;
+  }
+  .rank-row .num.top1 { background: var(--gold); color: white; }
+  .rank-row .num.top2 { background: #c4b59a; color: white; }
+  .rank-row .num.top3 { background: #b08861; color: white; }
+  .rank-row .name { flex: 1; font-weight: 500; }
+  .rank-row .qty {
+    background: var(--primary-2); color: white;
+    padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: 600;
+  }
+
+  /* 進出條形圖 */
+  .mov-bars { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+  .mov-row { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .mov-row .date { width: 70px; color: var(--muted); }
+  .mov-row .bars { flex: 1; display: flex; gap: 2px; height: 16px; }
+  .mov-row .in-bar  { background: var(--success); border-radius: 2px; }
+  .mov-row .out-bar { background: var(--accent);  border-radius: 2px; }
+  .mov-legend { font-size: 11px; color: var(--muted); margin-top: 6px; display: flex; gap: 12px; }
+  .mov-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+  /* 對比 */
+  .cmp-pair { display: flex; gap: 10px; margin-top: 8px; }
+  .cmp-col {
+    flex: 1; background: #f7fafc; padding: 10px; border-radius: 8px; text-align: center;
+  }
+  .cmp-col.winner { background: #ebf8ff; border: 2px solid var(--primary-2); }
+  .cmp-col .lbl { font-size: 12px; color: var(--muted); }
+  .cmp-col .val { font-size: 20px; font-weight: 700; color: var(--primary); margin-top: 4px; }
+
+  #input-bar {
+    background: white;
+    border-top: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  #input-text {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 10px 14px;
+    font-size: 15px;
+    outline: none;
+    font-family: inherit;
+    resize: none;
+    min-height: 40px;
+    max-height: 80px;
+  }
+  #input-text:focus { border-color: var(--primary-2); }
+  #send-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  #send-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* 麥克風 (Web Speech API) */
+  .mic-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 1px solid var(--border); background: white;
+    cursor: pointer; padding: 0; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .2s, border-color .2s;
+  }
+  .mic-btn svg { width: 22px; height: 22px; fill: var(--muted); }
+  .mic-btn:hover { background: var(--bg); }
+  .mic-btn.recording {
+    background: var(--warning); border-color: var(--warning);
+    animation: mic-pulse 1.2s ease-in-out infinite;
+  }
+  .mic-btn.recording svg { fill: white; }
+  .mic-btn:disabled { opacity: .4; cursor: not-allowed; }
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(229,62,62,.5); }
+    50%      { box-shadow: 0 0 0 8px rgba(229,62,62,0); }
+  }
+  .mic-status {
+    font-size: 12px; color: var(--muted);
+    text-align: center; margin: 4px 0; min-height: 16px;
+  }
+
+  .suggestions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .sug {
+    background: white;
+    border: 1px solid var(--primary-2);
+    color: var(--primary);
+    padding: 5px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .sug:active { transform: scale(.95); }
+
+  /* 連帶備貨 related view */
+  .rel-anchor {
+    font-size: 13px; color: var(--muted); margin-bottom: 4px;
+  }
+  .rel-anchor b { color: var(--text); font-size: 15px; }
+  .rel-item {
+    padding: 10px 0; border-top: 1px solid var(--border);
+  }
+  .rel-item:first-child { border-top: none; }
+  .rel-item .rel-top {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .rel-item .rel-name { font-weight: 600; font-size: 14px; word-break: break-word; }
+  .rel-item .rel-cat { font-size: 11px; color: var(--muted); }
+  .conf-badge {
+    font-size: 12px; font-weight: 700; padding: 2px 8px;
+    border-radius: 10px; cursor: pointer; white-space: nowrap;
+    border: 1px dashed transparent;
+  }
+  .conf-badge:active { transform: scale(.94); }
+  .conf-badge.gold { background: #fffaf0; color: #b7791f; border-color: #d69e2e; }
+  .conf-badge.high { background: #fffaf0; color: #c05621; border-color: #ed8936; }
+  .conf-badge.good { background: #f0fff4; color: #276749; border-color: #38a169; }
+  .conf-badge.mid  { background: #ebf8ff; color: #2c5282; border-color: #4299e1; }
+  .conf-badge.low  { background: #f7fafc; color: #718096; border-color: #cbd5e0; }
+  .conf-badge .tap-hint { font-size: 9px; opacity: .6; margin-left: 2px; }
+  .rel-quip {
+    font-size: 13px; color: #5a6677; margin-top: 4px;
+    font-style: italic; padding-left: 2px;
+  }
+  .rel-quip::before { content: "「"; }
+  .rel-quip::after  { content: "」"; }
+  .rel-stock {
+    font-size: 11px; color: var(--muted); margin-top: 4px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .rel-stock .restock { color: var(--warning); font-weight: 600; }
+  .days-badge {
+    cursor: pointer; color: var(--primary); font-weight: 600;
+    border: 1px dashed var(--primary-2); border-radius: 8px; padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .days-badge:active { transform: scale(.94); }
+  .rel-trend-up   { color: var(--warning); }
+  .rel-trend-down { color: var(--success); }
+  .rel-restock-banner {
+    margin-top: 10px; padding: 10px; background: #fff5f5;
+    border: 1px solid var(--warning); border-radius: 8px;
+    font-size: 13px; color: #742a2a; line-height: 1.5;
+  }
+  .rel-baseline-note {
+    margin-top: 8px; font-size: 11px; color: var(--muted); text-align: center;
+  }
+  /* 點同捆率彈出的算式卡片 */
+  #calc-pop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: none; align-items: center; justify-content: center; z-index: 999;
+    padding: 24px;
+  }
+  #calc-pop.show { display: flex; }
+  .calc-box {
+    background: white; border-radius: 16px; padding: 20px;
+    max-width: 340px; width: 100%; box-shadow: 0 8px 30px rgba(0,0,0,.25);
+  }
+  .calc-box h3 { margin: 0 0 12px; font-size: 16px; color: var(--primary); }
+  .calc-formula {
+    background: #f7fafc; border-radius: 10px; padding: 14px;
+    text-align: center; font-size: 15px; line-height: 1.8; margin: 10px 0;
+  }
+  .calc-formula .big { font-size: 26px; font-weight: 700; color: var(--primary); }
+  .calc-compare {
+    font-size: 13px; color: #5a6677; line-height: 1.7; margin-top: 10px;
+  }
+  .calc-compare .hi { color: var(--warning); font-weight: 700; }
+  .calc-close {
+    margin-top: 16px; width: 100%; padding: 10px; border: none;
+    background: var(--primary); color: white; border-radius: 10px;
+    font-size: 14px; cursor: pointer;
+  }
+
+  /* 鉤子入口 chip(獵奇/八卦/驚喜) */
+  .chip.hook {
+    background: linear-gradient(135deg, #ed8936, #dd6b20);
+    color: white; border-color: #dd6b20;
+  }
+  .chip.hook.purple { background: linear-gradient(135deg, #805ad5, #6b46c1); border-color: #6b46c1; }
+
+  /* ⏰ 到期警示 view + 燈號徽章 */
+  .exp-counts {
+    display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap;
+  }
+  .exp-counts .cnt {
+    font-size: 12px; padding: 4px 10px; border-radius: 12px; font-weight: 600;
+  }
+  .exp-counts .cnt.red    { background: #fff5f5; color: var(--warning); border: 1px solid var(--warning); }
+  .exp-counts .cnt.orange { background: #fffaf0; color: #c05621; border: 1px solid #ed8936; }
+  .exp-counts .cnt.yellow { background: #fffff0; color: #b7791f; border: 1px solid #d69e2e; }
+  .exp-counts .cnt.green  { background: #f0fff4; color: var(--success); border: 1px solid var(--success); }
+  .exp-table {
+    width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px;
+  }
+  .exp-table th {
+    background: #f7fafc; color: var(--muted); padding: 8px; text-align: left;
+    font-weight: 600; font-size: 12px;
+  }
+  .exp-table td { padding: 8px; border-top: 1px solid var(--border); }
+  .exp-table tr.lvl-red    td { background: #fff5f5; }
+  .exp-table tr.lvl-orange td { background: #fffaf0; }
+  .exp-table tr.lvl-yellow td { background: #fffff0; }
+  .exp-table .days {
+    display: inline-block; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+    font-size: 12px; white-space: nowrap;
+  }
+  .exp-table .days.red    { background: var(--warning); color: white; }
+  .exp-table .days.orange { background: #ed8936; color: white; }
+  .exp-table .days.yellow { background: #d69e2e; color: white; }
+  /* 到期徽章(放在 inventory_single / related item 上)*/
+  .exp-badge {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .exp-badge.red    { background: #fff5f5; color: var(--warning); border: 1px dashed var(--warning); }
+  .exp-badge.orange { background: #fffaf0; color: #c05621;        border: 1px dashed #ed8936; }
+  .exp-badge.yellow { background: #fffff0; color: #b7791f;        border: 1px dashed #d69e2e; }
+
+  /* loading dot */
+  .loading-dots { display: inline-flex; gap: 3px; }
+  .loading-dots span {
+    width: 6px; height: 6px; background: var(--muted); border-radius: 50%;
+    animation: bounce 1.2s ease-in-out infinite;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: .15s; }
+  .loading-dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(.5); opacity: .3; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+  /* ── v2 Agent trace（多步浮現）── */
+  .agent-trace { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+  .trace-step {
+    display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
+    background: rgba(120,160,255,.08); border-left: 3px solid var(--accent);
+    border-radius: 6px; font-size: 13px; opacity: 0;
+    animation: traceIn .35s ease forwards;
+  }
+  @keyframes traceIn { from { opacity:0; transform: translateX(-8px);} to {opacity:1; transform:none;} }
+  .ts-icon { font-size: 15px; }
+  .ts-kind { font-weight: 700; color: var(--accent); white-space: nowrap; min-width: 72px; }
+  .ts-detail { color: var(--fg); line-height: 1.6; }
+  .ts-warn { color: var(--danger) !important; font-weight: 600; }
+  .ts-sub { margin: 4px 0 2px 28px; display: flex; flex-direction: column; gap: 2px; }
+  .ts-sub-line { font-size: 12px; color: var(--muted); font-family: monospace; line-height: 1.5; }
+  .ts-sub-line.ts-warn { color: var(--danger) !important; font-weight: 600; }
+  .trace-step.trace-in { opacity: 0; animation: traceIn .35s ease forwards; }
+  .agent-trace { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+  .rca-result { animation: traceIn .4s ease forwards; }
+  .rca-summary {
+    margin-top: 12px; padding: 10px 12px;
+    background: var(--surface2, #f5f5f5); border-left: 3px solid var(--accent);
+    border-radius: 6px; font-size: 13px; line-height: 1.7;
+    animation: traceIn .4s ease forwards;
+  }
+  .tool-call-inline {
+    font-size: 11px; color: var(--muted); margin: 2px 0; opacity: 0.8;
+  }
+  .tool-call-inline code {
+    background: var(--surface2, #f0f0f0); padding: 1px 5px;
+    border-radius: 4px; font-family: monospace; font-size: 11px;
+  }
+  .tool-calls-bar {
+    font-size: 11px; color: var(--muted); padding: 3px 0 4px;
+    border-bottom: 1px solid var(--border, #eee); margin-bottom: 6px;
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .rca-suggest {
+    margin-top: 8px; padding: 10px 12px;
+    background: var(--surface2, #f5f5f5); border-left: 3px solid var(--warning, #e67e22);
+    border-radius: 6px; font-size: 13px; line-height: 1.7;
+    animation: traceIn .4s ease forwards;
+  }
+  /* ── HITL 確認框 ── */
+  .clarify-opts { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 8px; }
+  .clarify-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+  .clarify-num {
+    min-width: 22px; height: 22px; line-height: 22px; text-align: center;
+    background: var(--accent); color: #fff; border-radius: 50%;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .clarify-text { font-size: 14px; color: var(--fg); }
+  .clarify-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .confirm-box { background: rgba(255,180,80,.10); border: 1px solid var(--warn,#ed8936);
+    border-radius: 8px; padding: 12px; }
+  .confirm-msg { font-size: 14px; margin-bottom: 8px; }
+  .confirm-btns { display: flex; gap: 10px; margin-top: 8px; }
+  .cbtn { flex: 1; padding: 10px; border: none; border-radius: 7px; font-size: 14px;
+    font-weight: 700; cursor: pointer; }
+  .cbtn.yes { background: var(--accent); color: #fff; }
+  .cbtn.no  { background: rgba(150,150,150,.2); color: var(--fg); }
+  /* ── Human-in-the-loop 授權卡片 ── */
+  .hitl-card { border-radius: 10px; overflow: hidden; margin: 6px 0;
+    box-shadow: 0 2px 12px rgba(0,0,0,.18); animation: traceIn .25s ease; }
+  .hitl-header { display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; font-weight: 700; font-size: 13px; }
+  .hitl-header.warn  { background: rgba(237,137,54,.18); border-bottom: 2px solid #ed8936; color: #c97a1a; }
+  .hitl-header.danger{ background: rgba(220,53,69,.15);  border-bottom: 2px solid #dc3545; color: #b02535; }
+  .hitl-header.info  { background: rgba(99,179,237,.15); border-bottom: 2px solid #63b3ed; color: #2b6cb0; }
+  .hitl-body  { padding: 12px 14px; font-size: 13px; }
+  .hitl-diff  { display: flex; align-items: center; gap: 10px; margin: 10px 0;
+    padding: 10px; border-radius: 8px; background: rgba(0,0,0,.06); flex-wrap: wrap; }
+  .hitl-before{ color: #e53e3e; font-weight: 700; font-size: 16px; text-decoration: line-through; opacity: .8; }
+  .hitl-arrow { font-size: 18px; color: var(--muted); }
+  .hitl-after { color: #38a169; font-weight: 700; font-size: 16px; }
+  .hitl-meta  { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .hitl-btns  { display: flex; gap: 10px; padding: 12px 14px 14px;
+    border-top: 1px solid var(--border); }
+  .hitl-approve { flex: 1; padding: 11px; border: none; border-radius: 8px;
+    background: #38a169; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: background .15s; }
+  .hitl-approve:hover { background: #2f855a; }
+  .hitl-reject  { flex: 1; padding: 11px; border: none; border-radius: 8px;
+    background: rgba(150,150,150,.18); color: var(--fg); font-size: 14px;
+    font-weight: 700; cursor: pointer; transition: background .15s; }
+  .hitl-reject:hover  { background: rgba(220,53,69,.15); color: #b02535; }
+  /* ── A 波報告預覽 ── */
+  .report-preview { background: rgba(0,0,0,.04); border-radius: 6px; padding: 10px;
+    font-size: 11px; line-height: 1.5; max-height: 260px; overflow: auto;
+    white-space: pre-wrap; margin: 6px 0; font-family: 'Microsoft JhengHei', monospace; }
+  /* ── 主動異常偵測橫幅 ── */
+  .anomaly-bar { background: linear-gradient(135deg,#7a2020,#a13030); color:#fff;
+    border-radius:8px; margin:8px 12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+  .ab-head { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; font-size:14px; }
+  .ab-badges { display:flex; gap:6px; margin-left:auto; }
+  .ab-b { padding:2px 8px; border-radius:10px; font-size:12px; font-weight:700; }
+  .ab-b.crit { background:#fff; color:#a13030; }
+  .ab-b.warn { background:rgba(255,200,80,.95); color:#5a3a00; }
+  .ab-b.info { background:rgba(255,255,255,.25); color:#fff; }
+  .ab-toggle { font-size:11px; opacity:.8; }
+  .ab-list { display:none; padding:0 14px 12px; }
+  .anomaly-bar.open .ab-list { display:block; }
+  .ab-item { display:flex; gap:8px; padding:8px; background:rgba(0,0,0,.18); border-radius:6px; margin-top:6px; font-size:13px; }
+  .ab-dot { width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; }
+  .ab-item.critical .ab-dot { background:#ff5252; }
+  .ab-item.warning .ab-dot { background:#ffc850; }
+  .ab-detail { font-size:11px; opacity:.85; }
+  .ab-more { font-size:11px; opacity:.7; margin-top:6px; text-align:center; }
+  /* ── 能力地圖（教使用者能問什麼）── */
+  .capmap { margin:10px 0; display:flex; flex-direction:column; gap:8px; }
+  .cap-row { background:rgba(120,160,255,.07); border-radius:8px; padding:8px 10px; }
+  .cap-title { font-weight:700; font-size:13px; margin-bottom:6px; color:var(--fg); }
+  .cap-egs { display:flex; flex-wrap:wrap; gap:6px; }
+  .cap-eg { background:var(--card,#fff); border:1px solid var(--accent); color:var(--accent);
+    border-radius:14px; padding:5px 12px; font-size:13px; cursor:pointer; transition:.15s; }
+  .cap-eg:hover { background:var(--accent); color:#fff; }
+  .report-chart { width:100%; border-radius:8px; margin:8px 0; border:1px solid rgba(0,0,0,.08); }
+/* ── 🔔 Alert Panel ── */
+#alert-panel-btn {
+  margin-left: auto; background: none; border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 4px 10px; cursor: pointer;
+  font-size: 15px; position: relative;
+}
+#alert-panel-btn:hover { background: var(--surface2); }
+.alert-badge {
+  position: absolute; top: -4px; right: -4px; background: #e53e3e;
+  color: #fff; border-radius: 50%; font-size: 10px; min-width: 16px;
+  height: 16px; line-height: 16px; text-align: center; padding: 0 3px;
+}
+.alert-panel {
+  position: fixed; top: 0; right: -360px; width: 340px; height: 100vh;
+  background: #ffffff; border-left: 1px solid #d0d7de; color: #24292f;
+  z-index: 1000; display: flex; flex-direction: column;
+  transition: right 0.25s ease; box-shadow: -4px 0 24px rgba(0,0,0,.25);
+}
+.alert-panel.open { right: 0; }
+.alert-panel-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 999;
+}
+.alert-panel-overlay.open { display: block; }
+.alert-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid #d0d7de;
+  font-weight: 600; font-size: 14px; color: #24292f;
+}
+.alert-panel-close {
+  background: none; border: none; color: #57606a; cursor: pointer; font-size: 16px;
+}
+.alert-panel-close:hover { color: #24292f; }
+.alert-panel-body { flex: 1; overflow-y: auto; padding: 12px; background: #f6f8fa; }
+.alert-panel-footer {
+  padding: 10px 16px; border-top: 1px solid #d0d7de; background: #ffffff;
+}
+.alert-check-btn {
+  width: 100%; padding: 8px; background: #f6f8fa; border: 1px solid #d0d7de;
+  color: #24292f; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.alert-check-btn:hover { background: #0969da; color: #fff; border-color: #0969da; }
+.alert-rule-card {
+  background: #ffffff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; position: relative;
+}
+.alert-rule-card.triggered { border-color: #cf222e; }
+.alert-rule-id { font-size: 11px; color: #57606a; font-family: monospace; }
+.alert-rule-cond { font-size: 13px; font-weight: 600; margin: 4px 0 2px; color: #24292f; }
+.alert-rule-scope { font-size: 12px; color: #57606a; }
+.alert-rule-time { font-size: 11px; color: #57606a; margin-top: 4px; }
+.alert-rule-del {
+  position: absolute; top: 8px; right: 8px; background: none; border: none;
+  color: #57606a; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px;
+}
+.alert-rule-del:hover { background: rgba(207,34,46,.1); color: #cf222e; }
+.alert-panel-tabs {
+  display: flex; border-bottom: 1px solid #d0d7de; background: #ffffff;
+}
+.apt {
+  flex: 1; padding: 8px; background: none; border: none; border-bottom: 2px solid transparent;
+  color: #57606a; cursor: pointer; font-size: 12px; transition: all .15s;
+}
+.apt.active { color: #0969da; border-bottom-color: #0969da; font-weight: 600; }
+.apt:hover:not(.active) { color: #24292f; }
+.schedule-card {
+  background: #ffffff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; position: relative;
+}
+.schedule-card-id { font-size: 11px; color: #57606a; font-family: monospace; }
+.schedule-card-label { font-size: 13px; font-weight: 600; margin: 4px 0 2px; color: #24292f; }
+.schedule-card-time { font-size: 12px; color: #0969da; }
+.schedule-card-next { font-size: 11px; color: #57606a; margin-top: 2px; }
+.schedule-card-del {
+  position: absolute; top: 8px; right: 8px; background: none; border: none;
+  color: #57606a; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px;
+}
+.schedule-card-del:hover { background: rgba(207,34,46,.1); color: #cf222e; }
+.schedule-triggered-banner {
+  background: rgba(99,179,237,.10); border: 1px solid #63b3ed; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #90cdf4;
+}
+.alert-triggered-banner {
+  background: rgba(229,62,62,.12); border: 1px solid #e53e3e; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #fc8181;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="icon">📦</span>
+  <h1>倉管助理</h1>
+  <span class="sub" id="snap-date">載入中...</span>
+  <button id="alert-panel-btn" title="警示規則" onclick="toggleAlertPanel()">
+    🔔 <span id="alert-badge" class="alert-badge" style="display:none">0</span>
+  </button>
+</header>
+
+<!-- 右側警示規則 Panel -->
+<div id="alert-panel" class="alert-panel">
+  <div class="alert-panel-header">
+    <span>🔔 警示 &amp; 排程</span>
+    <button onclick="toggleAlertPanel()" class="alert-panel-close">✕</button>
+  </div>
+  <div class="alert-panel-tabs">
+    <button class="apt active" id="tab-alerts" onclick="switchPanelTab('alerts')">⚡ 警示規則</button>
+    <button class="apt" id="tab-schedules" onclick="switchPanelTab('schedules')">⏰ 定時排程</button>
+  </div>
+  <div class="alert-panel-body" id="alert-panel-body">
+    <div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">載入中...</div>
+  </div>
+  <div class="alert-panel-footer" id="alert-panel-footer">
+    <button onclick="triggerAlertCheck()" class="alert-check-btn">⚡ 立即掃描警示</button>
+  </div>
+</div>
+<div id="alert-panel-overlay" class="alert-panel-overlay" onclick="toggleAlertPanel()"></div>
+
+<div id="chips-bar">
+  <!-- 鉤子入口(隨機輪播、勾起好奇)由 JS 動態插入到這 -->
+  <button class="chip primary" data-action="show-inventory-menu">📦 庫存查詢</button>
+  <button class="chip warning" data-action="low-stock-direct">🚨 缺貨警示</button>
+  <button class="chip gold"    data-action="hot-items">🔥 熱銷排行</button>
+  <button class="chip" data-action="show-related-menu" style="border-color:#805ad5;color:#6b46c1">🔗 連帶備貨</button>
+  <button class="chip" data-action="expiring-direct" style="border-color:#dd6b20;color:#c05621">⏰ 到期警示</button>
+  <button class="chip" data-action="agent-menu" style="border-color:#3182ce;color:#fff;background:linear-gradient(135deg,#3182ce,#5a67d8);font-weight:700">🤖 智慧管家</button>
+</div>
+
+<div id="messages"></div>
+
+<!-- 點同捆率彈出的算式說明 -->
+<div id="calc-pop" onclick="if(event.target===this)closeCalc()">
+  <div class="calc-box" id="calc-box"></div>
+</div>
+
+<div class="mic-status" id="mic-status"></div>
+
+<div id="input-bar">
+  <textarea id="input-text" placeholder="試試：藍牙耳機庫存 / 庫存警示 / 本月熱銷..." rows="1"></textarea>
+  <button id="mic-btn" class="mic-btn" title="點擊開始語音輸入" aria-label="語音輸入">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/>
+    </svg>
+  </button>
+  <button id="send-btn">▶</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const messages = $('messages');
+
+// ── 🔔 Alert Panel ──────────────────────────────────────
+let _alertPanelOpen = false;
+
+function toggleAlertPanel() {
+  _alertPanelOpen = !_alertPanelOpen;
+  const panel = $('alert-panel');
+  const overlay = $('alert-panel-overlay');
+  panel.classList.toggle('open', _alertPanelOpen);
+  overlay.classList.toggle('open', _alertPanelOpen);
+  if (_alertPanelOpen) loadAlertPanel();
+}
+
+async function loadAlertPanel() {
+  const body = $('alert-panel-body');
+  body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">載入中...</div>';
+  try {
+    const r = await fetch('/api/alerts');
+    const data = await r.json();
+    renderAlertPanel(data.rules || []);
+  } catch(e) {
+    body.innerHTML = '<div style="color:#e53e3e;font-size:13px;padding:12px">載入失敗</div>';
+  }
+}
+
+function renderAlertPanel(rules) {
+  const body = $('alert-panel-body');
+  const badge = $('alert-badge');
+  const active = rules.filter(r => r.enabled !== false);
+  badge.textContent = active.length;
+  badge.style.display = active.length > 0 ? 'block' : 'none';
+
+  if (active.length === 0) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0">目前沒有警示規則<br><br>試試：「當洗衣精低於安全庫存時通知我」</div>';
+    return;
+  }
+  body.innerHTML = active.map(r => `
+    <div class="alert-rule-card" id="arc-${r.id}">
+      <button class="alert-rule-del" onclick="deleteAlert('${r.id}')" title="刪除">✕</button>
+      <div class="alert-rule-id">${r.id}</div>
+      <div class="alert-rule-cond">⚡ ${r.condition_label || r.condition}</div>
+      <div class="alert-rule-scope">📦 ${r.scope_txt || '全部商品'}</div>
+      <div class="alert-rule-time">建立：${(r.created || '').slice(0,16).replace('T',' ')}</div>
+    </div>
+  `).join('');
+}
+
+async function deleteAlert(ruleId) {
+  if (!confirm(`確定刪除警示規則 ${ruleId}？`)) return;
+  try {
+    const r = await fetch(`/api/alerts/${ruleId}`, {method: 'DELETE'});
+    if (r.ok) loadAlertPanel();
+    else alert('刪除失敗');
+  } catch(e) { alert('刪除失敗：' + e); }
+}
+
+let _currentPanelTab = 'alerts';
+
+function switchPanelTab(tab) {
+  _currentPanelTab = tab;
+  document.querySelectorAll('.apt').forEach(b => b.classList.remove('active'));
+  $('tab-' + tab).classList.add('active');
+  const footer = $('alert-panel-footer');
+  if (tab === 'alerts') {
+    footer.innerHTML = '<button onclick="triggerAlertCheck()" class="alert-check-btn">⚡ 立即掃描警示</button>';
+    loadAlertPanel();
+  } else {
+    footer.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:4px 0">輸入「每天早上9點幫我跑盤點」設定排程</div>';
+    loadSchedulePanel();
+  }
+}
+
+async function loadSchedulePanel() {
+  const body = $('alert-panel-body');
+  body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">載入中...</div>';
+  try {
+    const r = await fetch('/api/schedules');
+    const data = await r.json();
+    renderSchedulePanel(data.jobs || []);
+  } catch(e) {
+    body.innerHTML = '<div style="color:#e53e3e;font-size:13px;padding:12px">載入失敗</div>';
+  }
+}
+
+function renderSchedulePanel(jobs) {
+  const body = $('alert-panel-body');
+  const active = jobs.filter(j => j.enabled !== false);
+  if (active.length === 0) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0">目前沒有定時排程<br><br>輸入「每天早上9點幫我跑盤點」來設定</div>';
+    return;
+  }
+  body.innerHTML = active.map(j => {
+    const lastRun = j.last_run ? j.last_run.slice(0,16).replace('T',' ') : '尚未執行';
+    return `
+    <div class="schedule-card" id="sc-${j.id}">
+      <button class="schedule-card-del" onclick="deleteSchedule('${j.id}')" title="刪除">✕</button>
+      <div class="schedule-card-id">${j.id}</div>
+      <div class="schedule-card-label">⏰ ${j.script_label}</div>
+      <div class="schedule-card-time">${j.freq_label} ${j.time_str} 自動執行</div>
+      <div class="schedule-card-next">上次執行：${lastRun}</div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteSchedule(jobId) {
+  if (!confirm(`確定刪除排程 ${jobId}？`)) return;
+  try {
+    const r = await fetch(`/api/schedules/${jobId}`, {method: 'DELETE'});
+    if (r.ok) loadSchedulePanel();
+    else alert('刪除失敗');
+  } catch(e) { alert('刪除失敗：' + e); }
+}
+
+async function triggerAlertCheck() {
+  const btn = document.querySelector('.alert-check-btn');
+  btn.textContent = '⚡ 掃描中...';
+  btn.disabled = true;
+  try {
+    await fetch('/api/alerts/check', {method: 'POST'});
+    btn.textContent = '✓ 掃描完成';
+    setTimeout(() => { btn.textContent = '⚡ 立即掃描'; btn.disabled = false; }, 2000);
+  } catch(e) {
+    btn.textContent = '⚡ 立即掃描'; btn.disabled = false;
+  }
+}
+
+const CATEGORY_LABEL = {
+  electronics: '電子產品', appliance_kitchen: '家電廚具',
+  food_beverage: '食品飲料', daily_goods: '日用品',
+  apparel: '服飾', sports: '運動用品',
+};
+const WAREHOUSE_LABEL = {
+  north: '北區倉', central: '中區倉', south: '南區倉', all: '全部倉',
+};
+
+let ws = null;
+let wsReconnectTimer = null;
+let isSending = false;
+let currentBotMsg = null;
+let lastBotAnchor = null;   // 最後插入在訊息泡後的元素(卡片)、follow-up 鈕接在它後面
+
+function connectWS() {
+  if (ws) { try { ws.close(); } catch {} }
+  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+  ws.onopen = () => { console.log('[ws] open'); isSending = false; };
+  ws.onclose = () => { console.log('[ws] close'); scheduleReconnect(); };
+  ws.onerror = e => { console.log('[ws] error', e); try { ws.close(); } catch {} };
+  ws.onmessage = ev => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    handleMessage(msg);
+  };
+}
+function scheduleReconnect() {
+  if (wsReconnectTimer) return;
+  if (document.hidden) return;
+  wsReconnectTimer = setTimeout(() => { wsReconnectTimer = null; connectWS(); }, 3000);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    if (ws) { try { ws.close(); } catch {} }
+    setTimeout(connectWS, 100);
+  }
+});
+connectWS();
+
+// ── 主動異常偵測：進站自動拉一次 + 持續接 WS 推播 ──
+function renderAnomalyBanner(data) {
+  const all = data.alerts || [];
+  const counts = data.counts || {};
+  let bar = document.getElementById('anomalyBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'anomalyBar';
+    bar.className = 'anomaly-bar';
+    // 插到訊息區 #messages 的前面（不要碰 body，否則版面壞掉）
+    const host = document.getElementById('messages');
+    if (host && host.parentNode) {
+      host.parentNode.insertBefore(bar, host);
+    } else {
+      return;   // 找不到掛載點就不顯示，絕不破壞頁面
+    }
+  }
+  const crit = counts.critical || 0, warn = counts.warning || 0, info = counts.info || 0;
+  if (crit + warn + info === 0) { bar.style.display = 'none'; return; }
+  const top = all.filter(a => a.level !== 'info').slice(0, 5);
+  bar.style.display = 'block';
+  bar.innerHTML = `
+    <div class="ab-head" onclick="this.parentNode.classList.toggle('open')">
+      <b>⚠ 主動偵測到 ${crit + warn} 項需注意異常</b>
+      <span class="ab-badges">
+        ${crit ? `<span class="ab-b crit">${crit} 嚴重</span>` : ''}
+        ${warn ? `<span class="ab-b warn">${warn} 警告</span>` : ''}
+        ${info ? `<span class="ab-b info">${info} 注意</span>` : ''}
+      </span>
+      <span class="ab-toggle">展開 ▼</span>
+    </div>
+    <div class="ab-list">
+      ${top.map(a => `<div class="ab-item ${a.level}">
+        <span class="ab-dot"></span>
+        <span><b>${a.title}</b><br><span class="ab-detail">${a.detail || ''}</span></span>
+      </div>`).join('')}
+      ${all.filter(a=>a.level!=='info').length > 5 ? `<div class="ab-more">…還有 ${all.filter(a=>a.level!=='info').length - 5} 項</div>` : ''}
+    </div>`;
+}
+function pullAnomalies() {
+  fetch('/anomalies').then(r => r.json()).then(renderAnomalyBanner).catch(() => {});
+}
+setTimeout(pullAnomalies, 1200);   // 進站自動偵測（不靠使用者問）
+
+function appendBot(text, klass) {
+  const div = document.createElement('div');
+  div.className = 'msg bot' + (klass ? ' ' + klass : '');
+  div.textContent = text || '';
+  messages.appendChild(div);
+  scrollBottom();
+  return div;
+}
+function appendUser(text) {
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  div.textContent = text;
+  messages.appendChild(div);
+  scrollBottom();
+}
+function appendLoading() {
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.innerHTML = '<span class="loading-dots"><span></span><span></span><span></span></span>';
+  messages.appendChild(div);
+  scrollBottom();
+  return div;
+}
+function scrollBottom() {
+  requestAnimationFrame(() => { messages.scrollTop = messages.scrollHeight; });
+}
+
+function showSuggestions(items) {
+  if (!currentBotMsg) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'suggestions';
+  items.forEach(it => {
+    const btn = document.createElement('button');
+    btn.className = 'sug';
+    btn.textContent = it.label;
+    btn.onclick = () => {
+      if (it.action) it.action();
+      else if (it.direct_call) sendDirectCall(it.direct_call.function, it.direct_call.args || {});
+      else if (it.query) sendQuery(it.query);
+    };
+    wrap.appendChild(btn);
+  });
+  // 接在「卡片」後面(若有),否則接在訊息泡後面 → 鈕永遠在最下面
+  const anchor = (lastBotAnchor && lastBotAnchor.parentNode) ? lastBotAnchor : currentBotMsg;
+  anchor.parentNode.insertBefore(wrap, anchor.nextSibling);
+  lastBotAnchor = wrap;
+  scrollBottom();
+}
+
+// ── 能力地圖：明白告訴使用者「我懂這 6 類事」，每類給可點範例 ──
+const CAPABILITIES = [
+  { icon:'📦', name:'查庫存 / 進出貨', egs:['藍牙耳機庫存', '這週出倉記錄', '南倉洗衣精多少'] },
+  { icon:'🔍', name:'追查「帳對不上」', egs:['智慧手環怎麼少這麼多', '抗菌洗衣精帳對不上'] },
+  { icon:'⚙️', name:'改設定（要你確認）', egs:['南倉安全庫存全部加30', '現在的補貨前置天數是多少'] },
+  { icon:'📄', name:'產生報告', egs:['幫我出個全倉體檢報告', '出個缺貨報表'] },
+  { icon:'🗂️', name:'看有哪些資料可查', egs:['倉庫裡有哪些紀錄檔'] },
+  { icon:'🚨', name:'缺貨 / 到期 / 熱銷', egs:['缺貨的有哪些', '快到期的有哪些', '這週哪些賣最好'] },
+];
+function renderCapabilityMap() {
+  if (!currentBotMsg) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'capmap';
+  wrap.innerHTML = CAPABILITIES.map(c => `
+    <div class="cap-row">
+      <div class="cap-title">${c.icon} ${c.name}</div>
+      <div class="cap-egs">
+        ${c.egs.map(e => `<button class="cap-eg" data-q="${e}">${e}</button>`).join('')}
+      </div>
+    </div>`).join('');
+  wrap.querySelectorAll('.cap-eg').forEach(b =>
+    b.onclick = () => sendQuery(b.dataset.q));
+  const anchor = (lastBotAnchor && lastBotAnchor.parentNode) ? lastBotAnchor : currentBotMsg;
+  anchor.parentNode.insertBefore(wrap, anchor.nextSibling);
+  lastBotAnchor = wrap;
+  scrollBottom();
+}
+
+// ── 動態引導：讀現在的異常，丟一句「具體可點」的問題（解「想不出要問什麼」）──
+function suggestFromAnomalies() {
+  fetch('/anomalies').then(r => r.json()).then(d => {
+    const alerts = (d.alerts || []).filter(a => a.level !== 'info');
+    if (!alerts.length) return;
+    // 挑最嚴重的一筆，組一句「使用者可以這樣問」的具體引導
+    const a = alerts[0];
+    let q = '', hint = '';
+    if (a.type === 'po_short') {
+      q = `${a.data.name}怎麼少這麼多`;
+      hint = `我發現「${a.data.name}」帳對不上，要不要點我幫你追原因？`;
+    } else if (a.type === 'low_stock') {
+      q = `${a.data.name}的安全庫存是多少`;
+      hint = `「${a.data.name}」快斷貨了（撐 ${a.data.days_left} 天），想看設定嗎？`;
+    } else if (a.type === 'expiry') {
+      q = '快到期的有哪些';
+      hint = `有商品快到期了，要不要看完整到期清單？`;
+    } else {
+      q = '幫我出個全倉體檢報告';
+      hint = '掃到一些異常，要不要我出一份全倉體檢報告？';
+    }
+    const cb = appendBot('💡 ' + hint);
+    showSuggestions([
+      { label: '👉 ' + q, query: q },
+      { label: '📄 出全倉體檢報告', query: '幫我出個全倉體檢報告' },
+    ]);
+    currentBotMsg = null;
+  }).catch(() => {});
+}
+
+// ── 任務拆解進度樹 ──────────────────────────────────────────
+let _taskPlanEl = null;
+
+function renderTaskPlan(steps) {
+  _taskPlanEl = document.createElement('div');
+  _taskPlanEl.className = 'task-plan';
+  _taskPlanEl.style.cssText =
+    'margin:6px 0 4px 12px;padding:8px 12px;border-left:3px solid var(--accent);' +
+    'background:rgba(var(--accent-rgb,99,179,237),.06);border-radius:0 8px 8px 0;' +
+    'font-size:12px;display:flex;flex-direction:column;gap:5px;animation:traceIn .2s ease';
+  const title = document.createElement('div');
+  title.style.cssText = 'font-weight:700;color:var(--accent);margin-bottom:2px;font-size:11px;letter-spacing:.05em';
+  title.textContent = '▸ 任務規劃';
+  _taskPlanEl.appendChild(title);
+  steps.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.id = `task-step-${i}`;
+    row.style.cssText = 'display:flex;align-items:center;gap:7px;color:var(--muted)';
+    row.innerHTML = `<span class="task-chk" style="font-size:13px">⬜</span><span>${s}</span>`;
+    _taskPlanEl.appendChild(row);
+  });
+  if (currentBotMsg) {
+    currentBotMsg.parentNode.insertBefore(_taskPlanEl, currentBotMsg.nextSibling);
+  } else {
+    $('chat').appendChild(_taskPlanEl);
+  }
+  scrollBottom();
+}
+
+function tickTaskStep(index) {
+  if (!_taskPlanEl) return;
+  const row = _taskPlanEl.querySelector(`#task-step-${index}`);
+  if (!row) return;
+  const chk = row.querySelector('.task-chk');
+  if (chk) chk.textContent = '✅';
+  row.style.color = 'var(--fg)';
+  row.style.fontWeight = '500';
+}
+
+const TRACE_KIND = {
+  glob:    { icon: '📂', label: '掃描目錄', color: '#7c9cbf' },
+  grep:    { icon: '🔍', label: '比對關鍵字', color: '#7c9cbf' },
+  read:    { icon: '📄', label: '讀取檔案', color: '#7c9cbf' },
+  reason:  { icon: '🧠', label: '分析結論', color: '#a08c5a' },
+  act:     { icon: '⚙️', label: '執行動作', color: '#5a8c6a' },
+  confirm: { icon: '✅', label: '確認', color: '#5a8c6a' },
+  verify:  { icon: '🔎', label: '驗證', color: '#7c9cbf' },
+};
+
+let _traceContainer = null;  // 目前訊息泡的 trace 容器
+let _pendingToolCalls = [];  // tool_call 訊息暫存，等 card 建好後插入
+let _rcaCardId = null;       // 當次 agent_rca card 的 id，給 round2 handler 用
+
+function appendTraceStep(step) {
+  // 若還沒有 trace 容器，建一個接在目前 bot 訊息後面
+  if (!_traceContainer) {
+    _traceContainer = document.createElement('div');
+    _traceContainer.className = 'agent-trace-live';
+    _traceContainer.style.cssText =
+      'margin:4px 0 4px 12px;padding:6px 10px;border-left:2px solid var(--border);' +
+      'font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;';
+    if (currentBotMsg) {
+      currentBotMsg.parentNode.insertBefore(_traceContainer, currentBotMsg.nextSibling);
+    } else {
+      $('chat').appendChild(_traceContainer);
+    }
+  }
+  const k = TRACE_KIND[step.kind] || { icon: '▸', label: step.kind, color: '#888' };
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:flex-start;gap:6px;animation:traceIn .2s ease';
+  row.innerHTML =
+    `<span style="min-width:18px">${k.icon}</span>` +
+    `<span style="color:${k.color};font-weight:600;min-width:72px">${k.label}</span>` +
+    `<span style="color:var(--text-secondary)">${step.detail}</span>`;
+  _traceContainer.appendChild(row);
+  scrollBottom();
+}
+
+function handleMessage(msg) {
+  if (msg.type === 'anomaly_alert') {
+    pullAnomalies();
+    return;
+  }
+  if (msg.type === 'alert_triggered') {
+    // 背景排程掃到警示觸發 → 推一張通知 card
+    const banner = document.createElement('div');
+    banner.className = 'alert-triggered-banner';
+    banner.innerHTML = `🔔 <b>警示觸發</b>（${msg.rule_id}）${msg.ts || ''}<br>
+      <span style="color:var(--muted)">${msg.scope_txt}：${msg.condition_label}</span><br>
+      ${msg.detail || ''}`;
+    messages.appendChild(banner);
+    scrollBottom();
+    // 更新 badge
+    const badge = $('alert-badge');
+    const cur = parseInt(badge.textContent) || 0;
+    badge.textContent = cur;
+    badge.style.display = 'block';
+    badge.style.background = '#e53e3e';
+    if (_alertPanelOpen) loadAlertPanel();
+    return;
+  }
+  if (msg.type === 'alert_deleted') {
+    if (_alertPanelOpen) loadAlertPanel();
+    return;
+  }
+  if (msg.type === 'schedule_triggered') {
+    const banner = document.createElement('div');
+    banner.className = 'schedule-triggered-banner';
+    banner.innerHTML = `⏰ <b>排程自動執行</b>（${msg.job_id}）${msg.ts || ''}<br>
+      <span style="color:var(--muted)">正在執行：${msg.script_label}</span>`;
+    messages.appendChild(banner);
+    scrollBottom();
+    return;
+  }
+  if (msg.type === 'schedule_done') {
+    const banner = document.createElement('div');
+    banner.className = 'schedule-triggered-banner';
+    const icon = msg.ok ? '✅' : '❌';
+    banner.innerHTML = `${icon} <b>${msg.script_label}</b> 執行${msg.ok ? '完成' : '失敗'}<br>
+      <span style="color:var(--muted)">${msg.output_tail || msg.summary || ''}</span>`;
+    messages.appendChild(banner);
+    scrollBottom();
+    if (_alertPanelOpen && _currentPanelTab === 'schedules') loadSchedulePanel();
+    return;
+  }
+  if (msg.type === 'schedule_created' || msg.type === 'schedule_deleted') {
+    if (_alertPanelOpen && _currentPanelTab === 'schedules') loadSchedulePanel();
+    return;
+  }
+  if (msg.type === 'task_plan') {
+    renderTaskPlan(msg.steps);
+    return;
+  }
+  if (msg.type === 'task_tick') {
+    tickTaskStep(msg.index);
+    return;
+  }
+  if (msg.type === 'trace_step') {
+    appendTraceStep(msg.step);
+    return;
+  }
+  if (msg.type === 'token') {
+    if (!currentBotMsg) currentBotMsg = appendBot('');
+    currentBotMsg.textContent += msg.text;
+    scrollBottom();
+    return;
+  }
+  if (msg.type === 'error') {
+    if (currentBotMsg) currentBotMsg.remove();
+    appendBot(msg.text, 'rejected');
+    currentBotMsg = null;
+    isSending = false;
+    $('send-btn').disabled = false;
+    return;
+  }
+  if (msg.type === 'tool_call') {
+    const tcHtml = `🔧 <code>${msg.func}(${msg.args_preview || ''})</code>`;
+    // 第二輪（_rcaCardId 已存在）→ 插到 rca-suggest 前
+    if (_rcaCardId) {
+      const existCard = document.getElementById(_rcaCardId);
+      if (existCard) {
+        const suggestEl = existCard.querySelector('[id^="rca-suggest-"]');
+        const tc = document.createElement('div');
+        tc.className = 'tool-call-inline';
+        tc.innerHTML = tcHtml;
+        if (suggestEl) suggestEl.before(tc);
+        else existCard.appendChild(tc);
+        return;
+      }
+    }
+    // 第一輪：card 還沒建，暫存
+    _pendingToolCalls.push(tcHtml);
+    return;
+  }
+  if (msg.type === 'rca_round2_start') {
+    // 第二輪 LLM 開始：在 rca-suggest 區塊顯示 loading 動畫
+    const _rcaCard2 = _rcaCardId ? document.getElementById(_rcaCardId) : null;
+    const suggestEl = _rcaCard2 ? _rcaCard2.querySelector('[id^="rca-suggest-"]') : null;
+    if (suggestEl) {
+      suggestEl.innerHTML = '<span style="color:var(--muted);font-size:13px">💡 Agent 推理建議行動 </span><span class="loading-dots"><span></span><span></span><span></span></span>';
+      suggestEl.style.display = '';
+    }
+    return;
+  }
+  if (msg.type === 'rca_round2_done') {
+    const _rcaCard3 = _rcaCardId ? document.getElementById(_rcaCardId) : null;
+    const suggestEl = _rcaCard3 ? _rcaCard3.querySelector('[id^="rca-suggest-"]') : null;
+    if (suggestEl && msg.suggestion) {
+      const actionColor = {
+        contact_supplier: '#e67e22',
+        create_po:        'var(--danger)',
+        monitor:          'var(--accent)',
+      }[msg.suggestion_action] || 'var(--accent)';
+      suggestEl.innerHTML = `<span style="font-weight:600;color:${actionColor}">💡 Agent 建議</span><br>${msg.suggestion.replace(/</g,'&lt;')}`;
+    } else if (suggestEl) {
+      suggestEl.style.display = 'none';
+    }
+    _rcaCardId = null;
+    isSending = false;
+    $('send-btn').disabled = false;
+    return;
+  }
+  if (msg.type === 'done') {
+    const result = msg.result || {};
+    const view = result.view;
+    const data = result.data || {};
+    lastBotAnchor = currentBotMsg;   // 預設接在訊息泡後;有卡片時 renderViewCard 會改成卡片
+    if (view && view !== 'guide' && view !== 'rejected') {
+      renderViewCard(view, data, result.summary);
+    }
+    renderFollowups(view, data);
+    currentBotMsg = null;
+    if (_traceContainer && _traceContainer.parentNode) { _traceContainer.parentNode.removeChild(_traceContainer); }
+    _traceContainer = null;
+    _pendingToolCalls = [];
+    _taskPlanEl = null;
+    // 存下當次 agent_rca card id，給 round2 handler 定位用
+    if (view === 'agent_rca' && lastBotAnchor && lastBotAnchor.id) {
+      _rcaCardId = lastBotAnchor.id;
+    }
+    // agent_rca 有第二輪推理，等 rca_round2_done 再解鎖
+    if (view !== 'agent_rca') {
+      isSending = false;
+      $('send-btn').disabled = false;
+    }
+    return;
+  }
+}
+
+function renderViewCard(view, data, topSummary) {
+  if (!currentBotMsg) return;
+  const card = document.createElement('div');
+  card.className = 'view-card';
+  card.id = 'vc-' + Date.now();
+  if (view === 'inventory_single') {
+    const per = data.per_warehouse || {};
+    const maxQty = Math.max(...Object.values(per), 1);
+    const isLow = data.is_low_stock;
+    const nx = data.next_expiring;
+    const expBadge = (nx && ['red','orange','yellow'].includes(nx.level))
+      ? `<span class="exp-badge ${nx.level}" style="margin-left:6px">${nx.level_emoji} ${nx.warehouse_label} ${nx.qty} 件 · ${nx.days_to_expire} 天到期</span>`
+      : '';
+    card.innerHTML = `
+      <div class="label">${data.name} (${data.category_label})</div>
+      <div class="kpi ${isLow ? 'warning' : ''}">${data.total_qty.toLocaleString()} 件</div>
+      <div class="sub-label">總價值 NT$ ${data.value.toLocaleString()} ${isLow ? ' · ⚠️ 低於安全庫存' : ''} ${expBadge}</div>
+      <div class="wh-bars">
+        ${Object.entries(per).map(([k, v]) => `
+          <div class="wh-bar">
+            <div class="wh-name">${WAREHOUSE_LABEL[k] || k}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${(v/maxQty*100).toFixed(0)}%"></div></div>
+            <div class="wh-qty">${v.toLocaleString()}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else if (view === 'inventory_multi') {
+    const matches = data.matches || [];
+    card.innerHTML = `
+      <div class="label">找到 ${data.total_matches} 筆相關商品</div>
+      <div class="rank-list">
+        ${matches.map((m, i) => `
+          <div class="rank-row">
+            <div class="num">${i+1}</div>
+            <div class="name">${m.name}<div style="font-size:11px;color:var(--muted)">${m.category_label}</div></div>
+            <div class="qty">${m.total_qty.toLocaleString()}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else if (view === 'low_stock') {
+    const warns = data.warnings || [];
+    if (warns.length === 0) {
+      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">所有商品庫存充足</div>`;
+    } else {
+      card.innerHTML = `
+        <div class="label">缺貨警示 (${warns.length} 項) — 按「撐幾天」排序</div>
+        <table class="alert-table">
+          <tr><th>商品</th><th>倉庫</th><th>現量</th><th>撐天</th><th>建議補</th></tr>
+          ${warns.slice(0, 15).map(w => {
+            const days = w.days_left;
+            const daysCls = days <= 3 ? 'critical' : '';
+            const daysTxt = days >= 60 ? '60+' : (days + '天');
+            return `
+            <tr class="${days <= 7 ? 'critical' : ''}">
+              <td>${w.name}<div style="font-size:11px;color:var(--muted)">${w.category_label}</div></td>
+              <td>${w.warehouse_label}</td>
+              <td><b>${w.qty}</b><div style="font-size:11px;color:var(--muted)">/ 安全 ${w.safety_stock}</div></td>
+              <td><b style="color:${days <= 7 ? 'var(--warning)' : (days <= 14 ? '#c05621' : 'var(--text)')}">${daysTxt}</b></td>
+              <td><b>${w.suggest_qty}</b> 件</td>
+            </tr>`;
+          }).join('')}
+        </table>
+      `;
+    }
+  } else if (view === 'movement') {
+    const daily = data.daily || [];
+    const maxQty = Math.max(...daily.flatMap(d => [d.in, d.out]), 1);
+    card.innerHTML = `
+      <div style="display:flex;gap:16px">
+        <div><div class="label">進貨</div><div class="kpi success">${data.in_qty.toLocaleString()}</div></div>
+        <div><div class="label">出貨</div><div class="kpi" style="color:var(--accent)">${data.out_qty.toLocaleString()}</div></div>
+        <div><div class="label">淨變動</div><div class="kpi">${data.delta >= 0 ? '+' : ''}${data.delta.toLocaleString()}</div></div>
+      </div>
+      <div class="mov-legend">
+        <span><span class="dot" style="background:var(--success)"></span>進貨</span>
+        <span><span class="dot" style="background:var(--accent)"></span>出貨</span>
+      </div>
+      <div class="mov-bars">
+        ${daily.map(d => `
+          <div class="mov-row">
+            <div class="date">${d.date.slice(5)}</div>
+            <div class="bars">
+              <div class="in-bar"  style="width:${(d.in/maxQty*100).toFixed(0)}%"></div>
+              <div class="out-bar" style="width:${(d.out/maxQty*100).toFixed(0)}%"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else if (view === 'compare_warehouses') {
+    const winner = data.winner;
+    const a_winner = winner === data.warehouse_a_label;
+    card.innerHTML = `
+      <div class="label">${data.metric_label}比較</div>
+      <div class="cmp-pair">
+        <div class="cmp-col ${a_winner ? 'winner' : ''}">
+          <div class="lbl">${data.warehouse_a_label}</div>
+          <div class="val">${formatMetric(data.metric, data.value_a)}</div>
+        </div>
+        <div class="cmp-col ${!a_winner && winner !== '平手' ? 'winner' : ''}">
+          <div class="lbl">${data.warehouse_b_label}</div>
+          <div class="val">${formatMetric(data.metric, data.value_b)}</div>
+        </div>
+      </div>
+    `;
+  } else if (view === 'hot_items') {
+    const rks = data.rankings || [];
+    card.innerHTML = `
+      <div class="label">${data.period_label} ${data.category_label || '全類別'} ${data.rank_label} TOP ${rks.length}</div>
+      <div class="rank-list">
+        ${rks.map((r, i) => `
+          <div class="rank-row">
+            <div class="num ${i===0?'top1':i===1?'top2':i===2?'top3':''}">${i+1}</div>
+            <div class="name">${r.name}<div style="font-size:11px;color:var(--muted)">${r.category_label}</div></div>
+            <div class="qty">${r.out_qty.toLocaleString()}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else if (view === 'related') {
+    const rels = data.related || [];
+    if (rels.length === 0) {
+      card.innerHTML = `<div style="text-align:center;color:var(--muted)">${data.anchor_name || ''} 樣本不足、暫無連帶資料</div>`;
+    } else {
+      const anchorName = data.anchor_name || '';
+      card.innerHTML = `
+        <div class="rel-anchor">買 <b>${anchorName}</b> 的人,通常也會備這些貨:</div>
+        ${rels.map((r, i) => {
+          const trendCls = r.trend_dir === 'up' ? 'rel-trend-up' : (r.trend_dir === 'down' ? 'rel-trend-down' : '');
+          const stockBits = [];
+          // 庫存合計 + 若有倉低於安全線、加精簡警示(細節去點單品查)
+          const pw = r.per_warehouse || {};
+          const safety = r.safety_stock || 0;
+          const lowWhs = Object.entries(pw).filter(([k, v]) => v < safety);
+          if (lowWhs.length > 0) {
+            const whShort = { north: '北', central: '中', south: '南' };
+            const lowNames = lowWhs.map(([k]) => whShort[k] || k).join('/');
+            stockBits.push(`庫存 ${r.total_stock} <span style="color:var(--warning);font-weight:600">⚠️ ${lowNames}倉低</span>`);
+          } else {
+            stockBits.push(`庫存 ${r.total_stock} 件`);
+          }
+          // 「撐X天」可點 → 彈出預測算式
+          if (r.days_left < 60) {
+            const pwJson = encodeURIComponent(JSON.stringify(r.per_warehouse_restock || []));
+            stockBits.push(
+              `<span class="days-badge" data-stock="${r.total_stock}" data-burn="${r.daily_burn}"` +
+              ` data-days="${r.days_left}" data-trend="${r.trend_dir}" data-safety="${r.safety_stock}"` +
+              ` data-suggest="${r.suggest_qty}" data-target="${r.target_days}" data-bname="${r.name}"` +
+              ` data-pw="${pwJson}"` +
+              ` data-reorder="${r.need_reorder ? 1 : 0}" onclick="showForecast(this)">⏳ 撐 ${r.days_left} 天 <span class="tap-hint">▸怎麼算</span></span>`
+            );
+          }
+          // 該補貨 → 顯示建議補多少 + 分倉
+          if (r.need_reorder && r.suggest_qty > 0) {
+            const pw = r.per_warehouse_restock || [];
+            const whBreak = pw.length
+              ? '（' + pw.map(x => `${x.label.replace('區倉','倉')}+${x.suggest_qty}`).join(' ') + '）'
+              : '';
+            stockBits.push(`<span class="restock">📦 建議補 ${r.suggest_qty} 件${whBreak}</span>`);
+          }
+          // 連帶品的「下批 X 天到期」徽章(食品/嬰幼類才會有)
+          const nx = r.next_expiring;
+          if (nx && ['red','orange','yellow'].includes(nx.level)) {
+            stockBits.push(`<span class="exp-badge ${nx.level}">${nx.level_emoji} 下批 ${nx.days_to_expire} 天到期</span>`);
+          }
+          // 把算式素材塞進 data-* 給彈卡片用
+          return `
+            <div class="rel-item">
+              <div class="rel-top">
+                <span class="rel-name">🔗 ${r.name}</span>
+                <span class="conf-badge ${r.conf_level}"
+                  data-conf="${r.confidence}" data-co="${r.co_count}"
+                  data-anchor-orders="${r.anchor_orders}" data-baseline="${r.random_baseline}"
+                  data-aname="${anchorName}" data-bname="${r.name}"
+                  onclick="showCalc(this)">
+                  ${r.confidence}% · ${r.conf_emoji}${r.conf_label}
+                  <span class="tap-hint">▸怎麼算</span>
+                </span>
+                <span class="${trendCls}" style="font-weight:700">${r.trend_arrow}</span>
+              </div>
+              <div class="rel-quip">${r.quip}</div>
+              <div class="rel-stock">${stockBits.join(' · ')}</div>
+            </div>
+          `;
+        }).join('')}
+        ${data.restock_alerts && data.restock_alerts.length ? `
+          <div class="rel-restock-banner">
+            ⚠️ <b>${anchorName}</b> 近期出貨量高,連帶品「${data.restock_alerts[0].name}」庫存吃緊,
+            ${data.restock_alerts[0].suggest_after_days <= 1 ? '建議今天就補' : `建議 ${data.restock_alerts[0].suggest_after_days} 天內補`},別等缺了才補。
+          </div>` : ''}
+        <div class="rel-baseline-note">📊 點同捆率看「這數字怎麼算出來的」· 隨機商品同單僅約 ${data.random_baseline}%</div>
+      `;
+    }
+  } else if (view === 'expiring') {
+    const rows = data.rows || [];
+    if (rows.length === 0) {
+      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">${data.warehouse_label || ''}最近 ${data.within_days} 天內沒有快到期的批次</div>`;
+    } else {
+      const c = data.counts || {};
+      const totalValue = data.total_value || 0;
+      card.innerHTML = `
+        <div class="label">⏰ 到期警示 — ${data.warehouse_label || '全部倉'} 最近 ${data.within_days} 天內共 ${rows.length} 批 · 約 NT$ ${totalValue.toLocaleString()}</div>
+        <div class="exp-counts">
+          ${c.red    ? `<span class="cnt red">🔴 7 天內 ${c.red} 批</span>` : ''}
+          ${c.orange ? `<span class="cnt orange">🟠 14 天內 ${c.orange} 批</span>` : ''}
+          ${c.yellow ? `<span class="cnt yellow">🟡 30 天內 ${c.yellow} 批</span>` : ''}
+        </div>
+        <table class="exp-table">
+          <tr><th>商品</th><th>倉庫</th><th>剩餘</th><th>數量</th></tr>
+          ${rows.map(r => `
+            <tr class="lvl-${r.level}">
+              <td>${r.name}<div style="font-size:11px;color:var(--muted)">${r.category_label}</div></td>
+              <td>${r.warehouse_label}</td>
+              <td><span class="days ${r.level}">${r.days_to_expire} 天</span></td>
+              <td><b>${r.qty}</b> 件</td>
+            </tr>
+          `).join('')}
+        </table>
+        <div class="rel-baseline-note">⏰ 紅(≤7天) / 橙(≤14天) / 黃(≤30天) — 主動下架 / 促銷 / 注意</div>
+      `;
+    }
+  } else if (view === 'agent_rca') {
+    // ── Agent 多步 RCA trace：逐步 setTimeout 浮現，有真實計算感 ──
+    // agent_rca 不送 token，loading bubble 直接清空（summary 放在 card 內，不依賴 bubble）
+    if (currentBotMsg) { currentBotMsg.textContent = ''; currentBotMsg.style.display = 'none'; }
+    const trace = data.trace || [];
+    const disc  = data.discrepancies || [];
+    const ICON  = {glob:'🔍', grep:'📋', read:'📂', reason:'🧠'};
+    const KIND  = {glob:'掃採購單', grep:'比對收貨', read:'比對收貨', reason:'推論結論'};
+    const WH    = {north:'北區倉', central:'中區倉', south:'南區倉'};
+    const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    // 結果表格 HTML（先隱藏，最後一步後顯示）
+    const tableHtml = disc.length ? `
+      <div class="rca-result" style="margin-top:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--danger);margin-bottom:6px">
+          ⚠️ 發現 ${disc.length} 筆短收異常
+        </div>
+        <table class="exp-table">
+          <tr><th>採購單</th><th>商品</th><th>倉庫</th><th>應收</th><th>實收</th><th>短收</th></tr>
+          ${disc.map(d=>`<tr class="lvl-red">
+            <td>${escHtml(d.po_id)}<div style="font-size:11px;color:var(--muted)">${d.date}</div></td>
+            <td>${escHtml(d.name)}</td>
+            <td>${WH[d.warehouse]||d.warehouse}</td>
+            <td>${d.order_qty}</td>
+            <td>${d.received_qty}</td>
+            <td><b style="color:var(--danger)">${d.gap}</b></td>
+          </tr>`).join('')}
+        </table>
+      </div>` : (data.cause_found===false ? '<div style="padding:8px;color:var(--muted);font-size:13px">✅ 未發現短收異常</div>' : '');
+
+    // summary 區塊（trace 結束後才出現，放在 card 底部）
+    const _rcaSummaryText = topSummary || data.summary || '';
+    const summaryHtml = _rcaSummaryText
+      ? `<div id="rca-summary-${card.id}" class="rca-summary" style="display:none">${escHtml(_rcaSummaryText).replace(/\n/g,'<br>')}</div>`
+      : '';
+
+    card.innerHTML = `
+      <div class="label agent-label">🤖 Agent 追查 — <span id="rca-status-${card.id}" style="color:var(--muted)">分析中…</span></div>
+      <div class="agent-trace" id="rca-trace-${card.id}"></div>
+      <div id="rca-result-${card.id}" style="display:none">${tableHtml}</div>
+      ${summaryHtml}
+      <div id="rca-suggest-${card.id}" class="rca-suggest" style="display:none"></div>`;
+
+    // 逐步顯示 trace
+    const traceEl   = card.querySelector('#rca-trace-' + card.id);
+    const statusEl  = card.querySelector('#rca-status-' + card.id);
+    const resultEl  = card.querySelector('#rca-result-' + card.id);
+    const summaryEl = card.querySelector('#rca-summary-' + card.id);
+    const suggestEl = card.querySelector('#rca-suggest-' + card.id);
+    const DELAY = 380;  // ms per step
+    trace.forEach((s, i) => {
+      setTimeout(() => {
+        const div = document.createElement('div');
+        div.className = 'trace-step trace-in';
+        const detailHtml = escHtml(s.detail||'').replace(/\n/g,'<br>');
+        // sub_lines：PO 明細列表，短收行標紅
+        const subLines = s.sub_lines || [];
+        const subHtml = subLines.length ? '<div class="ts-sub">' +
+          subLines.map(l => {
+            const le = escHtml(l).replace(/\n/g,'<br>');
+            const warn = l.startsWith('⚠');
+            return `<div class="ts-sub-line${warn?' ts-warn':''}">${le}</div>`;
+          }).join('') + '</div>' : '';
+        div.innerHTML =
+          `<span class="ts-icon">${ICON[s.kind]||'•'}</span>` +
+          `<span class="ts-kind">${KIND[s.kind]||s.kind}</span>` +
+          `<span class="ts-detail">${detailHtml}</span>` +
+          subHtml;
+        traceEl.appendChild(div);
+        traceEl.scrollTop = traceEl.scrollHeight;
+        // 最後一步後：顯示結果表格 + summary（都在 card 內）
+        if (i === trace.length - 1) {
+          setTimeout(() => {
+            statusEl.textContent = data.cause_found ? '✅ 已追到原因' : '掃描完成';
+            statusEl.style.color = data.cause_found ? 'var(--danger)' : 'var(--text)';
+            resultEl.style.display = '';
+            if (summaryEl) summaryEl.style.display = '';
+            // 建議行動（第二輪 LLM 推理結果）
+            if (suggestEl && data.suggestion) {
+              const actionColor = {
+                contact_supplier: 'var(--warning, #e67e22)',
+                create_po:        'var(--danger)',
+                monitor:          'var(--accent)',
+              }[data.suggestion_action] || 'var(--accent)';
+              suggestEl.innerHTML = `<span style="font-weight:600;color:${actionColor}">💡 Agent 建議</span><br>${escHtml(data.suggestion)}`;
+              suggestEl.style.display = '';
+            }
+          }, DELAY);
+        }
+      }, i * DELAY);
+    });
+  } else if (view === 'config_read') {
+    if (data.rows) {
+      card.innerHTML = `<div class="label">⚙️ 安全庫存設定（${data.rows.length} 項）</div>
+        <table class="exp-table"><tr><th>商品</th><th>基準</th><th>分倉</th></tr>
+        ${data.rows.map(r => `<tr><td>${r.name}</td><td>${r.base}</td>
+          <td style="font-size:12px">${Object.entries(r.by_warehouse).map(([w,v])=>`${w}:${v}`).join(' / ')}</td></tr>`).join('')}
+        </table>`;
+    } else {
+      card.innerHTML = `<div class="label">⚙️ 設定查詢</div>
+        <div style="font-size:18px;padding:8px">「${data.label}」目前設定為 <b style="color:var(--accent)">${data.current}</b></div>`;
+    }
+  } else if (view === 'config_confirm' || view === 'script_confirm') {
+    const isCfg = view === 'config_confirm';
+    const preview = data.preview || [];
+    const riskLevel = preview.length > 10 ? 'danger' : 'warn';
+    const riskLabel = preview.length > 10 ? '⚠️ 高風險操作' : '✋ 需要授權';
+    const diffHtml = isCfg
+      ? (preview.length
+          ? `<div class="hitl-diff" style="flex-direction:column;align-items:flex-start;gap:6px">
+              ${preview.slice(0,8).map(p=>`
+                <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+                  <span style="min-width:120px;color:var(--text-secondary)">${p.name||p.sku_id}（${p.warehouse}）</span>
+                  <span class="hitl-before">${p.old}</span>
+                  <span class="hitl-arrow">→</span>
+                  <span class="hitl-after">${p.new}</span>
+                </div>`).join('')}
+              ${preview.length>8?`<div class="hitl-meta">…共 ${preview.length} 項異動</div>`:''}
+            </div>`
+          : `<div class="hitl-diff">
+              <span class="hitl-before">${data.old ?? '—'}</span>
+              <span class="hitl-arrow">→</span>
+              <span class="hitl-after">${data.new ?? '—'}</span>
+              <span style="font-size:12px;color:var(--muted);margin-left:6px">「${data.label||data.canon||''}」</span>
+            </div>`)
+      : `<div class="hitl-diff">
+          <span style="font-size:13px">📜 腳本：<b>${data.script_id||data.script_name||''}</b></span>
+        </div>`;
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header ${riskLevel}">${riskLabel}</div>
+        <div class="hitl-body">
+          <div style="font-size:13px;margin-bottom:8px">${(currentBotMsg ? currentBotMsg.textContent : '') || data.summary || ''}</div>
+          ${diffHtml}
+          <div class="hitl-meta">此操作將寫入正式資料，執行後可透過 audit log 查詢記錄。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick='doConfirm(this)' data-action="${isCfg?'config_set':'run_script'}"
+            data-payload='${JSON.stringify(isCfg?{pending:data}:{script_id:data.script_id})}'>✅ 授權執行</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 退回重擬</button>
+        </div>
+      </div>`;
+  } else if (view === 'config_done' || view === 'script_done') {
+    // 從 output_tail 解析 OUTPUT: 路徑 → 產出下載連結
+    const tail = data.output_tail || '';
+    const outMatch = tail.match(/OUTPUT:(.+)/);
+    const outPath  = outMatch ? outMatch[1].trim() : '';
+    const fname    = outPath ? outPath.replace(/\\/g,'/').split('/').pop() : '';
+    const isAudit  = fname && fname.endsWith('.csv');
+    const dlHtml   = fname
+      ? `<a href="/${isAudit?'audit':'reports'}/${fname}" download="${fname}"
+           style="display:inline-block;margin-top:8px;padding:6px 14px;
+                  background:var(--accent);color:#fff;border-radius:6px;
+                  font-size:13px;text-decoration:none">⬇ 下載 ${fname}</a>` : '';
+    const summaryLine = tail.match(/SUMMARY:(.+)/);
+    const summaryText = summaryLine ? summaryLine[1].trim() : (data.summary || '');
+    card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} 腳本執行${data.ok===false?'失敗':'完成'}</div>
+      <div style="padding:8px;font-size:14px">${summaryText}</div>
+      ${dlHtml}
+      ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · 已記錄到 audit log</div>`:''}`;
+  } else if (view === 'report_done') {
+    const trace = data.trace || [];
+    const ICON = {glob:'🔍', grep:'📑', read:'📂', reason:'🧠', act:'✍️'};
+    const KIND = {glob:'掃檔', grep:'比對', read:'讀取', reason:'彙整', act:'寫檔'};
+    const rptFname = data.file || '';
+    const rptDlHtml = rptFname
+      ? `<a href="/reports/${rptFname}" download="${rptFname}"
+           style="display:inline-block;margin-top:8px;padding:6px 14px;
+                  background:var(--accent);color:#fff;border-radius:6px;
+                  font-size:13px;text-decoration:none">⬇ 下載 ${rptFname}</a>` : '';
+    card.innerHTML = `
+      <div class="label">📄 報告已產出 — <span style="color:var(--accent)">${rptFname}</span></div>
+      <div class="agent-trace">
+        ${trace.map((s,i)=>`<div class="trace-step" style="animation-delay:${i*0.22}s">
+          <span class="ts-icon">${ICON[s.kind]||'•'}</span>
+          <span class="ts-kind">${KIND[s.kind]||s.kind}</span>
+          <span class="ts-detail">${s.detail||''}</span></div>`).join('')}
+      </div>
+      ${data.chart ? `<img class="report-chart" src="/reports/${data.chart}" alt="報告圖表">` : ''}
+      <pre class="report-preview">${(data.preview||'').replace(/</g,'&lt;')}</pre>
+      ${rptDlHtml}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">完整檔：warehouse_data/reports/${rptFname}</div>`;
+  } else if (view === 'file_list') {
+    const rows = data.rows || [];
+    if (data.area === null) {
+      card.innerHTML = `<div class="label">🗂️ 資料區概覽（Agent 動態掃描）</div>
+        <table class="exp-table"><tr><th>區域</th><th>說明</th><th>檔數</th></tr>
+        ${rows.map(r=>`<tr><td><b>${r.area}</b></td><td>${r.label}</td><td>${r.file_count}</td></tr>`).join('')}
+        </table>`;
+    } else {
+      card.innerHTML = `<div class="label">🗂️ ${data.area}/ — ${data.label||''}（${data.total||rows.length} 檔）</div>
+        <div style="max-height:200px;overflow:auto;font-size:12px;font-family:monospace">
+        ${rows.map(r=>`${r.name} <span style="color:var(--muted)">(${r.size}b)</span>`).join('<br>')}</div>`;
+    }
+  } else if (view === 'po_confirm') {
+    const lines = data.lines || [];
+    if (!lines.length) {
+      card.innerHTML = `<div class="label">📋 採購建議</div><div style="padding:8px">目前沒有需要補貨的品項。</div>`;
+    } else {
+      const totalAmt = (data.total||0).toLocaleString();
+      const riskLevel = lines.length > 15 ? 'danger' : 'warn';
+      card.innerHTML = `
+        <div class="hitl-card">
+          <div class="hitl-header ${riskLevel}">✋ 採購授權 — 請確認後送出</div>
+          <div class="hitl-body">
+            <div style="font-size:13px;margin-bottom:8px">
+              共 <b>${lines.length}</b> 項商品需補貨，預估金額
+              <b style="color:var(--accent);font-size:16px">NT$ ${totalAmt}</b>
+            </div>
+            <table class="exp-table" style="margin:8px 0">
+              <tr><th>商品</th><th>倉</th><th>補貨量</th><th>金額</th><th>供應商</th></tr>
+              ${lines.slice(0,12).map(l=>`<tr>
+                <td>${l.name}</td><td>${l.warehouse}</td>
+                <td><b>${l.order_qty}</b></td>
+                <td style="color:var(--accent)">NT$ ${(l.amount||0).toLocaleString()}</td>
+                <td style="color:var(--muted)">${l.supplier||'—'}</td></tr>`).join('')}
+              ${lines.length>12?`<tr><td colspan="5" style="text-align:center;color:var(--muted)">…還有 ${lines.length-12} 項</td></tr>`:''}
+            </table>
+            <div class="hitl-meta">確認後將建立採購草稿存入 PO_draft/，並記錄至 audit log。</div>
+          </div>
+          <div class="hitl-btns">
+            <button class="hitl-approve" onclick='doConfirm(this)' data-action="generate_po"
+              data-payload='${JSON.stringify({pending:data})}'>✅ 授權建立採購單</button>
+            <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 退回重擬</button>
+          </div>
+        </div>`;
+    }
+  } else if (view === 'po_done') {
+    card.innerHTML = `<div class="label">✅ 採購草稿已建立</div>
+      <div style="padding:8px;font-size:14px">${data.po_id||''} — ${data.lines||0} 項，存到 PO_draft/</div>
+      ${data.trace_id?`<div style="font-size:11px;color:var(--muted)">trace_id: ${data.trace_id} · 已記 audit</div>`:''}`;
+  } else if (view === 'alert_confirm') {
+    const scopeTxt = (data.scope_names||[]).length ? (data.scope_names||[]).join('、') : '全部商品';
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header warn">🔔 設定警示 — 請確認</div>
+        <div class="hitl-body">
+          <div style="font-size:13px;margin-bottom:10px">${(currentBotMsg?currentBotMsg.textContent:'')||data.summary||''}</div>
+          <div class="hitl-diff">
+            <span style="font-size:20px">🔔</span>
+            <div>
+              <div style="font-weight:700;font-size:14px">當【${scopeTxt}】發生「${data.condition_label}」</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">規則 ID：${data.rule_id} · 啟用後背景掃描自動套用</div>
+            </div>
+          </div>
+          <div class="hitl-meta">確認後寫入 alert_rules.json 並記錄 audit log。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick='doConfirm(this)' data-action="set_alert"
+            data-payload='${JSON.stringify({pending:data})}'>✅ 授權啟用警示</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 退回重擬</button>
+        </div>
+      </div>`;
+  } else if (view === 'alert_done') {
+    card.innerHTML = `<div class="label">🔔 警示規則已設定 — ${data.rule_id||''}</div>
+      <div style="padding:8px;font-size:14px">當【${(data.scope_names||[]).join('、')||'全部商品'}】發生「${data.condition_label}」時主動通知。</div>
+      <div style="font-size:11px;color:var(--muted)">背景掃描會自動套用此規則（點右上角 🔔 查看）</div>`;
+  } else if (view === 'schedule_confirm') {
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header">⏰ 設定定時排程 — 請確認</div>
+        <div class="hitl-body">
+          <div style="font-size:13px;margin-bottom:10px">${(currentBotMsg?currentBotMsg.textContent:'')||''}</div>
+          <div class="hitl-diff">
+            <span style="font-size:20px">⏰</span>
+            <div>
+              <div style="font-weight:700;font-size:14px">${data.freq_label} ${data.time_str} 自動執行【${data.script_label}】</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">排程 ID：${data.job_id} · 寫入 schedule_jobs.json，重啟不消失</div>
+            </div>
+          </div>
+          <div class="hitl-meta">確認後 Agent 將定時自動執行，完成後推送通知到此對話。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick='doConfirm(this)' data-action="set_schedule"
+            data-payload='${JSON.stringify({pending:data})}'>✅ 確認建立排程</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
+  } else if (view === 'schedule_done') {
+    card.innerHTML = `<div class="label">⏰ 排程已建立 — ${data.job?.id||''}</div>
+      <div style="padding:8px;font-size:14px">${data.job?.freq_label||''} ${data.job?.time_str||''} 自動執行【${data.job?.script_label||''}】</div>
+      <div style="font-size:11px;color:var(--muted)">點右上角 🔔 → 定時排程 可查看 / 刪除</div>`;
+  } else if (view === 'period_compare') {
+    // 跨期比較
+    const rows = data.rows || [];
+    card.innerHTML = `<div class="label">📈 近兩個月出庫變化（變化最大）</div>
+      <table class="exp-table"><tr><th>商品</th><th>上月</th><th>本月</th><th>變化</th></tr>
+      ${rows.map(r=>`<tr><td>${r.name}</td><td>${r.last}</td><td>${r.this}</td>
+        <td style="color:${r.delta>0?'#5cb85c':'#d9534f'};font-weight:700">${r.delta>0?'+':''}${r.delta} (${r.pct>0?'+':''}${r.pct}%)</td></tr>`).join('')}
+      </table>`;
+  } else if (view === 'clarify') {
+    // 意圖澄清選項 — 數字選單，輸入 1/2/3/4 送出
+    const opts = data.options || [];
+    card.innerHTML = `
+      <div class="label" style="margin-bottom:8px">❓ ${data.question}</div>
+      <div class="clarify-opts">
+        ${opts.map((opt, i) =>
+          `<div class="clarify-row"><span class="clarify-num">${i+1}</span><span class="clarify-text">${opt}</span></div>`
+        ).join('')}
+      </div>
+      <div class="clarify-hint">輸入數字 1~${opts.length} 選擇，或直接輸入完整問題</div>
+    `;
+    // 把選項存到 window，讓送出時能展開數字
+    window._clarifyOpts = opts;
+    // actions：實際送出的指令（沒有就 fallback 用 opts）
+    window._clarifyActions = data.actions || opts;
+  } else {
+    return;
+  }
+  // 把暫存的 tool call 插到 card 標題下方
+  if (_pendingToolCalls.length) {
+    const label = card.querySelector('.label, .agent-label');
+    const tcWrap = document.createElement('div');
+    tcWrap.className = 'tool-calls-bar';
+    tcWrap.innerHTML = _pendingToolCalls.join(' ');
+    if (label) label.after(tcWrap); else card.prepend(tcWrap);
+    _pendingToolCalls = [];
+  }
+  currentBotMsg.parentNode.insertBefore(card, currentBotMsg.nextSibling);
+  lastBotAnchor = card;
+  scrollBottom();
+}
+
+// ── HITL 確認：把 pending 送回 server commit ──
+function doConfirm(btn) {
+  const action = btn.dataset.action;
+  const payload = JSON.parse(btn.dataset.payload || '{}');
+  const btnsEl = btn.closest('.hitl-btns');
+  if (btnsEl) btnsEl.innerHTML = '<div style="padding:10px;color:var(--muted)">執行中…</div>';
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    connectWS();
+    setTimeout(() => ws.send(JSON.stringify({type:'confirm', action, ...payload})), 1200);
+    return;
+  }
+  ws.send(JSON.stringify({type:'confirm', action, ...payload}));
+}
+
+function formatMetric(metric, val) {
+  if (metric === 'stock_value') return `NT$ ${val.toLocaleString()}`;
+  if (metric === 'item_count')  return `${val.toLocaleString()} 件`;
+  if (metric === 'turnover')    return val.toFixed(3);
+  return String(val);
+}
+
+// ─── 點同捆率 → 彈出「這數字怎麼算」算式卡片(純前端、零延遲)───
+function showCalc(el) {
+  const conf = el.dataset.conf;
+  const co = +el.dataset.co;
+  const anchorOrders = +el.dataset.anchorOrders;
+  const baseline = +el.dataset.baseline;
+  const aname = el.dataset.aname;
+  const bname = el.dataset.bname;
+  const ratio = baseline > 0 ? (conf / baseline) : 0;
+  const box = $('calc-box');
+  box.innerHTML = `
+    <h3>🔍 ${conf}% 是怎麼算出來的?</h3>
+    <div class="calc-formula">
+      在買「${aname}」的 <b>${anchorOrders}</b> 張訂單裡,<br>
+      有 <b>${co}</b> 張也買了「${bname}」<br>
+      <span class="big">${co} ÷ ${anchorOrders} = ${conf}%</span>
+    </div>
+    <div class="calc-compare">
+      📊 隨便兩個商品「剛好」同單的機率只有 <b>${baseline}%</b>。<br>
+      這組高達 ${conf}%,是隨機的 <span class="hi">約 ${ratio.toFixed(0)} 倍</span> —
+      代表它們是<span class="hi">真的常一起被買</span>,不是巧合。
+    </div>
+    <div class="calc-compare" style="margin-top:8px;font-size:11px;color:var(--muted)">
+      這就是「購物籃分析」,跟 Amazon「買了這個的人也買了」同一套作法 —
+      系統真的去數了訂單算出來,不是寫死的。
+    </div>
+    <button class="calc-close" onclick="closeCalc()">懂了！</button>
+  `;
+  $('calc-pop').classList.add('show');
+}
+function closeCalc() { $('calc-pop').classList.remove('show'); }
+
+// ─── 點「撐 X 天」→ 彈出庫存預測算式 ───
+function showForecast(el) {
+  const stock = +el.dataset.stock;
+  const burn = +el.dataset.burn;
+  const days = +el.dataset.days;
+  const trend = el.dataset.trend;
+  const safety = +el.dataset.safety;
+  const suggest = +el.dataset.suggest;
+  const target = +el.dataset.target;
+  const bname = el.dataset.bname;
+  const reorder = el.dataset.reorder === '1';
+  let pw = [];
+  try { pw = JSON.parse(decodeURIComponent(el.dataset.pw || '[]')); } catch {}
+  const trendTxt = trend === 'up' ? '↗ 上升(賣越來越快、消耗 ×1.3 不低估)'
+                 : (trend === 'down' ? '↘ 下滑(退燒中、消耗 ×0.8)' : '→ 持平');
+  const box = $('calc-box');
+  box.innerHTML = `
+    <h3>⏳ 「${bname}」還能撐 ${days} 天?</h3>
+    <div class="calc-formula">
+      現有庫存 <b>${stock}</b> 件<br>
+      ÷ 每天約賣 <b>${burn}</b> 件<br>
+      <span class="big">${stock} ÷ ${burn} ≈ ${days} 天</span>
+    </div>
+    <div class="calc-compare">
+      📈 每天賣多少 = 看近 30 天平均,再依趨勢加權:<br>
+      　趨勢 ${trendTxt}<br>
+      🔔 庫存跌到安全線(${safety} 件)或撐不到 7 天 → 就提醒補貨。
+    </div>
+    ${reorder && suggest > 0 ? `
+      <div class="calc-compare" style="margin-top:10px;background:#fff5f5;padding:10px;border-radius:8px">
+        📦 <b class="hi">建議補 ${suggest} 件</b>${pw.length ? `
+        <div style="margin-top:6px;font-size:12px">
+          ${pw.map(x => `<div>　• ${x.label}:現 ${x.stock} 件 → 補 <b>${x.suggest_qty}</b> 件</div>`).join('')}
+        </div>` : ''}
+        <span style="font-size:11px;color:var(--muted)">每倉各自補到能撐 ${target} 天、含叫貨緩衝(缺最多的倉排前面)</span>
+      </div>` : ''}
+    <div class="calc-compare" style="margin-top:8px;font-size:11px;color:var(--muted)">
+      這叫「線性消耗預測」— 依最近賣法往前推,倉儲補貨常用算法,不是亂猜。
+    </div>
+    <button class="calc-close" onclick="closeCalc()">懂了！</button>
+  `;
+  $('calc-pop').classList.add('show');
+}
+
+function renderFollowups(view, data) {
+  if (!currentBotMsg) return;
+  if (view === 'inventory_single' || view === 'inventory_multi') {
+    const kw = data.keyword || '';
+    const items = [];
+    if (kw) items.push({ label: `${kw} 本週進出`, query: `${kw} 本週進出` });
+    items.push({ label: '🚨 庫存警示', direct_call: { function: 'list_low_stock' } });
+    items.push({ label: '🔥 本週熱銷', query: '本週熱銷' });
+    showSuggestions(items);
+  } else if (view === 'low_stock') {
+    showSuggestions([
+      { label: '北倉缺貨', query: '北倉缺貨清單' },
+      { label: '中倉缺貨', query: '中倉缺貨清單' },
+      { label: '南倉缺貨', query: '南倉缺貨清單' },
+      { label: '🔥 本週熱銷', query: '本週熱銷' },
+    ]);
+  } else if (view === 'movement') {
+    showSuggestions([
+      { label: '今天進出', query: '今天進出狀況' },
+      { label: '本週進出', query: '本週進出狀況' },
+      { label: '本月進出', query: '本月進出狀況' },
+      { label: '🚨 庫存警示', direct_call: { function: 'list_low_stock' } },
+    ]);
+  } else if (view === 'compare_warehouses') {
+    showSuggestions([
+      { label: '比庫存價值', query: '北倉跟南倉庫存價值比較' },
+      { label: '比商品數量', query: '北倉跟中倉商品數量比較' },
+      { label: '比週轉率', query: '中倉跟南倉週轉率比較' },
+    ]);
+  } else if (view === 'hot_items') {
+    showSuggestions([
+      { label: '本週熱銷', query: '本週熱銷排行' },
+      { label: '本月熱銷', query: '本月熱銷排行' },
+      { label: '本月滯銷', query: '本月滯銷品' },
+      { label: '🚨 庫存警示', direct_call: { function: 'list_low_stock' } },
+    ]);
+  } else if (view === 'rejected') {
+    showSuggestions([
+      { label: '藍牙耳機庫存', query: '藍牙耳機庫存' },
+      { label: '庫存警示', direct_call: { function: 'list_low_stock' } },
+      { label: '本週熱銷', query: '本週熱銷' },
+      { label: '今天進貨', query: '今天進了什麼貨' },
+    ]);
+  } else if (view === 'compare_help') {
+    showSuggestions([
+      { label: '北倉 vs 南倉 庫存', query: '北倉跟南倉哪個庫存比較多' },
+      { label: '中倉 vs 南倉 週轉', query: '中倉跟南倉週轉率比較' },
+      { label: '北倉 vs 中倉 商品數', query: '北倉跟中倉商品數量比較' },
+    ]);
+  } else if (view === 'related') {
+    // 連鎖探索:連帶品本身可再點(看它的連帶)→ 一路探索停不下來
+    const rels = data.related || [];
+    const items = [];
+    rels.slice(0, 3).forEach(r => {
+      items.push({ label: `🔗 ${r.name} 還連到啥`, query: `買${r.name}的人還會買什麼` });
+    });
+    // 該商品庫存 + 隨機驚喜
+    if (data.anchor_name) {
+      items.push({ label: `📦 ${data.anchor_name} 庫存`, query: `${data.anchor_name}庫存` });
+    }
+    items.push({ label: '🎲 隨機來一個', action: randomSurprise });
+    showSuggestions(items);
+  } else if (view === 'expiring') {
+    const items = [];
+    // 點到期清單前 3 項 → 跳該品庫存查詢
+    const rows = data.rows || [];
+    rows.slice(0, 3).forEach(r => {
+      items.push({ label: `📦 ${r.name} 庫存`, query: `${r.name}庫存` });
+    });
+    // 換倉看
+    items.push({ label: '北倉到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'north', within_days: 30 } } });
+    items.push({ label: '中倉到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'central', within_days: 30 } } });
+    items.push({ label: '南倉到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'south', within_days: 30 } } });
+    showSuggestions(items);
+  }
+}
+
+// 🎲 隨機驚喜:隨機挑一個情境錨點問連帶(像轉扭蛋)
+const SURPRISE_KEYWORDS = [
+  '藍牙耳機','咖啡機','尿布','帳篷','瑜珈墊','慢跑鞋','洗衣精','羽絨外套',
+  '氣泡水','野炊鍋','防蚊液','登山水壺','健身環','排汗衣','行動電源',
+];
+function randomSurprise() {
+  const kw = SURPRISE_KEYWORDS[Math.floor(Math.random() * SURPRISE_KEYWORDS.length)];
+  sendQuery(`買${kw}的人還會買什麼`);
+}
+
+function sendQuery(text) {
+  if (isSending || !text) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    connectWS();
+    setTimeout(() => sendQuery(text), 300);
+    return;
+  }
+  isSending = true;
+  $('send-btn').disabled = true;
+  appendUser(text);
+  currentBotMsg = appendLoading();
+  setTimeout(() => { if (currentBotMsg) currentBotMsg.innerHTML = ''; }, 50);
+  ws.send(JSON.stringify({ type: 'chat', text }));
+}
+
+function sendDirectCall(func, args) {
+  if (isSending) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    connectWS();
+    setTimeout(() => sendDirectCall(func, args), 300);
+    return;
+  }
+  isSending = true;
+  $('send-btn').disabled = true;
+  const labelMap = { list_low_stock: '🚨 庫存警示', list_expiring_items: '⏰ 到期警示' };
+  appendUser(labelMap[func] || func);
+  currentBotMsg = appendLoading();
+  setTimeout(() => { if (currentBotMsg) currentBotMsg.innerHTML = ''; }, 50);
+  ws.send(JSON.stringify({ type: 'direct_call', function: func, args }));
+}
+
+document.querySelectorAll('#chips-bar .chip').forEach(c => {
+  c.onclick = () => {
+    const a = c.dataset.action;
+    if (a === 'show-inventory-menu') {
+      currentBotMsg = appendBot('想查哪一類庫存？');
+      const cats = ['electronics', 'appliance_kitchen', 'food_beverage', 'daily_goods', 'apparel', 'sports'];
+      showSuggestions(cats.map(c => ({
+        label: CATEGORY_LABEL[c],
+        query: `${CATEGORY_LABEL[c]}庫存`,
+      })));
+      currentBotMsg = null;
+    } else if (a === 'low-stock-direct') {
+      sendDirectCall('list_low_stock', {});
+    } else if (a === 'hot-items') {
+      sendQuery('本週熱銷');
+    } else if (a === 'show-related-menu') {
+      currentBotMsg = appendBot('想看哪個商品「買的人還會買什麼」?點一個試試:');
+      const seeds = ['藍牙耳機', '咖啡機', '尿布', '帳篷', '瑜珈墊', '慢跑鞋'];
+      const items = seeds.map(kw => ({ label: kw, query: `買${kw}的人還會買什麼` }));
+      items.push({ label: '🎲 隨機來一個', action: randomSurprise });
+      showSuggestions(items);
+      currentBotMsg = null;
+    } else if (a === 'expiring-direct') {
+      sendDirectCall('list_expiring_items', { within_days: 30 });
+    } else if (a === 'agent-menu') {
+      // ── v2 智慧管家：三金剛示範（展場訪客一鍵體驗 Agent）──
+      currentBotMsg = appendBot('🤖 智慧管家能「追原因 / 改設定 / 跑作業」。挑一個看看 Agent 怎麼多步思考:');
+      showSuggestions([
+        { label: '🔍 追查庫存對不上', query: '智慧手環怎麼少這麼多' },
+        { label: '⚙️ 南倉安全庫存全部+30', query: '南倉安全庫存全部加30' },
+        { label: '📄 產全倉體檢報告(含圖表)', query: '幫我出個全倉體檢報告' },
+        { label: '📋 缺貨→自動產採購單', query: '幫我把缺貨的產採購單' },
+        { label: '🔔 設警示(缺貨就通知)', query: '藍牙耳機缺貨就通知我' },
+        { label: '📈 這月vs上月變化', query: '這個月跟上個月哪些變化大' },
+        { label: '🗂️ 看有哪些資料可查', query: '倉庫裡有哪些紀錄檔' },
+        { label: '🛠️ 跑月底盤點', query: '幫我跑一次月底盤點' },
+      ]);
+      currentBotMsg = null;
+    }
+  };
+});
+
+function resolveInput(raw) {
+  // 如果有 clarify 選項待機，且輸入是純數字 → 展開成 action（實際指令）
+  if (window._clarifyOpts && /^[1-4]$/.test(raw)) {
+    const idx = parseInt(raw) - 1;
+    if (idx >= 0 && idx < window._clarifyOpts.length) {
+      // 優先用 actions（對應實際工具指令），沒有才用顯示文字
+      const actions = window._clarifyActions || window._clarifyOpts;
+      const resolved = actions[idx] || window._clarifyOpts[idx];
+      window._clarifyOpts = null;
+      window._clarifyActions = null;
+      document.querySelectorAll('.view-card').forEach(el => {
+        if (el.querySelector('.clarify-opts')) el.remove();
+      });
+      return resolved;
+    }
+  }
+  window._clarifyOpts = null;
+  window._clarifyActions = null;
+  return raw;
+}
+
+$('input-text').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const raw = $('input-text').value.trim();
+    if (raw) {
+      $('input-text').value = '';
+      sendQuery(resolveInput(raw));
+    }
+  }
+});
+$('send-btn').onclick = () => {
+  const raw = $('input-text').value.trim();
+  if (raw) {
+    $('input-text').value = '';
+    sendQuery(resolveInput(raw));
+  }
+};
+
+// ─── 語音輸入 (Web Speech API、zh-TW) ───
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+const micBtn = $('mic-btn');
+const micStatus = $('mic-status');
+let recognition = null;
+let isRecording = false;
+
+if (!SpeechRec) {
+  micBtn.disabled = true;
+  micBtn.title = '此瀏覽器不支援語音輸入（建議用 Chrome / Edge / Safari）';
+} else {
+  recognition = new SpeechRec();
+  recognition.lang = 'zh-TW';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    micBtn.classList.add('recording');
+    micStatus.textContent = '🎤 聆聽中... 請說話';
+  };
+  recognition.onresult = ev => {
+    let txt = '';
+    for (let i = 0; i < ev.results.length; i++) {
+      txt += ev.results[i][0].transcript;
+    }
+    $('input-text').value = txt;
+  };
+  recognition.onerror = ev => {
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    if (ev.error === 'not-allowed' || ev.error === 'permission-denied') {
+      micStatus.textContent = '❌ 麥克風權限被拒、請到瀏覽器設定開啟';
+    } else if (ev.error === 'no-speech') {
+      micStatus.textContent = '⚠️ 沒聽到聲音、請再試一次';
+    } else if (ev.error === 'network') {
+      micStatus.textContent = '⚠️ 語音辨識需要網路（iOS Safari 離線可用）';
+    } else {
+      micStatus.textContent = `語音錯誤：${ev.error}`;
+    }
+  };
+  recognition.onend = () => {
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    const text = $('input-text').value.trim();
+    if (text) {
+      micStatus.textContent = '✓ 辨識完成、送出中...';
+      setTimeout(() => {
+        $('input-text').value = '';
+        sendQuery(text);
+        micStatus.textContent = '';
+      }, 200);
+    } else {
+      micStatus.textContent = '';
+    }
+  };
+
+  micBtn.addEventListener('click', () => {
+    if (isRecording) {
+      recognition.stop();
+    } else {
+      $('input-text').value = '';
+      micStatus.textContent = '';
+      try {
+        recognition.start();
+      } catch (e) {
+        micStatus.textContent = '語音啟動失敗：' + e.message;
+      }
+    }
+  });
+}
+
+fetch('/snapshot').then(r => r.json()).then(s => {
+  $('snap-date').textContent = `${s.snapshot_date} · ${s.sku_count} SKU · ${s.warehouse_count} 倉`;
+});
+
+// ─── 鉤子入口隨機輪播(勾起好奇、騙人點進連帶分析)───
+// 每次開/重整網頁,從池子隨機選 2 顆鉤子插在 chips-bar 最前面
+const HOOK_POOL = [
+  { txt: '🍺 買尿布的也買了…?', kw: '尿布' },
+  { txt: '☕ 買咖啡機還要囤啥?', kw: '咖啡機' },
+  { txt: '🏕️ 買帳篷的人還扛了?', kw: '帳篷' },
+  { txt: '🎧 買耳機順手帶了啥?', kw: '藍牙耳機' },
+  { txt: '💪 買瑜珈墊的還買?', kw: '瑜珈墊' },
+  { txt: '🏃 跑者購物車有啥?', kw: '慢跑鞋' },
+  { txt: '❄️ 買羽絨外套還配?', kw: '羽絨外套' },
+  { txt: '🧹 大掃除要囤哪些?', kw: '洗衣精' },
+];
+(function mountHooks() {
+  const bar = $('chips-bar');
+  const shuffled = HOOK_POOL.slice().sort(() => Math.random() - 0.5).slice(0, 2);
+  // 額外固定一顆「隨機驚喜」
+  const surprise = document.createElement('button');
+  surprise.className = 'chip hook purple';
+  surprise.textContent = '🎲 隨機驚喜';
+  surprise.onclick = randomSurprise;
+  bar.insertBefore(surprise, bar.firstChild);
+  shuffled.forEach(h => {
+    const btn = document.createElement('button');
+    btn.className = 'chip hook';
+    btn.textContent = h.txt;
+    btn.onclick = () => sendQuery(`買${h.kw}的人還會買什麼`);
+    bar.insertBefore(btn, bar.firstChild);
+  });
+})();
+
+currentBotMsg = appendBot(
+  '👋 嗨！我是倉管 Agent。你可以「直接打字問我」，像跟同事講話一樣。\n\n' +
+  '我懂這 6 類事 —— 不知道怎麼問的話，下面的範例點一下就會幫你送出 👇'
+);
+// ── 能力地圖：明白告訴使用者「我懂哪 6 類事」+ 每類給可點範例 ──
+renderCapabilityMap();
+currentBotMsg = null;
+
+// 進站 1.5 秒後，根據「現在的異常」丟一句具體的動態引導（解「想不出要問什麼」）
+setTimeout(suggestFromAnomalies, 1500);
+</script>
+
+</body>
+</html>

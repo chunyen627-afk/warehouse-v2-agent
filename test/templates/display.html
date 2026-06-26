@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FunctionGemma 金融分析 · LLM Live Trace</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+  }
+
+  /* ── 整版 ── */
+  .screen {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 28px 32px;
+    gap: 18px;
+  }
+
+  /* ── 頂部 banner ── */
+  .header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid #21262d;
+    padding-bottom: 14px;
+    flex-shrink: 0;
+  }
+  .header .title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #f0f6fc;
+    letter-spacing: 0.01em;
+  }
+  .header .title .accent {
+    color: #58a6ff;
+  }
+  .header .meta {
+    font-size: 13px;
+    color: #8b949e;
+    text-align: right;
+    font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+  }
+  .header .meta .status {
+    color: #3fb950;
+    margin-top: 4px;
+  }
+  .header .meta .status.offline { color: #f85149; }
+
+  /* ── 主體：LLM Trace ── */
+  .trace-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+  .trace-area::-webkit-scrollbar { width: 8px; }
+  .trace-area::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+  /* 等待訊息 */
+  .waiting {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6e7681;
+    text-align: center;
+    gap: 16px;
+  }
+  .waiting .big {
+    font-size: 56px;
+    font-weight: 200;
+    letter-spacing: 0.02em;
+    color: #8b949e;
+  }
+  .waiting .sub {
+    font-size: 18px;
+    color: #6e7681;
+    line-height: 1.6;
+  }
+  .waiting .pulse {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #3fb950;
+    animation: pulse 2s ease-in-out infinite;
+    margin: 8px;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  /* ── trace 卡片 ── */
+  .trace-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 16px 22px;
+    animation: slideIn 0.3s ease-out;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .trace-card .stage {
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .trace-card .stage::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .trace-card .content {
+    font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+    font-size: 17px;
+    line-height: 1.7;
+    color: #e6edf3;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .trace-card.user .stage   { color: #d29922; }
+  .trace-card.user          { border-left: 3px solid #d29922; }
+  .trace-card.user .content { font-size: 24px; color: #f0f6fc; font-family: -apple-system, "Microsoft JhengHei", sans-serif; }
+
+  .trace-card.llm .stage    { color: #58a6ff; }
+  .trace-card.llm           { border-left: 3px solid #58a6ff; }
+  .trace-card.llm .content  { color: #79c0ff; }
+
+  .trace-card.parsed .stage   { color: #a371f7; }
+  .trace-card.parsed          { border-left: 3px solid #a371f7; }
+  .trace-card.parsed .fname   { color: #d2a8ff; font-weight: 600; }
+  .trace-card.parsed .argkey  { color: #79c0ff; }
+  .trace-card.parsed .argval  { color: #a5d6ff; }
+
+  .trace-card.result .stage   { color: #3fb950; }
+  .trace-card.result          { border-left: 3px solid #3fb950; }
+  .trace-card.result .content { font-size: 19px; color: #f0f6fc; font-family: -apple-system, "Microsoft JhengHei", sans-serif; line-height: 1.8; }
+
+  .trace-card.error .stage    { color: #f85149; }
+  .trace-card.error           { border-left: 3px solid #f85149; }
+  .trace-card.error .content  { color: #ffa198; }
+
+  .trace-card.guided .stage   { color: #d29922; }
+  .trace-card.guided          { border-left: 3px solid #d29922; }
+  .trace-card.guided .content { font-size: 19px; color: #f0f6fc; font-family: -apple-system, "Microsoft JhengHei", sans-serif; line-height: 1.8; }
+
+  /* ── QR Code 角落 ── */
+  .qr-corner {
+    position: fixed;
+    bottom: 22px;
+    right: 22px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px 12px 8px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.6);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .qr-corner img {
+    width: 140px;
+    height: 140px;
+    display: block;
+    image-rendering: pixelated;
+  }
+  .qr-corner .qr-title {
+    font-size: 12px;
+    color: #0d1117;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .qr-corner .qr-label {
+    font-size: 10px;
+    color: #57606a;
+    text-align: center;
+    margin-top: 5px;
+    max-width: 140px;
+    font-family: "SF Mono", Monaco, monospace;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<!-- QR Code 角落 -->
+<div class="qr-corner" id="qr-corner" style="display:none;">
+  <div class="qr-title">掃我互動 📱</div>
+  <img id="qr-img" src="/qr.png" alt="QR Code">
+  <div class="qr-label" id="qr-url">—</div>
+</div>
+
+<div class="screen">
+
+  <!-- 頂部 banner -->
+  <div class="header">
+    <div class="title">
+      <span class="accent">FunctionGemma</span> · 台股金融分析
+    </div>
+    <div class="meta">
+      <div>270M @ RPI5 · q8_0 GGUF</div>
+      <div>快照 <span id="snapshot-date">—</span></div>
+      <div class="status" id="ws-status">連線中...</div>
+    </div>
+  </div>
+
+  <!-- LLM Live Trace -->
+  <div class="trace-area" id="trace-area">
+    <div class="waiting" id="waiting">
+      <div class="big">等待訪客提問</div>
+      <div class="sub">
+        掃描右下角 QR Code 用手機提問<br>
+        每一步推論流程會即時顯示在這裡
+      </div>
+      <div class="pulse"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ─── Trace 卡片管理 ────────────────────────────
+const traceArea = $('trace-area');
+
+function clearTrace() {
+  // 保留 waiting，移掉其他
+  traceArea.innerHTML = '';
+}
+
+function hideWaiting() {
+  const w = $('waiting');
+  if (w) w.remove();
+}
+
+function showWaiting() {
+  if (!$('waiting')) {
+    const div = document.createElement('div');
+    div.className = 'waiting';
+    div.id = 'waiting';
+    div.innerHTML = `
+      <div class="big">等待下一個提問</div>
+      <div class="sub">掃描右下角 QR Code 用手機提問</div>
+      <div class="pulse"></div>
+    `;
+    traceArea.appendChild(div);
+  }
+}
+
+function addCard(stageLabel, contentHtml, kind = '', isHtml = false) {
+  const card = document.createElement('div');
+  card.className = 'trace-card ' + kind;
+  const stageDiv = document.createElement('div');
+  stageDiv.className = 'stage';
+  stageDiv.textContent = stageLabel;
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'content';
+  if (kind === 'parsed') {
+    // parsed 需要 inline highlight，所以用 innerHTML
+    contentDiv.innerHTML = contentHtml;
+  } else {
+    contentDiv.textContent = contentHtml;
+  }
+  card.appendChild(stageDiv);
+  card.appendChild(contentDiv);
+  traceArea.appendChild(card);
+  // auto scroll
+  setTimeout(() => { traceArea.scrollTop = traceArea.scrollHeight; }, 50);
+  return card;
+}
+
+function formatArgs(fname, args) {
+  let html = `<span class="fname">${fname}</span>(\n`;
+  const entries = Object.entries(args);
+  entries.forEach(([k, v], i) => {
+    const comma = i < entries.length - 1 ? ',' : '';
+    html += `  <span class="argkey">${k}</span>: <span class="argval">${JSON.stringify(v)}</span>${comma}\n`;
+  });
+  html += ')';
+  return html;
+}
+
+function trace(msg) {
+  if (msg.stage === 'user_input') {
+    clearTrace();
+    addCard('使用者輸入', msg.user_text, 'user');
+  } else if (msg.stage === 'llm_output') {
+    addCard('LLM 原始輸出 (270M 推論)', msg.raw, 'llm');
+  } else if (msg.stage === 'parsed') {
+    addCard('解析 function call', formatArgs(msg.function, msg.args), 'parsed');
+  } else if (msg.stage === 'result') {
+    const r = msg.result;
+    const cls = r.ok ? 'result' : 'error';
+    const label = r.ok ? '✓ 查詢結果 (從冷凍快照)' : '✗ 錯誤';
+    addCard(label, r.summary, cls);
+    // 5 秒後自動回到 waiting（除非又有新的 trace 進來）
+    setTimeout(() => {
+      if (traceArea.querySelectorAll('.trace-card').length > 0
+          && !document.hidden) {
+        // 不立即清，讓用戶看；若 10 秒內沒新 trace 才清
+      }
+    }, 5000);
+  } else if (msg.stage === 'guided') {
+    // 引導流程：不送 LLM，直接回覆
+    addCard('客服引導 (不送 LLM)', '訪客查詢可查項目清單', 'guided');
+  } else if (msg.stage === 'rejected') {
+    addCard('✗ 守門員攔截', msg.reason || '輸入未命中金融關鍵字 — 不送 LLM', 'error');
+  } else if (msg.stage === 'no_function') {
+    addCard('✗ 無 function call', 'LLM 輸出未包含可識別的 function', 'error');
+  }
+}
+
+// ─── WebSocket ────────────────────────────────
+let ws = null;
+let wsReconnectTimer = null;
+
+function connectWS() {
+  if (ws) { try { ws.close(); } catch(e) {} }
+  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${wsProto}//${location.host}/ws/display`);
+  ws.onopen  = () => {
+    const el = $('ws-status');
+    el.textContent = '● 已連線';
+    el.classList.remove('offline');
+  };
+  ws.onclose = () => {
+    ws = null;
+    const el = $('ws-status');
+    el.textContent = '● 已斷線，3 秒後重連';
+    el.classList.add('offline');
+    wsReconnectTimer = setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => {
+    const el = $('ws-status');
+    el.textContent = '● 連線錯誤';
+    el.classList.add('offline');
+    ws.close();
+  };
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'snapshot') {
+      // 取出 snapshot_date 更新 banner
+      const s = msg.snapshot;
+      if (s && s.snapshot_date) $('snapshot-date').textContent = s.snapshot_date;
+    } else if (msg.type === 'reset') {
+      clearTrace();
+      showWaiting();
+    } else if (msg.type === 'trace') {
+      hideWaiting();
+      trace(msg);
+    }
+  };
+}
+
+// 初始載入：取 snapshot 拿日期
+fetch('/snapshot').then(r => r.json()).then(s => {
+  if (s.snapshot_date) $('snapshot-date').textContent = s.snapshot_date;
+});
+
+connectWS();
+
+// QR Code 角落
+fetch('/info').then(r => r.json()).then(info => {
+  $('qr-url').textContent  = info.url.replace(/^https?:\/\//, '');
+  $('qr-corner').style.display = 'flex';
+});
+</script>
+</body>
+</html>

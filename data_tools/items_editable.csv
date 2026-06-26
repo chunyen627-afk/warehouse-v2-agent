@@ -1,0 +1,61 @@
+﻿sku_id,name,category,unit_price,safety_stock,stock_north,stock_central,stock_south
+e01,無線藍牙耳機,electronics,1290,50,141,42,44
+e02,行動電源 10000mAh,electronics,590,80,141,164,109
+e03,USB-C 快充線 2M,electronics,290,150,48,38,32
+e04,藍牙喇叭,electronics,1890,30,38,35,20
+e05,智慧手環,electronics,1490,40,50,45,53
+e06,手機防摔殼,electronics,390,120,310,140,151
+e07,無線滑鼠,electronics,590,90,293,72,136
+e08,機械式鍵盤,electronics,1690,40,119,55,29
+e09,14吋筆電包,electronics,890,60,218,82,40
+e10,桌上型 USB 風扇,electronics,350,100,144,224,127
+a01,不鏽鋼悶燒罐,appliance_kitchen,880,40,130,81,23
+a02,蒸氣電熨斗,appliance_kitchen,1490,20,73,28,24
+a03,陶瓷不沾鍋 28cm,appliance_kitchen,1290,30,99,55,47
+a04,電動牙刷,appliance_kitchen,1990,25,66,14,15
+a05,迷你果汁機,appliance_kitchen,990,35,62,45,22
+a06,全自動咖啡機,appliance_kitchen,4990,25,44,24,22
+a07,手沖咖啡壺組,appliance_kitchen,1280,40,112,56,40
+a08,野炊鍋具組,appliance_kitchen,1590,35,60,43,58
+a09,玻璃保鮮盒 5入,appliance_kitchen,590,70,199,128,53
+a10,除塵電動拖把,appliance_kitchen,2290,30,91,32,30
+f01,氣泡水 500ml,food_beverage,28,300,1116,566,366
+f02,經典黑咖啡豆 1kg,food_beverage,680,60,176,133,89
+f03,蜂蜜檸檬茶 600ml,food_beverage,45,250,446,213,233
+f04,綜合堅果罐 500g,food_beverage,320,90,169,104,151
+f05,全麥蘇打餅 200g,food_beverage,65,180,618,240,241
+f06,精釀啤酒 6入,food_beverage,390,100,220,235,110
+f07,電解質運動飲,food_beverage,35,220,412,268,270
+f08,高蛋白乳清飲,food_beverage,80,160,299,287,260
+f09,熱可可粉 300g,food_beverage,180,110,244,129,192
+f10,濾掛咖啡 20入,food_beverage,280,130,324,124,80
+d01,抗菌洗衣精 4kg,daily_goods,320,120,177,223,180
+d02,三層抽取衛生紙,daily_goods,290,200,455,181,202
+d03,天然沐浴乳 1L,daily_goods,280,100,374,169,171
+d04,蚊香液補充瓶,daily_goods,120,150,509,122,212
+d05,強力垃圾袋 50入,daily_goods,95,180,528,308,157
+d06,嬰兒紙尿布 L,daily_goods,450,140,396,138,150
+d07,嬰兒濕紙巾,daily_goods,99,200,471,484,320
+d08,防蚊液,daily_goods,150,130,243,214,100
+d09,橡膠清潔手套,daily_goods,60,160,564,364,146
+d10,咖啡濾紙 100入,daily_goods,75,140,396,256,103
+c01,純棉素T 男款,apparel,390,100,314,171,148
+c02,羊毛保暖襪 3雙入,apparel,290,150,382,120,141
+c03,輕量羽絨外套,apparel,2890,40,13,95,64
+c04,牛仔長褲 男款,apparel,1290,60,199,79,37
+c05,彈性運動內衣,apparel,690,80,275,192,52
+c06,機能排汗衣,apparel,590,110,268,100,161
+c07,運動壓縮臂套,apparel,290,90,283,91,101
+c08,嬰兒連身衣,apparel,350,100,260,125,159
+c09,保暖毛帽,apparel,350,90,205,104,108
+c10,防曬遮陽帽,apparel,390,100,306,114,93
+s01,瑜珈墊 6mm,sports,690,50,186,95,54
+s02,登山水壺 1L,sports,450,80,201,80,66
+s03,彈力健身環,sports,390,70,22,18,14
+s04,啞鈴 5kg 一對,sports,890,45,79,41,20
+s05,運動毛巾 100x30cm,sports,220,120,214,280,189
+s06,露營帳篷 4人,sports,3990,25,34,30,33
+s07,折疊露營椅,sports,690,60,104,61,100
+s08,慢跑鞋 男款,sports,2290,40,106,64,59
+s09,露營馬克杯,sports,250,90,293,101,60
+s10,LED 露營燈,sports,590,55,126,83,61

@@ -1,0 +1,29 @@
+# ── 模型權重（全排除，太大）──
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+models/
+functiongemma-270m-it-fine-tune/
+test/models/
+
+# ── 微調產物（本機跑的，不需備份）──
+training_data.jsonl
+*.jsonl
+
+# ── Python cache ──
+__pycache__/
+*.pyc
+*.pyo
+
+# ── 暫存 / log ──
+*.log
+_ft*.log
+_backups/
+*.zip
+
+# ── 系統 ──
+.DS_Store
+Thumbs.db
+desktop.ini

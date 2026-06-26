@@ -1,0 +1,11 @@
+[
+  {
+    "receipt_id": "GR-PO00582-d01",
+    "po_id": "PO00582",
+    "sku_id": "d01",
+    "received_qty": 54,
+    "receipt_date": "2026-05-02",
+    "warehouse": "south",
+    "note": ""
+  }
+]
