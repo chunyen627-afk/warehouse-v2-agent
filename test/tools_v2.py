@@ -1234,3 +1234,114 @@ def compare_periods(metric: str = "out") -> dict:
     summary = "近兩個月出庫變化 — " + "；".join(parts) if parts else "兩期出庫無明顯變化。"
     return {"ok": True, "summary": summary, "view": "period_compare",
             "data": {"rows": top, "trace": steps}}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 補貨建議 Loop — Step 1: judge_restock_needed
+# ──────────────────────────────────────────────────────────────────────────────
+def judge_restock_needed(keyword: str = "", warehouse: str = "all") -> dict:
+    """
+    判斷是否需要補貨。
+    回傳 needs_restock=True/False + 各 SKU 庫存 vs 安全庫存的差距。
+    """
+    s = W.state()
+    wh_f = warehouse if warehouse in ("north", "central", "south") else "all"
+
+    # 找符合 keyword 的 SKU
+    from difflib import SequenceMatcher
+    matched = []
+    for it in s.items:
+        name = it.get("name", "")
+        if not keyword or keyword in name or name in keyword:
+            matched.append(it)
+        elif keyword:
+            score = SequenceMatcher(None, keyword, name).ratio()
+            if score > 0.5:
+                matched.append(it)
+
+    if not matched:
+        return {"ok": False, "needs_restock": False,
+                "summary": f"找不到「{keyword}」相關商品",
+                "view": "restock_judge", "data": {"items": []}}
+
+    # 計算各 SKU 庫存缺口
+    items_out = []
+    for it in matched:
+        sku = it["sku_id"]
+        safety = it.get("safety_stock", 0)
+        total, by_wh = W._sku_total_stock(sku, wh_f)
+        gap = safety - total          # 正數 = 缺口，負數 = 充足
+        daily_burn = it.get("daily_burn", 0) or 0
+        days_left = round(total / daily_burn, 1) if daily_burn > 0 else 999
+
+        items_out.append({
+            "sku_id":       sku,
+            "name":         it["name"],
+            "qty":          total,
+            "safety_stock": safety,
+            "gap":          gap,
+            "daily_burn":   daily_burn,
+            "days_left":    days_left,
+            "needs":        gap > 0,
+        })
+
+    needs = [i for i in items_out if i["needs"]]
+    ok_items = [i for i in items_out if not i["needs"]]
+
+    if not needs:
+        names = "、".join(i["name"] for i in ok_items[:3])
+        return {"ok": True, "needs_restock": False,
+                "summary": f"✅ {names} 庫存充足，暫不需補貨",
+                "view": "restock_judge",
+                "data": {"items": items_out, "needs": [], "ok_items": ok_items}}
+
+    names = "、".join(i["name"] for i in needs[:3])
+    return {"ok": True, "needs_restock": True,
+            "summary": f"⚠️ {len(needs)} 項商品低於安全庫存：{names}",
+            "view": "restock_judge",
+            "data": {"items": items_out, "needs": needs, "ok_items": ok_items}}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 補貨建議 Loop — Step 2: calculate_restock_qty
+# ──────────────────────────────────────────────────────────────────────────────
+def calculate_restock_qty(keyword: str = "", warehouse: str = "all",
+                          cover_days: int = 30) -> dict:
+    """
+    計算建議補貨量（cover_days 天的用量 + 補回安全庫存）。
+    通常在 judge_restock_needed 確認需要補貨後呼叫。
+    """
+    judge = judge_restock_needed(keyword=keyword, warehouse=warehouse)
+    needs = judge.get("data", {}).get("needs", [])
+
+    if not needs:
+        return {"ok": True, "summary": judge["summary"],
+                "view": "restock_plan", "data": {"rows": []}}
+
+    rows = []
+    for it in needs:
+        daily = it["daily_burn"] or 0
+        # 建議補量 = 缺口 + cover_days 天用量（至少補到安全庫存以上）
+        suggest = max(it["gap"], 0) + round(daily * cover_days)
+        suggest = max(suggest, 1)
+        rows.append({
+            "sku_id":       it["sku_id"],
+            "name":         it["name"],
+            "qty":          it["qty"],
+            "safety_stock": it["safety_stock"],
+            "gap":          it["gap"],
+            "daily_burn":   daily,
+            "suggest_qty":  suggest,
+            "cover_days":   cover_days,
+        })
+
+    total_skus = len(rows)
+    summary = f"📦 建議補貨 {total_skus} 項商品（涵蓋 {cover_days} 天用量）：\n"
+    for r in rows[:3]:
+        summary += f"  • {r['name']}：補 {r['suggest_qty']} 件（現有 {r['qty']}，安全庫存 {r['safety_stock']}）\n"
+    if total_skus > 3:
+        summary += f"  … 共 {total_skus} 項，詳見下方清單"
+
+    return {"ok": True, "summary": summary.strip(),
+            "view": "restock_plan",
+            "data": {"rows": rows, "cover_days": cover_days}}

@@ -765,7 +765,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # query_movement 不加在此，因為 C8 RCA 校正需要能 override 它
     if func_name in ("set_schedule", "list_schedules", "delete_schedule",
                      "list_alerts", "delete_alert", "set_alert",
-                     "compare_warehouses"):
+                     "compare_warehouses",
+                     "judge_restock_needed", "calculate_restock_qty"):
         return func_name, func_args, True
     text_low = user_text.lower()
 
@@ -818,7 +819,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if (any(kw in user_text for kw in _LOW_STOCK_INTENT_WORDS) or
         any(kw in text_low for kw in _LOW_STOCK_INTENT_WORDS)) \
        and not _cfg_key_in_text and not _report_in_text \
-       and not _alert_in_text and not _po_in_text:
+       and not _alert_in_text and not _po_in_text \
+       and func_name not in ("judge_restock_needed", "calculate_restock_qty"):
         if func_name != "list_low_stock":
             log.info(f"[校正 C3] {func_name} → list_low_stock (缺貨意圖)")
             new_args = {}
@@ -1714,26 +1716,46 @@ async def api_query(req: Request):
 
     vid = body.get("vid", "api")
 
-    try:
-        prompt = build_prompt(user_text)
-        r = await asyncio.wait_for(
-            asyncio.to_thread(
-                LLM, prompt,
-                max_tokens=160, temperature=0.0,
-                stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
-                echo=False, stream=False,
-            ),
-            timeout=25.0,
-        )
-    except Exception as e:
-        return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
+    # ── 純規則路由（不需要 LLM，Rewrite 後直接對應）──
+    _rule_func_name, _rule_func_args = None, {}
+    _restock_kws_early = ("需要補貨嗎", "要補貨嗎", "需要補貨", "什麼需要補", "哪些需要補",
+                          "補貨建議", "建議補多少", "要補多少", "補幾個", "幾個需要補")
+    if any(w in user_text for w in _restock_kws_early):
+        _rule_func_name, _rule_func_args = "judge_restock_needed", {"keyword": "", "warehouse": "all"}
+    elif user_text in ("比較各倉庫庫存", "查看排程", "查看警示規則"):
+        _rule_func_name = {
+            "比較各倉庫庫存": "compare_warehouses",
+            "查看排程":       "list_schedules",
+            "查看警示規則":   "list_alerts",
+        }[user_text]
+        _rule_func_args = {}
 
-    output = r["choices"][0]["text"].strip()
-    parsed = parse_function_call(output)
-    if not parsed:
-        return JSONResponse({"ok": False, "view": "error", "summary": "parse_failed", "raw": output})
+    if _rule_func_name:
+        func_name, func_args = _rule_func_name, _rule_func_args
+    else:
+        if LLM is None:
+            return JSONResponse({"ok": False, "view": "error",
+                                 "summary": HEALTH.get("message") or "LLM 尚未載入"})
+        try:
+            prompt = build_prompt(user_text)
+            r = await asyncio.wait_for(
+                asyncio.to_thread(
+                    LLM, prompt,
+                    max_tokens=160, temperature=0.0,
+                    stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
+                    echo=False, stream=False,
+                ),
+                timeout=25.0,
+            )
+        except Exception as e:
+            return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
 
-    func_name, func_args = parsed
+        output = r["choices"][0]["text"].strip()
+        parsed = parse_function_call(output)
+        if not parsed:
+            return JSONResponse({"ok": False, "view": "error", "summary": "parse_failed", "raw": output})
+
+        func_name, func_args = parsed
 
     # search_log keyword pre-clean
     if func_name == "search_log" and func_args.get("keyword"):
@@ -1804,6 +1826,16 @@ async def api_query(req: Request):
         func_name = "set_alert"
         func_args = {"raw_text": user_text}
 
+    # ── Pre-C-Restock（HTTP 版）── 補貨詢問 → judge_restock_needed
+    _restock_kws = ("需要補貨嗎", "要補貨嗎", "需要補貨", "什麼需要補", "哪些需要補",
+                    "補貨建議", "建議補多少", "要補多少", "補幾個", "幾個需要補",
+                    "calculate_restock", "judge_restock")
+    if any(w in user_text for w in _restock_kws):
+        func_name = "judge_restock_needed"
+        # 嘗試從 func_args 繼承 keyword；若無則從 user_text 解析
+        if "keyword" not in func_args or not func_args.get("keyword"):
+            func_args = {"keyword": func_args.get("keyword", ""), "warehouse": "all"}
+
     # correct（先校正，OOV 才能對正確的 func_name/keyword 做判斷）
     func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
 
@@ -1844,6 +1876,21 @@ async def api_query(req: Request):
     result = finance.execute(func_name, func_args)
     if oov_hint and isinstance(result, dict) and result.get("summary"):
         result["summary"] = oov_hint + result["summary"]
+
+    # ── 補貨 Loop HTTP：judge_restock_needed → auto calculate_restock_qty ──
+    if isinstance(result, dict) and result.get("view") == "restock_judge":
+        needs = result.get("data", {}).get("needs", [])
+        if needs:
+            try:
+                import tools_v2 as _tv2_http
+                plan = _tv2_http.calculate_restock_qty(
+                    keyword=func_args.get("keyword", ""),
+                    warehouse=func_args.get("warehouse", "all"),
+                    cover_days=30
+                )
+                result = {**result, "restock_plan": plan}
+            except Exception as _re:
+                log.warning(f"[Restock HTTP] calculate 失敗: {_re}")
 
     return JSONResponse(result)
 
@@ -2214,6 +2261,13 @@ async def ws_handler(ws: WebSocket):
                         func_name = "set_alert"
                         func_args = {"raw_text": user_text}
                         log.info("[Pre-C-Alert] → set_alert")
+                    elif any(w in user_text for w in (
+                            "需要補貨嗎", "要補貨嗎", "需要補貨", "什麼需要補", "哪些需要補",
+                            "補貨建議", "建議補多少", "要補多少", "補幾個", "幾個需要補")):
+                        func_name = "judge_restock_needed"
+                        if "keyword" not in func_args or not func_args.get("keyword"):
+                            func_args = {"keyword": func_args.get("keyword", ""), "warehouse": "all"}
+                        log.info("[Pre-C-Restock] → judge_restock_needed")
 
                 # ── Clarification：模糊意圖攔截（在校正前）──
                 clarify = _detect_clarify(user_text)
@@ -2375,12 +2429,51 @@ async def ws_handler(ws: WebSocket):
                 if _oov_hint:
                     summary = _oov_hint + " " + summary
                     result = {**result, "summary": summary}
-                # agent_rca：先送第一輪結果，再做第二輪 LLM 推理
+                # agent_rca：judge_cause_found → (retry if needed) → suggest_action
                 if result.get("view") == "agent_rca":
+                    rca_ctx = result.get("data", {}).get("rca_context", {})
+
+                    # ── judge_cause_found：有沒有找到差異？──
+                    cause_found = rca_ctx and rca_ctx.get("disc_count", 0) > 0
+
+                    if not cause_found:
+                        # 沒找到 → 換更廣的 keyword 再搜一輪（category-level retry）
+                        await send({"type": "tool_call", "func": "judge_cause_found",
+                                    "args_preview": "found=False → retry"})
+                        retry_kw = func_args.get("keyword", "")
+                        # 嘗試用 category 擴大搜尋
+                        snap = warehouse.state()
+                        retry_items = [it for it in snap.items if retry_kw and retry_kw in it.get("name","")]
+                        if retry_items:
+                            retry_cat = retry_items[0].get("category", "")
+                            cat_label = retry_items[0].get("category_label", retry_cat)
+                            await send({"type": "tool_call", "func": "search_log",
+                                        "args_preview": f"keyword={cat_label!r} (category retry)"})
+                            import tools_v2 as _tv2
+                            retry_result = await asyncio.to_thread(
+                                _tv2.search_log, keyword=retry_cat)
+                            retry_ctx = retry_result.get("data", {}).get("rca_context", {})
+                            if retry_ctx and retry_ctx.get("disc_count", 0) > 0:
+                                result = retry_result
+                                rca_ctx = retry_ctx
+                                cause_found = True
+                                log.info(f"[RCA retry] category 搜尋找到 {retry_ctx['disc_count']} 筆差異")
+                            else:
+                                log.info("[RCA retry] 兩輪都找不到差異")
+
                     await send({"type": "done", "result": result})   # 先顯示 trace + 表格
 
-                    rca_ctx = result.get("data", {}).get("rca_context", {})
-                    if rca_ctx and rca_ctx.get("disc_count", 0) > 0 and LLM:
+                    if not cause_found:
+                        # judge_cause_found 確認：兩輪都沒找到差異
+                        await send({"type": "tool_call", "func": "judge_cause_found",
+                                    "args_preview": "found=False → no_cause"})
+                        await send({"type": "rca_round2_done",
+                                    "suggestion": "⚠️ 兩輪搜尋均未發現帳務差異記錄，建議進行人工實地盤點確認實際庫存。",
+                                    "suggestion_action": "manual_audit"})
+                    elif LLM:
+                        # judge_cause_found 確認：找到差異，進行根因分析
+                        await send({"type": "tool_call", "func": "judge_cause_found",
+                                    "args_preview": f"found=True disc_count={rca_ctx.get('disc_count',0)}"})
                         # 通知前端：第二輪推理開始（故意等一下讓 loading 看得到）
                         await send({"type": "rca_round2_start"})
                         await send({"type": "tool_call", "func": "suggest_action", "args_preview": "action=?"})
@@ -2429,6 +2522,22 @@ async def ws_handler(ws: WebSocket):
                         except Exception as e2:
                             log.warning(f"[RCA round2] 失敗: {e2}")
                             await send({"type": "rca_round2_done", "suggestion": "", "suggestion_action": ""})
+                # ── 補貨建議 Loop ─────────────────────────────────────────
+                elif result.get("view") == "restock_judge":
+                    await send({"type": "done", "result": result})
+                    needs = result.get("data", {}).get("needs", [])
+                    if needs:
+                        # Step 2：自動計算補貨量
+                        await send({"type": "tool_call", "func": "calculate_restock_qty",
+                                    "args_preview": f"items={len(needs)} cover_days=30"})
+                        await asyncio.sleep(0.4)
+                        restock_result = await asyncio.to_thread(
+                            _tv2.calculate_restock_qty,
+                            keyword=func_args.get("keyword", ""),
+                            warehouse=func_args.get("warehouse", "all"),
+                            cover_days=30
+                        )
+                        await send({"type": "restock_plan_done", "result": restock_result})
                 else:
                     for ch in summary:
                         await send({"type": "token", "text": ch})
