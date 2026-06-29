@@ -135,6 +135,8 @@ GATEKEEPER_KEYWORDS = {
     # English actions
     "stock", "inventory", "low", "alert", "restock", "compare", "hot", "slow",
     "top", "selling", "movement", "inbound", "outbound",
+    "bluetooth", "earphone", "coffee", "machine", "bought", "together", "related",
+    "what", "how", "show", "today", "week", "month", "much", "many",
     # 助理代名
     "我", "my", "i ",
 }
@@ -147,6 +149,10 @@ def is_meaningful_input(text: str) -> bool:
         return False
     if re.fullmatch(r"\d+", s):
         return False
+    # 黑名單：明顯非倉管領域 → 直接擋
+    for kw in _GATEKEEPER_BLACKLIST:
+        if kw in s:
+            return False
     for kw in GATEKEEPER_KEYWORDS:
         if kw in s:
             return True
@@ -158,6 +164,12 @@ GATEKEEPER_REJECT_MSG = (
     "試試這樣問：\n"
     "「藍牙耳機庫存」「庫存警示」「本月熱銷排行」「北倉跟南倉比較」\n"
     "或輸入「查倉管」看完整功能列表！"
+)
+
+# 明顯非倉管領域的黑名單（股市/天氣/電影…）— 就算含「查」也不放行
+_GATEKEEPER_BLACKLIST = (
+    "股市", "股票", "天氣", "電影", "音樂", "新聞", "地圖",
+    "翻譯", "計算", "食譜", "笑話", "遊戲", "stocks", "weather",
 )
 
 
@@ -434,7 +446,16 @@ _REWRITE_RULES: list[tuple] = [
     (_re.compile(r"^(查一下|看一下|幫我查|幫我看)庫存$"),           "查詢庫存"),
     (_re.compile(r"^幫.查$"), "查詢"),  # 「幫偶查」「幫我查」→ clarify
     (_re.compile(r"^查庫存$"),                                      "查詢所有庫存"),
-    # 含「有多少/剩多少」但沒有名詞（< 7 字）才改寫；長句含商品名讓 LLM 抽
+        # ── 英文常用句型 ──
+    (_re.compile(r"(show|list|get)\s+(today|this week|this month)\s+(inbound|outbound)", _re.IGNORECASE),
+                                                                    "查詢進出記錄"),
+    (_re.compile(r"low stock alert", _re.IGNORECASE),                 "庫存警示"),
+    (_re.compile(r"(what|show|list|get).*(bought|related).*", _re.IGNORECASE),
+                                                                    "相關商品查詢"),
+    (_re.compile(r"(how much|how many|show|list|get)\s+(.+)", _re.IGNORECASE),
+                                                                    "\\2 庫存"),
+
+# 含「有多少/剩多少」但沒有名詞（< 7 字）才改寫；長句含商品名讓 LLM 抽
     (_re.compile(r"^現在還有多少貨$"),                              "查詢庫存"),
 ]
 
@@ -629,7 +650,7 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
     _kw_prefixes = ("幫我查", "幫我看", "幫我找", "查看", "查詢", "查一下",
                     "看看", "有沒有", "有", "是", "了", "也", "還", "的")
     _kw_suffixes = ("有多少", "剩多少", "有幾個", "剩幾個", "有幾", "剩幾",
-                    "有", "剩", "的", "嗎", "啊", "呢", "吧", "了", "喔")
+                    "有", "剩", "還", "的", "嗎", "啊", "呢", "吧", "了", "喔")
     _kw_clean = keyword
     for pfx in sorted(_kw_prefixes, key=len, reverse=True):
         if _kw_clean.startswith(pfx) and len(_kw_clean) > len(pfx) + 1:
@@ -1030,6 +1051,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     log.info(f"[校正 C1] query_inventory 補 keyword: {cleaned!r}")
                     func_args = dict(func_args)
                     func_args["keyword"] = cleaned
+
+    # ── C2c: query_movement 沒抽到 keyword → 從 user_text 補 ──
+    if func_name == "query_movement":
+        if not func_args.get("keyword"):
+            cleaned = _extract_sku_keyword(user_text)
+            if cleaned and len(cleaned) >= 2:
+                log.info(f"[校正 C2c] query_movement 補 keyword: {cleaned!r}")
+                func_args = dict(func_args)
+                func_args["keyword"] = cleaned
 
     # ── 通用：warehouse / category / period enum 容錯 ──
     if "warehouse" in func_args and func_args["warehouse"] not in VALID_WAREHOUSES:
@@ -1804,6 +1834,11 @@ async def api_query(req: Request):
         return JSONResponse({"ok": False, "view": "error", "summary": "empty query"})
     user_text = _rewrite_query(user_text)
 
+    # ── 守門員（HTTP 版）──
+    if not is_meaningful_input(user_text):
+        return JSONResponse({"ok": False, "view": "rejected",
+                             "summary": GATEKEEPER_REJECT_MSG})
+
     clarify = _detect_clarify(user_text)
     if clarify:
         return JSONResponse({"ok": True, "view": "clarify", **clarify})
@@ -1972,6 +2007,10 @@ async def api_query(req: Request):
     result = finance.execute(func_name, func_args)
     if isinstance(result, dict):
         result["_function"] = func_name  # 給 eval_http.py 驗證路由
+        # 把 keyword 回傳到 data 層（有些 function 會內部 resolve 成完整名稱）
+        _res_kw = func_args.get("keyword", "") or func_args.get("target", "")
+        if _res_kw and isinstance(result.get("data"), dict) and "keyword" not in result["data"]:
+            result["data"]["keyword"] = _res_kw
     if oov_hint and isinstance(result, dict) and result.get("summary"):
         result["summary"] = oov_hint + result["summary"]
 
