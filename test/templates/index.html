@@ -1028,7 +1028,6 @@ const TRACE_KIND = {
 let _traceContainer = null;  // 目前訊息泡的 trace 容器
 let _pendingToolCalls = [];  // tool_call 訊息暫存，等 card 建好後插入
 let _rcaCardId = null;       // 當次 agent_rca card 的 id，給 round2 handler 用
-let _restockCardId = null;  // 當次 restock_judge card 的 id，給 restock_plan_done 用
 
 function appendTraceStep(step) {
   // 若還沒有 trace 容器，建一個接在目前 bot 訊息後面
@@ -1179,30 +1178,6 @@ function handleMessage(msg) {
     $('send-btn').disabled = false;
     return;
   }
-  if (msg.type === 'restock_plan_done') {
-    const restockCard = _restockCardId ? document.getElementById(_restockCardId) : null;
-    const planEl = restockCard ? restockCard.querySelector('.restock-plan-section') : null;
-    const rdata = (msg.result && msg.result.data) || {};
-    const rows = rdata.rows || [];
-    if (planEl && rows.length > 0) {
-      let tbl = `<div style="margin-top:10px;font-weight:600;color:var(--accent)">📦 補貨建議（${rdata.cover_days || 30} 天）</div>
-<table class="inv-table" style="margin-top:6px;font-size:12px">
-<thead><tr><th>商品</th><th>現庫存</th><th>安全庫存</th><th>日耗</th><th>建議補量</th></tr></thead><tbody>`;
-      rows.forEach(r => {
-        const dangerColor = r.gap > 20 ? 'color:var(--danger);font-weight:700' : 'color:#e67e22';
-        tbl += `<tr><td>${r.name}</td><td>${r.qty}</td><td>${r.safety_stock}</td><td>${r.daily_burn||0}</td>
-<td style="${dangerColor}">+${r.suggest_qty}</td></tr>`;
-      });
-      tbl += '</tbody></table>';
-      planEl.innerHTML = tbl;
-    } else if (planEl) {
-      planEl.style.display = 'none';
-    }
-    _restockCardId = null;
-    isSending = false;
-    $('send-btn').disabled = false;
-    return;
-  }
   if (msg.type === 'done') {
     const result = msg.result || {};
     const view = result.view;
@@ -1222,14 +1197,9 @@ function handleMessage(msg) {
       _rcaCardId = lastBotAnchor.id;
     }
     // agent_rca 有第二輪推理，等 rca_round2_done 再解鎖
-    // restock_judge 有第二輪計算，等 restock_plan_done 再解鎖
-    if (view !== 'agent_rca' && view !== 'restock_judge') {
+    if (view !== 'agent_rca') {
       isSending = false;
       $('send-btn').disabled = false;
-    }
-    // 儲存 restock_judge card id，給 restock_plan_done 定位用
-    if (view === 'restock_judge' && lastBotAnchor && lastBotAnchor.id) {
-      _restockCardId = lastBotAnchor.id;
     }
     return;
   }
@@ -1748,34 +1718,6 @@ function renderViewCard(view, data, topSummary) {
       ${rows.map(r=>`<tr><td>${r.name}</td><td>${r.last}</td><td>${r.this}</td>
         <td style="color:${r.delta>0?'#5cb85c':'#d9534f'};font-weight:700">${r.delta>0?'+':''}${r.delta} (${r.pct>0?'+':''}${r.pct}%)</td></tr>`).join('')}
       </table>`;
-  } else if (view === 'restock_judge') {
-    // 補貨判斷結果 — Step 1
-    const items = data.items || [];
-    const needs = data.needs || [];
-    const ok    = data.ok_items || [];
-    const hasDanger = needs.length > 0;
-    let rows = items.map(r => {
-      const color = r.needs ? (r.gap > 20 ? 'var(--danger)' : '#e67e22') : 'var(--accent)';
-      const label = r.needs ? `⚠️ 缺 ${r.gap} 件` : '✅ 充足';
-      return `<tr>
-        <td>${r.name}</td>
-        <td>${r.qty}</td>
-        <td>${r.safety_stock}</td>
-        <td>${r.daily_burn||0}</td>
-        <td>${r.days_left >= 999 ? '∞' : r.days_left}</td>
-        <td style="color:${color};font-weight:600">${label}</td>
-      </tr>`;
-    }).join('');
-    card.innerHTML = `
-      <div class="label">🔎 補貨判斷 — ${hasDanger ? `<span style="color:var(--danger)">${needs.length} 項需補貨</span>` : '<span style="color:var(--accent)">庫存充足</span>'}</div>
-      <table class="inv-table" style="font-size:12px">
-        <thead><tr><th>商品</th><th>現庫存</th><th>安全庫存</th><th>日耗</th><th>撐天</th><th>狀態</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="restock-plan-section" style="min-height:${hasDanger?'40':'0'}px">
-        ${hasDanger ? '<div style="color:var(--muted);font-size:12px;margin-top:8px">⏳ 計算補貨量中…</div>' : ''}
-      </div>
-    `;
   } else if (view === 'clarify') {
     // 意圖澄清選項 — 數字選單，輸入 1/2/3/4 送出
     const opts = data.options || [];

@@ -765,8 +765,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # query_movement 不加在此，因為 C8 RCA 校正需要能 override 它
     if func_name in ("set_schedule", "list_schedules", "delete_schedule",
                      "list_alerts", "delete_alert", "set_alert",
-                     "compare_warehouses",
-                     "judge_restock_needed", "calculate_restock_qty"):
+                     "compare_warehouses"):
         return func_name, func_args, True
     text_low = user_text.lower()
 
@@ -819,8 +818,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if (any(kw in user_text for kw in _LOW_STOCK_INTENT_WORDS) or
         any(kw in text_low for kw in _LOW_STOCK_INTENT_WORDS)) \
        and not _cfg_key_in_text and not _report_in_text \
-       and not _alert_in_text and not _po_in_text \
-       and func_name not in ("judge_restock_needed", "calculate_restock_qty"):
+       and not _alert_in_text and not _po_in_text:
         if func_name != "list_low_stock":
             log.info(f"[校正 C3] {func_name} → list_low_stock (缺貨意圖)")
             new_args = {}
@@ -1570,33 +1568,24 @@ app = FastAPI()
 
 
 def _background_init():
-    """背景載入模型。seed data 失敗才算真正失敗；llama_cpp 載入失敗只降級為無 LLM 模式。"""
+    """背景載入模型。"""
     global LLM, MODEL_FILE, SYSTEM_PROMPT
     try:
         _set_health("starting", "初始化 seed 資料...")
         finance.init(SEED_FILE)
         intent_clf.load()
         SYSTEM_PROMPT = load_system_prompt()
-    except Exception as e:
-        log.error(f"[startup] seed 初始化失敗: {e}", exc_info=True)
-        _set_health("failed", "初始化失敗", error=f"{type(e).__name__}: {e}")
-        return
-
-    # 模型載入失敗不影響 rule-based 功能，只是 LLM=None
-    try:
         LLM, MODEL_FILE = load_model()
+        snap = finance.state()
+        log.info(f"快照日期：{snap.snapshot_date}")
+        log.info(f"SKU 數：{len(snap.items)} / 倉庫：{len(snap.warehouses)} / 類別：{len(snap.categories)}")
+        log.info(f"URL: {get_url()}")
+        _set_health("ready",
+                    f"就緒 — 快照 {snap.snapshot_date}、{len(snap.items)} SKU、{len(snap.warehouses)} 倉")
     except Exception as e:
-        log.warning(f"[startup] 模型載入失敗（無 LLM 模式）: {e}")
-        LLM = None
-        MODEL_FILE = ""
-
-    snap = finance.state()
-    log.info(f"快照日期：{snap.snapshot_date}")
-    log.info(f"SKU 數：{len(snap.items)} / 倉庫：{len(snap.warehouses)} / 類別：{len(snap.categories)}")
-    log.info(f"URL: {get_url()}")
-    llm_note = f"、模型 {MODEL_FILE}" if MODEL_FILE else "、無 LLM（rule-only 模式）"
-    _set_health("ready",
-                f"就緒 — 快照 {snap.snapshot_date}、{len(snap.items)} SKU、{len(snap.warehouses)} 倉{llm_note}")
+        log.error(f"[startup] 初始化失敗: {e}", exc_info=True)
+        if HEALTH["stage"] != "failed":
+            _set_health("failed", "初始化失敗", error=f"{type(e).__name__}: {e}")
 
 
 @app.on_event("startup")
@@ -1725,63 +1714,26 @@ async def api_query(req: Request):
 
     vid = body.get("vid", "api")
 
-    # ── 純規則路由（不需要 LLM）——先做，LLM=None 時也能跑 ──
-    _rule_func_name, _rule_func_args = None, {}
-    ut = user_text   # shortcut
-    # 補貨
-    _restock_kws_early = ("需要補貨嗎", "要補貨嗎", "需要補貨", "什麼需要補", "哪些需要補",
-                          "補貨建議", "建議補多少", "要補多少", "補幾個", "幾個需要補")
-    if any(w in ut for w in _restock_kws_early):
-        _rule_func_name, _rule_func_args = "judge_restock_needed", {"keyword": "", "warehouse": "all"}
-    # 庫存查詢（全覽）
-    elif any(ut == kw for kw in ("查詢庫存", "查詢所有庫存", "查一下庫存", "看庫存", "查庫存")):
-        _rule_func_name, _rule_func_args = "query_inventory", {}
-    # 缺貨警示
-    elif any(w in ut for w in ("缺貨警示", "哪些商品缺貨", "低庫存", "庫存警示")):
-        _rule_func_name, _rule_func_args = "list_low_stock", {}
-    # 熱銷
-    elif any(w in ut for w in ("熱銷", "熱賣", "熱銷排行", "熱賣排行", "本週熱銷", "本月熱銷", "暢銷")):
-        _rule_func_name, _rule_func_args = "list_hot_items", {}
-    # 到期警示
-    elif any(w in ut for w in ("到期", "即將過期", "快過期", "效期")):
-        _rule_func_name, _rule_func_args = "list_expiring_items", {}
-    # 比較倉庫
-    elif any(w in ut for w in ("比較各倉庫庫存", "倉庫比較", "各倉比較", "北中南倉")):
-        _rule_func_name, _rule_func_args = "compare_warehouses", {"warehouse_a": "north", "warehouse_b": "central"}
-    # 排程管理
-    elif any(w in ut for w in ("查看排程", "查排程", "看排程", "有哪些排程")):
-        _rule_func_name, _rule_func_args = "list_schedules", {}
-    # 警示規則管理
-    elif any(w in ut for w in ("查看警示規則", "查看警示", "警示規則", "有哪些警示")):
-        _rule_func_name, _rule_func_args = "list_alerts", {}
+    try:
+        prompt = build_prompt(user_text)
+        r = await asyncio.wait_for(
+            asyncio.to_thread(
+                LLM, prompt,
+                max_tokens=160, temperature=0.0,
+                stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
+                echo=False, stream=False,
+            ),
+            timeout=25.0,
+        )
+    except Exception as e:
+        return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
 
-    _used_rule_route = bool(_rule_func_name)
-    if _rule_func_name:
-        func_name, func_args = _rule_func_name, _rule_func_args
-    else:
-        if LLM is None:
-            return JSONResponse({"ok": False, "view": "error",
-                                 "summary": "⚠️ LLM 模型未載入，此功能需要 GGUF 模型檔。可用功能：查庫存、缺貨警示、補貨建議、熱銷排行、到期警示"})
-        try:
-            prompt = build_prompt(user_text)
-            r = await asyncio.wait_for(
-                asyncio.to_thread(
-                    LLM, prompt,
-                    max_tokens=160, temperature=0.0,
-                    stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
-                    echo=False, stream=False,
-                ),
-                timeout=25.0,
-            )
-        except Exception as e:
-            return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
+    output = r["choices"][0]["text"].strip()
+    parsed = parse_function_call(output)
+    if not parsed:
+        return JSONResponse({"ok": False, "view": "error", "summary": "parse_failed", "raw": output})
 
-        output = r["choices"][0]["text"].strip()
-        parsed = parse_function_call(output)
-        if not parsed:
-            return JSONResponse({"ok": False, "view": "error", "summary": "parse_failed", "raw": output})
-
-        func_name, func_args = parsed
+    func_name, func_args = parsed
 
     # search_log keyword pre-clean
     if func_name == "search_log" and func_args.get("keyword"):
@@ -1824,44 +1776,41 @@ async def api_query(req: Request):
             func_name = "run_script"
             func_args = {"script_name": smap.get(_pre_hit, _pre_hit)}
 
-    if not _used_rule_route:
-        # ── Pre-C-Movement（HTTP 版）── rewrite 後的標準句 → query_movement（RCA 意圖優先）
-        _movement_kws = ("查詢進出記錄", "進出記錄", "出貨了多少", "上週進了多少", "最近30天出貨",
-                         "進貨記錄", "出貨記錄", "入庫記錄", "移動記錄")
-        _has_rca_kw = any(w in user_text for w in _RCA_INTENT_WORDS)
-        if (not _has_rca_kw and
-                func_name != "query_movement" and
-                func_name not in ("run_script", "set_schedule", "list_schedules") and
-                any(w in user_text for w in _movement_kws)):
-            func_name = "query_movement"
-            func_args = {"period": "this_month", "direction": "both"}
+    # ── Pre-C-Movement（HTTP 版）── rewrite 後的標準句 → query_movement（RCA 意圖優先）
+    _movement_kws = ("查詢進出記錄", "進出記錄", "出貨了多少", "上週進了多少", "最近30天出貨",
+                     "進貨記錄", "出貨記錄", "入庫記錄", "移動記錄")
+    _has_rca_kw = any(w in user_text for w in _RCA_INTENT_WORDS)
+    if (not _has_rca_kw and
+            func_name != "query_movement" and
+            func_name not in ("run_script", "set_schedule", "list_schedules") and
+            any(w in user_text for w in _movement_kws)):
+        func_name = "query_movement"
+        func_args = {"period": "this_month", "direction": "both"}
 
-        # ── Pre-C-Compare（HTTP 版）── rewrite 後的標準句 → compare_warehouses
-        _compare_kws = ("比較各倉庫庫存", "各倉庫比較", "三個倉庫比較", "北中南倉",
-                        "倉庫比較", "倉庫對比", "比較倉庫")
-        if (func_name != "compare_warehouses" and
-                func_name not in ("run_script", "set_schedule", "list_schedules") and
-                any(w in user_text for w in _compare_kws)):
-            func_name = "compare_warehouses"
-            func_args = {}
+    # ── Pre-C-Compare（HTTP 版）── rewrite 後的標準句 → compare_warehouses
+    _compare_kws = ("比較各倉庫庫存", "各倉庫比較", "三個倉庫比較", "北中南倉",
+                    "倉庫比較", "倉庫對比", "比較倉庫")
+    if (func_name != "compare_warehouses" and
+            func_name not in ("run_script", "set_schedule", "list_schedules") and
+            any(w in user_text for w in _compare_kws)):
+        func_name = "compare_warehouses"
+        func_args = {}
 
-        # ── Pre-C-Alert-Set（HTTP 版）── rewrite 後的標準句 → set_alert
-        _alert_set_kws = ("新增庫存警示規則", "設定缺貨警示", "設定警示", "新增警示",
-                          "庫存不足時提醒", "低於安全庫存通知")
-        if (func_name not in ("list_alerts", "delete_alert", "set_alert") and
-                any(w in user_text for w in _alert_set_kws)):
-            func_name = "set_alert"
-            func_args = {"raw_text": user_text}
+    # ── Pre-C-Alert-Set（HTTP 版）── rewrite 後的標準句 → set_alert
+    _alert_set_kws = ("新增庫存警示規則", "設定缺貨警示", "設定警示", "新增警示",
+                      "庫存不足時提醒", "低於安全庫存通知")
+    if (func_name not in ("list_alerts", "delete_alert", "set_alert") and
+            any(w in user_text for w in _alert_set_kws)):
+        func_name = "set_alert"
+        func_args = {"raw_text": user_text}
 
-        # correct（先校正，OOV 才能對正確的 func_name/keyword 做判斷）
-        func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
+    # correct（先校正，OOV 才能對正確的 func_name/keyword 做判斷）
+    func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
 
-        # C18
-        mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
-        if mismatch and not _hard:
-            func_name = clf_intent
-    else:
-        _hard = True  # rule 路由不需要 C18 覆蓋
+    # C18
+    mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
+    if mismatch and not _hard:
+        func_name = clf_intent
 
     # OOV（在校正後才跑，避免誤攔 RCA keyword）
     oov_hint = ""
@@ -1895,21 +1844,6 @@ async def api_query(req: Request):
     result = finance.execute(func_name, func_args)
     if oov_hint and isinstance(result, dict) and result.get("summary"):
         result["summary"] = oov_hint + result["summary"]
-
-    # ── 補貨 Loop HTTP：judge_restock_needed → auto calculate_restock_qty ──
-    if isinstance(result, dict) and result.get("view") == "restock_judge":
-        needs = result.get("data", {}).get("needs", [])
-        if needs:
-            try:
-                import tools_v2 as _tv2_http
-                plan = _tv2_http.calculate_restock_qty(
-                    keyword=func_args.get("keyword", ""),
-                    warehouse=func_args.get("warehouse", "all"),
-                    cover_days=30
-                )
-                result = {**result, "restock_plan": plan}
-            except Exception as _re:
-                log.warning(f"[Restock HTTP] calculate 失敗: {_re}")
 
     return JSONResponse(result)
 
@@ -2140,9 +2074,11 @@ async def ws_handler(ws: WebSocket):
             if not user_text:
                 continue
             user_text = _rewrite_query(user_text)
-            # LLM=None 時只有在需要 LLM 推理的階段才拒絕，rule-based 功能照常運作
-            if LLM is None and HEALTH.get("stage") == "failed":
-                await send({"type": "error", "text": f"系統啟動失敗：{HEALTH.get('error') or '未知錯誤'}"})
+            if LLM is None:
+                msg = HEALTH.get("message") or "系統還在啟動中"
+                if HEALTH.get("stage") == "failed":
+                    msg = f"系統啟動失敗：{HEALTH.get('error') or '未知錯誤'}"
+                await send({"type": "error", "text": msg})
                 continue
 
             log.info(f"User vid={vid}: {user_text}")
@@ -2171,30 +2107,6 @@ async def ws_handler(ws: WebSocket):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.008)
                 await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
-                continue
-
-            # ── 純規則早期路由（無需 LLM）——直接執行，跳過 LLM 區 ──
-            _ws_restock_kws = ("需要補貨嗎", "要補貨嗎", "需要補貨", "什麼需要補", "哪些需要補",
-                               "補貨建議", "建議補多少", "要補多少", "補幾個", "幾個需要補")
-            if any(w in user_text for w in _ws_restock_kws):
-                log.info("[Pre-C-WS-Early] → judge_restock_needed（無 LLM）")
-                _early_result = await asyncio.to_thread(
-                    finance.execute, "judge_restock_needed", {"keyword": "", "warehouse": "all"}
-                )
-                await send({"type": "done", "result": _early_result})
-                needs = _early_result.get("data", {}).get("needs", [])
-                if needs:
-                    await send({"type": "tool_call", "func": "calculate_restock_qty",
-                                "args_preview": f"items={len(needs)} cover_days=30"})
-                    await asyncio.sleep(0.3)
-                    _plan = await asyncio.to_thread(
-                        _tv2.calculate_restock_qty, keyword="", warehouse="all", cover_days=30
-                    )
-                    await send({"type": "restock_plan_done", "result": _plan})
-                continue
-
-            if LLM is None:
-                await send({"type": "error", "text": "⚠️ 此功能需要 LLM 模型（GGUF 檔）才能運作"})
                 continue
 
             prompt = build_prompt(user_text)
@@ -2302,13 +2214,6 @@ async def ws_handler(ws: WebSocket):
                         func_name = "set_alert"
                         func_args = {"raw_text": user_text}
                         log.info("[Pre-C-Alert] → set_alert")
-                    elif any(w in user_text for w in (
-                            "需要補貨嗎", "要補貨嗎", "需要補貨", "什麼需要補", "哪些需要補",
-                            "補貨建議", "建議補多少", "要補多少", "補幾個", "幾個需要補")):
-                        func_name = "judge_restock_needed"
-                        if "keyword" not in func_args or not func_args.get("keyword"):
-                            func_args = {"keyword": func_args.get("keyword", ""), "warehouse": "all"}
-                        log.info("[Pre-C-Restock] → judge_restock_needed")
 
                 # ── Clarification：模糊意圖攔截（在校正前）──
                 clarify = _detect_clarify(user_text)
@@ -2470,51 +2375,12 @@ async def ws_handler(ws: WebSocket):
                 if _oov_hint:
                     summary = _oov_hint + " " + summary
                     result = {**result, "summary": summary}
-                # agent_rca：judge_cause_found → (retry if needed) → suggest_action
+                # agent_rca：先送第一輪結果，再做第二輪 LLM 推理
                 if result.get("view") == "agent_rca":
-                    rca_ctx = result.get("data", {}).get("rca_context", {})
-
-                    # ── judge_cause_found：有沒有找到差異？──
-                    cause_found = rca_ctx and rca_ctx.get("disc_count", 0) > 0
-
-                    if not cause_found:
-                        # 沒找到 → 換更廣的 keyword 再搜一輪（category-level retry）
-                        await send({"type": "tool_call", "func": "judge_cause_found",
-                                    "args_preview": "found=False → retry"})
-                        retry_kw = func_args.get("keyword", "")
-                        # 嘗試用 category 擴大搜尋
-                        snap = finance.state()
-                        retry_items = [it for it in snap.items if retry_kw and retry_kw in it.get("name","")]
-                        if retry_items:
-                            retry_cat = retry_items[0].get("category", "")
-                            cat_label = retry_items[0].get("category_label", retry_cat)
-                            await send({"type": "tool_call", "func": "search_log",
-                                        "args_preview": f"keyword={cat_label!r} (category retry)"})
-                            import tools_v2 as _tv2
-                            retry_result = await asyncio.to_thread(
-                                _tv2.search_log, keyword=retry_cat)
-                            retry_ctx = retry_result.get("data", {}).get("rca_context", {})
-                            if retry_ctx and retry_ctx.get("disc_count", 0) > 0:
-                                result = retry_result
-                                rca_ctx = retry_ctx
-                                cause_found = True
-                                log.info(f"[RCA retry] category 搜尋找到 {retry_ctx['disc_count']} 筆差異")
-                            else:
-                                log.info("[RCA retry] 兩輪都找不到差異")
-
                     await send({"type": "done", "result": result})   # 先顯示 trace + 表格
 
-                    if not cause_found:
-                        # judge_cause_found 確認：兩輪都沒找到差異
-                        await send({"type": "tool_call", "func": "judge_cause_found",
-                                    "args_preview": "found=False → no_cause"})
-                        await send({"type": "rca_round2_done",
-                                    "suggestion": "⚠️ 兩輪搜尋均未發現帳務差異記錄，建議進行人工實地盤點確認實際庫存。",
-                                    "suggestion_action": "manual_audit"})
-                    elif LLM:
-                        # judge_cause_found 確認：找到差異，進行根因分析
-                        await send({"type": "tool_call", "func": "judge_cause_found",
-                                    "args_preview": f"found=True disc_count={rca_ctx.get('disc_count',0)}"})
+                    rca_ctx = result.get("data", {}).get("rca_context", {})
+                    if rca_ctx and rca_ctx.get("disc_count", 0) > 0 and LLM:
                         # 通知前端：第二輪推理開始（故意等一下讓 loading 看得到）
                         await send({"type": "rca_round2_start"})
                         await send({"type": "tool_call", "func": "suggest_action", "args_preview": "action=?"})
@@ -2563,22 +2429,6 @@ async def ws_handler(ws: WebSocket):
                         except Exception as e2:
                             log.warning(f"[RCA round2] 失敗: {e2}")
                             await send({"type": "rca_round2_done", "suggestion": "", "suggestion_action": ""})
-                # ── 補貨建議 Loop ─────────────────────────────────────────
-                elif result.get("view") == "restock_judge":
-                    await send({"type": "done", "result": result})
-                    needs = result.get("data", {}).get("needs", [])
-                    if needs:
-                        # Step 2：自動計算補貨量
-                        await send({"type": "tool_call", "func": "calculate_restock_qty",
-                                    "args_preview": f"items={len(needs)} cover_days=30"})
-                        await asyncio.sleep(0.4)
-                        restock_result = await asyncio.to_thread(
-                            _tv2.calculate_restock_qty,
-                            keyword=func_args.get("keyword", ""),
-                            warehouse=func_args.get("warehouse", "all"),
-                            cover_days=30
-                        )
-                        await send({"type": "restock_plan_done", "result": restock_result})
                 else:
                     for ch in summary:
                         await send({"type": "token", "text": ch})

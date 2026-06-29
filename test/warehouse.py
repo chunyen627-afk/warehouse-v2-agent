@@ -1442,10 +1442,8 @@ def _register_v2_tools():
         FUNCTIONS["commit_schedule_set"] = tools_v2.commit_schedule_set # 排程確認寫入
         FUNCTIONS["list_schedules"]      = tools_v2.list_schedules      # 查排程
         FUNCTIONS["delete_schedule"]     = tools_v2.delete_schedule     # 刪排程
-        FUNCTIONS["list_alerts"]              = tools_v2.list_alerts              # 查警示規則
-        FUNCTIONS["delete_alert"]             = tools_v2.delete_alert             # 刪警示規則
-        FUNCTIONS["judge_restock_needed"]     = tools_v2.judge_restock_needed     # 補貨 Loop Step1
-        FUNCTIONS["calculate_restock_qty"]    = tools_v2.calculate_restock_qty    # 補貨 Loop Step2
+        FUNCTIONS["list_alerts"]         = tools_v2.list_alerts         # 查警示規則
+        FUNCTIONS["delete_alert"]        = tools_v2.delete_alert        # 刪警示規則
     except Exception as e:
         _log.warning(f"[v2] 三金剛註冊失敗：{e}")
 
