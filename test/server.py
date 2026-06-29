@@ -137,6 +137,14 @@ GATEKEEPER_KEYWORDS = {
     "top", "selling", "movement", "inbound", "outbound",
     "bluetooth", "earphone", "coffee", "machine", "bought", "together", "related",
     "what", "how", "show", "today", "week", "month", "much", "many",
+    # 錯字容錯關鍵字（避免 OOV 被守門員擋掉）
+    "芽", "汽", "灌", "精", "只", "基", "郭", "伽", "店", "員", "文", "窄", "胡", "湖",
+    "容", "鬥", "挖", "帶", "素", "協", "一", "運", "允", "燙",
+    # 口語關鍵字（避免「刷牙的那個」被 reject）
+    "刷牙", "洗衣服", "擦身體", "裝水", "煮咖啡", "運動用的", "充電的",
+    "那個", "這", "哪", "啥", "怎", "嗎", "呢", "啊", "吧", "喔",
+    "壺", "線", "乳", "精", "機器", "墊子", "咖啡", "衣服", "手機",
+    "洗澡", "牙刷", "牙膏", "毛巾", "肥皂", "洗髮",
     # 助理代名
     "我", "my", "i ",
 }
@@ -320,8 +328,10 @@ _CONFIG_READ_WORDS = ("是多少", "設多少", "多少", "現在設", "目前",
 _SCRIPT_INTENT_WORDS = ("跑一次", "執行", "跑個", "跑一下", "幫我跑", "做一次", "做個",
                         "盤點", "匯出", "重產", "重新產生", "重生", "重建", "run", "export", "regenerate")
 
-_WH_ZH_MAP = {"北倉": "north", "北區": "north", "中倉": "central", "中區": "central",
-              "南倉": "south", "南區": "south", "全部": "all", "所有": "all", "三倉": "all"}
+_WH_ZH_MAP = {"北倉": "north", "北區": "north", "北邊": "north", "北部": "north",
+              "中倉": "central", "中區": "central",
+              "南倉": "south", "南區": "south", "南邊": "south", "南部": "south",
+              "全部": "all", "所有": "all", "三倉": "all"}
 
 
 # ── Clarification 偵測 ──────────────────────────────────────────────────────
@@ -802,6 +812,12 @@ _ALL_KEYWORD_NOISE = (
     "好像有", "好像", "感覺", "應該", "可能", "是不是", "有沒有", "有",
     "怎麼", "一下", "好嗎", "對吧", "呀", "啊", "耶", "喔", "吧", "欸", "嗎", "呢",
     "那個", "這個", "的", "了", "還", "剩", "有幾", "剩幾", "多少了", "多少啊",
+    "啥",  # 「買耳機的通常還買啥」
+    # 口語填充（「洗衣服用的那個」「裝水壺」）
+    "用的那個", "用的", "那個", "還有沒有", "有沒有貨", "有現貨嗎", "有貨嗎",
+    "現貨嗎", "夠不夠", "有庫存嗎", "有嗎", "多少錢", "怎麼樣", "如何",
+    "狀況", "總共有", "目前", "現在", "幫我看", "幫我看一下", "幫偶",
+    "目前為止", "到現在", "目前有", "看一下", "現在有",
     # RCA 雜訊
     "帳對不上", "對不上", "對不起來", "兜不攏", "帳不對", "怎麼少這麼多",
     "怎麼少", "為什麼少", "為什麼短少", "短少", "少貨", "是誰動的", "誰改的",
@@ -855,17 +871,6 @@ def _extract_sku_keyword(text: str) -> str:
         if not src or len(src) < 2:
             continue
         scored = sorted(
-            [(s, n) for n in all_names if (s := _fuzzy_score(src, n)) >= 50],
-            reverse=True,
-        )
-        if scored:
-            return scored[0][1]
-
-    # ── Layer 5: 寬鬆 fuzzy（降低閾值到 40）──
-    for src in (cleaned, text):
-        if not src or len(src) < 2:
-            continue
-        scored = sorted(
             [(s, n) for n in all_names if (s := _fuzzy_score(src, n)) >= 40],
             reverse=True,
         )
@@ -881,8 +886,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 排程/警示管理工具：Pre-C 已確定，不再校正
     # set_alert / schedule / compare 已被 Pre-C 校正過，不需再過 C1-C18
     # query_movement 不加在此，因為 C8 RCA 校正需要能 override 它
+    # set_alert 不 early-return —「庫存警示」可能被模型誤判 set_alert，需經 C3 校正
     if func_name in ("set_schedule", "list_schedules", "delete_schedule",
-                     "list_alerts", "delete_alert", "set_alert",
+                     "list_alerts", "delete_alert",
                      "compare_warehouses"):
         return func_name, func_args, True
     text_low = user_text.lower()
@@ -1900,28 +1906,58 @@ async def api_query(req: Request):
 
     vid = body.get("vid", "api")
 
+    # ── intent_clf 主要路由：分類器先決定 function，LLM 只抽 keyword ──
+    _clf_func = None
+    _clf_conf = 0.0
     try:
-        prompt = build_prompt(user_text)
-        r = await asyncio.wait_for(
-            asyncio.to_thread(
-                LLM, prompt,
-                max_tokens=160, temperature=0.0,
-                stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
-                echo=False, stream=False,
-            ),
-            timeout=25.0,
-        )
-    except Exception as e:
-        return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
+        _clf_func, _clf_conf = intent_clf.predict(user_text)
+    except Exception:
+        pass
 
-    output = r["choices"][0]["text"].strip()
-    parsed = parse_function_call(output)
-    if not parsed:
-        return JSONResponse({"ok": False, "view": "error", "summary": "parse_failed", "raw": output})
+    # 需要 keyword 的 function → 先抽 keyword
+    _pre_kw = _extract_sku_keyword(user_text)
 
-    func_name, func_args = parsed
+    _clf_skip_llm = False
+    if _clf_func and _clf_func not in ("unknown", "unclear") and _clf_conf >= 0.8:
+        log.info(f"[intent_clf primary] {user_text!r} → {_clf_func} (conf={_clf_conf:.2f})")
+        func_name = _clf_func
+        _needs_llm = func_name in ("manage_config", "run_script", "set_alert",
+                                    "set_schedule", "generate_po", "generate_report")
+        if not _needs_llm:
+            func_args = {}
+            if func_name in ("query_inventory", "search_log", "query_related_items"):
+                if _pre_kw and len(_pre_kw) >= 2:
+                    func_args["keyword"] = _pre_kw
+            elif func_name == "query_movement":
+                func_args["period"] = "this_month"; func_args["direction"] = "both"
+                if _pre_kw and len(_pre_kw) >= 2:
+                    func_args["keyword"] = _pre_kw
+            _clf_skip_llm = True
+            log.info(f"[intent_clf primary] skip LLM, func={func_name} args={func_args}")
 
-    # search_log keyword pre-clean
+    if not _clf_skip_llm:
+        try:
+            prompt = build_prompt(user_text)
+            r = await asyncio.wait_for(
+                asyncio.to_thread(
+                    LLM, prompt,
+                    max_tokens=160, temperature=0.0,
+                    stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
+                    echo=False, stream=False,
+                ),
+                timeout=25.0,
+            )
+        except Exception as e:
+            return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
+
+        output = r["choices"][0]["text"].strip()
+        parsed = parse_function_call(output)
+        if not parsed:
+            return JSONResponse({"ok": False, "view": "error", "summary": "parse_failed", "raw": output})
+
+        func_name, func_args = parsed
+
+    # search_log keyword pre-clean (both paths)
     if func_name == "search_log" and func_args.get("keyword"):
         pre_kw = _extract_sku_keyword(func_args["keyword"])
         if pre_kw:
@@ -2089,6 +2125,21 @@ async def api_query(req: Request):
         log.info(f"[dispatch] 低庫存攔回: {user_text!r} → list_low_stock")
         func_name = "list_low_stock"
         func_args = {}
+
+    # ── dispatch 攔截：「那個XX」被 intent_clf 誤判 query_related_items ──
+    _descriptive_kws = ("的那個", "用的那個", "的那台", "的那個", "用的")
+    if func_name == "query_related_items" and any(w in user_text for w in _descriptive_kws):
+        _dk = _extract_sku_keyword(user_text)
+        if _dk and len(_dk) >= 2:
+            log.info(f"[dispatch] 描述性查詢攔回 inventory: {user_text!r} kw={_dk!r}")
+            func_name = "query_inventory"
+            func_args = {"keyword": _dk}
+
+    # ── dispatch 攔截：movement 查詢 empty keyword → 從 user_text 補 ──
+    if func_name == "query_movement" and not func_args.get("keyword"):
+        _mk = _extract_sku_keyword(user_text)
+        if _mk and len(_mk) >= 2:
+            func_args = {**func_args, "keyword": _mk}
 
     # dispatch — same as ws_handler
     # 執行前清理 keyword 前後綴雜訊（LLM 常把「有/的/剩/幾個」黏在 keyword 上）
