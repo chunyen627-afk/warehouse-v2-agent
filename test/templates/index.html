@@ -1192,15 +1192,9 @@ function handleMessage(msg) {
     _traceContainer = null;
     _pendingToolCalls = [];
     _taskPlanEl = null;
-    // 存下當次 agent_rca card id，給 round2 handler 定位用
-    if (view === 'agent_rca' && lastBotAnchor && lastBotAnchor.id) {
-      _rcaCardId = lastBotAnchor.id;
-    }
-    // agent_rca 有第二輪推理，等 rca_round2_done 再解鎖
-    if (view !== 'agent_rca') {
-      isSending = false;
-      $('send-btn').disabled = false;
-    }
+    // RCA 已簡化為單步（search_log），無第二輪推理，直接解鎖
+    isSending = false;
+    $('send-btn').disabled = false;
     return;
   }
 }
@@ -1937,6 +1931,7 @@ function randomSurprise() {
 
 function sendQuery(text) {
   if (isSending || !text) return;
+  $('input-text').value = '';  // 通過 guard 才清空，避免文字不見但沒送出
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     connectWS();
     setTimeout(() => sendQuery(text), 300);
@@ -2034,7 +2029,6 @@ $('input-text').addEventListener('keydown', e => {
     e.preventDefault();
     const raw = $('input-text').value.trim();
     if (raw) {
-      $('input-text').value = '';
       sendQuery(resolveInput(raw));
     }
   }
@@ -2042,7 +2036,6 @@ $('input-text').addEventListener('keydown', e => {
 $('send-btn').onclick = () => {
   const raw = $('input-text').value.trim();
   if (raw) {
-    $('input-text').value = '';
     sendQuery(resolveInput(raw));
   }
 };
