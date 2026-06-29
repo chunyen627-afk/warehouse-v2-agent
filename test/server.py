@@ -1921,17 +1921,20 @@ async def api_query(req: Request):
         "電子產品": "electronics", "家電廚具": "appliance_kitchen",
         "食品飲料": "food_beverage", "日用品": "daily_goods",
         "服飾": "apparel", "運動用品": "sports",
-        "電子": "electronics", "家電": "appliance_kitchen", "廚具": "appliance_kitchen",
-        "食品": "food_beverage", "飲料": "food_beverage",
-        "日用": "daily_goods", "衣服": "apparel", "服裝": "apparel", "運動": "sports",
     }
     if func_name == "query_inventory":
         _dkw = (func_args.get("keyword") or "").strip()
         _dcat = func_args.get("category", "")
+        # 先剝掉常見後綴雜訊（類/類別/庫存/查詢/詢 等），取純類別名
+        _dkw_clean = _dkw
+        for _sfx in ("類別", "庫存查詢", "庫存", "查詢", "類", "詢"):
+            if _dkw_clean.endswith(_sfx) and len(_dkw_clean) > len(_sfx) + 1:
+                _dkw_clean = _dkw_clean[:-len(_sfx)].strip()
+                break
         # case A: keyword 是類別名且 category 未設 → 轉成 category 查詢
         if _dkw and _dcat not in VALID_CATEGORIES:
             for _zh, _en in sorted(_CAT_FALLBACK.items(), key=lambda x: -len(x[0])):
-                if _zh in _dkw:
+                if _zh in _dkw_clean or _dkw_clean in _zh:
                     log.info(f"[dispatch] 類別轉換: kw={_dkw!r} → category={_en}")
                     func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                     func_args["category"] = _en
@@ -1939,7 +1942,7 @@ async def api_query(req: Request):
         # case B: category 已設但 keyword 是純類別名（enum 容錯修完 category 但 keyword 殘留）
         elif _dkw and _dcat in VALID_CATEGORIES:
             for _zh in _CAT_FALLBACK:
-                if _dkw == _zh or (_zh in _dkw and len(_dkw) <= len(_zh) + 2):
+                if _zh in _dkw_clean or _dkw_clean in _zh:
                     log.info(f"[dispatch] 關鍵字是類別名，清掉 kw={_dkw!r} 保留 cat={_dcat}")
                     func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                     break
@@ -2445,6 +2448,34 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[trace] vid={vid} call={corrected_call}")
                 await push_display({"type": "trace", "stage": "parsed",
                                     "function": func_name, "args": func_args})
+
+                # ── dispatch 前最後防線：keyword 是類別名 → 轉 category（WS 版）──
+                _CAT_FB = {
+                    "電子產品": "electronics", "家電廚具": "appliance_kitchen",
+                    "食品飲料": "food_beverage", "日用品": "daily_goods",
+                    "服飾": "apparel", "運動用品": "sports",
+                }
+                if func_name == "query_inventory":
+                    _dkw = (func_args.get("keyword") or "").strip()
+                    _dcat = func_args.get("category", "")
+                    _dkw_clean = _dkw
+                    for _sfx in ("類別", "庫存查詢", "庫存", "查詢", "類", "詢"):
+                        if _dkw_clean.endswith(_sfx) and len(_dkw_clean) > len(_sfx) + 1:
+                            _dkw_clean = _dkw_clean[:-len(_sfx)].strip()
+                            break
+                    if _dkw and _dcat not in VALID_CATEGORIES:
+                        for _zh, _en in sorted(_CAT_FB.items(), key=lambda x: -len(x[0])):
+                            if _zh in _dkw_clean or _dkw_clean in _zh:
+                                log.info(f"[dispatch-ws] 類別轉換: kw={_dkw!r} → category={_en}")
+                                func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                                func_args["category"] = _en
+                                break
+                    elif _dkw and _dcat in VALID_CATEGORIES:
+                        for _zh in _CAT_FB:
+                            if _zh in _dkw_clean or _dkw_clean in _zh:
+                                log.info(f"[dispatch-ws] 關鍵字是類別名，清掉 kw={_dkw!r}")
+                                func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                                break
 
                 # ── 執行前清理 keyword 前後綴雜訊 ──
                 _kw_f2 = "keyword" if "keyword" in func_args else ("target" if "target" in func_args else None)
