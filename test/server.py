@@ -1192,6 +1192,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             return "query_inventory", {**func_args, "keyword": kw}, True
 
     # ══════════════ v2 三金剛校正（C8-C11）══════════════
+
+    # ── C8-pre: 「還有嗎/夠不夠/有沒有貨」被 LLM 誤判 RCA → 攔回 inventory ──
+    _is_stock_question = any(w in user_text for w in (
+        "還有嗎", "還有貨嗎", "有沒有貨", "夠不夠", "還夠嗎", "有貨嗎",
+        "有沒有", "還有沒有", "會缺貨嗎", "快沒了嗎",
+    ))
+    if _is_stock_question and func_name == "search_log":
+        kw = func_args.get("keyword", "") or _extract_sku_keyword(user_text)
+        if kw:
+            log.info(f"[校正 C8-pre] 庫存詢問攔回 inventory: {user_text!r} kw={kw!r}")
+            return "query_inventory", {"keyword": kw}, True
+
     has_rca    = any(w in user_text for w in _RCA_INTENT_WORDS)
     has_cfgkey = any(w in user_text for w in _CONFIG_KEY_WORDS)
     has_cfgset = any(w in user_text for w in _CONFIG_SET_WORDS)
@@ -2040,6 +2052,43 @@ async def api_query(req: Request):
                     log.info(f"[dispatch] 關鍵字是類別名，清掉 kw={_dkw!r} 保留 cat={_dcat}")
                     func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                     break
+
+    # ── dispatch 前最後攔截：LLM 常見誤判 pattern → 強制修正 ──
+    _stock_question_kws = ("還有嗎", "還有貨嗎", "有沒有貨", "夠不夠", "還夠嗎", "有貨嗎",
+                           "有沒有", "還有沒有", "會缺貨嗎", "快沒了嗎", "有嗎", "還有嗎",
+                           "有貨嗎", "現貨嗎", "有現貨嗎", "有庫存嗎")
+    _movement_kws  = ("出了多少", "進了哪些", "進了什麼", "進了多少", "出貨狀況", "進貨狀況",
+                      "進出狀況", "出多少貨", "進多少貨", "出貨多少", "進貨多少")
+    _hot_kws       = ("賣最好", "賣最差", "熱賣", "暢銷", "滯銷", "賣得", "銷量")
+    _low_kws       = ("快沒了", "快斷貨", "快缺貨", "不夠了", "要補貨", "需要補", "缺貨了")
+
+    if func_name in ("search_log",) and any(w in user_text for w in _stock_question_kws):
+        _sq_kw = _extract_sku_keyword(user_text) or func_args.get("keyword", "")
+        if _sq_kw and len(_sq_kw) >= 2:
+            log.info(f"[dispatch] 庫存問句攔回: {user_text!r} → query_inventory(kw={_sq_kw!r})")
+            func_name = "query_inventory"
+            func_args = {"keyword": _sq_kw}
+
+    if func_name in ("search_log", "query_inventory") and any(w in user_text for w in _movement_kws):
+        _mv_kw = _extract_sku_keyword(user_text) or ""
+        _mv_period = "this_week" if any(w in user_text for w in ("這禮拜","這週","本週")) else \
+                     "this_month" if any(w in user_text for w in ("本月","這個月")) else \
+                     "today" if any(w in user_text for w in ("今天","今日")) else None
+        log.info(f"[dispatch] 進出記錄攔回: {user_text!r} → query_movement")
+        func_name = "query_movement"
+        func_args = {"period": _mv_period or func_args.get("period", "this_month"), "direction": "both"}
+        if _mv_kw:
+            func_args["keyword"] = _mv_kw
+
+    if func_name not in ("list_hot_items",) and any(w in user_text for w in _hot_kws):
+        log.info(f"[dispatch] 熱銷攔回: {user_text!r} → list_hot_items")
+        func_name = "list_hot_items"
+        func_args = {"rank_type": "hot", "period": "this_week"}
+
+    if func_name not in ("list_low_stock",) and any(w in user_text for w in _low_kws):
+        log.info(f"[dispatch] 低庫存攔回: {user_text!r} → list_low_stock")
+        func_name = "list_low_stock"
+        func_args = {}
 
     # dispatch — same as ws_handler
     # 執行前清理 keyword 前後綴雜訊（LLM 常把「有/的/剩/幾個」黏在 keyword 上）

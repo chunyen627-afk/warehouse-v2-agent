@@ -1,0 +1,45 @@
+{"user_content": "慢跑鞋還有嗎", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"慢跑鞋\"}"}
+{"user_content": "洗衣還有嗎", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"洗衣\"}"}
+{"user_content": "蚊香還有嗎", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"蚊香\"}"}
+{"user_content": "氣泡水還有貨嗎", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"氣泡水\"}"}
+{"user_content": "咖啡豆夠不夠", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"咖啡豆\"}"}
+{"user_content": "衛生紙還夠嗎", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"衛生紙\"}"}
+{"user_content": "藍牙耳機還有沒有", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"藍牙耳機\"}"}
+{"user_content": "悶燒罐有沒有貨", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"悶燒罐\"}"}
+{"user_content": "這禮拜出了多少貨", "tool_name": "query_movement", "tool_arguments": "{\"period\": \"this_week\", \"direction\": \"out\"}"}
+{"user_content": "今天進了哪些", "tool_name": "query_movement", "tool_arguments": "{\"period\": \"today\", \"direction\": \"in\"}"}
+{"user_content": "這個月進貨狀況怎樣", "tool_name": "query_movement", "tool_arguments": "{\"period\": \"this_month\", \"direction\": \"in\"}"}
+{"user_content": "出貨耳機本週", "tool_name": "query_movement", "tool_arguments": "{\"period\": \"this_week\", \"keyword\": \"耳機\", \"direction\": \"out\"}"}
+{"user_content": "最近什麼賣最好", "tool_name": "list_hot_items", "tool_arguments": "{\"rank_type\": \"hot\", \"period\": \"this_week\"}"}
+{"user_content": "這週哪些賣最差", "tool_name": "list_hot_items", "tool_arguments": "{\"rank_type\": \"slow\", \"period\": \"this_week\"}"}
+{"user_content": "快要沒了的東西有哪些", "tool_name": "list_low_stock", "tool_arguments": "{}"}
+{"user_content": "什麼東西快斷貨了", "tool_name": "list_low_stock", "tool_arguments": "{}"}
+{"user_content": "哪些要補貨了", "tool_name": "list_low_stock", "tool_arguments": "{}"}
+{"user_content": "洗衣精會缺貨嗎", "tool_name": "list_low_stock", "tool_arguments": "{}"}
+{"user_content": "那個藍牙耳機現在還有沒有", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"藍牙耳機\"}"}
+{"user_content": "那個洗衣精好像快沒了", "tool_name": "list_low_stock", "tool_arguments": "{}"}
+{"user_content": "阿是不是有些東西快沒了", "tool_name": "list_low_stock", "tool_arguments": "{}"}
+{"user_content": "阿那個蚊香還有沒有貨", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"蚊香\"}"}
+{"user_content": "現在藍牙耳機剩多少啊", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"藍牙耳機\"}"}
+{"user_content": "悶燒罐有沒有現貨", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"悶燒罐\"}"}
+{"user_content": "你幫我看看那個瑜珈墊剩多少", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"瑜珈墊\"}"}
+{"user_content": "幫我查一下悶燒罐的庫存好嗎", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"悶燒罐\"}"}
+{"user_content": "請問一下咖啡豆現在還有嗎", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"咖啡豆\"}"}
+{"user_content": "我就是想問衛生紙還有幾包", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"衛生紙\"}"}
+{"user_content": "我想知道氣泡水到底剩多少", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"氣泡水\"}"}
+{"user_content": "庫存藍牙耳機", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"藍牙耳機\"}"}
+{"user_content": "剩多少氣泡水", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"氣泡水\"}"}
+{"user_content": "有多少悶燒罐", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"悶燒罐\"}"}
+{"user_content": "咖啡豆庫存查一下", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"咖啡豆\"}"}
+{"user_content": "我想查一下慢跑鞋的庫存量", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"慢跑鞋\"}"}
+{"user_content": "藍牙那個耳機", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"藍牙耳機\"}"}
+{"user_content": "煮咖啡的那台機器", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"咖啡機\"}"}
+{"user_content": "運動用的那個墊子", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"瑜珈墊\"}"}
+{"user_content": "裝水的那個壺", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"水壺\"}"}
+{"user_content": "充電的那個線", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"充電線\"}"}
+{"user_content": "買耳機的通常還買啥", "tool_name": "query_related_items", "tool_arguments": "{\"keyword\": \"耳機\"}"}
+{"user_content": "買咖啡機順便會買什麼", "tool_name": "query_related_items", "tool_arguments": "{\"keyword\": \"咖啡機\"}"}
+{"user_content": "跟瑜珈墊一起買的有哪些", "tool_name": "query_related_items", "tool_arguments": "{\"keyword\": \"瑜珈墊\"}"}
+{"user_content": "北倉的悶燒罐還有多少", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"悶燒罐\", \"warehouse\": \"north\"}"}
+{"user_content": "南區洗衣精夠不夠", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"洗衣精\", \"warehouse\": \"south\"}"}
+{"user_content": "中倉那邊咖啡豆剩多少", "tool_name": "query_inventory", "tool_arguments": "{\"keyword\": \"咖啡豆\", \"warehouse\": \"central\"}"}

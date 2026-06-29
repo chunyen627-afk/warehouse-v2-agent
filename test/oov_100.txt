@@ -1,0 +1,126 @@
+# OOV 口語測試 100 句
+# 格式：預期功能 | 口語輸入
+# 類別：錯字 / 不完整 / 口語贅詞 / 中英混合 / 語序顛倒 / 俗稱別名 / 不完整句子
+
+# === 錯字（同音/近音）===
+query_inventory | 藍芽耳機有多少
+query_inventory | 汽泡水剩幾個
+query_inventory | 悶燒鍋庫存
+query_inventory | 電燙斗多少錢
+query_inventory | 慢跑鞋還有嗎
+query_inventory | 洗衣經剩多少
+query_inventory | 衛生紙剩幾包
+query_inventory | 手基殼有多少
+query_inventory | 不沾鍋還有幾個
+query_inventory | 瑜加墊庫存
+
+# === 不完整名稱 ===
+query_inventory | 耳機有多少
+query_inventory | 洗衣還有嗎
+query_inventory | 咖啡剩多少
+query_inventory | 牛仔庫存
+query_inventory | 瑜珈剩幾個
+query_inventory | 悶燒庫存
+query_inventory | 蚊香還有嗎
+query_inventory | 襪子剩多少
+query_inventory | 外套庫存
+query_inventory | 牙刷有多少
+
+# === 口語贅詞 ===
+query_inventory | 那個藍牙耳機現在還有沒有
+query_inventory | 我想知道氣泡水到底剩多少
+query_inventory | 幫我查一下悶燒罐的庫存好嗎
+query_inventory | 請問一下咖啡豆現在還有嗎
+query_inventory | 那個洗衣精好像快沒了的樣子
+query_inventory | 我就是想問衛生紙還有幾包
+query_inventory | 你幫我看看那個瑜珈墊剩多少
+query_inventory | 阿那個蚊香還有沒有貨
+query_inventory | 我想查一下慢跑鞋的庫存量
+list_low_stock | 阿是不是有些東西快沒了
+
+# === 中英混合 ===
+query_inventory | 藍牙 earphone 庫存
+query_inventory | coffee 豆剩多少
+query_inventory | 那個 bluetooth 耳機
+query_movement | 今天 inbound 多少
+list_hot_items | top selling 有哪些
+query_inventory | 衛生紙 tissue 還有嗎
+query_related_items | 買 coffee machine 的人還買什麼
+query_inventory | 運動 socks 庫存
+
+# === 語序顛倒/不標準 ===
+query_inventory | 庫存藍牙耳機
+query_inventory | 剩多少氣泡水
+query_inventory | 有多少悶燒罐
+query_inventory | 咖啡豆庫存查一下
+query_movement | 出貨耳機本週
+list_low_stock | 快沒了哪些東西
+
+# === 俗稱/別名/簡稱 ===
+query_inventory | 藍牙那個耳機
+query_inventory | 洗衣服的那個精
+query_inventory | 做瑜伽墊子
+query_inventory | 煮咖啡的那台機器
+query_inventory | 運動用的那個墊子
+query_inventory | 充電的那個線
+query_inventory | 裝水的那個壺
+query_inventory | 擦身體的那個乳
+query_inventory | 刷牙的那個
+
+# === 口語問法（不同問法） ===
+query_inventory | 現在藍牙耳機剩多少啊
+query_inventory | 氣泡水還有貨嗎
+query_inventory | 悶燒罐有沒有現貨
+query_inventory | 咖啡豆夠不夠
+query_inventory | 洗衣精會缺貨嗎
+query_inventory | 衛生紙還夠嗎
+query_inventory | 蚊香有沒有补货
+list_low_stock | 哪些要补货了
+list_low_stock | 有什麼東西快斷貨了
+list_low_stock | 快要沒了的東西有哪些
+
+# === 不完整句子（需 clarify）===
+clarify | 幫偶查
+clarify | 幫我查一下
+clarify | 我想知道
+clarify | 幫我看
+clarify | 查看看
+clarify | 那個
+clarify | 欸
+
+# === 含倉庫名的口語 ===
+query_inventory | 北倉的悶燒罐還有多少
+query_inventory | 南區洗衣精夠不夠
+query_inventory | 中倉那邊咖啡豆剩多少
+query_inventory | 北區倉庫的衛生紙
+query_movement | 南倉這禮拜出了多少貨
+query_movement | 北邊的倉庫今天進了什麼
+list_low_stock | 中區倉有沒有快缺貨的
+
+# === 含時間的口語 ===
+query_movement | 今天到目前進了哪些
+query_movement | 這禮拜出了多少貨啊
+query_movement | 這個月進貨狀況怎樣
+list_hot_items | 最近什麼賣最好
+list_hot_items | 這週哪些賣最差
+list_expiring_items | 最近有沒有快過期的
+
+# === 複合查詢 ===
+query_inventory | 北倉電子產品類有哪些
+query_inventory | 南區食品飲料剩多少
+query_inventory | 中倉運動用品庫存狀況
+
+# === 口語 RCA ===
+search_log | 藍牙耳機帳怎麼對不上
+search_log | 洗衣精為什麼數量不對
+search_log | 咖啡豆好像少了幫我看一下
+search_log | 悶燒罐的帳對不起來
+search_log | 衛生紙數量兜不攏
+search_log | 蚊香怎麼少這麼多
+
+# === 連帶口語 ===
+query_related_items | 買耳機的通常還買啥
+query_related_items | 買咖啡機順便會買什麼
+query_related_items | 買尿布的人還會買啥
+query_related_items | 跟瑜珈墊一起買的有哪些
+query_related_items | 慢跑鞋會帶動什麼商品
