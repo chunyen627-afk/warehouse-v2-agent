@@ -2126,12 +2126,20 @@ async def api_query(req: Request):
         func_name = "list_low_stock"
         func_args = {}
 
-    # ── dispatch 攔截：「那個XX」被 intent_clf 誤判 query_related_items ──
-    _descriptive_kws = ("的那個", "用的那個", "的那台", "的那個", "用的")
-    if func_name == "query_related_items" and any(w in user_text for w in _descriptive_kws):
+    # ── dispatch 攔截：「那個XX」被 intent_clf 誤判 query_related_items / search_log ──
+    _descriptive_kws = ("的那個", "用的那個", "的那台", "的那個", "用的", "刷牙", "擦身體", "洗衣服")
+    if func_name in ("query_related_items", "search_log") and any(w in user_text for w in _descriptive_kws):
         _dk = _extract_sku_keyword(user_text)
         if _dk and len(_dk) >= 2:
             log.info(f"[dispatch] 描述性查詢攔回 inventory: {user_text!r} kw={_dk!r}")
+            func_name = "query_inventory"
+            func_args = {"keyword": _dk}
+
+    # ── dispatch 攔截：「幫我查一下XX的庫存好嗎」被誤判 search_log ──
+    if func_name == "search_log" and any(w in user_text for w in ("庫存好嗎", "的庫存", "庫存量", "幫我查一下", "查一下")):
+        _dk = _extract_sku_keyword(user_text)
+        if _dk and len(_dk) >= 2:
+            log.info(f"[dispatch] 庫存查詢句攔回: {user_text!r} kw={_dk!r}")
             func_name = "query_inventory"
             func_args = {"keyword": _dk}
 

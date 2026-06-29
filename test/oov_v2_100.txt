@@ -1,0 +1,105 @@
+# OOV 第二輪 100 句 — 純中文口語測試
+# 全部全新句子，不重複第一輪
+
+# === 錯字（同音選字錯誤）===
+query_inventory | 藍牙耳機有幾個
+query_inventory | 汽泡水還有庫存嗎
+query_inventory | 悶燒灌剩幾個
+query_inventory | 洗一精還有沒有
+query_inventory | 衛生只夠不夠
+query_inventory | 手基殼有現貨嗎
+query_inventory | 不沾郭多少錢
+query_inventory | 瑜伽墊子庫存
+query_inventory | 行動店員剩多少
+query_inventory | 文香液還有嗎
+
+# === 口語庫存問法 ===
+query_inventory | 現在耳機有多少
+query_inventory | 氣泡水目前剩多少啊
+query_inventory | 幫我看一下悶燒罐
+query_inventory | 咖啡豆的庫存怎麼樣
+query_inventory | 洗衣精的存量有多少
+query_inventory | 衛生紙還有幾包
+query_inventory | 蚊香庫存夠不夠
+query_inventory | 慢跑鞋的現貨狀況
+query_inventory | 牛仔褲還剩幾件
+query_inventory | 羽絨外套有沒有貨
+
+# === 不同商品名表述 ===
+query_inventory | 藍牙的那個耳機還有嗎
+query_inventory | 洗衣服用的那個還有沒有
+query_inventory | 煮咖啡的機器庫存
+query_inventory | 運動墊子剩多少
+query_inventory | 手機的殼子有多少
+query_inventory | 裝水壺還有貨嗎
+query_inventory | 擦身體的沐浴乳
+query_inventory | 刷牙的電動牙刷
+query_inventory | 充電用的行動電源
+query_inventory | 戶外用的帳篷
+
+# === 缺貨相關 ===
+list_low_stock | 有沒有東西快缺貨了
+list_low_stock | 哪些商品需要補貨
+list_low_stock | 快要斷貨的有哪些
+list_low_stock | 庫存不足的有什麼
+list_low_stock | 什麼東西已經快沒了
+list_low_stock | 現在有缺貨的嗎
+list_low_stock | 幫我看哪些要補貨
+
+# === 熱銷相關 ===
+list_hot_items | 這禮拜什麼東西最好賣
+list_hot_items | 最近賣最差的有哪些
+list_hot_items | 本月暢銷排行
+list_hot_items | 有什麼滯銷的嗎
+list_hot_items | 幫我查這週熱銷
+list_hot_items | 銷量冠軍是哪個
+
+# === 進出記錄 ===
+query_movement | 今天到現在進了哪些貨
+query_movement | 這禮拜出貨總共有多少
+query_movement | 本月進貨狀況如何
+query_movement | 最近一週的進出明細
+query_movement | 今天入庫了什麼
+query_movement | 這幾天出了多少件
+
+# === 到期相關 ===
+list_expiring_items | 有沒有東西快過期了
+list_expiring_items | 哪些商品即將到期
+list_expiring_items | 保存期限快到的有哪些
+list_expiring_items | 最近過期的東西
+list_expiring_items | 快要壞掉的有什麼
+
+# === 倉庫+商品 ===
+query_inventory | 北倉的藍牙耳機還有多少
+query_inventory | 南區咖啡豆剩幾個
+query_inventory | 中區倉的洗衣精庫存
+query_inventory | 北邊倉庫的衛生紙夠嗎
+query_inventory | 南倉那邊的蚊香有多少
+
+# === 倉庫比較 ===
+compare_warehouses | 北倉跟南倉哪個庫存多
+compare_warehouses | 中區和北區庫存價值比較
+compare_warehouses | 三個倉哪個東西最多
+
+# === RCA 追查 ===
+search_log | 藍牙耳機數量為什麼對不上
+search_log | 洗衣精的帳怎麼兜不攏
+search_log | 咖啡豆好像有短少
+search_log | 悶燒罐的進貨差異幫我查
+search_log | 衛生紙庫存異常追一下
+search_log | 蚊香對帳有問題
+
+# === 連帶備貨 ===
+query_related_items | 買耳機的人通常還買了什麼
+query_related_items | 咖啡機的搭配商品有哪些
+query_related_items | 尿布會跟什麼一起買
+query_related_items | 瑜珈墊的連帶推薦
+query_related_items | 帳篷順便買的商品
+
+# === 不完整句子 ===
+clarify | 幫偶看一下
+clarify | 我想問一下
+clarify | 有個問題
+clarify | 請問一下
+clarify | 幫我看一下
+clarify | 查個東西
