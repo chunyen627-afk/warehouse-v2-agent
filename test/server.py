@@ -432,6 +432,7 @@ _REWRITE_RULES: list[tuple] = [
 
     # ── 庫存查詢（只改寫真正的裸句，帶商品/倉庫名的原樣送 LLM）──
     (_re.compile(r"^(查一下|看一下|幫我查|幫我看)庫存$"),           "查詢庫存"),
+    (_re.compile(r"^幫.查$"), "查"),  # 「幫偶查」「幫我查」→ clarify
     (_re.compile(r"^查庫存$"),                                      "查詢所有庫存"),
     # 含「有多少/剩多少」但沒有名詞（< 7 字）才改寫；長句含商品名讓 LLM 抽
     (_re.compile(r"^現在還有多少貨$"),                              "查詢庫存"),
@@ -586,8 +587,10 @@ def _detect_clarify(user_text: str) -> dict | None:
         }
 
     # ⑥ 純模糊短句（查/看/確認等）— 用 t_clean 或 t 都檢查，剝掉填充詞後剩「查」也算
+    #    也涵蓋「幫偶查」→ strip「幫」→「偶查」太短且無具體目標 → clarify
     _vague = {"查", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看"}
-    if t in _vague or t_clean in _vague or (not t_clean and not has_intent):
+    _too_short = len(t_clean) <= 3 and has_intent  # 剝完填充詞只剩 1-3 字且有動作意圖
+    if t in _vague or t_clean in _vague or (not t_clean and not has_intent) or _too_short:
         return {
             "question": "你想查什麼？",
             "options": [
