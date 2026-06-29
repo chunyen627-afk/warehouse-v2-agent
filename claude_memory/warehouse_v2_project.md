@@ -16,7 +16,7 @@ metadata:
 - 校正層 C0-C18 + Pre-C 攔截（server.py）。
 - 訓練：full FT Q8_0，不用 LoRA。
 
-**目前功能（2026-06-26）**：
+**目前功能（2026-06-29）**：
 - ✅ 七金剛（query_inventory / query_movement / list_low_stock / compare_warehouses / list_hot_items / query_related_items / list_expiring_items）
 - ✅ 三金剛（search_log / manage_config / run_script）
 - ✅ RCA ReAct 2-step loop（search_log → rca_context → suggest_action），前端 Agent trace 卡
@@ -31,9 +31,19 @@ metadata:
 - ✅ OOV keyword 前後綴清理（dispatch 前清理「有洗衣精」→「洗衣精」）
 - ✅ query_inventory 空 keyword → 全倉前 10 筆概覽
 - ✅ set_alert 接受 raw_text，condition 解析失敗預設 below_safety
+- ✅ OOV 模糊匹配引擎 `_fuzzy_score()`（剝規格 + 雙向滑窗 + 字元重疊，2026-06-29）
+- ✅ C3/C4/C6 hard-return 防護（防止後續規則推翻正確路由，2026-06-29）
+- ✅ eval_http.py HTTP 路由評測工具（2026-06-29）
+- ✅ test_oov.py OOV 容錯測試 33 題（2026-06-29）
 
-**路由準確率**：71 題測試 **71/71 = 100%**（2026-06-26 測得）
-- 前：75%（純 LLM）→ 後：100%（Query Rewriting + Pre-C + OOV 清理）
+**路由準確率**：81 題測試（2026-06-29）
+- 56/81 (69%) — 較 100% 下降，主因 query_related_items keyword 提取 gap + 英文 mixed input
+- 「庫存警示」等核心查詢已透過 C3 hard-return 修復
+
+**重要踩雷（2026-06-29）**：
+- 「警示」同時出現在 `_LOW_STOCK_INTENT_WORDS` 和 C14 `_alert_words`，造成路由衝突
+- 改 `server.py` 後必須跑 `eval_http.py` 確認未退步（見 [[run_full_eval_after_server_change]]）
+- 新增意圖詞前 grep 檢查是否與其他規則詞重疊（見 [[intent_word_overlap_gotcha]]）
 
 **備份**：`_backups/warehouse_v2_test_20260626_1221.zip`（1.2GB，含模型 GGUF）
 

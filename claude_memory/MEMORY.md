@@ -8,3 +8,10 @@
 - [業界邊緣 Agent 模型尺寸定位](edge_agent_model_size.md) — 主流 3B-8B、270M 是路由器不是決策者;v2.0 架構正是業界正解
 - [改完倉管 CODE 自動重啟 server](feedback_auto_restart_server.md) — 改完 server.py/tools_v2/index.html 後自動 Start-Process 重啟，不等使用者要求
 - [禁止 taskkill/Stop-Process -Name python 重啟 server](feedback_no_kill_python.md) — 會殺 Headroom proxy；只能用 port 8000 找 PID 殺目標程序
+- [啟動 server 必須用 Python311](feedback_python311_server.md) — hermes venv 的 python 沒有 llama_cpp，裸 python 指令讓模型載不起來
+- [工具命名規範](feedback_naming_convention.md) — 禁用「金剛」，改用 Query Tools / Agent Tools / Automation Tools
+- [OOV 模糊匹配引擎](oov_fuzzy_matching_engine.md) — `_fuzzy_score()` 剝規格+雙向滑窗+字元重疊，解決 SequenceMatcher 被規格詞稀釋
+- [校正層 hard-return 防護](correction_layer_hard_return_pattern.md) — C3/C4/C6 命中意圖詞時 hard-return，防止後續規則推翻
+- [意圖詞重疊導致路由衝突](intent_word_overlap_gotcha.md) —「警示」同時在 C3 和 C14，加意圖詞前要 grep 檢查
+- [HTTP 路由評測工具](eval_http_tool.md) — eval_http.py 用法，避免 WS 單訪客 crash
+- [改 server.py 後跑完整評測](run_full_eval_after_server_change.md) — SOP：改完→重啟→eval_http.py→確認沒退步→commit
