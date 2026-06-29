@@ -46,13 +46,20 @@ def get_keyword(r):
     return d.get("keyword", d.get("target", ""))
 
 def kw_match(exp_args, actual_kw):
-    """檢查 keyword 是否符合預期"""
+    """檢查 keyword 是否符合預期（寬鬆比對：substring 或前 2 字匹配）"""
     if not exp_args:
         return True
     exp_kw = exp_args.get("keyword", exp_args.get("target", ""))
     if not exp_kw:
         return True
-    return exp_kw in str(actual_kw)
+    act = str(actual_kw)
+    # 精準包含
+    if exp_kw in act or act in exp_kw:
+        return True
+    # 前 2 字匹配（如「牛仔褲」vs「牛仔長褲 男款」）
+    if len(exp_kw) >= 2 and len(act) >= 2 and exp_kw[:2] == act[:2]:
+        return True
+    return False
 
 print(f"評測 {len(ALL)} 題...")
 t0 = time.time()

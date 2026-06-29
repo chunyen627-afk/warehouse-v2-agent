@@ -434,9 +434,8 @@ _REWRITE_RULES: list[tuple] = [
                                                                     "相關商品查詢"),
     (_re.compile(r"相關商品|類似商品|同類商品"),                     "相關商品查詢"),
 
-    # ── 進出記錄 / 移動 ──
-    (_re.compile(r"(進貨|入庫).*(記錄|多少|幾|狀況)"),              "查詢進出記錄"),
-    (_re.compile(r"(出貨|出庫).*(記錄|多少|幾|狀況)"),              "查詢進出記錄"),
+    # ── 進出記錄 / 移動（只匹配無商品名的純動作查詢）──
+    (_re.compile(r"^(進貨|入庫|出貨|出庫)(記錄|多少|幾|狀況)?$"),   "查詢進出記錄"),
     (_re.compile(r"^(最近|近期|上週|本週|這週|本月|最近\d+天)(進出|出貨|進貨|移動)(記錄|狀況|多少)?$"),
                                                                     "\\1\\2\\3"),
     (_re.compile(r"(進出記錄|移動記錄|庫存移動)"),                   "查詢進出記錄"),
@@ -615,7 +614,9 @@ def _detect_clarify(user_text: str) -> dict | None:
     # ⑥ 純模糊短句（查/看/確認等）— 用 t_clean 或 t 都檢查，剝掉填充詞後剩「查」也算
     #    也涵蓋「幫偶查」→ strip「幫」→「偶查」太短且無具體目標 → clarify
     _vague = {"查", "查詢", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看"}
-    _too_short = len(t_clean) <= 3 and has_intent  # 剝完填充詞只剩 1-3 字且有動作意圖
+    # 剝完填充詞只剩 1-3 字且有動作意圖 → clarify（但含類別關鍵字則放行，如「查食品」）
+    _has_cat = any(zh in t for zh in ("電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動"))
+    _too_short = len(t_clean) <= 3 and has_intent and not _has_cat
     if t in _vague or t_clean in _vague or (not t_clean and not has_intent) or _too_short:
         return {
             "question": "你想查什麼？",
@@ -786,59 +787,92 @@ _WH_NOISE = ("北倉", "南倉", "中倉", "東倉", "西倉", "北區倉", "南
 _QTY_NOISE = ("多少", "幾個", "幾件", "多少個", "多少件", "還有", "剩多少", "剩幾個",
               "庫存", "數量", "查", "看看", "告訴我", "幫我查", "多少了", "多少啊")
 
+# 完整的雜詞清單：把所有會汙染 keyword 的詞統一在此
+_ALL_KEYWORD_NOISE = (
+    # 倉庫名 + 前綴
+    "北區倉的", "中區倉的", "南區倉的", "北倉的", "中倉的", "南倉的",
+    "北區的", "中區的", "南區的", "北倉", "南倉", "中倉", "北區倉", "南區倉", "中區倉",
+    "北區", "南區", "中區", "全倉", "所有倉", "全部的",
+    # 數量/動作詞
+    "還有多少件", "還有多少", "剩多少", "有多少", "有幾個", "剩幾個", "多少個", "多少件",
+    "多少", "幾個", "幾件", "還有", "庫存量", "庫存查詢", "庫存", "數量", "剩餘",
+    # 動作/查詢詞
+    "查一下", "看一下", "幫我查", "告訴我", "查詢", "查", "看", "詢",
+    # 填充/語氣詞
+    "好像有", "好像", "感覺", "應該", "可能", "是不是", "有沒有", "有",
+    "怎麼", "一下", "好嗎", "對吧", "呀", "啊", "耶", "喔", "吧", "欸", "嗎", "呢",
+    "那個", "這個", "的", "了", "還", "剩", "有幾", "剩幾", "多少了", "多少啊",
+    # RCA 雜訊
+    "帳對不上", "對不上", "對不起來", "兜不攏", "帳不對", "怎麼少這麼多",
+    "怎麼少", "為什麼少", "為什麼短少", "短少", "少貨", "是誰動的", "誰改的",
+    "庫存差異", "差異", "扣帳異常", "異常", "短收", "誰動的",
+)
+
 def _extract_sku_keyword(text: str) -> str:
-    """從任意句子裡抽出最可能的 SKU keyword。
-    ③ SKU substring/fuzzy match 優先（動態讀 seed_data，新商品自動跟上）
-    ① noise 剝除兜底
-    """
+    """從任意句子抽出最可能的 SKU keyword。
+    分層清理 → 精準匹配 → fuzzy 滑窗 → 字元重疊。"""
     import warehouse as _W
-    from tools_v2 import _RCA_NOISE, _RCA_GENERIC
 
     try:
         all_names = [it["name"] for it in _W.state().items]
     except Exception:
         all_names = []
 
-    # 預剝倉庫前綴和數量詞（讓 fuzzy 對到乾淨的商品名稱）
+    if not all_names:
+        return text.strip()
+
+    # ── Layer 1: 完整雜詞剝除，取乾淨片段 ──
     cleaned = text
-    for w in _WH_NOISE + _QTY_NOISE:
+    # 按長度倒序剝（先剝長詞，避免「北區倉的」被「北區」先吃掉）
+    noise_sorted = sorted(_ALL_KEYWORD_NOISE, key=len, reverse=True)
+    for w in noise_sorted:
         cleaned = cleaned.replace(w, " ")
-    cleaned = cleaned.strip()
+    cleaned = " ".join(cleaned.split()).strip()
 
-    if all_names:
-        # ③-a substring 完全命中（先試 cleaned，再試 text）：取最長
-        for t in (cleaned, text):
-            hits = [n for n in all_names if n in t]
-            if hits:
-                return max(hits, key=len)
+    # ── Layer 2: 精準 substring match ──
+    for src in (cleaned, text):
+        if not src:
+            continue
+        hits = [n for n in all_names if n in src]
+        if hits:
+            return max(hits, key=len)
 
-        # ③-a2 部分命中：商品名以空格切分後，最長 part 在 text 中 → 取匹配字數最多的商品
-        for t in (cleaned, text):
-            part_hits = []
-            for n in all_names:
-                parts = [p for p in n.split() if len(p) >= 2]
-                match_len = max((len(p) for p in parts if p in t), default=0)
-                if match_len >= 2:
-                    part_hits.append((match_len, n))
-            if part_hits:
-                return max(part_hits)[1]
+    # ── Layer 3: 商品名 part 在 text 中 ──
+    for src in (cleaned, text):
+        if not src:
+            continue
+        part_hits = []
+        for n in all_names:
+            parts = [p for p in n.split() if len(p) >= 2]
+            match_len = max((len(p) for p in parts if p in src), default=0)
+            if match_len >= 2:
+                part_hits.append((match_len, n))
+        if part_hits:
+            return max(part_hits)[1]
 
-        # ③-b fuzzy：用 _fuzzy_score（剝規格 + 雙向滑窗 + 字元重疊）
-        for src in (cleaned, text):
-            if not src or len(src) < 2:
-                continue
-            scored = sorted(
-                [(s, n) for n in all_names if (s := _fuzzy_score(src, n)) >= 55],
-                reverse=True,
-            )
-            if scored:
-                return scored[0][1]
+    # ── Layer 4: _fuzzy_score（剝規格 + 雙向滑窗 + 字元重疊）──
+    for src in (cleaned, text):
+        if not src or len(src) < 2:
+            continue
+        scored = sorted(
+            [(s, n) for n in all_names if (s := _fuzzy_score(src, n)) >= 50],
+            reverse=True,
+        )
+        if scored:
+            return scored[0][1]
 
-    # ① 兜底：剝 noise + 語氣詞
-    raw = text
-    for w in list(_WH_NOISE) + list(_QTY_NOISE) + _EXTRA_NOISE + list(_RCA_NOISE) + list(_RCA_GENERIC):
-        raw = raw.replace(w, "")
-    return raw.strip()
+    # ── Layer 5: 寬鬆 fuzzy（降低閾值到 40）──
+    for src in (cleaned, text):
+        if not src or len(src) < 2:
+            continue
+        scored = sorted(
+            [(s, n) for n in all_names if (s := _fuzzy_score(src, n)) >= 40],
+            reverse=True,
+        )
+        if scored:
+            return scored[0][1]
+
+    return cleaned if len(cleaned) >= 2 else ""
 
 
 def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> tuple[str, dict, bool]:
@@ -1018,7 +1052,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             for w in _RELATED_INTENT_WORDS + (
                 "買", "的人", "什麼", "啥", "哪些", "通常", "跟", "和",
                 "查", "看", "會", "還", "了", "嗎", "呢", "?", "？",
-                "的有", "有哪", "的", "有",
+                "的有", "有哪", "的", "有", "商品", "產品",
             ):
                 cleaned = cleaned.replace(w, " ")
             cleaned = " ".join(cleaned.split())
@@ -1147,7 +1181,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 if zh in kw:
                     cat_en = en
                     break
-            if cat_en and func_args.get("category", "") not in VALID_CATEGORIES:
+            # 只有純類別詞才轉 category（商品名含類別詞如「運動毛巾」不該被轉）
+            import warehouse as _W13
+            _c13_names = [it["name"] for it in _W13.state().items]
+            _kw_matches_product = any(n for n in _c13_names if kw in n)
+            if cat_en and func_args.get("category", "") not in VALID_CATEGORIES and not _kw_matches_product:
                 log.info(f"[校正 C13] 類別庫存查詢 kw={kw!r} → category={cat_en}")
                 return "query_inventory", {**{k:v for k,v in func_args.items() if k!='keyword'}, "category": cat_en}, True
             log.info(f"[校正 C13] 明確庫存查詢 → query_inventory({kw!r})")
@@ -1970,9 +2008,10 @@ async def api_query(req: Request):
         _dcat = func_args.get("category", "")
         # 先剝掉常見前後綴雜訊，取純類別名
         _dkw_clean = _dkw
-        # 剝倉庫名前綴（北倉的/南倉的/中區的...）
+        # 剝前綴（倉庫名 + 動作詞）
         for _pfx in ("北區倉的", "中區倉的", "南區倉的", "北倉的", "中倉的", "南倉的",
-                     "北區的", "中區的", "南區的", "北部的", "中部的", "南部的"):
+                     "北區的", "中區的", "南區的", "北部的", "中部的", "南部的",
+                     "查", "看一下", "看", "查一下"):
             if _dkw_clean.startswith(_pfx):
                 _dkw_clean = _dkw_clean[len(_pfx):].strip()
                 break
@@ -1982,13 +2021,18 @@ async def api_query(req: Request):
                 _dkw_clean = _dkw_clean[:-len(_sfx)].strip()
                 break
         # case A: keyword 是類別名且 category 未設 → 轉成 category 查詢
+        #   避免誤轉商品名（如「運動毛巾」含「運動」但不該變類別）
         if _dkw and _dcat not in VALID_CATEGORIES:
-            for _zh, _en in sorted(_CAT_FALLBACK.items(), key=lambda x: -len(x[0])):
-                if _zh in _dkw_clean or _dkw_clean in _zh:
-                    log.info(f"[dispatch] 類別轉換: kw={_dkw!r} → category={_en}")
-                    func_args = {k: v for k, v in func_args.items() if k != "keyword"}
-                    func_args["category"] = _en
-                    break
+            import warehouse as _W_dispatch
+            _dispatch_names = [it["name"] for it in _W_dispatch.state().items]
+            _dispatch_kw_is_product = any(_dkw_clean in n or n in _dkw_clean for n in _dispatch_names)
+            if not _dispatch_kw_is_product:
+                for _zh, _en in sorted(_CAT_FALLBACK.items(), key=lambda x: -len(x[0])):
+                    if _zh in _dkw_clean or _dkw_clean in _zh:
+                        log.info(f"[dispatch] 類別轉換: kw={_dkw!r} → category={_en}")
+                        func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                        func_args["category"] = _en
+                        break
         # case B: category 已設但 keyword 是純類別名（enum 容錯修完 category 但 keyword 殘留）
         elif _dkw and _dcat in VALID_CATEGORIES:
             for _zh in _CAT_FALLBACK:
