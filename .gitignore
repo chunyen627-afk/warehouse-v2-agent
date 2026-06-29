@@ -23,6 +23,10 @@ _ft*.log
 _backups/
 *.zip
 
+# ── 測試產物（動態產生，不入版控）──
+test/warehouse_data/reports/
+test/intent_clf_report.txt
+
 # ── 系統 ──
 .DS_Store
 Thumbs.db

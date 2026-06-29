@@ -15,3 +15,4 @@
 - [意圖詞重疊導致路由衝突](intent_word_overlap_gotcha.md) —「警示」同時在 C3 和 C14，加意圖詞前要 grep 檢查
 - [HTTP 路由評測工具](eval_http_tool.md) — eval_http.py 用法，避免 WS 單訪客 crash
 - [改 server.py 後跑完整評測](run_full_eval_after_server_change.md) — SOP：改完→重啟→eval_http.py→確認沒退步→commit
+- [記憶同步規則](memory_sync_rule.md) — 改記憶要兩邊同步：全域 ~/.claude/ + 專案 claude_memory/（Git 用）

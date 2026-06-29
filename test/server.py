@@ -1905,7 +1905,7 @@ async def api_query(req: Request):
 
     # C18
     mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
-    if mismatch and not _hard:
+    if mismatch and not _hard and clf_intent != "unknown":
         func_name = clf_intent
 
     # OOV（在校正後才跑，避免誤攔 RCA keyword）
@@ -2417,7 +2417,7 @@ async def ws_handler(ws: WebSocket):
 
                 # ── C18：clf mismatch 檢查（hard_corrected 時不蓋過）──
                 mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
-                if mismatch and not _hard:
+                if mismatch and not _hard and clf_intent != "unknown":
                     log.info(f"[C18] clf={clf_intent}({clf_conf:.2f}) vs model={func_name} → 校正")
                     func_name = intent_clf.LABEL_TO_FUNC.get(clf_intent, clf_intent)
                     # C18 改了 func_name 後，若轉成 search_log 須重新清 args
