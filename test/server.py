@@ -363,13 +363,16 @@ _REWRITE_RULES: list[tuple] = [
     (_re.compile(r"(目前|現在).*(警示|告警)"),                      "查看警示規則"),
 
     # ── RCA 異常追查（優先於庫存查詢，避免被抓成 inventory）──
-    (_re.compile(r".*(帳不對|帳對不上|對不上帳)"),                 "庫存帳對不上"),
-    (_re.compile(r".*(庫存差異|數量差異|進貨差異).*(追查|調查|原因|找)"),
+    # 帶商品名的句型：保留商品名 → "XXX 帳對不上"，讓 C17 能抽出 keyword
+    (_re.compile(r"^(.+?)(的)?(帳不對|帳對不上|對不上帳|對不起來|兜不攏)$"),
+                                                                    "\\1 帳對不上"),
+    (_re.compile(r"^(.+?)(庫存|數量|進貨)?(少了|短少|短收).*(查|追|找|原因|為什麼)"),
+                                                                    "\\1 帳對不上"),
+    # 無商品名的通用句型
+    (_re.compile(r"^(庫存差異|數量差異|進貨差異)(追查|調查|原因)?$"), "庫存帳對不上"),
+    (_re.compile(r"^(帳不對|異常|對不上|兜不攏).*(查|追|找原因|原因)$"),
                                                                     "庫存帳對不上"),
-    (_re.compile(r"庫存差異(追查|調查|原因)"),                      "庫存帳對不上"),
-    (_re.compile(r"(帳不對|異常|對不上|兜不攏).*(查|追|找原因|原因)"),
-                                                                    "庫存帳對不上"),
-    (_re.compile(r"(誰改|誰動|是誰).*(庫存|帳|數量)"),             "庫存帳對不上"),
+    (_re.compile(r"^(誰改|誰動|是誰).*(庫存|帳|數量)"),            "庫存帳對不上"),
 
     # ── 執行腳本（明確動詞 + 品名）──
     (_re.compile(r"(幫我跑|幫我執行|請執行|請跑|執行|跑).*(盤點|月底盤點)"),
@@ -444,12 +447,19 @@ def _has_product_or_wh_keyword(text: str) -> bool:
 def _rewrite_query(user_text: str) -> str:
     """將口語/模糊輸入改寫成 LLM 訓練時的標準句型。"""
     t = user_text.strip()
+    _GENERIC_RCA_HEADS = ("庫存", "數量", "進貨", "帳", "對不上", "差異")
     for pattern, replacement in _REWRITE_RULES:
         m = pattern.search(t)
         if m:
-            # replacement 含 \\1 才做 group 展開，否則直接用固定字串
             if "\\1" in replacement:
                 rewritten = pattern.sub(replacement, t)
+                # group 1 是純通用詞（非商品名）→ 改回固定字串
+                try:
+                    g1 = m.group(1).strip()
+                    if g1 in _GENERIC_RCA_HEADS or g1 == "":
+                        rewritten = "庫存帳對不上"
+                except IndexError:
+                    pass
             else:
                 rewritten = replacement
             if rewritten != t:
