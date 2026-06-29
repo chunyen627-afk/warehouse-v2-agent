@@ -1,0 +1,53 @@
+# 注音常見錯字測試 50 句
+# 格式：預期 | 輸入（含錯字）
+# 錯字類型：同音/近音選字錯誤
+
+# === 同音錯字 ===
+query_inventory | 藍牙耳基庫存
+query_inventory | 藍芽耳機庫存
+query_inventory | 氣泡水剩多少（正確對照）
+query_inventory | 汽泡水有多少
+query_inventory | 悶燒灌庫存
+query_inventory | 悶燒館有多少
+query_inventory | 電運斗庫存
+query_inventory | 電允斗剩多少
+query_inventory | 慢跑鞋還有嗎
+query_inventory | 慢跑協庫存
+query_inventory | 洗衣精庫存（正確）
+query_inventory | 洗一精有多少
+query_inventory | 衛生紙庫存（正確）
+query_inventory | 衛生只剩多少
+query_inventory | 為生紙庫存
+query_inventory | 手機咳庫存
+query_inventory | 手基殼有多少
+query_inventory | 不沾鍋庫存（正確）
+query_inventory | 不沾郭有多少
+query_inventory | 瑜珈墊庫存（正確）
+query_inventory | 瑜伽墊剩多少
+query_inventory | 於加墊庫存
+query_inventory | 行動電源庫存（正確）
+query_inventory | 行動店員有多少
+query_inventory | 蚊香庫存（正確）
+query_inventory | 文香剩多少
+query_inventory | 咖啡豆庫存（正確）
+query_inventory | 咖啡鬥有多少
+query_inventory | 咖非豆庫存
+query_inventory | 羊毛襪庫存
+query_inventory | 羊毛襪（正確）
+query_inventory | 羊毛襪子剩多少
+query_inventory | 羊毛挖庫存
+query_inventory | 垃圾袋庫存
+query_inventory | 垃圾帶剩多少
+query_inventory | 拉圾袋有多少
+query_inventory | 蘇打餅庫存
+query_inventory | 蘇打餅乾有多少
+query_inventory | 素打餅庫存
+query_inventory | 牛仔褲庫存（正確）
+query_inventory | 牛窄褲剩多少
+query_inventory | 牛子褲庫存
+query_inventory | 水壺庫存（正確）
+query_inventory | 水胡有多少
+query_inventory | 水湖剩多少
+query_inventory | 羽絨外套庫存
+query_inventory | 羽容外套有多少
+query_inventory | 雨絨外套庫存
