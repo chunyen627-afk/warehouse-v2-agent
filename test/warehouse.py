@@ -458,6 +458,25 @@ def query_inventory(
     if not matches:
         return _suggest_on_empty(keyword or category or "", action="庫存查詢")
 
+    # 純 category 查詢 → 列出該類別所有商品（不進 clarify 選單）
+    if category and not keyword:
+        rows = []
+        for r in matches:
+            it = r["item"]
+            total, per_wh = _sku_total_stock(it["sku_id"], warehouse)
+            rows.append({"sku_id": it["sku_id"], "name": it["name"],
+                         "category": CATEGORY_LABEL.get(it["category"], it["category"]),
+                         "qty": total, "unit": it.get("unit", "件"),
+                         "per_warehouse": per_wh})
+        cat_label = CATEGORY_LABEL.get(category, category)
+        wh_label_f = WAREHOUSE_LABEL.get(warehouse, "全部倉")
+        return {"ok": True,
+                "summary": f"{cat_label}類別（{wh_label_f}）：共 {len(rows)} 項，總庫存 {sum(r['qty'] for r in rows)} 件",
+                "view": "inventory",
+                "data": {"category": category, "category_label": cat_label,
+                         "warehouse": warehouse, "warehouse_label": wh_label_f,
+                         "total_items": len(rows), "rows": rows}}
+
     # 多筆 match → clarify 讓使用者選哪個商品
     if len(matches) > 1:
         scope = CATEGORY_LABEL.get(category, "") if category else (keyword or "")

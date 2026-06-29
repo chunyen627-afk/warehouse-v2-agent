@@ -1094,6 +1094,24 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if not _c13_has_rca and any(w in user_text for w in _inv_intent) and func_name == "query_inventory":
         kw = _extract_sku_keyword(user_text) or func_args.get("keyword", "")
         if kw:
+            # 檢查 keyword 是否其實是類別名（如「電子產品庫存」→ category=electronics）
+            _CAT_ZH_MAP = {
+                "電子產品": "electronics", "家電廚具": "appliance_kitchen",
+                "食品飲料": "food_beverage", "日用品": "daily_goods",
+                "服飾": "apparel", "運動用品": "sports",
+                "電子": "electronics", "家電": "appliance_kitchen", "廚具": "appliance_kitchen",
+                "食品": "food_beverage", "飲料": "food_beverage",
+                "日用": "daily_goods", "衣服": "apparel", "服裝": "apparel",
+                "運動": "sports",
+            }
+            cat_en = None
+            for zh, en in sorted(_CAT_ZH_MAP.items(), key=lambda x: -len(x[0])):
+                if zh in kw:
+                    cat_en = en
+                    break
+            if cat_en and func_args.get("category", "") not in VALID_CATEGORIES:
+                log.info(f"[校正 C13] 類別庫存查詢 kw={kw!r} → category={cat_en}")
+                return "query_inventory", {**{k:v for k,v in func_args.items() if k!='keyword'}, "category": cat_en}, True
             log.info(f"[校正 C13] 明確庫存查詢 → query_inventory({kw!r})")
             return "query_inventory", {**func_args, "keyword": kw}, True
 
@@ -1896,6 +1914,35 @@ async def api_query(req: Request):
             oov_hint = f"（已自動修正：{oov['original_keyword']} → {oov['fixed_keyword']}）"
         else:
             return JSONResponse({"ok": True, "view": "clarify", **oov})
+
+    # ── dispatch 前最後防線：keyword 其實是類別名 → 轉 category ──
+    # 同時處理 category 已被 enum 容錯轉換但 keyword 殘留的情況
+    _CAT_FALLBACK = {
+        "電子產品": "electronics", "家電廚具": "appliance_kitchen",
+        "食品飲料": "food_beverage", "日用品": "daily_goods",
+        "服飾": "apparel", "運動用品": "sports",
+        "電子": "electronics", "家電": "appliance_kitchen", "廚具": "appliance_kitchen",
+        "食品": "food_beverage", "飲料": "food_beverage",
+        "日用": "daily_goods", "衣服": "apparel", "服裝": "apparel", "運動": "sports",
+    }
+    if func_name == "query_inventory":
+        _dkw = (func_args.get("keyword") or "").strip()
+        _dcat = func_args.get("category", "")
+        # case A: keyword 是類別名且 category 未設 → 轉成 category 查詢
+        if _dkw and _dcat not in VALID_CATEGORIES:
+            for _zh, _en in sorted(_CAT_FALLBACK.items(), key=lambda x: -len(x[0])):
+                if _zh in _dkw:
+                    log.info(f"[dispatch] 類別轉換: kw={_dkw!r} → category={_en}")
+                    func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                    func_args["category"] = _en
+                    break
+        # case B: category 已設但 keyword 是純類別名（enum 容錯修完 category 但 keyword 殘留）
+        elif _dkw and _dcat in VALID_CATEGORIES:
+            for _zh in _CAT_FALLBACK:
+                if _dkw == _zh or (_zh in _dkw and len(_dkw) <= len(_zh) + 2):
+                    log.info(f"[dispatch] 關鍵字是類別名，清掉 kw={_dkw!r} 保留 cat={_dcat}")
+                    func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                    break
 
     # dispatch — same as ws_handler
     # 執行前清理 keyword 前後綴雜訊（LLM 常把「有/的/剩/幾個」黏在 keyword 上）
