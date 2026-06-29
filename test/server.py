@@ -644,7 +644,6 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
         keyword = _kw_clean
 
     import warehouse as W
-    from difflib import SequenceMatcher
 
     snap = W.state()
     all_names = [it["name"] for it in snap.items]
@@ -657,11 +656,9 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
                     "fixed_keyword": keyword, "score": 100}
         return None
 
-    def score(name):
-        return SequenceMatcher(None, keyword, name).ratio() * 100
-
+    # 用 _fuzzy_score（剝規格 + 雙向滑窗 + 字元重疊），比純 SequenceMatcher 更抗規格詞稀釋
     scored = sorted(
-        [(score(n), n) for n in all_names if score(n) >= 60],
+        [(s, n) for n in all_names if (s := _fuzzy_score(keyword, n)) >= 60],
         reverse=True,
     )
 
@@ -691,6 +688,64 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
         }
 
 
+# ── 模糊匹配：中文錯字 / 不完整名稱的容錯比對 ────────────────────────
+# 問題：SequenceMatcher 把全名一起比，DB 裡「氣泡水 500ml」跟 user 的「汽泡水」
+#       被規格詞稀釋到 <60%。修法：剝規格 → 取核心名 → 雙向滑窗 + 字元重疊。
+import re as _re_fuzzy
+
+_SPEC_RE = _re_fuzzy.compile(
+    r'\d+(\.\d+)?\s*(ml|kg|g|mm|cm|L|oz|入|抽|包|件|組|片|張|條|雙|瓶|罐|盒|袋|箱'
+    r'|公升|公斤|公克|公分|毫升|男款|女款|兒童|成人|加大|標準|輕量|厚底|短袖|長袖)'
+)
+_VARIANT_SFX = (' 男款', ' 女款', ' 兒童', ' 成人', ' 加大', ' 標準', ' 輕量',
+                ' 厚底', ' 短袖', ' 長袖', ' 窄版', ' 寬版')
+
+
+def _fuzzy_score(keyword: str, name: str) -> float:
+    """中文模糊相似度 0-100。
+    把 DB 商品名的規格詞剝掉後，用雙向滑窗 + 字元重疊計算。
+    設計為對 2-4 字 keyword 含 1-2 個錯字仍有 ≥55 分。"""
+    from difflib import SequenceMatcher
+
+    # 剝規格詞，留下核心商品名稱
+    core = _SPEC_RE.sub('', name).strip()
+    for sfx in _VARIANT_SFX:
+        if core.endswith(sfx):
+            core = core[:-len(sfx)].strip()
+            break
+    if not core or len(core) < 2:
+        core = name
+
+    # ① substring 命中 → 高分（70-100，依長度比）
+    if keyword in core or core in keyword:
+        ratio = min(len(keyword), len(core)) / max(len(keyword), len(core))
+        return 70.0 + 30.0 * ratio
+
+    # ② 全字串 SequenceMatcher（base）
+    best = SequenceMatcher(None, keyword, core).ratio() * 100
+
+    # ③ 雙向滑窗：keyword 在 core 上滑，core 在 keyword 上滑
+    kw_len, core_len = len(keyword), len(core)
+    if core_len >= kw_len:
+        for i in range(core_len - kw_len + 1):
+            w = core[i:i + kw_len]
+            best = max(best, SequenceMatcher(None, keyword, w).ratio() * 100)
+    if kw_len >= core_len and core_len >= 2:
+        for i in range(kw_len - core_len + 1):
+            w = keyword[i:i + core_len]
+            best = max(best, SequenceMatcher(None, w, core).ratio() * 100)
+
+    # ④ 字元重疊（Dice）— 對短 keyword 的錯字額外加分
+    kw_set = set(keyword)
+    core_set = set(core)
+    if kw_set and core_set:
+        char_score = 2 * len(kw_set & core_set) / (len(kw_set) + len(core_set)) * 100
+        if len(keyword) <= 3:
+            best = max(best, char_score * 0.85)
+
+    return best
+
+
 _EXTRA_NOISE = [
     "好像有", "好像", "感覺", "應該", "可能", "似乎", "有點",
     "怎麼", "是不是", "有沒有", "一下", "好嗎", "對吧",
@@ -708,7 +763,6 @@ def _extract_sku_keyword(text: str) -> str:
     ① noise 剝除兜底
     """
     import warehouse as _W
-    from difflib import SequenceMatcher
     from tools_v2 import _RCA_NOISE, _RCA_GENERIC
 
     try:
@@ -740,21 +794,12 @@ def _extract_sku_keyword(text: str) -> str:
             if part_hits:
                 return max(part_hits)[1]
 
-        # ③-b fuzzy 滑窗：score ≥ 55（優先用 cleaned）
-        def _score(name, src):
-            full = SequenceMatcher(None, src, name).ratio()
-            window = max(
-                (SequenceMatcher(None, src[i:i+len(name)], name).ratio()
-                 for i in range(max(1, len(src) - len(name) + 1))),
-                default=0,
-            )
-            return max(full, window) * 100
-
+        # ③-b fuzzy：用 _fuzzy_score（剝規格 + 雙向滑窗 + 字元重疊）
         for src in (cleaned, text):
-            if not src:
+            if not src or len(src) < 2:
                 continue
             scored = sorted(
-                [(s, n) for n in all_names if (s := _score(n, src)) >= 55],
+                [(s, n) for n in all_names if (s := _fuzzy_score(src, n)) >= 55],
                 reverse=True,
             )
             if scored:
@@ -838,6 +883,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             if func_args.get("category") in VALID_CATEGORIES:
                 new_args["category"] = func_args["category"]
             return "list_low_stock", new_args, True
+        else:
+            # LLM 已正確輸出 list_low_stock，但後續 C14 看到「警示」會誤覆蓋成 set_alert
+            # → hard-return 防止被後面規則（C14 等）推翻
+            return func_name, func_args, True
 
     # ── C4: 熱銷 / 滯銷意圖詞 → list_hot_items ──
     is_hot = any(kw in user_text for kw in _HOT_INTENT_WORDS_HOT) or \
@@ -870,6 +919,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 new_args["category"] = cat
                 break
         return "list_hot_items", new_args, True
+    elif is_hot or is_slow:
+        # LLM 已正確輸出 list_hot_items → hard-return 防後面規則推翻
+        return func_name, func_args, True
 
     # ── C4b: list_hot_items period + category 依 user_text 校準 ──
     # (模型對沒明講期間的 query period 不穩定、且常漏抽 category slot)
@@ -927,26 +979,32 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             log.info("[校正 C2b] query_movement 補 direction=out")
 
     # ── C6: 連帶意圖詞 → query_related_items ──
-    if any(kw in user_text for kw in _RELATED_INTENT_WORDS) or \
-       any(kw in text_low for kw in _RELATED_INTENT_WORDS):
+    _has_related = any(kw in user_text for kw in _RELATED_INTENT_WORDS) or \
+                   any(kw in text_low for kw in _RELATED_INTENT_WORDS)
+    if _has_related:
+        # keyword:優先用 LLM 已抽的,否則從 user_text 去掉意圖詞+雜詞當 keyword
+        kw = func_args.get("keyword")
+        if not kw:
+            cleaned = user_text
+            for w in _RELATED_INTENT_WORDS + (
+                "買", "的人", "什麼", "啥", "哪些", "通常", "跟", "和",
+                "查", "看", "會", "還", "了", "嗎", "呢", "?", "？",
+                "的有", "有哪", "的", "有",
+            ):
+                cleaned = cleaned.replace(w, " ")
+            cleaned = " ".join(cleaned.split())
+            kw = cleaned if len(cleaned) >= 2 else (func_args.get("keyword") or "")
         if func_name != "query_related_items":
             log.info(f"[校正 C6] {func_name} → query_related_items (連帶意圖)")
-            # keyword:優先用 LLM 已抽的,否則從 user_text 去掉意圖詞+雜詞當 keyword
-            kw = func_args.get("keyword")
-            if not kw:
-                cleaned = user_text
-                for w in _RELATED_INTENT_WORDS + (
-                    "買", "的人", "什麼", "啥", "哪些", "通常", "跟", "和",
-                    "查", "看", "會", "還", "了", "嗎", "呢", "?", "？",
-                    "的有", "有哪", "的", "有",
-                ):
-                    cleaned = cleaned.replace(w, " ")
-                cleaned = " ".join(cleaned.split())
-                kw = cleaned if len(cleaned) >= 2 else (func_args.get("keyword") or "")
             new_args = {"keyword": kw}
             if func_args.get("category") in VALID_CATEGORIES:
                 new_args["category"] = func_args["category"]
             return "query_related_items", new_args, True
+        else:
+            # LLM 已正確輸出 query_related_items，但可能漏 keyword → 補上並 hard-return
+            if not func_args.get("keyword") and kw:
+                func_args = {**func_args, "keyword": kw}
+            return func_name, func_args, True
 
     # ── C2: 模糊時間詞 → period rewrite ──
     if func_name == "query_movement":
@@ -1859,6 +1917,8 @@ async def api_query(req: Request):
             log.info(f"[dispatch] keyword 清理: 「{_raw_kw}」→「{_ck}」")
             func_args = {**func_args, _kw_field: _ck}
     result = finance.execute(func_name, func_args)
+    if isinstance(result, dict):
+        result["_function"] = func_name  # 給 eval_http.py 驗證路由
     if oov_hint and isinstance(result, dict) and result.get("summary"):
         result["summary"] = oov_hint + result["summary"]
 
