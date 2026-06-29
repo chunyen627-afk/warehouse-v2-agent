@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>倉管助理 Demo</title>
 <style>
+  /* 關閉按鈕 */
+  #close-btn {
+    position: fixed; top: 10px; right: 14px; z-index: 9999;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(0,0,0,.55); color: #fff; border: none;
+    font-size: 18px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .2s; line-height: 1;
+  }
+  #close-btn:hover { background: #e53e3e; transform: scale(1.1); }
+
   :root {
     --bg:        #f5f7fa;
     --card:      #ffffff;
@@ -599,6 +610,7 @@
 
 <header>
   <span class="icon">📦</span>
+  <button id="close-btn" title="關閉頁面" onclick="closePage()">✕</button>
   <h1>倉管助理</h1>
   <span class="sub" id="snap-date">載入中...</span>
   <button id="alert-panel-btn" title="警示規則" onclick="toggleAlertPanel()">
@@ -655,6 +667,16 @@
 </div>
 
 <script>
+// ── 關閉頁面（防誤觸）──
+function closePage() {
+  if (confirm('確定要關閉倉管助理嗎？')) {
+    window.close();
+    // fallback: 如果 window.close() 無效（非 script 開啟的視窗），顯示提示
+    setTimeout(() => {
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:20px;color:#666">頁面已關閉，請手動關閉此分頁（Ctrl+W 或 Alt+F4）</div>';
+    }, 300);
+  }
+}
 const $ = id => document.getElementById(id);
 const messages = $('messages');
 
