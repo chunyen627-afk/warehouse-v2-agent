@@ -7,14 +7,13 @@
 <style>
   /* 關閉按鈕 */
   #close-btn {
-    position: fixed; bottom: 20px; right: 20px; z-index: 9999;
-    width: 40px; height: 40px; border-radius: 50%;
-    background: rgba(0,0,0,.45); color: #fff; border: none;
-    font-size: 18px; font-weight: 700; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: background .2s; line-height: 1;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(0,0,0,.35); color: #fff; border: none;
+    font-size: 16px; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .2s; vertical-align: middle; margin-left: 4px;
   }
-  #close-btn:hover { background: #e53e3e; transform: scale(1.1); }
+  #close-btn:hover { background: #e53e3e; }
 
   :root {
     --bg:        #f5f7fa;
@@ -610,12 +609,12 @@
 
 <header>
   <span class="icon">📦</span>
-  <button id="close-btn" title="關閉頁面" onclick="closePage()">✕</button>
   <h1>倉管助理</h1>
   <span class="sub" id="snap-date">載入中...</span>
   <button id="alert-panel-btn" title="警示規則" onclick="toggleAlertPanel()">
     🔔 <span id="alert-badge" class="alert-badge" style="display:none">0</span>
   </button>
+  <button id="close-btn" title="關閉頁面" onclick="closePage()">✕</button>
 </header>
 
 <!-- 右側警示規則 Panel -->
