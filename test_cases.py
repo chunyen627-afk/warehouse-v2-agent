@@ -107,6 +107,15 @@ E2E_EXTRA_CASES = [
     # 此 case 不放 expected function、放 None 給 e2e 判定容錯
     # ("北倉怎樣", None, None),
 
+    # ── RCA / search_log（帳對不上追查）──
+    # 帶商品名：rewrite 必須保留商品名讓 C17 抽出 keyword
+    ("抗菌洗衣精帳對不上",         "search_log",  {"keyword": "抗菌洗衣精"}),
+    ("洗衣精庫存帳對不上",         "search_log",  {"keyword": "洗衣精"}),
+    ("藍牙耳機為什麼少了",         "search_log",  {"keyword": "藍牙耳機"}),
+    # 無商品名：查全倉
+    ("庫存帳對不上",               "search_log",  {}),
+    ("庫存為何對不上",             "search_log",  {}),
+
     # 守門員 (引導排除測試)
     ("查股市",                     None, None),   # 預期 reject (倉管 demo 沒有股市)
     ("天氣怎樣",                   None, None),   # 預期 reject

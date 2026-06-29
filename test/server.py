@@ -1210,12 +1210,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # C17：search_log 參數清理 + keyword 抽取（_extract_sku_keyword）
     if func_name == "search_log":
         model_kw = func_args.get("keyword", func_args.get("script_name", "")).strip()
-        # 先用模型抽到的 keyword 跑 SKU match；沒結果再用完整 user_text
+        # rewrite 後的 user_text 可能是「XXX 帳對不上」，把 RCA 後綴去掉只留商品名
+        _rca_suffixes = (" 帳對不上", " 帳不對", " 對不上帳", " 對不起來", " 兜不攏", "帳對不上", "庫存帳對不上")
+        _clean_user = user_text
+        for _sfx in _rca_suffixes:
+            if _clean_user.endswith(_sfx):
+                _clean_user = _clean_user[: -len(_sfx)].strip()
+                break
+        # 先用模型抽到的 keyword 跑 SKU match；沒結果再用去後綴的 user_text
         final_kw = _extract_sku_keyword(model_kw) if model_kw else ""
         if not final_kw:
-            final_kw = _extract_sku_keyword(user_text)
+            final_kw = _extract_sku_keyword(_clean_user)
         func_args = {
-            "keyword":    final_kw or model_kw or user_text,
+            "keyword":    final_kw or model_kw or _clean_user or user_text,
             "time_range": func_args.get("time_range", func_args.get("period")),
         }
         if func_args["time_range"] is None:
