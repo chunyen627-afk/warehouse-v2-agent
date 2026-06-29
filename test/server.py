@@ -2483,7 +2483,7 @@ async def ws_handler(ws: WebSocket):
                                     "args_preview": "found=False → retry"})
                         retry_kw = func_args.get("keyword", "")
                         # 嘗試用 category 擴大搜尋
-                        snap = warehouse.state()
+                        snap = finance.state()
                         retry_items = [it for it in snap.items if retry_kw and retry_kw in it.get("name","")]
                         if retry_items:
                             retry_cat = retry_items[0].get("category", "")
