@@ -327,7 +327,7 @@ _WH_ZH_MAP = {"北倉": "north", "北區": "north", "中倉": "central", "中區
 # ── Clarification 偵測 ──────────────────────────────────────────────────────
 # 所有已知意圖詞（用於判斷「有沒有動作詞」）
 _ALL_INTENT_WORDS = (
-    "庫存", "查庫存", "還有多少", "有多少", "數量", "剩多少", "剩幾個",
+    "查", "看", "庫存", "查庫存", "還有多少", "有多少", "數量", "剩多少", "剩幾個",
     "多少", "幾個", "幾件", "多少個", "多少件",   # ← 補「多少」系列
     "進出", "進貨", "出貨", "異動", "移動", "移轉", "紀錄", "流向",
     "缺貨", "低庫存", "不夠", "快沒", "即將缺貨", "需要補", "補貨",
@@ -437,8 +437,8 @@ _REWRITE_RULES: list[tuple] = [
     # ── 進出記錄 / 移動 ──
     (_re.compile(r"(進貨|入庫).*(記錄|多少|幾|狀況)"),              "查詢進出記錄"),
     (_re.compile(r"(出貨|出庫).*(記錄|多少|幾|狀況)"),              "查詢進出記錄"),
-    (_re.compile(r"(最近|近期|上週|本週|這週|本月|最近\d+天).*(進出|出貨|進貨|移動)"),
-                                                                    "查詢進出記錄"),
+    (_re.compile(r"^(最近|近期|上週|本週|這週|本月|最近\d+天)(進出|出貨|進貨|移動)(記錄|狀況|多少)?$"),
+                                                                    "\\1\\2\\3"),
     (_re.compile(r"(進出記錄|移動記錄|庫存移動)"),                   "查詢進出記錄"),
     (_re.compile(r"上週.*(進了|入了|來了)"),                        "查詢進出記錄"),
 
@@ -450,10 +450,12 @@ _REWRITE_RULES: list[tuple] = [
     (_re.compile(r"(show|list|get)\s+(today|this week|this month)\s+(inbound|outbound)", _re.IGNORECASE),
                                                                     "查詢進出記錄"),
     (_re.compile(r"low stock alert", _re.IGNORECASE),                 "庫存警示"),
+    (_re.compile(r"what(?:'?s?| is) bought with (.+)", _re.IGNORECASE),
+                                                                    "買\\1的人還會買什麼"),
     (_re.compile(r"(what|show|list|get).*(bought|related).*", _re.IGNORECASE),
                                                                     "相關商品查詢"),
-    (_re.compile(r"(how much|how many|show|list|get)\s+(.+)", _re.IGNORECASE),
-                                                                    "\\2 庫存"),
+    (_re.compile(r"(?:how much |how many |show |list |get )(.+)", _re.IGNORECASE),
+                                                                    "\\1 庫存"),
 
 # 含「有多少/剩多少」但沒有名詞（< 7 字）才改寫；長句含商品名讓 LLM 抽
     (_re.compile(r"^現在還有多少貨$"),                              "查詢庫存"),
@@ -528,7 +530,10 @@ def _detect_clarify(user_text: str) -> dict | None:
     _wh_names = ["北倉", "北區倉", "南倉", "南區倉", "中倉", "中區倉"]
     matched_whs = [zh for zh in _wh_names if zh in t]
     matched_wh = matched_whs[0] if matched_whs else None
-    if matched_wh and len(matched_whs) < 2 and not has_intent:
+    # 如果也含類別或商品關鍵字 → 不是純倉庫查詢，不攔
+    _cat_hint = next((zh for zh in ("電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動") if zh in t), None)
+    _has_product = bool(W.match_items(t_clean)) if t_clean else False
+    if matched_wh and len(matched_whs) < 2 and not has_intent and not _cat_hint and not _has_product:
         return {
             "question": f"你想查「{matched_wh}」的哪個項目？",
             "options": [
@@ -657,7 +662,7 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
             _kw_clean = _kw_clean[len(pfx):]
             break
     for sfx in sorted(_kw_suffixes, key=len, reverse=True):
-        if _kw_clean.endswith(sfx) and len(_kw_clean) > len(sfx) + 1:
+        if _kw_clean.endswith(sfx) and len(_kw_clean) >= len(sfx) + 1:
             _kw_clean = _kw_clean[:-len(sfx)]
             break
     # 清理後太短（< 2字）→ 清空，讓後續邏輯查全部，而非用單字亂比對
@@ -1963,8 +1968,15 @@ async def api_query(req: Request):
     if func_name == "query_inventory":
         _dkw = (func_args.get("keyword") or "").strip()
         _dcat = func_args.get("category", "")
-        # 先剝掉常見後綴雜訊（類/類別/庫存/查詢/詢 等），取純類別名
+        # 先剝掉常見前後綴雜訊，取純類別名
         _dkw_clean = _dkw
+        # 剝倉庫名前綴（北倉的/南倉的/中區的...）
+        for _pfx in ("北區倉的", "中區倉的", "南區倉的", "北倉的", "中倉的", "南倉的",
+                     "北區的", "中區的", "南區的", "北部的", "中部的", "南部的"):
+            if _dkw_clean.startswith(_pfx):
+                _dkw_clean = _dkw_clean[len(_pfx):].strip()
+                break
+        # 剝常見後綴
         for _sfx in ("類別", "庫存查詢", "庫存", "查詢", "類", "詢"):
             if _dkw_clean.endswith(_sfx) and len(_dkw_clean) > len(_sfx) + 1:
                 _dkw_clean = _dkw_clean[:-len(_sfx)].strip()
@@ -2501,6 +2513,11 @@ async def ws_handler(ws: WebSocket):
                     _dkw = (func_args.get("keyword") or "").strip()
                     _dcat = func_args.get("category", "")
                     _dkw_clean = _dkw
+                    for _pfx in ("北區倉的", "中區倉的", "南區倉的", "北倉的", "中倉的", "南倉的",
+                                 "北區的", "中區的", "南區的", "北部的", "中部的", "南部的"):
+                        if _dkw_clean.startswith(_pfx):
+                            _dkw_clean = _dkw_clean[len(_pfx):].strip()
+                            break
                     for _sfx in ("類別", "庫存查詢", "庫存", "查詢", "類", "詢"):
                         if _dkw_clean.endswith(_sfx) and len(_dkw_clean) > len(_sfx) + 1:
                             _dkw_clean = _dkw_clean[:-len(_sfx)].strip()
