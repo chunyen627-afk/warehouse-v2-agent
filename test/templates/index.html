@@ -1157,6 +1157,21 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'trace_step') {
+    // 若 _rcaCardId 存在，插入到 RCA card 內（round2 trace）
+    if (_rcaCardId) {
+      const existCard = document.getElementById(_rcaCardId);
+      if (existCard) {
+        const k = TRACE_KIND[msg.step.kind] || { icon: '▸', label: msg.step.kind, color: '#888' };
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:flex-start;gap:6px;padding:3px 0;font-size:12px;color:var(--muted)';
+        row.innerHTML =
+          `<span style="min-width:18px">${k.icon}</span>` +
+          `<span style="color:${k.color};font-weight:600;min-width:72px">${k.label}</span>` +
+          `<span style="color:var(--text-secondary)">${msg.step.detail}</span>`;
+        existCard.querySelector('.agent-trace')?.appendChild(row) || existCard.appendChild(row);
+        return;
+      }
+    }
     appendTraceStep(msg.step);
     return;
   }
