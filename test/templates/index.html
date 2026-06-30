@@ -1611,8 +1611,15 @@ function renderViewCard(view, data, topSummary) {
         </div>
       </div>`;
   } else if (view === 'item_done') {
-    card.innerHTML = `<div class="label">✅ 已新增商品</div>
-      <div style="padding:8px;font-size:14px">「${data.item?.name||''}」 — SKU: ${data.item?.sku||''}</div>`;
+    const it = data.item;
+    const del = data.deleted;
+    if (del) {
+      card.innerHTML = `<div class="label">✅ 已刪除商品</div><div style="padding:8px;font-size:14px">${del}</div>`;
+    } else if (it) {
+      card.innerHTML = `<div class="label">✅ 已新增商品</div><div style="padding:8px;font-size:14px">「${it.name||''}」 — SKU: ${it.sku||''}</div>`;
+    } else {
+      card.innerHTML = `<div class="label">✅ 完成</div>`;
+    }
   } else if (view === 'item_create_step1' || view === 'item_create_step2' || view === 'item_create_step3' || view === 'item_create_step4') {
     const stepData = data;
     card.innerHTML = `
