@@ -35,21 +35,30 @@ metadata:
 - ✅ C3/C4/C6 hard-return 防護（防止後續規則推翻正確路由，2026-06-29）
 - ✅ eval_http.py HTTP 路由評測工具（2026-06-29）
 - ✅ test_oov.py OOV 容錯測試 33 題（2026-06-29）
+- ✅ 自然語言新增商品（create_item）— 分步引導 + 一句話模式 + 同名防呆（2026-06-30）
+- ✅ 自然語言刪除商品（delete_item）— 引導模式 + 原60項保護 + HITL確認（2026-06-30）
+- ✅ 庫存排行（rank_type=stock）—「哪個東西庫存最多」（2026-06-30）
+- ✅ 3-step RCA loop（search_log→judge_cause_found規則→suggest_action）（2026-06-30）
+- ✅ 多裝置同時連線（移除單訪客保護）+ HTTPS + QR code（2026-06-30）
+- ✅ 能力地圖 7 類 + chips 新增/刪除按鈕（2026-06-30）
 
-**路由準確率**：81 題測試（2026-06-29）
-- 56/81 (69%) — 較 100% 下降，主因 query_related_items keyword 提取 gap + 英文 mixed input
-- 「庫存警示」等核心查詢已透過 C3 hard-return 修復
+**路由準確率（2026-06-30）**：
+- 81 eval: 80/81 (99%)
+- OOV v1: 95/97 (98%)
+- OOV v2: 77/79 (97.5%)
+- v6 模型: eval_loss=0.026, 5,849 筆訓練
+- intent_clf: 重訓 489MB, per-label 96-100%
 
-**重要踩雷（2026-06-29）**：
-- 「警示」同時出現在 `_LOW_STOCK_INTENT_WORDS` 和 C14 `_alert_words`，造成路由衝突
-- 改 `server.py` 後必須跑 `eval_http.py` 確認未退步（見 [[run_full_eval_after_server_change]]）
-- 新增意圖詞前 grep 檢查是否與其他規則詞重疊（見 [[intent_word_overlap_gotcha]]）
+**最終架構**: intent_clf(分類) → LLM(抽參數) → dispatch(攔截清理) → execute
 
-**備份**：`_backups/warehouse_v2_test_20260626_1221.zip`（1.2GB，含模型 GGUF）
+**重要踩雷**：
+- 改 code 後 HTTP + WS 兩路徑都要同步修改（見 [[sync_both_sides_after_code_change]]）
+- session state（_item_create_state/_item_delete_state）必須在 WS/HTTP 兩路徑都設
+- chip 按鈕用 HTTP fetch 不會設 WS session state，要用 sendQuery() 走 WS
+- 「警示」同時出現在 `_LOW_STOCK_INTENT_WORDS` 和 C14 `_alert_words`
+- 270M 不適合單獨做 routing，intent_clf 主路由 + LLM 抽參數 是最佳架構
 
-**待做清單（優先序）**：
-1. 🟡 set_alert 後立即跑一次掃描（30 min）
-2. 🟡 set_schedule 重複時改 HITL 問覆蓋（1h）
+**備份**：`_backups/warehouse_v2_20260630_v2.0.zip`（3.3GB，含模型）
 3. 🟡 RCA 第二輪 timeout 保護（1h）
 4. 🟢 Context carry-over（追問「那中倉呢？」記住上輪 entity，3-5h）
 5. 🟢 查完庫存自動帶 Proactive 建議 button（1h）
