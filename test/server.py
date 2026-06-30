@@ -1924,7 +1924,7 @@ async def api_query(req: Request):
         func_name = _clf_func
         _needs_llm = func_name in ("manage_config", "run_script", "set_alert",
                                     "set_schedule", "generate_po", "generate_report",
-                                    "query_movement")  # movement 需要 LLM 抽時間/方向
+                                    "query_movement", "compare_warehouses")  # 需要 LLM 抽參數
         if not _needs_llm:
             func_args = {}
             if func_name in ("query_inventory", "search_log", "query_related_items"):
@@ -2155,6 +2155,11 @@ async def api_query(req: Request):
                 log.info(f"[dispatch] 無連帶意圖攔回: {user_text!r} kw={_dk!r}")
                 func_name = "query_inventory"
                 func_args = {"keyword": _dk}
+
+    # ── dispatch：compare_warehouses 清理非法參數（LLM 常幻覺 rank_type）──
+    if func_name == "compare_warehouses":
+        func_args = {k: v for k, v in func_args.items()
+                     if k in ("warehouse_a", "warehouse_b", "metric")}
 
     # ── dispatch 攔截：movement 關鍵字清理 + 自動提取 ──
     if func_name == "query_movement":
