@@ -44,7 +44,7 @@ def load_as_seed(wd: Path) -> dict:
     shelf_life = {
         r["sku_id"]: int(r["shelf_life_days"])
         for r in items_rows
-        if r.get("shelf_life_days", "").strip()
+        if (r.get("shelf_life_days") or "").strip()
     }
 
     # categories：從 items 的 category + category_label 還原（保序、去重）

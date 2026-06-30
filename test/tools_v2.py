@@ -1438,7 +1438,7 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
         s.stock.setdefault(wh_key, {})[new_sku] = qty
 
     # 6. 持久化到 warehouse_data/master/（重啟後不消失）
-    master = _P(__file__).parent / "warehouse_data" / "master"
+    master = Path(__file__).parent / "warehouse_data" / "master"
     # items.csv：若 SKU 不存在才追加
     items_path = master / "items.csv"
     existing = list(csv.DictReader(open(items_path, encoding="utf-8-sig")))
@@ -1540,10 +1540,9 @@ def commit_delete_item(pending: dict, actor: str = "user_confirmed",
         f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
                             "action": "delete_items", "skus": list(skus_to_delete)}, ensure_ascii=False) + "\n")
 
-    # 4. 重生 seed
-    from pathlib import Path as _P
-    seed_path = _P(__file__).parent / "seed_data.json"
-    W.init(seed_path)
+    # 4. 熱更新記憶體（從 warehouse_data/ 重載）
+    import warehouse as W_mod
+    W_mod.init(Path(__file__).parent / "warehouse_data")
 
     return {"ok": True, "summary": f"✅ 已刪除：{deleted_names}（共 {len(deletable)} 項）",
             "view": "item_done", "data": {"deleted": deleted_names, "trace_id": trace_id}}
