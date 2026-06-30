@@ -1899,13 +1899,14 @@ async def api_query(req: Request):
     user_text = body.get("text", "").strip()
     if not user_text:
         return JSONResponse({"ok": False, "view": "error", "summary": "empty query"})
-    user_text = _rewrite_query(user_text)
 
-    # ── 取消（清除所有 session state）──
-    if user_text.strip() == "取消":
+    # ── 取消（rewrite 之前先攔截，避免被改掉）──
+    if user_text == "取消":
         _item_create_state.clear()
         _item_delete_state.clear()
         return JSONResponse({"ok": True, "summary": "已取消。", "view": "item_cancelled", "data": {}})
+
+    user_text = _rewrite_query(user_text)
 
     # ── 刪除模式中 → 直接處理，跳過守門員 ──
     if _item_delete_state.get("active"):
@@ -2601,6 +2602,14 @@ async def ws_handler(ws: WebSocket):
             user_text = (data.get("text") or "").strip()
             if not user_text:
                 continue
+
+            # ── 取消（rewrite 之前先攔截）──
+            if user_text == "取消":
+                _item_create_state.clear()
+                _item_delete_state.clear()
+                await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
+                continue
+
             user_text = _rewrite_query(user_text)
             if LLM is None:
                 msg = HEALTH.get("message") or "系統還在啟動中"
