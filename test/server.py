@@ -623,7 +623,8 @@ def _detect_clarify(user_text: str) -> dict | None:
 
     # ⑥ 純模糊短句（查/看/確認等）— 用 t_clean 或 t 都檢查，剝掉填充詞後剩「查」也算
     #    也涵蓋「幫偶查」→ strip「幫」→「偶查」太短且無具體目標 → clarify
-    _vague = {"查", "查詢", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看"}
+    _vague = {"查", "查詢", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看",
+              "那個", "這個", "欸", "誒", "喂", "嗨"}
     # 剝完填充詞只剩 1-3 字且有動作意圖 → clarify（但含類別關鍵字則放行，如「查食品」）
     _has_cat = any(zh in t for zh in ("電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動"))
     _too_short = len(t_clean) <= 3 and has_intent and not _has_cat
@@ -1922,7 +1923,8 @@ async def api_query(req: Request):
         log.info(f"[intent_clf primary] {user_text!r} → {_clf_func} (conf={_clf_conf:.2f})")
         func_name = _clf_func
         _needs_llm = func_name in ("manage_config", "run_script", "set_alert",
-                                    "set_schedule", "generate_po", "generate_report")
+                                    "set_schedule", "generate_po", "generate_report",
+                                    "query_movement")  # movement 需要 LLM 抽時間/方向
         if not _needs_llm:
             func_args = {}
             if func_name in ("query_inventory", "search_log", "query_related_items"):
@@ -1930,8 +1932,8 @@ async def api_query(req: Request):
                     func_args["keyword"] = _pre_kw
             elif func_name == "query_movement":
                 func_args["period"] = "this_month"; func_args["direction"] = "both"
-                if _pre_kw and len(_pre_kw) >= 2:
-                    func_args["keyword"] = _pre_kw
+                # movement 不從 user_text 抽 keyword（容易誤抽時間/動作詞）
+                # 讓 LLM 專門處理參數提取，或用 dispatch 補
             _clf_skip_llm = True
             log.info(f"[intent_clf primary] skip LLM, func={func_name} args={func_args}")
 
@@ -2143,11 +2145,24 @@ async def api_query(req: Request):
             func_name = "query_inventory"
             func_args = {"keyword": _dk}
 
-    # ── dispatch 攔截：movement 查詢 empty keyword → 從 user_text 補 ──
-    if func_name == "query_movement" and not func_args.get("keyword"):
-        _mk = _extract_sku_keyword(user_text)
-        if _mk and len(_mk) >= 2:
-            func_args = {**func_args, "keyword": _mk}
+    # ── dispatch 攔截：「XX墊子/補貨了」被誤判 query_related_items ──
+    if func_name == "query_related_items" and not any(w in user_text for w in ("買", "連帶", "一起買", "還會買", "搭配")):
+        _dk = _extract_sku_keyword(user_text)
+        if _dk and len(_dk) >= 2:
+            import warehouse as _WR
+            # 確認沒有明顯的 related 意圖 → 攔回 inventory
+            if not any(w in user_text for w in ("買", "連帶", "一起", "搭配", "相關", "帶動", "順便")):
+                log.info(f"[dispatch] 無連帶意圖攔回: {user_text!r} kw={_dk!r}")
+                func_name = "query_inventory"
+                func_args = {"keyword": _dk}
+
+    # ── dispatch 攔截：movement 關鍵字清理（LLM 常把整句當 keyword）──
+    if func_name == "query_movement":
+        import warehouse as _WM2
+        _mv_kw = func_args.get("keyword", "")
+        # 太長或找不到商品 → 清掉（純時間查詢不需要 keyword）
+        if _mv_kw and (len(_mv_kw) > 10 or not _WM2.match_items(_mv_kw)):
+            func_args = {k: v for k, v in func_args.items() if k != "keyword"}
 
     # dispatch — same as ws_handler
     # 執行前清理 keyword 前後綴雜訊（LLM 常把「有/的/剩/幾個」黏在 keyword 上）
