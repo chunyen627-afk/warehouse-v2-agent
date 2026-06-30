@@ -5,7 +5,9 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![Model](https://img.shields.io/badge/Model-FunctionGemma--270M-orange)](https://huggingface.co/google/gemma-3-1b-it)
-[![Routing](https://img.shields.io/badge/Routing_Accuracy-100%25-brightgreen)]()
+[![Routing](https://img.shields.io/badge/81_Eval-99%25-brightgreen)]()
+[![OOV v1](https://img.shields.io/badge/OOV_v1-98%25-brightgreen)]()
+[![OOV v2](https://img.shields.io/badge/OOV_v2-97.5%25-brightgreen)]()
 [![License](https://img.shields.io/badge/License-MIT-green)]()
 
 ---
@@ -20,13 +22,19 @@
 使用者輸入
     │
     ▼
-[Query Rewriting]   ← 口語 → 標準句（53條規則）
+[Query Rewriting]   ← 口語 → 標準句（60+條規則）
     │
     ▼
-[FunctionGemma 270M]  ← 意圖路由 → Function Call JSON
+[intent_clf 主路由]  ← FastText 512MB 分類器（意圖分類 98.9% 精準）
     │
     ▼
-[校正層 C0-C18 + Pre-C]  ← 修正 LLM 輸出錯誤
+[FunctionGemma 270M]  ← 輔助參數提取（keyword/倉庫/時間）
+    │
+    ▼
+[dispatch 攔截層]   ← 口語 pattern 強制路由 + keyword 清理
+    │
+    ▼
+[校正層 C0-C18 + Pre-C]  ← 最後防線修正
     │
     ▼
 [業務工具執行]  ← 七金剛查詢 / 三金剛 Agent / 腳本執行
@@ -102,12 +110,17 @@ LLM 輸出不穩定是 270M 小模型的先天限制，解法是 **Server 端後
     └─ 前端：Agent 追蹤卡顯示兩次 Tool Call + 💡建議
 ```
 
-### 路由準確率
-| 版本 | 準確率 | 說明 |
-|------|--------|------|
-| 純 LLM（未修正） | ~40-50% | 270M 模型天花板 |
-| + 校正層 C0-C18 | 75% | 前版 |
-| + Query Rewriting + Pre-C + OOV清理 | **100%** | 71/71 題 |
+### 路由準確率（2026-06-30）
+| 測試 | 題數 | 準確率 | 說明 |
+|------|------|--------|------|
+| 81 eval | 81 | **99%** (80/81) | 標準測試集 |
+| OOV v1 | 97 | **98%** (95/97) | 口語錯字/不完整/贅詞 |
+| OOV v2 | 79 | **97.5%** (77/79) | 全新純中文口語 |
+
+**最終架構**: `intent_clf(分類) → LLM(抽參數) → dispatch(攔截) → execute`
+- v6 模型: 5,849 筆訓練, eval_loss=0.026
+- intent_clf: 489MB, per-label 96-100%
+- OOV 引擎: fuzzy threshold 40, 雜詞清單 80+ 詞
 
 ---
 
@@ -302,4 +315,4 @@ python data_tools/regenerate_seed_from_csv.py
 
 ---
 
-*最後更新：2026-06-26 | 路由準確率：71/71 = 100%*
+*最後更新：2026-06-30 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | v6 模型 5,849 筆訓練*
