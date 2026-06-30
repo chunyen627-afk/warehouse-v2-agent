@@ -1616,6 +1616,9 @@ function renderViewCard(view, data, topSummary) {
         </div>
       </div>`;
   } else if (view === 'item_done') {
+    // 新增/刪除商品後即時更新狀態列和異常橫幅
+    refreshSnapshot();
+    pullAnomalies();
     const it = data.item;
     const del = data.deleted;
     if (del) {
@@ -2253,9 +2256,12 @@ if (!SpeechRec) {
   });
 }
 
-fetch('/snapshot').then(r => r.json()).then(s => {
-  $('snap-date').textContent = `${s.snapshot_date} · ${s.sku_count} SKU · ${s.warehouse_count} 倉`;
-});
+function refreshSnapshot() {
+  fetch('/snapshot').then(r => r.json()).then(s => {
+    $('snap-date').textContent = `${s.snapshot_date} · ${s.sku_count} SKU · ${s.warehouse_count} 倉`;
+  });
+}
+refreshSnapshot();
 
 // ─── 鉤子入口隨機輪播(勾起好奇、騙人點進連帶分析)───
 // 每次開/重整網頁,從池子隨機選 2 顆鉤子插在 chips-bar 最前面
