@@ -1540,11 +1540,14 @@ def _resolve_followup(user_text: str, func_name: str, func_args: dict):
     if not _ctx.get("last_sku"):
         return func_name, func_args
     is_followup = any(w in user_text for w in _CTX_FOLLOWUP_WORDS)
-    has_kw = bool(func_args.get("keyword") or func_args.get("target"))
+    raw_kw = (func_args.get("keyword") or func_args.get("target") or "").strip()
+    # keyword 本身含代詞視為無效（LLM 把「它 進出紀錄」當 keyword）
+    kw_is_proxy = any(w in raw_kw for w in _CTX_FOLLOWUP_WORDS)
+    has_kw = bool(raw_kw) and not kw_is_proxy
     # 偵測功能切換（「它的進出紀錄呢？」「這個快到期嗎？」）
     new_func = next((v for k, v in _CTX_FUNC_HINT.items() if k in user_text), None)
 
-    # 只有追問詞 + 沒有 keyword 時才介入
+    # 只有追問詞 + 沒有有效 keyword 時才介入
     if not is_followup or has_kw:
         return func_name, func_args
 
