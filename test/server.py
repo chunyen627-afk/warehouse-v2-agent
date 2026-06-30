@@ -1469,7 +1469,8 @@ llm_lock = asyncio.Lock()
 display_sockets: set[WebSocket] = set()
 all_sockets:     set[WebSocket] = set()
 _visitor_closed = False
-_item_create_state: dict = {}  # 分步新增商品的 session state
+_item_create_state: dict = {}
+_item_delete_state: dict = {}  # 刪除模式的 session state
 
 
 # ─── Util ─────────────────────────────────────────────────
@@ -2618,6 +2619,17 @@ async def ws_handler(ws: WebSocket):
                         result = {"ok": True, "summary": "目前沒有可刪除的商品。先用「➕ 新增商品」建立。", "view": "item_list", "data": {}}
                 else:
                     result = _tv2_del_ws.delete_item_start(keyword=kw)
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.012)
+                await send({"type": "done", "result": result})
+                continue
+
+            # ── 刪除模式中：訪客輸入商品名 → 執行刪除 ──
+            if _item_delete_state.get("active"):
+                import tools_v2 as _tv2_del_mode
+                _item_delete_state.clear()
+                result = _tv2_del_mode.delete_item_start(keyword=user_text.strip())
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.012)
