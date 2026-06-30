@@ -2718,6 +2718,13 @@ async def ws_handler(ws: WebSocket):
                                 func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                                 break
 
+                # ── dispatch-ws：compare_warehouses 清理非法參數 ──
+                if func_name == "compare_warehouses":
+                    func_args = {k: v for k, v in func_args.items()
+                                 if k in ("warehouse_a", "warehouse_b", "metric")}
+                    if "warehouse_a" not in func_args: func_args["warehouse_a"] = "north"
+                    if "warehouse_b" not in func_args: func_args["warehouse_b"] = "south"
+
                 # ── 執行前清理 keyword 前後綴雜訊 ──
                 _kw_f2 = "keyword" if "keyword" in func_args else ("target" if "target" in func_args else None)
                 if _kw_f2 and func_args.get(_kw_f2):
