@@ -1235,7 +1235,10 @@ function handleMessage(msg) {
     _traceContainer = null;
     _pendingToolCalls = [];
     _taskPlanEl = null;
-    // RCA 已簡化為單步（search_log），無第二輪推理，直接解鎖
+    // 存下 card id 給 round2 handler 用（但不鎖按鈕，訪客可繼續問）
+    if (view === 'agent_rca' && lastBotAnchor && lastBotAnchor.id) {
+      _rcaCardId = lastBotAnchor.id;
+    }
     isSending = false;
     $('send-btn').disabled = false;
     return;
@@ -1358,7 +1361,7 @@ function renderViewCard(view, data, topSummary) {
           <div class="rank-row">
             <div class="num ${i===0?'top1':i===1?'top2':i===2?'top3':''}">${i+1}</div>
             <div class="name">${r.name}<div style="font-size:11px;color:var(--muted)">${r.category_label}</div></div>
-            <div class="qty">${r.out_qty.toLocaleString()}</div>
+            <div class="qty">${(r.out_qty || r.stock_qty || 0).toLocaleString()}</div>
           </div>
         `).join('')}
       </div>
