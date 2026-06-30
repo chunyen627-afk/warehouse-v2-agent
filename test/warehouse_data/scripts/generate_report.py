@@ -2,7 +2,7 @@
 報告產生腳本：產出 Markdown 全倉體檢報告
 用法：python generate_report.py [--data-dir <path>] [--type full|low_stock|hot]
 """
-import sys, json, pathlib, datetime, argparse
+import sys, csv, pathlib, datetime, argparse
 
 WH_LABEL = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
 
@@ -12,26 +12,31 @@ def main():
     parser.add_argument("--type", default="full", choices=["full", "low_stock", "hot"])
     args = parser.parse_args()
 
-    dd   = pathlib.Path(args.data_dir)
-    seed = json.loads((dd.parent / "seed_data.json").read_text("utf-8"))
+    dd     = pathlib.Path(args.data_dir)
+    master = dd / "master"
 
-    items   = {it["sku_id"]: it for it in seed["items"]}
-    safety  = {it["sku_id"]: it.get("safety_stock", 0) for it in seed["items"]}
-    stock_rows = seed.get("stock", [])
-    movements  = seed.get("movements", [])
+    # 從 items.csv 讀商品和安全庫存
+    items  = {}
+    safety = {}
+    for r in csv.DictReader(open(master / "items.csv", encoding="utf-8-sig")):
+        items[r["sku_id"]]  = r
+        safety[r["sku_id"]] = int(r.get("safety_stock") or 0)
 
-    # stock 格式：{warehouse: {sku: qty}}
+    # 從 stock.csv 讀各倉庫存
     sku_total = {}
-    for wh, sku_dict in stock_rows.items():
-        for sku, qty in sku_dict.items():
-            sku_total[sku] = sku_total.get(sku, 0) + qty
+    for r in csv.DictReader(open(master / "stock.csv", encoding="utf-8-sig")):
+        sku = r["sku_id"]
+        sku_total[sku] = sku_total.get(sku, 0) + int(r.get("qty") or 0)
 
-    # movements 格式：list of {date, sku_id, warehouse, direction, qty}
+    # 從 transactions/ 讀出貨紀錄
     sku_sales = {}
-    for m in movements:
-        if m.get("direction") == "out":
-            sku = m["sku_id"]
-            sku_sales[sku] = sku_sales.get(sku, 0) + m.get("qty", 0)
+    tx_dir = dd / "transactions"
+    if tx_dir.exists():
+        for f in sorted(tx_dir.glob("*.csv")):
+            for r in csv.DictReader(open(f, encoding="utf-8-sig")):
+                if r.get("direction") == "out":
+                    sku = r["sku_id"]
+                    sku_sales[sku] = sku_sales.get(sku, 0) + int(r.get("qty") or 0)
 
     now     = datetime.datetime.now()
     ts      = now.strftime("%Y-%m-%dT%H:%M:%S")
