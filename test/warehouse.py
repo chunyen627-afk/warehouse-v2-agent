@@ -260,8 +260,9 @@ def dashboard_snapshot() -> dict:
         if s.stock.get(wh["key"], {}).get(it["sku_id"], 0) < it["safety_stock"]
     )
 
+    from datetime import date as _d
     return {
-        "snapshot_date":   s.snapshot_date,
+        "snapshot_date":   str(_d.today()),
         "warehouse_count": len(s.warehouses),
         "sku_count":       len(s.items),
         "low_stock_count": n_low,
