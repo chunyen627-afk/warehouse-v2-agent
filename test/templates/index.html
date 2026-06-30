@@ -1163,9 +1163,10 @@ function handleMessage(msg) {
         const row = document.createElement('div');
         row.style.cssText = 'margin:4px 0;padding:5px 8px;background:rgba(160,140,90,.12);border-radius:4px;font-size:12px;color:var(--text-secondary)';
         row.textContent = '[分析] ' + (msg.step.detail || '');
-        const traceEl = existCard.querySelector('[id^="rca-trace-"]');
-        if (traceEl && traceEl.parentNode) {
-          traceEl.parentNode.insertBefore(row, traceEl.nextSibling);
+        // 插到 tool_calls 之前（summary 之後）
+        const lastToolCall = existCard.querySelector('.tool-call-inline');
+        if (lastToolCall && lastToolCall.parentNode) {
+          lastToolCall.parentNode.insertBefore(row, lastToolCall);
         } else {
           existCard.appendChild(row);
         }
