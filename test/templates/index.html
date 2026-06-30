@@ -1168,7 +1168,8 @@ function handleMessage(msg) {
           `<span style="min-width:18px">${k.icon}</span>` +
           `<span style="color:${k.color};font-weight:600;min-width:72px">${k.label}</span>` +
           `<span style="color:var(--text-secondary)">${msg.step.detail}</span>`;
-        existCard.querySelector('.agent-trace')?.appendChild(row) || existCard.appendChild(row);
+        const traceContainer = existCard.querySelector('[id^=\"rca-trace-\"]') || existCard.querySelector('.agent-trace');
+        if (traceContainer) { traceContainer.appendChild(row); } else { existCard.appendChild(row); }
         return;
       }
     }
