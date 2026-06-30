@@ -1419,10 +1419,24 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
         f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
                             "action": "create_item", "item": item}, ensure_ascii=False) + "\n")
 
-    # 5. 熱更新記憶體（重新載入 seed）
-    from pathlib import Path as _P
-    seed_path = _P(__file__).parent / "seed_data.json"
-    W.init(seed_path)
+    # 5. 熱更新記憶體（直接塞進 State，不依賴 seed_data.json）
+    import warehouse as W_mod
+    s = W_mod._STATE
+    # 新增到 items 清單（如果還沒有）
+    new_sku = item["sku"]
+    if not any(it["sku_id"] == new_sku for it in s.items):
+        s.items.append({
+            "sku_id":       new_sku,
+            "name":         item["name"],
+            "category":     item["category"],
+            "unit_price":   item["price"],
+            "safety_stock": item["safety"],
+        })
+        s._items_by_sku[new_sku] = s.items[-1]
+    # 新增各倉庫存
+    for wh_key in ("north", "central", "south"):
+        qty = item.get(f"stock_{wh_key}", 0)
+        s.stock.setdefault(wh_key, {})[new_sku] = qty
 
     return {"ok": True, "summary": f"✅ 已新增商品「{item['name']}」（SKU: {item['sku']}）",
             "view": "item_done", "data": {"item": item, "trace_id": trace_id}}
