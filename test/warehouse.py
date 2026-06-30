@@ -1091,14 +1091,25 @@ def list_expiring_items(
     within_days: int = 30,
     warehouse: str = "all",
     category: str | None = None,
+    keyword: str | None = None,
 ) -> dict:
     """7. 列出在 within_days 天內到期的批次,按到期日由近到遠排序。
     三階燈號:7天紅 / 14天橙 / 30天黃。
+    keyword 可篩選特定商品名稱。
     """
     s = state()
     if warehouse not in ("north", "central", "south", "all"):
         warehouse = "all"
     today = _snapshot_date()
+
+    # keyword 模糊比對：找出符合的 sku_id 集合
+    kw_skus: set | None = None
+    if keyword:
+        kw_lower = keyword.lower()
+        kw_skus = {
+            it["sku_id"] for it in s.items
+            if kw_lower in it["name"].lower() or kw_lower in it["sku_id"].lower()
+        }
 
     rows = []
     for b in s.batches:
@@ -1108,6 +1119,8 @@ def list_expiring_items(
         if not item:
             continue
         if category and item["category"] != category:
+            continue
+        if kw_skus is not None and b["sku_id"] not in kw_skus:
             continue
         try:
             exp = _date.fromisoformat(b["expire_date"])
@@ -1141,13 +1154,20 @@ def list_expiring_items(
     scope = wh_label + (cat_label + "類" if cat_label else "")
 
     if not rows:
+        kw_note = f"「{keyword}」" if keyword else ""
+        no_shelf = (kw_skus is not None and kw_skus and
+                    not any(s.shelf_life.get(sku) for sku in kw_skus))
+        no_msg = (f"{kw_note}沒有保存期限紀錄，無需追蹤到期日 ✅"
+                  if no_shelf else
+                  f"{kw_note}{scope}最近 {within_days} 天內沒有快到期的批次 ✅")
         return {
             "ok": True,
-            "summary": f"{scope}最近 {within_days} 天內沒有快到期的批次 ✅",
+            "summary": no_msg,
             "data": {
                 "within_days": within_days,
                 "warehouse":   warehouse,
                 "category":    category,
+                "keyword":     keyword,
                 "rows":        [],
                 "counts":      {"red": 0, "orange": 0, "yellow": 0},
             },
