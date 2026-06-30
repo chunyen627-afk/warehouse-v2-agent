@@ -1244,6 +1244,11 @@ function handleMessage(msg) {
     const result = msg.result || {};
     const view = result.view;
     const data = result.data || {};
+    // 若 loading-dots 還在（例如取消直接跳 done，沒有 token），把它移掉
+    if (currentBotMsg && currentBotMsg.querySelector('.loading-dots')) {
+      currentBotMsg.remove();
+      currentBotMsg = null;
+    }
     lastBotAnchor = currentBotMsg;   // 預設接在訊息泡後;有卡片時 renderViewCard 會改成卡片
     if (view && view !== 'guide' && view !== 'rejected') {
       renderViewCard(view, data, result.summary);
