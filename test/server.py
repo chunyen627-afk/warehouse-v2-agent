@@ -316,6 +316,12 @@ _EXPIRING_INTENT_WORDS = (
 )
 
 # ── v2 三金剛校正詞（C8-C11）──────────────────────────────────
+# C7b query_movement 保護詞：含這些詞 → 強制 movement，不被 RCA 攔截
+_MOVEMENT_PROTECT_WORDS = (
+    "進出紀錄", "進出狀況", "動了多少", "異動紀錄", "流水紀錄",
+    "進出了多少", "這個月動", "上個月動",
+)
+
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
 _RCA_INTENT_WORDS = (
     "對不上", "對不起來", "兜不攏", "帳不對", "短少", "短收", "少貨", "少了",
@@ -1225,6 +1231,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         if kw:
             log.info(f"[校正 C8-pre] 庫存詢問攔回 inventory: {user_text!r} kw={kw!r}")
             return "query_inventory", {"keyword": kw}, True
+
+    # ── C7b: 含 movement 保護詞 → 強制 query_movement，不被 RCA 攔截 ──
+    if any(w in user_text for w in _MOVEMENT_PROTECT_WORDS):
+        kw = func_args.get("keyword", "") or _extract_sku_keyword(user_text)
+        log.info(f"[校正 C7b] movement 保護詞 → query_movement kw={kw!r}")
+        func_name = "query_movement"
+        func_args = {"keyword": kw} if kw else {}
 
     has_rca    = any(w in user_text for w in _RCA_INTENT_WORDS)
     has_cfgkey = any(w in user_text for w in _CONFIG_KEY_WORDS)
