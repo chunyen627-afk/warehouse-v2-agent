@@ -2156,13 +2156,19 @@ async def api_query(req: Request):
                 func_name = "query_inventory"
                 func_args = {"keyword": _dk}
 
-    # ── dispatch 攔截：movement 關鍵字清理（LLM 常把整句當 keyword）──
+    # ── dispatch 攔截：movement 關鍵字清理 + 自動提取 ──
     if func_name == "query_movement":
         import warehouse as _WM2
         _mv_kw = func_args.get("keyword", "")
-        # 太長或找不到商品 → 清掉（純時間查詢不需要 keyword）
-        if _mv_kw and (len(_mv_kw) > 10 or not _WM2.match_items(_mv_kw)):
+        # 清理髒 keyword
+        if _mv_kw and not _WM2.match_items(_mv_kw):
             func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+            _mv_kw = ""
+        # 沒有 keyword → 從 user_text 提取
+        if not _mv_kw or not func_args.get("keyword"):
+            _extracted = _extract_sku_keyword(user_text)
+            if _extracted and len(_extracted) >= 2 and _WM2.match_items(_extracted):
+                func_args["keyword"] = _extracted
 
     # dispatch — same as ws_handler
     # 執行前清理 keyword 前後綴雜訊（LLM 常把「有/的/剩/幾個」黏在 keyword 上）
