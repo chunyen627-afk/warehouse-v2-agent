@@ -2798,10 +2798,20 @@ async def ws_handler(ws: WebSocket):
 
                     rca_ctx = result.get("data", {}).get("rca_context", {})
                     if rca_ctx and rca_ctx.get("disc_count", 0) > 0 and LLM:
-                        # 通知前端：第二輪推理開始（故意等一下讓 loading 看得到）
+                        # ── Step 2: judge_cause_found（規則判斷，不靠模型）──
                         await send({"type": "rca_round2_start"})
+                        await send({"type": "tool_call", "func": "judge_cause_found", "args_preview": f"disc_count={rca_ctx['disc_count']}"})
+                        await asyncio.sleep(0.6)
+                        cause_found = rca_ctx["disc_count"] > 0
+                        await send({"type": "trace_step", "step": {
+                            "kind": "reason",
+                            "detail": f"發現 {rca_ctx['disc_count']} 筆短收，商品 {rca_ctx['sku_name']} 現存 {rca_ctx['total_stock']} 件／安全 {rca_ctx['safety_stock']} 件"
+                        }})
+                        await asyncio.sleep(0.4)
+
+                        # ── Step 3: suggest_action（LLM 推理建議）──
                         await send({"type": "tool_call", "func": "suggest_action", "args_preview": "action=?"})
-                        await asyncio.sleep(0.8)
+                        await asyncio.sleep(0.6)
 
                         ctx = rca_ctx
                         stock_status = (
