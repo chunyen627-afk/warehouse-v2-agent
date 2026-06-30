@@ -1101,6 +1101,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     func_args = dict(func_args)
                     func_args["keyword"] = cleaned
 
+    # ── C1b: query_inventory keyword 結尾有功能詞 → 去掉（如「藍牙耳機庫存」→「藍牙耳機」）──
+    if func_name == "query_inventory" and func_args.get("keyword"):
+        _inv_suffixes = ("庫存", "數量", "現貨", "存貨", "庫量", "剩餘", "剩多少", "還有多少", "有多少")
+        kw = func_args["keyword"]
+        for _sfx in _inv_suffixes:
+            if kw.endswith(_sfx) and len(kw) > len(_sfx):
+                kw = kw[:-len(_sfx)].strip()
+                log.info(f"[校正 C1b] query_inventory keyword 去尾詞: {func_args['keyword']!r} → {kw!r}")
+                func_args = dict(func_args)
+                func_args["keyword"] = kw
+                break
+
     # ── C2c: query_movement 沒抽到 keyword → 從 user_text 補 ──
     if func_name == "query_movement":
         if not func_args.get("keyword"):
