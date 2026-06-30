@@ -1157,19 +1157,18 @@ function handleMessage(msg) {
     return;
   }
   if (msg.type === 'trace_step') {
-    // 若 _rcaCardId 存在，插入到 RCA card 內（round2 trace）
     if (_rcaCardId) {
       const existCard = document.getElementById(_rcaCardId);
       if (existCard) {
-        const k = TRACE_KIND[msg.step.kind] || { icon: '▸', label: msg.step.kind, color: '#888' };
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:flex-start;gap:6px;padding:3px 0;font-size:12px;color:var(--muted)';
-        row.innerHTML =
-          `<span style="min-width:18px">${k.icon}</span>` +
-          `<span style="color:${k.color};font-weight:600;min-width:72px">${k.label}</span>` +
-          `<span style="color:var(--text-secondary)">${msg.step.detail}</span>`;
-        const traceContainer = existCard.querySelector('[id^=\"rca-trace-\"]') || existCard.querySelector('.agent-trace');
-        if (traceContainer) { traceContainer.appendChild(row); } else { existCard.appendChild(row); }
+        row.style.cssText = 'margin:4px 0;padding:5px 8px;background:rgba(160,140,90,.12);border-radius:4px;font-size:12px;color:var(--text-secondary)';
+        row.textContent = '[分析] ' + (msg.step.detail || '');
+        const traceEl = existCard.querySelector('[id^="rca-trace-"]');
+        if (traceEl && traceEl.parentNode) {
+          traceEl.parentNode.insertBefore(row, traceEl.nextSibling);
+        } else {
+          existCard.appendChild(row);
+        }
         return;
       }
     }
