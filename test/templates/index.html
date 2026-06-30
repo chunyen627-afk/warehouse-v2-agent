@@ -2121,24 +2121,7 @@ document.querySelectorAll('#chips-bar .chip').forEach(c => {
     } else if (a === 'item-create') {
       sendQuery('新增商品');
     } else if (a === 'item-delete') {
-      // 列出所有可刪除商品（非系統保護的 = 訪客自己加的）
-      fetch('/snapshot').then(r => r.json()).then(snap => {
-        const PROTECTED = [];
-        for (let p of ['e','a','f','d','c','s']) for (let i=1;i<=10;i++) PROTECTED.push(p+String(i).padStart(2,'0'));
-        const userItems = snap.items.filter(it => !PROTECTED.includes(it.sku_id));
-        if (userItems.length === 0) {
-          appendBot('目前沒有可刪除的商品（系統預設 60 項受保護）。你可以先用「➕ 新增商品」建立再刪。');
-        } else {
-          currentBotMsg = appendBot('請輸入要刪除的商品名稱，或選擇：');
-          const items = userItems.map(it => ({ label: '🗑 ' + it.name + ' (' + it.sku_id + ')', query: '刪除 ' + it.name }));
-          showSuggestions(items);
-          currentBotMsg = null;
-        }
-      }).catch(() => {
-        currentBotMsg = appendBot('請輸入要刪除的商品名稱');
-        currentBotMsg = null;
-        $('input-text').focus();
-      });
+      sendQuery('刪除商品');  // 透過 WS 觸發，讓 server 設 delete session state
     }
   };
 });
