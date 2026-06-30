@@ -1316,15 +1316,15 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             return {"ok": True, "summary": f"⚠️ 商品「{name}」已存在（SKU: {existing[0]['sku_id']}），請改用其他名稱。",
                     "view": "item_create_step1",
                     "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
-        return {"ok": True, "summary": f"已記錄商品名稱：「{name}」\n第二步：屬於哪一類？",
+        return {"ok": True, "summary": f"已記錄商品名稱：「{name}」\n第二步：屬於哪一類？（輸入「取消」可退出）",
                 "view": "item_create_step2",
-                "data": {"step": 2, "name": name, "prompt": "請選擇類別"}}
+                "data": {"step": 2, "name": name, "prompt": "請選擇類別（或輸入「取消」退出）"}}
     elif step == 2:
         return {"ok": True,
-                "summary": f"已記錄：「{name}」→ {category}\n第三步：單價多少？安全庫存幾件？\n直接輸入數字，用逗號或空格分開\n例如：150, 100  或  150 100",
+                "summary": f"已記錄：「{name}」→ {category}\n第三步：單價多少？安全庫存幾件？\n例如：150 100（輸入「取消」可退出）",
                 "view": "item_create_step3",
                 "data": {"step": 3, "name": name, "category": category,
-                         "prompt": "格式：單價 安全庫存（例如 150 100）"}}
+                         "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
     elif step == 3:
         # dispatch 已把 "100 20" 拆成 price=100, safety=20 → 直接取整數
         # 若 safety 沒值 → 從 price 字串再拆一次
