@@ -1947,8 +1947,10 @@ async def api_query(req: Request):
         kw = _extract_sku_keyword(user_text)
         if not kw:
             for w in _delete_kws_http: kw = user_text.replace(w, "").strip()
-        if not kw or len(kw) < 2:
-            import warehouse as _W_del_http
+        # 檢查 keyword 是否真的有對應商品
+        import warehouse as _W_del_http
+        _has_match = bool(_W_del_http.match_items(kw)) if kw else False
+        if not kw or len(kw) < 2 or not _has_match:
             PROTECTED = {f"{p}{i:02d}" for p in "eafdcs" for i in range(1,11)}
             user_items = [it for it in _W_del_http.state().items if it["sku_id"] not in PROTECTED]
             if user_items:
@@ -2603,8 +2605,9 @@ async def ws_handler(ws: WebSocket):
                 if not kw:
                     for w in _delete_kws_ws: kw = user_text.replace(w, "").strip()
                 # 沒有具體商品名 → 列出可刪除的商品供選擇
-                if not kw or len(kw) < 2:
-                    import warehouse as _W_del_list
+                import warehouse as _W_del_list
+                _has_match_ws = bool(_W_del_list.match_items(kw)) if kw else False
+                if not kw or len(kw) < 2 or not _has_match_ws:
                     PROTECTED = {f"{p}{i:02d}" for p in "eafdcs" for i in range(1,11)}
                     user_items = [it for it in _W_del_list.state().items if it["sku_id"] not in PROTECTED]
                     if user_items:
