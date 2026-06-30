@@ -2591,7 +2591,19 @@ async def ws_handler(ws: WebSocket):
                 kw = _extract_sku_keyword(user_text)
                 if not kw:
                     for w in _delete_kws_ws: kw = user_text.replace(w, "").strip()
-                result = _tv2_del_ws.delete_item_start(keyword=kw)
+                # 沒有具體商品名 → 列出可刪除的商品供選擇
+                if not kw or len(kw) < 2:
+                    import warehouse as _W_del_list
+                    PROTECTED = {f"{p}{i:02d}" for p in "eafdcs" for i in range(1,11)}
+                    user_items = [it for it in _W_del_list.state().items if it["sku_id"] not in PROTECTED]
+                    if user_items:
+                        names = "、".join(it["name"] for it in user_items[:10])
+                        result = {"ok": True, "summary": f"可刪除的商品：{names}\n請輸入要刪除的名稱", "view": "item_list",
+                                   "data": {"items": [{"name": it["name"], "sku": it["sku_id"]} for it in user_items]}}
+                    else:
+                        result = {"ok": True, "summary": "目前沒有可刪除的商品。先用「➕ 新增商品」建立。", "view": "item_list", "data": {}}
+                else:
+                    result = _tv2_del_ws.delete_item_start(keyword=kw)
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.012)
