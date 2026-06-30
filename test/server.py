@@ -106,6 +106,7 @@ GATEKEEPER_KEYWORDS = {
     "庫存", "存量", "還有", "剩", "幾件", "多少", "幾個", "查詢",
     # 資料管理
     "新增", "建立", "加入", "增加", "新建", "添加",
+    "刪除", "下架", "砍掉", "移除", "刪掉",
     "進貨", "出貨", "入庫", "出庫", "進倉", "出倉", "進出",
     "庫存量", "庫存價值", "週轉", "週轉率",
     "缺貨", "補貨", "警示", "警報", "告急", "快沒", "不足", "低庫存", "庫存警示",
@@ -1906,11 +1907,19 @@ async def api_query(req: Request):
         if st["step"] == 1: kwargs["name"] = user_text
         elif st["step"] == 2: kwargs["category"] = user_text
         elif st["step"] == 3:
-            parts = user_text.replace("，", ",").split(",")
-            if len(parts) >= 2: kwargs["price"] = parts[0].strip(); kwargs["safety"] = parts[1].strip()
+            raw_ps = user_text.replace("元", " ").replace("件", " ").replace("，", ",")
+            parts = [p.strip() for p in raw_ps.replace(" ", ",").split(",") if p.strip().lstrip("-").isdigit()]
+            if len(parts) >= 2: kwargs["price"] = parts[0]; kwargs["safety"] = parts[1]
+            elif len(parts) == 1: kwargs["price"] = parts[0]
             else: kwargs["price"] = user_text
         elif st["step"] == 4:
-            if "跳過" in user_text: kwargs["stock_north"] = kwargs["stock_central"] = kwargs["stock_south"] = "0"
+            if "跳過" in user_text:
+                kwargs["stock_north"] = kwargs["stock_central"] = kwargs["stock_south"] = "0"
+            elif not any(kw in user_text for kw in ("北", "中", "南")):
+                parts = user_text.replace(",", " ").split()
+                nums = [p for p in parts if p.strip().lstrip("-").isdigit()]
+                if len(nums) == 3:
+                    kwargs["stock_north"], kwargs["stock_central"], kwargs["stock_south"] = nums[0], nums[1], nums[2]
             else:
                 for part in user_text.replace("，", ",").split(","):
                     p = part.strip()
@@ -1930,6 +1939,16 @@ async def api_query(req: Request):
     if not is_meaningful_input(user_text):
         return JSONResponse({"ok": False, "view": "rejected",
                              "summary": GATEKEEPER_REJECT_MSG})
+
+    # ── 刪除/下架 → 優先處理（避免被 clarify 攔截）──
+    _delete_kws_http = ("刪除", "下架", "砍掉", "移除", "刪掉")
+    if any(w in user_text for w in _delete_kws_http):
+        import tools_v2 as _tv2_del_http
+        kw = _extract_sku_keyword(user_text)
+        if not kw:
+            for w in _delete_kws_http: kw = user_text.replace(w, "").strip()
+        result = _tv2_del_http.delete_item_start(keyword=kw)
+        return JSONResponse(result)
 
     clarify = _detect_clarify(user_text)
     if clarify:
@@ -2157,6 +2176,28 @@ async def api_query(req: Request):
         log.info(f"[dispatch] 低庫存攔回: {user_text!r} → list_low_stock")
         func_name = "list_low_stock"
         func_args = {}
+
+    # ── dispatch 攔截：「刪除/下架商品」→ delete_item 流程 ──
+    _delete_item_kws = ("刪除", "下架", "砍掉", "移除商品", "刪掉")
+    if any(w in user_text for w in _delete_item_kws):
+        import tools_v2 as _tv2_del
+        kw = _extract_sku_keyword(user_text)
+        if not kw:
+            for w in _delete_item_kws: kw = user_text.replace(w, "").strip()
+        result = _tv2_del.delete_item_start(keyword=kw)
+        return JSONResponse(result)
+
+    # ── dispatch 攔截：「列出所有商品/商品清單」→ 全商品列表 ──
+    if any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱")):
+        import warehouse as _W_list
+        snap = _W_list.state()
+        rows = [{"sku": it["sku_id"], "name": it["name"],
+                 "category": _W_list.CATEGORY_LABEL.get(it["category"], it["category"]),
+                 "price": it["unit_price"], "safety": it["safety_stock"]}
+                for it in snap.items]
+        summary = f"共 {len(rows)} 項商品：\n" + "\n".join(f"  {r['sku']} {r['name']} ({r['category']}) NT${r['price']}" for r in rows)
+        return JSONResponse({"ok": True, "view": "item_list", "summary": summary,
+                             "data": {"total": len(rows), "items": rows}})
 
     # ── dispatch 攔截：「新增商品」→ 分步引導流程 ──
     _create_item_kws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
@@ -2476,6 +2517,9 @@ async def ws_handler(ws: WebSocket):
                     elif act == "item_create":
                         res = tools_v2.commit_create_item(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
+                    elif act == "item_delete":
+                        res = tools_v2.commit_delete_item(
+                            data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                     else:
                         res = {"ok": False, "summary": "未知的確認動作", "view": "error", "data": {}}
                 except Exception as e:
@@ -2540,6 +2584,18 @@ async def ws_handler(ws: WebSocket):
                 "user_text": user_text,
             })
 
+            # ── 列出所有商品（優先於引導）──
+            if any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱")):
+                import warehouse as _W_list_ws
+                snap = _W_list_ws.state()
+                rows = [f"{it['sku_id']} {it['name']} ({_W_list_ws.CATEGORY_LABEL.get(it['category'], it['category'])}) NT${it['unit_price']}" for it in snap.items]
+                summary = f"共 {len(rows)} 項商品：\n" + "\n".join(f"  {r}" for r in rows)
+                for ch in summary:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.003)
+                await send({"type": "done", "result": {"ok": True, "view": "item_list", "summary": summary, "data": {"total": len(rows)}}})
+                continue
+
             # ── 客服引導 ──
             if _is_guide_request(user_text):
                 log.info(f"[引導] 訪客想看倉管工具總覽: {user_text!r}")
@@ -2551,7 +2607,7 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # ── 守門員 ──
-            if not is_meaningful_input(user_text):
+            if not _item_create_state.get("active") and not is_meaningful_input(user_text):
                 log.info(f"[守門員] 拒絕無意義輸入: {user_text!r}")
                 await push_display({"type": "trace", "stage": "rejected",
                                     "reason": "輸入未命中倉管關鍵字"})
@@ -2559,6 +2615,63 @@ async def ws_handler(ws: WebSocket):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.008)
                 await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                continue
+
+            # ── item_create 流程中 → 攔截處理，不進 LLM ──
+            if _item_create_state.get("active"):
+                import tools_v2 as _tv2_item_ws
+                st2 = _item_create_state
+                kwargs2 = {**{k: v for k, v in st2.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}, "raw_text": ""}
+                if st2["step"] == 1: kwargs2["name"] = user_text
+                elif st2["step"] == 2: kwargs2["category"] = user_text
+                elif st2["step"] == 3:
+                    raw_ps = user_text.replace("元", " ").replace("件", " ").replace("，", ",")
+                    parts = [p.strip() for p in raw_ps.replace(" ", ",").split(",") if p.strip().lstrip("-").isdigit()]
+                    if len(parts) >= 2: kwargs2["price"] = parts[0]; kwargs2["safety"] = parts[1]
+                    elif len(parts) == 1: kwargs2["price"] = parts[0]
+                    else: kwargs2["price"] = user_text
+                elif st2["step"] == 4:
+                    if "跳過" in user_text:
+                        kwargs2["stock_north"] = kwargs2["stock_central"] = kwargs2["stock_south"] = "0"
+                    elif not any(kw in user_text for kw in ("北", "中", "南")):
+                        parts = user_text.replace(",", " ").split()
+                        nums = [p for p in parts if p.strip().lstrip("-").isdigit()]
+                        if len(nums) == 3:
+                            kwargs2["stock_north"], kwargs2["stock_central"], kwargs2["stock_south"] = nums[0], nums[1], nums[2]
+                    else:
+                        for part in user_text.replace("，", ",").split(","):
+                            p = part.strip()
+                            if "北" in p: kwargs2["stock_north"] = p.replace("北", "").strip()
+                            elif "中" in p: kwargs2["stock_central"] = p.replace("中", "").strip()
+                            elif "南" in p: kwargs2["stock_south"] = p.replace("南", "").strip()
+                result = _tv2_item_ws.create_item_collect(**kwargs2)
+                if result.get("view") == "item_confirm":
+                    _item_create_state.clear()
+                else:
+                    d = result.get("data", {})
+                    _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
+                    _item_create_state["active"] = True
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.012)
+                await send({"type": "done", "result": result})
+                continue
+
+            # ── 新增商品 keyword 攔截（首次進入流程）──
+            _create_item_kws_ws2 = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
+            if any(w in user_text for w in _create_item_kws_ws2):
+                import tools_v2 as _tv2_ci2
+                raw = user_text
+                for kw in _create_item_kws_ws2: raw = raw.replace(kw, "").strip()
+                result = _tv2_ci2.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci2.create_item_start()
+                if result.get("view") != "item_confirm":
+                    d = result.get("data", {})
+                    _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
+                    _item_create_state["active"] = True
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.012)
+                await send({"type": "done", "result": result})
                 continue
 
             prompt = build_prompt(user_text)

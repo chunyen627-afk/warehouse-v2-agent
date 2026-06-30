@@ -1621,6 +1621,25 @@ function renderViewCard(view, data, topSummary) {
       showSuggestions(cats.map(c => ({label: labels[c], query: `類別${c}`})));
       window._itemCreateState = {name: stepData.name, step: 2};
     }
+  } else if (view === 'item_delete_confirm') {
+    const items = data.items || [];
+    const deletable = items.filter(it => !it.protected);
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header danger">🗑 刪除商品 — 請確認</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>SKU</th><th>商品</th><th>狀態</th></tr>
+            ${items.map(it => `<tr><td>${it.sku}</td><td>${it.name}</td><td>${it.protected ? '🔒 系統保護' : '可刪除'}</td></tr>`).join('')}
+          </table>
+          <div class="hitl-meta">⚠ 系統預設的 60 項商品不可刪除。刪除後將從 items.csv 移除並重生種子資料。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_delete" data-payload='${JSON.stringify({pending:data})}'>✅ 確認刪除 (${deletable.length}項)</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
+  } else if (view === 'item_delete_denied') {
+    card.innerHTML = `<div class="label">🔒 無法刪除</div><div style="padding:8px">${data.summary || '此商品受系統保護，不可刪除。'}</div>`;
   } else if (view === 'config_confirm' || view === 'script_confirm') {
     const isCfg = view === 'config_confirm';
     const preview = data.preview || [];

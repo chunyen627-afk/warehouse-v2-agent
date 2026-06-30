@@ -1493,9 +1493,11 @@ def _register_v2_tools():
         FUNCTIONS["delete_schedule"]     = tools_v2.delete_schedule     # 刪排程
         FUNCTIONS["list_alerts"]         = tools_v2.list_alerts         # 查警示規則
         FUNCTIONS["delete_alert"]        = tools_v2.delete_alert        # 刪警示規則
-        FUNCTIONS["create_item_start"]   = tools_v2.create_item_start  # 新增商品流程
+        FUNCTIONS["create_item_start"]   = tools_v2.create_item_start
         FUNCTIONS["create_item_collect"] = tools_v2.create_item_collect
         FUNCTIONS["commit_create_item"]  = tools_v2.commit_create_item
+        FUNCTIONS["delete_item_start"]   = tools_v2.delete_item_start
+        FUNCTIONS["commit_delete_item"]  = tools_v2.commit_delete_item
     except Exception as e:
         _log.warning(f"[v2] 三金剛註冊失敗：{e}")
 

@@ -1311,23 +1311,38 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 "data": {"step": 2, "name": name, "prompt": "請選擇類別"}}
     elif step == 2:
         return {"ok": True,
-                "summary": f"已記錄：「{name}」→ {category}\n第三步：單價多少元？安全庫存設幾件？（例如：150 元，安全庫存 100 件）",
+                "summary": f"已記錄：「{name}」→ {category}\n第三步：單價多少？安全庫存幾件？\n直接輸入數字，用逗號或空格分開\n例如：150, 100  或  150 100",
                 "view": "item_create_step3",
                 "data": {"step": 3, "name": name, "category": category,
-                         "prompt": "請輸入單價和安全庫存"}}
+                         "prompt": "格式：單價 安全庫存（例如 150 100）"}}
     elif step == 3:
+        # dispatch 已把 "100 20" 拆成 price=100, safety=20 → 直接取整數
+        # 若 safety 沒值 → 從 price 字串再拆一次
         try:
-            price_val = int(price) if price else 0
-            safety_val = int(safety) if safety else 0
-        except ValueError:
+            if safety and safety != "0":
+                price_val = int(price)
+                safety_val = int(safety)
+            else:
+                raw_ps = (price or "").replace("元", " ").replace("件", " ").replace("，", ",")
+                nums = [int(p.strip()) for p in raw_ps.replace(" ", ",").split(",") if p.strip().lstrip("-").isdigit()]
+                price_val = nums[0] if len(nums) >= 1 else 0
+                safety_val = nums[1] if len(nums) >= 2 else 0
+        except (ValueError, IndexError):
             return W._err(f"價格或安全庫存格式錯誤：{price} / {safety}")
         return {"ok": True,
-                "summary": f"已記錄：單價 {price_val} 元，安全庫存 {safety_val} 件\n第四步（可選）：設定初始庫存？直接輸入各倉數量，或輸入『跳過』設為 0",
+                "summary": f"已記錄：單價 {price_val} 元，安全庫存 {safety_val} 件\n第四步（可選）：設定初始庫存？\n直接輸入三個數字（北 中 南），例如：50 30 20\n或輸入『跳過』全部設為 0",
                 "view": "item_create_step4",
                 "data": {"step": 4, "name": name, "category": category,
                          "price": price_val, "safety": safety_val,
-                         "prompt": "北倉 中倉 南倉 各多少件？"}}
+                         "prompt": "格式：北 中 南（例如 50 30 20）或輸入跳過"}}
     elif step == 4:
+        # 支援 positional 格式：10 20 30 → 北10 中20 南30
+        raw_stock = str(stock_north) if stock_north else ""
+        if not any(kw in raw_stock for kw in ("北", "中", "南", "跳")):
+            parts = raw_stock.replace(",", " ").split()
+            nums = [int(p) for p in parts if p.lstrip("-").isdigit()]
+            if len(nums) == 3:
+                stock_north, stock_central, stock_south = str(nums[0]), str(nums[1]), str(nums[2])
         try:
             sn = int(stock_north) if stock_north else 0
             sc = int(stock_central) if stock_central else 0
@@ -1401,3 +1416,86 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
 
     return {"ok": True, "summary": f"✅ 已新增商品「{item['name']}」（SKU: {item['sku']}）",
             "view": "item_done", "data": {"item": item, "trace_id": trace_id}}
+
+
+# 原始 60 項商品的 SKU 白名單（不可刪除）
+_PROTECTED_SKUS = {
+    f"{p}{i:02d}"
+    for p in ("e", "a", "f", "d", "c", "s")
+    for i in range(1, 11)
+}
+
+
+def delete_item_start(keyword: str = "") -> dict:
+    """觸發刪除流程：找商品 → HITL 確認 → 軟刪除"""
+    if not keyword:
+        return W._err("請指定要刪除的商品名稱或 SKU")
+    matches = W.match_items(keyword)
+    if not matches:
+        return W._err(f"找不到「{keyword}」相關商品")
+    items = [m["item"] for m in matches[:5]]
+    # 過濾受保護商品
+    deletable = [it for it in items if it["sku_id"] not in _PROTECTED_SKUS]
+    protected = [it for it in items if it["sku_id"] in _PROTECTED_SKUS]
+    if not deletable:
+        return {"ok": True, "summary": f"「{keyword}」是系統預設商品，無法刪除。",
+                "view": "item_delete_denied",
+                "data": {"protected": [it["name"] for it in protected]}}
+    rows = [{"sku": it["sku_id"], "name": it["name"], "protected": False} for it in deletable]
+    if protected:
+        rows += [{"sku": it["sku_id"], "name": it["name"] + " 🔒", "protected": True} for it in protected]
+    summary = f"找到 {len(items)} 筆相關商品（{len(deletable)} 筆可刪除）：\n"
+    summary += "\n".join(f"  {'🔒 ' if it['sku_id'] in _PROTECTED_SKUS else '🗑 '}{it['sku_id']} {it['name']}" for it in items[:10])
+    return {"ok": True, "summary": summary, "view": "item_delete_confirm" if deletable else "item_delete_denied",
+            "data": {"keyword": keyword, "items": rows, "deletable_count": len(deletable),
+                     "protected_count": len(protected), "pending": True}}
+
+
+def commit_delete_item(pending: dict, actor: str = "user_confirmed",
+                       trace_id: str | None = None) -> dict:
+    """HITL 確認後刪除商品（軟刪除：從 items.csv 移除 + 重生 seed）"""
+    import csv, shutil
+    dd = _data_dir()
+    ts = __import__('datetime').datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"del-{ts}"
+    keyword = pending.get("keyword", "")
+
+    matches = W.match_items(keyword)
+    deletable = [m["item"] for m in matches if m["item"]["sku_id"] not in _PROTECTED_SKUS]
+    if not deletable:
+        return W._err("沒有可刪除的商品")
+
+    skus_to_delete = {it["sku_id"] for it in deletable}
+    deleted_names = ", ".join(it["name"] for it in deletable)
+
+    # 1. 從 items.csv 移除
+    items_path = dd / "master" / "items.csv"
+    shutil.copy2(items_path, str(items_path) + ".bak")
+    rows = list(csv.DictReader(open(items_path, encoding="utf-8-sig")))
+    kept = [r for r in rows if r["sku_id"] not in skus_to_delete]
+    with open(items_path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=rows[0].keys())
+        w.writeheader(); w.writerows(kept)
+
+    # 2. 從 config.json 移除 safety_stock
+    cfg_path = dd / "master" / "config.json"
+    cfg = json.load(open(cfg_path, encoding="utf-8"))
+    for sku in skus_to_delete:
+        cfg.get("safety_stock_base", {}).pop(sku, None)
+        for wh in ("north", "central", "south"):
+            cfg.get("safety_stock_override", {}).get(wh, {}).pop(sku, None)
+    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 3. audit log
+    audit_dir = dd / "audit"; audit_dir.mkdir(parents=True, exist_ok=True)
+    with open(audit_dir / f"{ts[:10]}_changes.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                            "action": "delete_items", "skus": list(skus_to_delete)}, ensure_ascii=False) + "\n")
+
+    # 4. 重生 seed
+    from pathlib import Path as _P
+    seed_path = _P(__file__).parent / "seed_data.json"
+    W.init(seed_path)
+
+    return {"ok": True, "summary": f"✅ 已刪除：{deleted_names}（共 {len(deletable)} 項）",
+            "view": "item_done", "data": {"deleted": deleted_names, "trace_id": trace_id}}
