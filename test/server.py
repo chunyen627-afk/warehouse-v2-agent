@@ -2725,6 +2725,13 @@ async def ws_handler(ws: WebSocket):
                                 func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                                 break
 
+                # ── dispatch-ws：庫存排行 / 口語 pattern 攔截 ──
+                _stock_rank_kws_ws = ("哪個", "哪個東西", "庫存最多", "數量最多", "哪個最多", "存貨最多", "東西最多")
+                if any(w in user_text for w in _stock_rank_kws_ws) and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷")):
+                    log.info(f"[dispatch-ws] 庫存排行攔截: {user_text!r} → list_hot_items(stock)")
+                    func_name = "list_hot_items"
+                    func_args = {"rank_type": "stock"}
+
                 # ── dispatch-ws：compare_warehouses 清理非法參數 ──
                 if func_name == "compare_warehouses":
                     func_args = {k: v for k, v in func_args.items()
