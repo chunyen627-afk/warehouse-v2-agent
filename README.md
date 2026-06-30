@@ -4,11 +4,11 @@
 > 用邊緣級小模型實現生產可用的倉庫管理智慧助理
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
-[![Model](https://img.shields.io/badge/Model-FunctionGemma--270M-orange)](https://huggingface.co/google/gemma-3-1b-it)
-[![Routing](https://img.shields.io/badge/81_Eval-99%25-brightgreen)]()
+[![Model](https://img.shields.io/badge/Model-v6_5,849筆訓練-orange)](https://huggingface.co/google/gemma-3-1b-it)
+[![81 Eval](https://img.shields.io/badge/81_Eval-99%25-brightgreen)]()
 [![OOV v1](https://img.shields.io/badge/OOV_v1-98%25-brightgreen)]()
 [![OOV v2](https://img.shields.io/badge/OOV_v2-97.5%25-brightgreen)]()
-[![License](https://img.shields.io/badge/License-MIT-green)]()
+[![intent_clf](https://img.shields.io/badge/intent_clf-489MB_主路由-blue)]()
 
 ---
 
@@ -97,18 +97,28 @@ LLM 輸出不穩定是 270M 小模型的先天限制，解法是 **Server 端後
 - **C13** — 明確庫存意圖 hard-return（不被 C18 覆蓋）
 - **OOV keyword 前後綴清理** — 「有洗衣精」→「洗衣精」、「洗衣精剩」→「洗衣精」
 
-### ReAct 2-Step Loop（RCA 根因分析）
+### ReAct 3-Step Loop（RCA 根因分析）
 ```
 使用者：「抗菌洗衣精帳對不上」
     │
-    ├─ Step 1: search_log(keyword="抗菌洗衣精")
-    │          → 找到異常日誌 3 筆
+    ├─ Step 1: search_log → 掃 PO + 比對收貨 → 找到短收
     │
-    ├─ Step 2: rca_context + suggest_action
-    │          → 分析根因 + 建議操作
+    ├─ Step 2: judge_cause_found（規則判斷，不需 LLM）
+    │          → ✅ 已確認根因：短收 15 件，供應商 SUP04
     │
-    └─ 前端：Agent 追蹤卡顯示兩次 Tool Call + 💡建議
+    ├─ Step 3: suggest_action（LLM 推理建議）
+    │          → 📧 聯絡供應商 / 📋 補開採購單 / 👁 持續監控
+    │
+    └─ 前端：Agent 追蹤卡顯示三步 Tool Call + 💡建議
 ```
+
+### v3 新增（2026-06-30）
+- **intent_clf 主路由**：512MB FastText 分類器先決定 function，LLM 只抽參數
+- **OOV 引擎重寫**：80+ 雜詞清單 + 多層 fallback fuzzy（threshold 40）
+- **錯字容錯**：汽泡水→氣泡水、悶燒鍋→悶燒罐 全自動修復
+- **庫存排行**：「哪個東西庫存最多」→ 📦 TOP 10
+- **HTTPS + 多裝置**：手機掃 QR 連線，語音輸入可用
+- **3-step RCA**：judge_cause_found 改用規則判斷，不需模型
 
 ### 路由準確率（2026-06-30）
 | 測試 | 題數 | 準確率 | 說明 |
@@ -315,4 +325,4 @@ python data_tools/regenerate_seed_from_csv.py
 
 ---
 
-*最後更新：2026-06-30 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | v6 模型 5,849 筆訓練*
+*最後更新：2026-06-30 | v6 模型 5,849 筆 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5%*
