@@ -1510,7 +1510,64 @@ all_sockets:     set[WebSocket] = set()
 _visitor_closed = False
 _item_create_state: dict = {}
 _item_delete_state: dict = {}  # 刪除模式的 session state
+_ctx: dict = {}                # Context carry-over：記住上一輪的 sku/warehouse/func
 
+
+# ─── Context carry-over ────────────────────────────────────
+_CTX_FOLLOWUP_WORDS = ("那", "它", "這個", "該", "同樣", "這支", "這件", "剛才", "上次")
+_CTX_WH_WORDS = {
+    "北倉": "north", "北區倉": "north", "北": "north",
+    "中倉": "central", "中區倉": "central", "中": "central",
+    "南倉": "south", "南區倉": "south", "南": "south",
+}
+_CTX_FUNC_HINT = {
+    "進出": "query_movement", "異動": "query_movement", "紀錄": "query_movement",
+    "搭配": "query_related_items", "推薦": "query_related_items",
+    "到期": "list_expiring_items", "保存": "list_expiring_items",
+}
+
+def _update_ctx(func_name: str, func_args: dict):
+    """每輪成功執行後更新 context。"""
+    kw = func_args.get("keyword") or func_args.get("target") or func_args.get("script_name")
+    wh = func_args.get("warehouse")
+    if kw:
+        _ctx["last_sku"] = kw
+    if wh and wh not in ("all", None):
+        _ctx["last_wh"] = wh
+    _ctx["last_func"] = func_name
+
+def _resolve_followup(user_text: str, func_name: str, func_args: dict):
+    """
+    若 user_text 是追問句（含代詞/倉庫切換）且 func_args 沒有 keyword，
+    嘗試從 _ctx 補上 last_sku / last_wh。
+    回傳 (new_func_name, new_func_args) 或原值。
+    """
+    if not _ctx.get("last_sku"):
+        return func_name, func_args
+    is_followup = any(w in user_text for w in _CTX_FOLLOWUP_WORDS)
+    has_kw = bool(func_args.get("keyword") or func_args.get("target"))
+    # 偵測倉庫切換（「那中倉呢？」）
+    new_wh = next((v for k, v in _CTX_WH_WORDS.items() if k in user_text), None)
+    # 偵測功能切換（「它的進出紀錄呢？」）
+    new_func = next((v for k, v in _CTX_FUNC_HINT.items() if k in user_text), None)
+
+    if not is_followup and not new_wh:
+        return func_name, func_args
+
+    new_args = dict(func_args)
+    if not has_kw:
+        new_args["keyword"] = _ctx["last_sku"]
+        log.info(f"[ctx] 補 keyword={_ctx['last_sku']!r} 從上一輪 context")
+    if new_wh:
+        new_args["warehouse"] = new_wh
+        log.info(f"[ctx] 補 warehouse={new_wh!r} 從追問句")
+    if new_func and not has_kw:
+        log.info(f"[ctx] 切換 func {func_name!r} → {new_func!r}")
+        func_name = new_func
+    elif not new_func and _ctx.get("last_func") in ("query_inventory", "query_movement"):
+        pass  # 保留 LLM 路由結果
+
+    return func_name, new_args
 
 # ─── Util ─────────────────────────────────────────────────
 def get_local_ip() -> str:
@@ -2151,6 +2208,9 @@ async def api_query(req: Request):
     # correct（先校正，OOV 才能對正確的 func_name/keyword 做判斷）
     func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
 
+    # Context carry-over：追問句補 keyword/warehouse
+    func_name, func_args = _resolve_followup(user_text, func_name, func_args)
+
     # C18
     mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
     if mismatch and not _hard and clf_intent != "unknown":
@@ -2396,6 +2456,8 @@ async def api_query(req: Request):
             log.info(f"[dispatch] keyword 清理: 「{_raw_kw}」→「{_ck}」")
             func_args = {**func_args, _kw_field: _ck}
     result = finance.execute(func_name, func_args)
+    if isinstance(result, dict) and result.get("ok"):
+        _update_ctx(func_name, func_args)
     # ── 參數錯誤時，從 user_text 推測正確意圖 → clarify ──
     if isinstance(result, dict) and not result.get("ok") and "unexpected keyword" in str(result.get("summary", "")):
         log.info(f"[dispatch] 參數錯誤 {func_name}: {result['summary']!r} → clarify")
@@ -2977,6 +3039,9 @@ async def ws_handler(ws: WebSocket):
 
                 # ── 校正 ──
                 func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
+
+                # Context carry-over：追問句補 keyword/warehouse
+                func_name, func_args = _resolve_followup(user_text, func_name, func_args)
                 corrected_call = f"{func_name}({func_args})"
 
                 # ── C18：clf mismatch 檢查（hard_corrected 時不蓋過）──
@@ -3139,6 +3204,8 @@ async def ws_handler(ws: WebSocket):
                 _arg_preview = ", ".join(f"{k}={v!r}" for k, v in list(func_args.items())[:2])
                 await send({"type": "tool_call", "func": func_name, "args_preview": _arg_preview})
                 result = finance.execute(func_name, func_args)
+                if isinstance(result, dict) and result.get("ok"):
+                    _update_ctx(func_name, func_args)
                 log.info(f"[trace] vid={vid} result={result.get('summary', '')[:80]!r}")
 
                 # ── 逐步送出 trace steps（讓前端看到內部執行過程）──
