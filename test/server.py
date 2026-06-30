@@ -1900,6 +1900,13 @@ async def api_query(req: Request):
         return JSONResponse({"ok": False, "view": "error", "summary": "empty query"})
     user_text = _rewrite_query(user_text)
 
+    # ── 刪除模式中 → 直接處理，跳過守門員 ──
+    if _item_delete_state.get("active"):
+        import tools_v2 as _tv2_del_http_mode
+        _item_delete_state.clear()
+        result = _tv2_del_http_mode.delete_item_start(keyword=user_text.strip())
+        return JSONResponse(result)
+
     # ── 分步建立商品流程中 → 直接處理，跳過守門員 + clarify ──
     if _item_create_state.get("active"):
         import tools_v2 as _tv2_item
@@ -1958,6 +1965,7 @@ async def api_query(req: Request):
                 names = "、".join(it["name"] for it in user_items[:10])
                 result = {"ok": True, "summary": f"可刪除的商品：{names}\n請輸入要刪除的名稱", "view": "item_list",
                            "data": {"items": [{"name": it["name"], "sku": it["sku_id"]} for it in user_items]}}
+                _item_delete_state["active"] = True
             else:
                 result = {"ok": True, "summary": "目前沒有可刪除的商品。先用「➕ 新增商品」建立。", "view": "item_list", "data": {}}
         else:
@@ -2656,6 +2664,17 @@ async def ws_handler(ws: WebSocket):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.006)
                 await send({"type": "done", "result": {"ok": True, "view": "guide"}})
+                continue
+
+            # ── 刪除模式中 → 優先處理，不進守門員 ──
+            if _item_delete_state.get("active"):
+                import tools_v2 as _tv2_del_mode2
+                _item_delete_state.clear()
+                result = _tv2_del_mode2.delete_item_start(keyword=user_text.strip())
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.012)
+                await send({"type": "done", "result": result})
                 continue
 
             # ── 守門員 ──
