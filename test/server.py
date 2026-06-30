@@ -2623,6 +2623,7 @@ async def ws_handler(ws: WebSocket):
                         names = "、".join(it["name"] for it in user_items[:10])
                         result = {"ok": True, "summary": f"可刪除的商品：{names}\n請輸入要刪除的名稱", "view": "item_list",
                                    "data": {"items": [{"name": it["name"], "sku": it["sku_id"]} for it in user_items]}}
+                        _item_delete_state["active"] = True
                     else:
                         result = {"ok": True, "summary": "目前沒有可刪除的商品。先用「➕ 新增商品」建立。", "view": "item_list", "data": {}}
                 else:
