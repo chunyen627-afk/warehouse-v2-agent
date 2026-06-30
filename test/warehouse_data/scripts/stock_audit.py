@@ -2,7 +2,7 @@
 月底盤點腳本：掃全倉庫存，和安全庫存比較，產出 CSV 到 audit/
 用法：python stock_audit.py [--data-dir <path>]
 """
-import sys, json, csv, pathlib, datetime, argparse
+import sys, csv, pathlib, datetime, argparse
 
 def main():
     parser = argparse.ArgumentParser()
@@ -10,19 +10,22 @@ def main():
     args = parser.parse_args()
 
     dd = pathlib.Path(args.data_dir)
-    seed = json.loads((dd.parent / "seed_data.json").read_text("utf-8"))
+    master = dd / "master"
 
-    items      = {it["sku_id"]: it for it in seed["items"]}
-    safety     = {it["sku_id"]: it.get("safety_stock", 0) for it in seed["items"]}
-    stock_rows = seed.get("stock", [])
+    # 從 items.csv 讀商品和安全庫存
+    items = {}
+    safety = {}
+    for r in csv.DictReader(open(master / "items.csv", encoding="utf-8-sig")):
+        items[r["sku_id"]] = r
+        safety[r["sku_id"]] = int(r.get("safety_stock") or 0)
 
-    # stock 格式：{warehouse: {sku: qty}}
+    # 從 stock.csv 讀各倉庫存
     stock_map = {}  # (sku, warehouse) -> qty
     sku_total = {}
-    for wh, sku_dict in stock_rows.items():
-        for sku, qty in sku_dict.items():
-            stock_map[(sku, wh)] = qty
-            sku_total[sku] = sku_total.get(sku, 0) + qty
+    for r in csv.DictReader(open(master / "stock.csv", encoding="utf-8-sig")):
+        sku, wh, qty = r["sku_id"], r["warehouse"], int(r.get("qty") or 0)
+        stock_map[(sku, wh)] = qty
+        sku_total[sku] = sku_total.get(sku, 0) + qty
 
     now      = datetime.datetime.now()
     ts       = now.strftime("%Y%m%d_%H%M%S")
@@ -30,7 +33,6 @@ def main():
     out_dir.mkdir(exist_ok=True)
     out_file = out_dir / f"stock_audit_{ts}.csv"
 
-    WH_LABEL = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
     warehouses = ["north", "central", "south"]
 
     with open(out_file, "w", newline="", encoding="utf-8-sig") as f:
@@ -45,7 +47,7 @@ def main():
             status = "缺貨警示" if total < ss else ("低庫存" if total < ss * 1.2 else "正常")
             if status != "正常":
                 low_count += 1
-            w.writerow([sku_id, item["name"], item.get("category",""),
+            w.writerow([sku_id, item["name"], item.get("category", ""),
                         ss, *wh_qtys, total, status])
 
     print(f"OUTPUT:{out_file}")
