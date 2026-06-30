@@ -1234,3 +1234,170 @@ def compare_periods(metric: str = "out") -> dict:
     summary = "近兩個月出庫變化 — " + "；".join(parts) if parts else "兩期出庫無明顯變化。"
     return {"ok": True, "summary": summary, "view": "period_compare",
             "data": {"rows": top, "trace": steps}}
+
+
+# ════════════════════════════════════════════════════════════
+# ④ create_item — 自然語言新增商品（分步引導 + HITL）
+# ════════════════════════════════════════════════════════════
+_CATEGORY_PREFIX = {
+    "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
+    "daily_goods": "d", "apparel": "c", "sports": "s",
+}
+
+def _next_sku(category: str) -> str:
+    """自動產生下一個 SKU 流水號"""
+    prefix = _CATEGORY_PREFIX.get(category, "x")
+    existing = [it["sku_id"] for it in W.state().items if it["sku_id"].startswith(prefix)]
+    nums = []
+    for sid in existing:
+        try:
+            nums.append(int(sid[1:]))
+        except ValueError:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"{prefix}{next_num:02d}"
+
+
+def create_item_start() -> dict:
+    """觸發新增商品流程，回第一步問題"""
+    return {
+        "ok": True,
+        "summary": "好的！第一步：商品叫什麼名字？（任何名稱都可以，例如『環保吸管』）",
+        "view": "item_create_step1",
+        "data": {"step": 1, "total_steps": 4, "prompt": "請輸入商品名稱"},
+    }
+
+
+def create_item_collect(step: int = 1, name: str = "", category: str = "",
+                         price: str = "", safety: str = "", stock_north: str = "0",
+                         stock_central: str = "0", stock_south: str = "0",
+                         raw_text: str = "") -> dict:
+    """收集訪客輸入，依 step 推進流程"""
+    # 如果 raw_text 有內容，嘗試從中解析多個欄位（老手一句話模式）
+    if raw_text and step == 1:
+        import re as _re
+        # 嘗試解析：名稱 + 類別 + 價格 + 安全庫存 + 倉庫庫存
+        _cat_map = {"電子": "electronics", "家電": "appliance_kitchen", "食品": "food_beverage",
+                     "飲料": "food_beverage", "日用": "daily_goods", "服飾": "apparel", "運動": "sports"}
+        _found_cat = next((v for k, v in _cat_map.items() if k in raw_text), "")
+        _price_m = _re.search(r'(\d+)\s*元', raw_text)
+        _safety_m = _re.search(r'安全\s*(\d+)', raw_text)
+        _north_m = _re.search(r'北\S*\s*(\d+)', raw_text)
+        _south_m = _re.search(r'南\S*\s*(\d+)', raw_text)
+        _central_m = _re.search(r'中\S*\s*(\d+)', raw_text)
+        # 去掉已知欄位後剩下的當名稱
+        _name = raw_text
+        for pat in [r'電子\S*', r'家電\S*', r'食品\S*', r'日用\S*', r'服飾\S*', r'運動\S*',
+                     r'\d+元', r'安全\d+', r'北\S*\d+', r'南\S*\d+', r'中\S*\d+', r'新增商品\s*']:
+            _name = _re.sub(pat, '', _name).strip()
+        if _name and _found_cat:
+            new_sku = _next_sku(_found_cat)
+            pending = {
+                "name": _name, "category": _found_cat,
+                "price": int(_price_m.group(1)) if _price_m else 0,
+                "safety": int(_safety_m.group(1)) if _safety_m else 0,
+                "stock_north": int(_north_m.group(1)) if _north_m else 0,
+                "stock_central": int(_central_m.group(1)) if _central_m else 0,
+                "stock_south": int(_south_m.group(1)) if _south_m else 0,
+                "sku": new_sku,
+            }
+            return {"ok": True, "summary": "已解析商品資訊，請確認", "view": "item_confirm",
+                    "data": {"pending": True, "item": pending}}
+
+    # 分步模式
+    if step == 1:
+        return {"ok": True, "summary": f"已記錄商品名稱：「{name}」\n第二步：屬於哪一類？",
+                "view": "item_create_step2",
+                "data": {"step": 2, "name": name, "prompt": "請選擇類別"}}
+    elif step == 2:
+        return {"ok": True,
+                "summary": f"已記錄：「{name}」→ {category}\n第三步：單價多少元？安全庫存設幾件？（例如：150 元，安全庫存 100 件）",
+                "view": "item_create_step3",
+                "data": {"step": 3, "name": name, "category": category,
+                         "prompt": "請輸入單價和安全庫存"}}
+    elif step == 3:
+        try:
+            price_val = int(price) if price else 0
+            safety_val = int(safety) if safety else 0
+        except ValueError:
+            return W._err(f"價格或安全庫存格式錯誤：{price} / {safety}")
+        return {"ok": True,
+                "summary": f"已記錄：單價 {price_val} 元，安全庫存 {safety_val} 件\n第四步（可選）：設定初始庫存？直接輸入各倉數量，或輸入『跳過』設為 0",
+                "view": "item_create_step4",
+                "data": {"step": 4, "name": name, "category": category,
+                         "price": price_val, "safety": safety_val,
+                         "prompt": "北倉 中倉 南倉 各多少件？"}}
+    elif step == 4:
+        try:
+            sn = int(stock_north) if stock_north else 0
+            sc = int(stock_central) if stock_central else 0
+            ss = int(stock_south) if stock_south else 0
+        except ValueError:
+            sn = sc = ss = 0
+        new_sku = _next_sku(category)
+        pending = {
+            "name": name, "category": category,
+            "price": int(price) if price else 0,
+            "safety": int(safety) if safety else 0,
+            "stock_north": sn, "stock_central": sc, "stock_south": ss,
+            "sku": new_sku,
+        }
+        stock_summary = f"北{sn} 中{sc} 南{ss}" if (sn+sc+ss) > 0 else "全部為 0"
+        return {"ok": True,
+                "summary": f"📦 準備新增「{name}」\n類別：{category} | 單價：{pending['price']}元 | 安全庫存：{pending['safety']}件\n初始庫存：{stock_summary}",
+                "view": "item_confirm",
+                "data": {"pending": True, "item": pending}}
+
+    return W._err(f"未知的步驟：{step}")
+
+
+def commit_create_item(pending: dict, actor: str = "user_confirmed",
+                       trace_id: str | None = None) -> dict:
+    """HITL 確認後寫入 items.csv + config.json + stock.csv"""
+    import csv, shutil
+    dd = _data_dir()
+    ts = __import__('datetime').datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"item-{ts}"
+    item = pending["item"] if "item" in pending else pending
+
+    # 1. 寫入 items.csv
+    items_path = dd / "master" / "items.csv"
+    shutil.copy2(items_path, str(items_path) + ".bak")
+    with open(items_path, "a", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([item["sku"], item["name"], item["category"],
+                         item.get("category_label", ""), item["price"], item["safety"]])
+
+    # 2. 寫入 config.json（安全庫存 base）
+    cfg_path = dd / "master" / "config.json"
+    cfg = json.load(open(cfg_path, encoding="utf-8"))
+    cfg.setdefault("safety_stock_base", {})[item["sku"]] = item["safety"]
+    shutil.copy2(cfg_path, str(cfg_path) + ".bak")
+    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 3. 寫入 stock.csv（初始庫存）
+    stock_path = dd / "master" / "stock.csv"
+    shutil.copy2(stock_path, str(stock_path) + ".bak")
+    with open(stock_path, "a", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        for wh, qty in [("north", item.get("stock_north", 0)),
+                         ("central", item.get("stock_central", 0)),
+                         ("south", item.get("stock_south", 0))]:
+            if qty > 0:
+                writer.writerow([wh, item["sku"], qty])
+
+    # 4. audit log
+    audit_dir = dd / "audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    log_path = audit_dir / f"{ts[:10]}_changes.log"
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                            "action": "create_item", "item": item}, ensure_ascii=False) + "\n")
+
+    # 5. 熱更新記憶體（重新載入 seed）
+    from pathlib import Path as _P
+    seed_path = _P(__file__).parent / "seed_data.json"
+    W.init(seed_path)
+
+    return {"ok": True, "summary": f"✅ 已新增商品「{item['name']}」（SKU: {item['sku']}）",
+            "view": "item_done", "data": {"item": item, "trace_id": trace_id}}

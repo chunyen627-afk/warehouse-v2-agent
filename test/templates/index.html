@@ -1586,6 +1586,41 @@ function renderViewCard(view, data, topSummary) {
       card.innerHTML = `<div class="label">⚙️ 設定查詢</div>
         <div style="font-size:18px;padding:8px">「${data.label}」目前設定為 <b style="color:var(--accent)">${data.current}</b></div>`;
     }
+  } else if (view === 'item_confirm') {
+    const it = data.item || {};
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header warn">📦 新增商品 — 請確認</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+            <tr><td>名稱</td><td><b>${it.name}</b></td></tr>
+            <tr><td>SKU</td><td>${it.sku}（自動產生）</td></tr>
+            <tr><td>類別</td><td>${it.category}</td></tr>
+            <tr><td>單價</td><td>NT$ ${it.price}</td></tr>
+            <tr><td>安全庫存</td><td>${it.safety} 件</td></tr>
+            <tr><td>初始庫存</td><td>北${it.stock_north||0} 中${it.stock_central||0} 南${it.stock_south||0}</td></tr>
+          </table>
+          <div class="hitl-meta">確認後將寫入 items.csv 並自動重生種子資料。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_create" data-payload='${JSON.stringify({pending:data})}'>✅ 確認新增</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
+  } else if (view === 'item_done') {
+    card.innerHTML = `<div class="label">✅ 已新增商品</div>
+      <div style="padding:8px;font-size:14px">「${data.item?.name||''}」 — SKU: ${data.item?.sku||''}</div>`;
+  } else if (view === 'item_create_step1' || view === 'item_create_step2' || view === 'item_create_step3' || view === 'item_create_step4') {
+    const stepData = data;
+    card.innerHTML = `
+      <div class="label">📦 新增商品 — 步驟 ${stepData.step}/4</div>
+      <div style="padding:8px;color:var(--accent);font-size:14px">${data.summary || data.prompt}</div>`;
+    if (view === 'item_create_step2') {
+      const cats = ['electronics','appliance_kitchen','food_beverage','daily_goods','apparel','sports'];
+      const labels = {electronics:'電子產品',appliance_kitchen:'家電廚具',food_beverage:'食品飲料',daily_goods:'日用品',apparel:'服飾',sports:'運動用品'};
+      showSuggestions(cats.map(c => ({label: labels[c], query: `類別${c}`})));
+      window._itemCreateState = {name: stepData.name, step: 2};
+    }
   } else if (view === 'config_confirm' || view === 'script_confirm') {
     const isCfg = view === 'config_confirm';
     const preview = data.preview || [];

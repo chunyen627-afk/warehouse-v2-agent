@@ -104,6 +104,8 @@ GATEKEEPER_KEYWORDS = {
     "倉", "倉庫", "warehouse",
     # 動作
     "庫存", "存量", "還有", "剩", "幾件", "多少", "幾個", "查詢",
+    # 資料管理
+    "新增", "建立", "加入", "增加", "新建", "添加",
     "進貨", "出貨", "入庫", "出庫", "進倉", "出倉", "進出",
     "庫存量", "庫存價值", "週轉", "週轉率",
     "缺貨", "補貨", "警示", "警報", "告急", "快沒", "不足", "低庫存", "庫存警示",
@@ -1466,6 +1468,7 @@ llm_lock = asyncio.Lock()
 display_sockets: set[WebSocket] = set()
 all_sockets:     set[WebSocket] = set()
 _visitor_closed = False
+_item_create_state: dict = {}  # 分步新增商品的 session state
 
 
 # ─── Util ─────────────────────────────────────────────────
@@ -1895,6 +1898,34 @@ async def api_query(req: Request):
         return JSONResponse({"ok": False, "view": "error", "summary": "empty query"})
     user_text = _rewrite_query(user_text)
 
+    # ── 分步建立商品流程中 → 直接處理，跳過守門員 + clarify ──
+    if _item_create_state.get("active"):
+        import tools_v2 as _tv2_item
+        st = _item_create_state
+        kwargs = {**{k: v for k, v in st.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}, "raw_text": ""}
+        if st["step"] == 1: kwargs["name"] = user_text
+        elif st["step"] == 2: kwargs["category"] = user_text
+        elif st["step"] == 3:
+            parts = user_text.replace("，", ",").split(",")
+            if len(parts) >= 2: kwargs["price"] = parts[0].strip(); kwargs["safety"] = parts[1].strip()
+            else: kwargs["price"] = user_text
+        elif st["step"] == 4:
+            if "跳過" in user_text: kwargs["stock_north"] = kwargs["stock_central"] = kwargs["stock_south"] = "0"
+            else:
+                for part in user_text.replace("，", ",").split(","):
+                    p = part.strip()
+                    if "北" in p: kwargs["stock_north"] = p.replace("北", "").strip()
+                    elif "中" in p: kwargs["stock_central"] = p.replace("中", "").strip()
+                    elif "南" in p: kwargs["stock_south"] = p.replace("南", "").strip()
+        result = _tv2_item.create_item_collect(**kwargs)
+        if result.get("view") == "item_confirm":
+            _item_create_state.clear()
+        else:
+            d = result.get("data", {})
+            _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
+            _item_create_state["active"] = True
+        return JSONResponse(result)
+
     # ── 守門員（HTTP 版）──
     if not is_meaningful_input(user_text):
         return JSONResponse({"ok": False, "view": "rejected",
@@ -2126,6 +2157,54 @@ async def api_query(req: Request):
         log.info(f"[dispatch] 低庫存攔回: {user_text!r} → list_low_stock")
         func_name = "list_low_stock"
         func_args = {}
+
+    # ── dispatch 攔截：「新增商品」→ 分步引導流程 ──
+    _create_item_kws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
+    if any(w in user_text for w in _create_item_kws):
+        import tools_v2 as _tv2
+        log.info(f"[dispatch] 新增商品攔截: {user_text!r}")
+        raw = user_text
+        for kw in _create_item_kws: raw = raw.replace(kw, "").strip()
+        result = _tv2.create_item_collect(step=1, raw_text=raw) if raw else _tv2.create_item_start()
+        if result.get("view") != "item_confirm":
+            d = result.get("data", {})
+            _item_create_state.update({k: v for k, v in d.items()
+                if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
+            _item_create_state["active"] = True
+        return JSONResponse(result)
+    if _item_create_state.get("active"):
+        st = _item_create_state
+        log.info(f"[dispatch] item_create step {st['step']}: {user_text!r}")
+        import tools_v2 as _tv2
+        kwargs = {**st, "raw_text": ""}
+        if st["step"] == 1:
+            kwargs["name"] = user_text
+        elif st["step"] == 2:
+            kwargs["category"] = user_text
+        elif st["step"] == 3:
+            parts = user_text.replace("，", ",").split(",")
+            if len(parts) >= 2:
+                kwargs["price"] = parts[0].strip()
+                kwargs["safety"] = parts[1].strip()
+            else:
+                kwargs["price"] = user_text
+        elif st["step"] == 4:
+            if "跳過" in user_text:
+                kwargs["stock_north"] = kwargs["stock_central"] = kwargs["stock_south"] = "0"
+            else:
+                for part in user_text.replace("，", ",").split(","):
+                    p = part.strip()
+                    if "北" in p: kwargs["stock_north"] = p.replace("北", "").strip()
+                    elif "中" in p: kwargs["stock_central"] = p.replace("中", "").strip()
+                    elif "南" in p: kwargs["stock_south"] = p.replace("南", "").strip()
+        result = _tv2.create_item_collect(**kwargs)
+        if result.get("view") == "item_confirm":
+            _item_create_state.clear()
+        else:
+            d = result.get("data", {})
+            _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
+            _item_create_state["active"] = True
+        return JSONResponse(result)
 
     # ── dispatch 攔截：「哪個最多/庫存排行」→ list_hot_items stock ──
     _stock_rank_kws = ("哪個", "哪個東西", "庫存最多", "數量最多", "哪個最多", "存貨最多", "東西最多")
@@ -2394,6 +2473,9 @@ async def ws_handler(ws: WebSocket):
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                         await push_display({"type": "schedule_created",
                                            "job": res.get("data", {}).get("job", {})})
+                    elif act == "item_create":
+                        res = tools_v2.commit_create_item(
+                            data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                     else:
                         res = {"ok": False, "summary": "未知的確認動作", "view": "error", "data": {}}
                 except Exception as e:
@@ -2724,6 +2806,55 @@ async def ws_handler(ws: WebSocket):
                                 log.info(f"[dispatch-ws] 關鍵字是類別名，清掉 kw={_dkw!r}")
                                 func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                                 break
+
+                # ── dispatch-ws：item_create 分步流程 ──
+                if _item_create_state.get("active"):
+                    import tools_v2 as _tv2_item_ws
+                    st2 = _item_create_state
+                    kwargs2 = {**{k: v for k, v in st2.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}, "raw_text": ""}
+                    if st2["step"] == 1: kwargs2["name"] = user_text
+                    elif st2["step"] == 2: kwargs2["category"] = user_text
+                    elif st2["step"] == 3:
+                        parts = user_text.replace("，", ",").split(",")
+                        if len(parts) >= 2: kwargs2["price"] = parts[0].strip(); kwargs2["safety"] = parts[1].strip()
+                        else: kwargs2["price"] = user_text
+                    elif st2["step"] == 4:
+                        if "跳過" in user_text: kwargs2["stock_north"] = kwargs2["stock_central"] = kwargs2["stock_south"] = "0"
+                        else:
+                            for part in user_text.replace("，", ",").split(","):
+                                p = part.strip()
+                                if "北" in p: kwargs2["stock_north"] = p.replace("北", "").strip()
+                                elif "中" in p: kwargs2["stock_central"] = p.replace("中", "").strip()
+                                elif "南" in p: kwargs2["stock_south"] = p.replace("南", "").strip()
+                    result = _tv2_item_ws.create_item_collect(**kwargs2)
+                    if result.get("view") == "item_confirm":
+                        _item_create_state.clear()
+                    else:
+                        d = result.get("data", {})
+                        _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
+                        _item_create_state["active"] = True
+                    for ch in result.get("summary", ""):
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.012)
+                    await send({"type": "done", "result": result})
+                    continue
+
+                # ── dispatch-ws：新增商品 keyword 攔截 ──
+                _create_item_kws_ws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
+                if any(w in user_text for w in _create_item_kws_ws):
+                    import tools_v2 as _tv2_ci
+                    log.info(f"[dispatch-ws] 新增商品攔截: {user_text!r}")
+                    raw = user_text
+                    for kw in _create_item_kws_ws: raw = raw.replace(kw, "").strip()
+                    result = _tv2_ci.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci.create_item_start()
+                    for ch in result.get("summary", ""):
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.012)
+                    await send({"type": "done", "result": result})
+                    _item_create_state.update({k: v for k, v in result.get("data", {}).items()
+                                               if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
+                    _item_create_state["active"] = result.get("view") != "item_confirm"
+                    continue
 
                 # ── dispatch-ws：庫存排行 / 口語 pattern 攔截 ──
                 _stock_rank_kws_ws = ("哪個", "哪個東西", "庫存最多", "數量最多", "哪個最多", "存貨最多", "東西最多")
