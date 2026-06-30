@@ -2198,9 +2198,20 @@ async def api_query(req: Request):
             log.info(f"[dispatch] keyword 清理: 「{_raw_kw}」→「{_ck}」")
             func_args = {**func_args, _kw_field: _ck}
     result = finance.execute(func_name, func_args)
+    # ── 參數錯誤時，從 user_text 推測正確意圖 → clarify ──
+    if isinstance(result, dict) and not result.get("ok") and "unexpected keyword" in str(result.get("summary", "")):
+        log.info(f"[dispatch] 參數錯誤 {func_name}: {result['summary']!r} → clarify")
+        _hint_q = "你是想查什麼？"
+        _hint_opts = ["哪些商品快缺貨", "哪些商品快到期", "本週熱銷商品", "採購對帳異常"]
+        # 從 user_text 推測
+        if any(w in user_text for w in ("哪個", "哪", "比較", "比", "多", "少")):
+            _hint_q = "你是想比較倉庫、還是查庫存排行？"
+            _hint_opts = ["北倉跟南倉庫存比較", "本月熱銷排行", "查全部庫存"]
+        result = {"ok": True, "view": "clarify", "question": _hint_q, "options": _hint_opts,
+                  "hint": "輸入數字選擇，或直接輸入更完整的問題", "data": {}}
+
     if isinstance(result, dict):
-        result["_function"] = func_name  # 給 eval_http.py 驗證路由
-        # 把 keyword 回傳到 data 層（有些 function 會內部 resolve 成完整名稱）
+        result["_function"] = func_name
         _res_kw = func_args.get("keyword", "") or func_args.get("target", "")
         if _res_kw and isinstance(result.get("data"), dict) and "keyword" not in result["data"]:
             result["data"]["keyword"] = _res_kw
