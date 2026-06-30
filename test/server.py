@@ -1283,6 +1283,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C9] 設定意圖 → manage_config{{{action}}}（原 {func_name}）")
         return "manage_config", new_args, True
 
+    # C9b: run_script script_name 去掉前綴動詞（「執行腳本 月底盤點」→「月底盤點」）
+    if func_name == "run_script" and func_args.get("script_name"):
+        _script_prefixes = ("執行腳本", "幫我執行", "請執行", "麻煩跑", "執行一次",
+                            "幫我跑", "跑一次", "執行", "跑", "啟動", "run ")
+        sn = func_args["script_name"].strip()
+        for _pfx in _script_prefixes:
+            if sn.startswith(_pfx):
+                sn = sn[len(_pfx):].strip()
+                log.info(f"[校正 C9b] run_script 去前綴: {func_args['script_name']!r} → {sn!r}")
+                func_args = dict(func_args)
+                func_args["script_name"] = sn
+                break
+
     # C10：含明確腳本動作詞 → 強轉 run_script
     #   明確腳本詞（盤點/匯出/重產）即使模型誤判成 manage_config 也要救回；
     #   但若同時含設定項詞（前置天數/安全庫存）則讓給 C9（避免誤傷設定查詢）。
