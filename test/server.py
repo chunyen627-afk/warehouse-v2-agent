@@ -1905,7 +1905,7 @@ async def api_query(req: Request):
     if user_text.strip() == "取消":
         _item_create_state.clear()
         _item_delete_state.clear()
-        return JSONResponse({"ok": True, "summary": "已取消。", "view": "item_list", "data": {}})
+        return JSONResponse({"ok": True, "summary": "已取消。", "view": "item_cancelled", "data": {}})
 
     # ── 刪除模式中 → 直接處理，跳過守門員 ──
     if _item_delete_state.get("active"):
@@ -1918,7 +1918,7 @@ async def api_query(req: Request):
     if _item_create_state.get("active"):
         if user_text.strip() == "取消":
             _item_create_state.clear()
-            return JSONResponse({"ok": True, "summary": "已取消新增商品。", "view": "item_list", "data": {}})
+            return JSONResponse({"ok": True, "summary": "已取消新增商品。", "view": "item_cancelled", "data": {}})
         import tools_v2 as _tv2_item
         st = _item_create_state
         kwargs = {**{k: v for k, v in st.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}, "raw_text": ""}
@@ -3007,7 +3007,7 @@ async def ws_handler(ws: WebSocket):
                     if user_text.strip() == "取消":
                         _item_create_state.clear()
                         await send({"type": "token", "text": "已取消新增商品。"})
-                        await send({"type": "done", "result": {"ok": True, "view": "item_list", "data": {}}})
+                        await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
                         continue
                     import tools_v2 as _tv2_item_ws
                     st2 = _item_create_state
