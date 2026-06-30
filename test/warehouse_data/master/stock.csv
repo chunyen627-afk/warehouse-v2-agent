@@ -182,3 +182,6 @@ south,s10,61
 north,x01,20
 central,x01,10
 south,x01,4
+north,x01,5
+central,x01,3
+south,x01,2

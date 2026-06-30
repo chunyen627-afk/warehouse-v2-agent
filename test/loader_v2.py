@@ -26,7 +26,7 @@ def _read_csv(path: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def load_as_seed(wd: Path, seed_fallback: Path | None = None) -> dict:
+def load_as_seed(wd: Path) -> dict:
     """從 warehouse_data/ 組出 seed 等價 dict（含 v2 區塊）。"""
     wd = Path(wd)
 
@@ -40,6 +40,13 @@ def load_as_seed(wd: Path, seed_fallback: Path | None = None) -> dict:
         "safety_stock": int(r["safety_stock"]),
     } for r in items_rows]
 
+    # shelf_life：從 items.csv 的 shelf_life_days 欄讀（空值略過）
+    shelf_life = {
+        r["sku_id"]: int(r["shelf_life_days"])
+        for r in items_rows
+        if r.get("shelf_life_days", "").strip()
+    }
+
     # categories：從 items 的 category + category_label 還原（保序、去重）
     cat_seen, categories = set(), []
     for r in items_rows:
@@ -50,6 +57,23 @@ def load_as_seed(wd: Path, seed_fallback: Path | None = None) -> dict:
 
     config = json.load(open(wd / "master" / "config.json", encoding="utf-8"))
     suppliers = _read_csv(wd / "master" / "suppliers.csv")
+
+    # ── batches：從 master/batches.csv 讀────────────────
+    batches = []
+    batches_path = wd / "master" / "batches.csv"
+    if batches_path.exists():
+        for r in _read_csv(batches_path):
+            batches.append({
+                "sku_id":      r["sku_id"],
+                "warehouse":   r["warehouse"],
+                "qty":         int(r["qty"]),
+                "mfg_date":    r["mfg_date"],
+                "expire_date": r["expire_date"],
+            })
+
+    # ── association_meta：從 master/association_meta.json 讀──
+    ameta_path = wd / "master" / "association_meta.json"
+    association_meta = json.load(open(ameta_path, encoding="utf-8")) if ameta_path.exists() else {}
 
     # ── transactions → movements（攤平所有日_方向 CSV）────────
     movements = []
@@ -81,34 +105,20 @@ def load_as_seed(wd: Path, seed_fallback: Path | None = None) -> dict:
     wh_keys = list(config.get("safety_stock_override", {}).keys()) or list(stock.keys())
     warehouses = [{"key": k, "label": WH_LABEL.get(k, k)} for k in wh_keys]
 
-    # ── seed 裡 multi 檔沒搬的東西（batches / shelf_life / snapshot_date /
-    #    association_meta）：從原 seed_data.json 借（它仍是 source of truth）──
-    extra = {}
-    if seed_fallback and Path(seed_fallback).exists():
-        sd = json.load(open(seed_fallback, encoding="utf-8"))
-        extra = {
-            "snapshot_date":    sd.get("snapshot_date", ""),
-            "schema_version":   sd.get("schema_version", 1),
-            "batches":          sd.get("batches", []),
-            "shelf_life":       sd.get("shelf_life", {}),
-            "association_meta": sd.get("association_meta", {}),
-        }
-
-    seed_equiv = {
-        "snapshot_date":    extra.get("snapshot_date", ""),
-        "schema_version":   extra.get("schema_version", 1),
+    return {
+        "snapshot_date":    config.get("snapshot_date", ""),
+        "schema_version":   config.get("schema_version", "2.0"),
         "categories":       categories,
         "warehouses":       warehouses,
         "items":            items,
         "stock":            stock,
         "movements":        movements,
         "orders":           orders,
-        "batches":          extra.get("batches", []),
-        "shelf_life":       extra.get("shelf_life", {}),
-        "association_meta": extra.get("association_meta", {}),
+        "batches":          batches,
+        "shelf_life":       shelf_life,
+        "association_meta": association_meta,
         # ── v2 專屬（v1 不讀）──
         "_v2_config":     config,
         "_v2_suppliers":  suppliers,
         "_v2_data_dir":   str(wd),
     }
-    return seed_equiv

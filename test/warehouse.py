@@ -33,18 +33,20 @@ import os as _os
 DATA_MODE = _os.getenv("WAREHOUSE_DATA_MODE", "multi").lower()
 
 
-def _load_seed_dict(seed_path: Path) -> dict:
-    """依 DATA_MODE 回傳 seed 等價 dict。multi 模式從 warehouse_data/ 組回。"""
-    if DATA_MODE == "multi":
-        wd = Path(seed_path).parent / "warehouse_data"
-        if wd.exists():
-            try:
-                import loader_v2
-                return loader_v2.load_as_seed(wd, seed_fallback=seed_path)
-            except Exception as e:   # multi 載入失敗 → fallback seed，永不讓 app 掛掉
-                _log.warning(f"[loader_v2] multi 載入失敗，fallback seed：{e}")
-    with open(seed_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+def _load_seed_dict(data_path: Path) -> dict:
+    """multi 模式從 warehouse_data/ 組回 seed 等價 dict。
+    data_path 可以是 warehouse_data/ 目錄本身，或其父目錄（向下找 warehouse_data/）。
+    """
+    p = Path(data_path)
+    wd = p if p.is_dir() and (p / "master").exists() else p.parent / "warehouse_data"
+    if wd.exists():
+        try:
+            import loader_v2
+            return loader_v2.load_as_seed(wd)
+        except Exception as e:
+            _log.error(f"[loader_v2] multi 載入失敗：{e}", exc_info=True)
+            raise
+    raise FileNotFoundError(f"warehouse_data/ 不存在：{wd}")
 
 
 # ────────────────────────────────────────────────

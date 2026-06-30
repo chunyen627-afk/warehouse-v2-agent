@@ -1422,21 +1422,45 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
     # 5. 熱更新記憶體（直接塞進 State，不依賴 seed_data.json）
     import warehouse as W_mod
     s = W_mod._STATE
-    # 新增到 items 清單（如果還沒有）
     new_sku = item["sku"]
+    new_item_entry = {
+        "sku_id":       new_sku,
+        "name":         item["name"],
+        "category":     item["category"],
+        "unit_price":   item["price"],
+        "safety_stock": item["safety"],
+    }
     if not any(it["sku_id"] == new_sku for it in s.items):
-        s.items.append({
-            "sku_id":       new_sku,
-            "name":         item["name"],
-            "category":     item["category"],
-            "unit_price":   item["price"],
-            "safety_stock": item["safety"],
-        })
+        s.items.append(new_item_entry)
         s._items_by_sku[new_sku] = s.items[-1]
-    # 新增各倉庫存
     for wh_key in ("north", "central", "south"):
         qty = item.get(f"stock_{wh_key}", 0)
         s.stock.setdefault(wh_key, {})[new_sku] = qty
+
+    # 6. 持久化到 warehouse_data/master/（重啟後不消失）
+    master = _P(__file__).parent / "warehouse_data" / "master"
+    # items.csv：若 SKU 不存在才追加
+    items_path = master / "items.csv"
+    existing = list(csv.DictReader(open(items_path, encoding="utf-8-sig")))
+    if not any(r["sku_id"] == new_sku for r in existing):
+        fieldnames = list(existing[0].keys()) if existing else ["sku_id","name","category","category_label","unit_price","safety_stock","shelf_life_days"]
+        with open(items_path, "a", newline="", encoding="utf-8-sig") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames)
+            row = {k: "" for k in fieldnames}
+            row.update({"sku_id": new_sku, "name": item["name"],
+                        "category": item["category"], "category_label": item.get("category_label",""),
+                        "unit_price": item["price"], "safety_stock": item["safety"]})
+            w.writerow(row)
+    # stock.csv：更新或新增各倉庫存
+    stock_path = master / "stock.csv"
+    stock_rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
+    updated = {(r["warehouse"], r["sku_id"]): r for r in stock_rows}
+    for wh_key in ("north", "central", "south"):
+        qty = item.get(f"stock_{wh_key}", 0)
+        updated[(wh_key, new_sku)] = {"warehouse": wh_key, "sku_id": new_sku, "qty": qty}
+    with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=["warehouse","sku_id","qty"])
+        w.writeheader(); w.writerows(updated.values())
 
     return {"ok": True, "summary": f"✅ 已新增商品「{item['name']}」（SKU: {item['sku']}）",
             "view": "item_done", "data": {"item": item, "trace_id": trace_id}}

@@ -50,7 +50,7 @@ MODELS_DIR         = BASE_DIR / "models"
 TEMPLATES_DIR      = BASE_DIR / "templates"
 STATIC_DIR         = BASE_DIR / "static"
 SYSTEM_PROMPT_FILE = BASE_DIR / "system_prompt.txt"
-SEED_FILE          = BASE_DIR / "seed_data.json"
+WH_DATA_DIR        = BASE_DIR / "warehouse_data"
 
 PORT          = int(os.getenv("PORT",         "8000"))
 
@@ -1765,7 +1765,7 @@ def _background_init():
     global LLM, MODEL_FILE, SYSTEM_PROMPT
     try:
         _set_health("starting", "初始化 seed 資料...")
-        finance.init(SEED_FILE)
+        finance.init(WH_DATA_DIR)
         intent_clf.load()
         SYSTEM_PROMPT = load_system_prompt()
         LLM, MODEL_FILE = load_model()
