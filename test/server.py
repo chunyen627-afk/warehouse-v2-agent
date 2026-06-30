@@ -144,7 +144,7 @@ GATEKEEPER_KEYWORDS = {
     "刷牙", "洗衣服", "擦身體", "裝水", "煮咖啡", "運動用的", "充電的",
     "那個", "這", "哪", "啥", "怎", "嗎", "呢", "啊", "吧", "喔",
     "壺", "線", "乳", "精", "機器", "墊子", "咖啡", "衣服", "手機",
-    "洗澡", "牙刷", "牙膏", "毛巾", "肥皂", "洗髮",
+    "洗澡", "牙刷", "牙膏", "毛巾", "肥皂", "洗髮", "戶外", "壞掉", "問題", "東西",
     # 助理代名
     "我", "my", "i ",
 }
@@ -623,8 +623,7 @@ def _detect_clarify(user_text: str) -> dict | None:
 
     # ⑥ 純模糊短句（查/看/確認等）— 用 t_clean 或 t 都檢查，剝掉填充詞後剩「查」也算
     #    也涵蓋「幫偶查」→ strip「幫」→「偶查」太短且無具體目標 → clarify
-    _vague = {"查", "查詢", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看",
-              "那個", "這個", "欸", "誒", "喂", "嗨"}
+    _vague = {"查", "查詢", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看", "那個", "這個", "欸", "誒", "喂", "嗨", "查個東西"}
     # 剝完填充詞只剩 1-3 字且有動作意圖 → clarify（但含類別關鍵字則放行，如「查食品」）
     _has_cat = any(zh in t for zh in ("電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動"))
     _too_short = len(t_clean) <= 3 and has_intent and not _has_cat
@@ -2156,10 +2155,14 @@ async def api_query(req: Request):
                 func_name = "query_inventory"
                 func_args = {"keyword": _dk}
 
-    # ── dispatch：compare_warehouses 清理非法參數（LLM 常幻覺 rank_type）──
+    # ── dispatch：compare_warehouses 清理非法參數 + 補預設倉庫 ──
     if func_name == "compare_warehouses":
         func_args = {k: v for k, v in func_args.items()
                      if k in ("warehouse_a", "warehouse_b", "metric")}
+        if "warehouse_a" not in func_args:
+            func_args["warehouse_a"] = "north"
+        if "warehouse_b" not in func_args:
+            func_args["warehouse_b"] = "south"
 
     # ── dispatch 攔截：movement 關鍵字清理 + 自動提取 ──
     if func_name == "query_movement":
