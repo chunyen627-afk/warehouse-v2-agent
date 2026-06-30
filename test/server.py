@@ -2332,17 +2332,7 @@ async def ws_display(ws: WebSocket):
 async def ws_handler(ws: WebSocket):
     global _visitor_closed
 
-    if all_sockets and not _visitor_closed:
-        log.info(f"新訪客連線、關閉 {len(all_sockets)} 個舊連線")
-        _visitor_closed = True
-        for old_ws in list(all_sockets):
-            try:
-                await old_ws.close(code=1001, reason="新連線取代")
-            except Exception:
-                pass
-        all_sockets.clear()
-        _visitor_closed = False
-
+    # 多裝置展示模式：允許多個同時連線（桌面+手機），不踢舊連線
     await ws.accept()
     all_sockets.add(ws)
     log.info(f"訪客連線（共 {len(all_sockets)}）")

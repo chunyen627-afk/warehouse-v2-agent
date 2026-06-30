@@ -603,6 +603,28 @@
   background: rgba(229,62,62,.12); border: 1px solid #e53e3e; border-radius: 8px;
   padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #fc8181;
 }
+
+/* ── 手機版調整 ── */
+@media (max-width: 768px) {
+  body { font-size: 14px; }
+  header { padding: 8px 12px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; }
+  header .sub { font-size: 11px; display: none; }
+  #close-btn { width: 28px; height: 28px; font-size: 14px; }
+  #chips-bar { gap: 4px; padding: 6px 8px; overflow-x: auto; flex-wrap: nowrap; }
+  #chips-bar .chip { font-size: 11px; padding: 6px 8px; white-space: nowrap; flex-shrink: 0; }
+  #input-row { padding: 6px 8px; gap: 6px; }
+  #input-text { font-size: 14px; padding: 8px 10px; }
+  #send-btn { width: 36px; height: 36px; font-size: 16px; }
+  #mic-btn { width: 28px; height: 28px; }
+  #messages { padding: 8px 10px; }
+  .msg-bubble { max-width: 90%; font-size: 13px; }
+  .kpi { font-size: 22px; }
+}
+@media (max-width: 480px) {
+  #chips-bar .chip { font-size: 10px; padding: 4px 6px; }
+  header h1 { font-size: 14px; }
+}
 </style>
 </head>
 <body>
