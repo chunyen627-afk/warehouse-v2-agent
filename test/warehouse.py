@@ -830,7 +830,7 @@ def list_hot_items(
                 continue
             total_qty, _ = _sku_total_stock(it["sku_id"], "all")
             rankings.append({
-                "sku_id": sku, "name": it["name"],
+                "sku_id": it["sku_id"], "name": it["name"],
                 "category": it["category"],
                 "category_label": CATEGORY_LABEL.get(it["category"], it["category"]),
                 "stock_qty": total_qty,
