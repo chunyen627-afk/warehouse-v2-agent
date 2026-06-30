@@ -1515,11 +1515,6 @@ _ctx: dict = {}                # Context carry-over：記住上一輪的 sku/war
 
 # ─── Context carry-over ────────────────────────────────────
 _CTX_FOLLOWUP_WORDS = ("那", "它", "這個", "該", "同樣", "這支", "這件", "剛才", "上次")
-_CTX_WH_WORDS = {
-    "北倉": "north", "北區倉": "north", "北": "north",
-    "中倉": "central", "中區倉": "central", "中": "central",
-    "南倉": "south", "南區倉": "south", "南": "south",
-}
 _CTX_FUNC_HINT = {
     "進出": "query_movement", "異動": "query_movement", "紀錄": "query_movement",
     "搭配": "query_related_items", "推薦": "query_related_items",
@@ -1546,26 +1541,20 @@ def _resolve_followup(user_text: str, func_name: str, func_args: dict):
         return func_name, func_args
     is_followup = any(w in user_text for w in _CTX_FOLLOWUP_WORDS)
     has_kw = bool(func_args.get("keyword") or func_args.get("target"))
-    # 偵測倉庫切換（「那中倉呢？」）
-    new_wh = next((v for k, v in _CTX_WH_WORDS.items() if k in user_text), None)
-    # 偵測功能切換（「它的進出紀錄呢？」）
+    # 偵測功能切換（「它的進出紀錄呢？」「這個快到期嗎？」）
     new_func = next((v for k, v in _CTX_FUNC_HINT.items() if k in user_text), None)
 
-    if not is_followup and not new_wh:
+    # 只有追問詞 + 沒有 keyword 時才介入
+    if not is_followup or has_kw:
         return func_name, func_args
 
     new_args = dict(func_args)
-    if not has_kw:
-        new_args["keyword"] = _ctx["last_sku"]
-        log.info(f"[ctx] 補 keyword={_ctx['last_sku']!r} 從上一輪 context")
-    if new_wh:
-        new_args["warehouse"] = new_wh
-        log.info(f"[ctx] 補 warehouse={new_wh!r} 從追問句")
-    if new_func and not has_kw:
+    new_args["keyword"] = _ctx["last_sku"]
+    log.info(f"[ctx] 補 keyword={_ctx['last_sku']!r} 從上一輪 context")
+
+    if new_func:
         log.info(f"[ctx] 切換 func {func_name!r} → {new_func!r}")
         func_name = new_func
-    elif not new_func and _ctx.get("last_func") in ("query_inventory", "query_movement"):
-        pass  # 保留 LLM 路由結果
 
     return func_name, new_args
 
