@@ -107,6 +107,7 @@ GATEKEEPER_KEYWORDS = {
     # 資料管理
     "新增", "建立", "加入", "增加", "新建", "添加",
     "刪除", "下架", "砍掉", "移除", "刪掉",
+    "取消", "退出", "停止",
     "進貨", "出貨", "入庫", "出庫", "進倉", "出倉", "進出",
     "庫存量", "庫存價值", "週轉", "週轉率",
     "缺貨", "補貨", "警示", "警報", "告急", "快沒", "不足", "低庫存", "庫存警示",
@@ -1899,6 +1900,12 @@ async def api_query(req: Request):
     if not user_text:
         return JSONResponse({"ok": False, "view": "error", "summary": "empty query"})
     user_text = _rewrite_query(user_text)
+
+    # ── 取消（清除所有 session state）──
+    if user_text.strip() == "取消":
+        _item_create_state.clear()
+        _item_delete_state.clear()
+        return JSONResponse({"ok": True, "summary": "已取消。", "view": "item_list", "data": {}})
 
     # ── 刪除模式中 → 直接處理，跳過守門員 ──
     if _item_delete_state.get("active"):
