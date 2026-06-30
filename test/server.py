@@ -2803,6 +2803,9 @@ async def ws_handler(ws: WebSocket):
                         await send({"type": "tool_call", "func": "judge_cause_found", "args_preview": f"disc_count={rca_ctx['disc_count']}"})
                         await asyncio.sleep(0.6)
                         cause_found = rca_ctx["disc_count"] > 0
+                        verdict = f"✅ 已確認根因：短收 {rca_ctx['total_gap']} 件，供應商 {rca_ctx.get('main_supplier','?')}" if cause_found else "✅ 未發現短收異常"
+                        await send({"type": "trace_step", "step": {"kind": "verify", "detail": verdict}})
+                        await asyncio.sleep(0.3)
                         await send({"type": "trace_step", "step": {
                             "kind": "reason",
                             "detail": f"發現 {rca_ctx['disc_count']} 筆短收，商品 {rca_ctx['sku_name']} 現存 {rca_ctx['total_stock']} 件／安全 {rca_ctx['safety_stock']} 件"
