@@ -2121,7 +2121,7 @@ document.querySelectorAll('#chips-bar .chip').forEach(c => {
     } else if (a === 'item-create') {
       sendQuery('新增商品');
     } else if (a === 'item-delete') {
-      currentBotMsg = appendBot('請輸入要刪除的商品名稱（例如：火箭）');
+      currentBotMsg = appendBot('請輸入要刪除的商品名稱');
       currentBotMsg = null;
       $('input-text').focus();
     }

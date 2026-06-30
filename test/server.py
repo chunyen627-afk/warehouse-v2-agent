@@ -2584,6 +2584,20 @@ async def ws_handler(ws: WebSocket):
                 "user_text": user_text,
             })
 
+            # ── 刪除/下架（優先於 clarify）──
+            _delete_kws_ws = ("刪除", "下架", "砍掉", "移除", "刪掉")
+            if any(w in user_text for w in _delete_kws_ws):
+                import tools_v2 as _tv2_del_ws
+                kw = _extract_sku_keyword(user_text)
+                if not kw:
+                    for w in _delete_kws_ws: kw = user_text.replace(w, "").strip()
+                result = _tv2_del_ws.delete_item_start(keyword=kw)
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.012)
+                await send({"type": "done", "result": result})
+                continue
+
             # ── 列出所有商品（優先於引導）──
             if any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱")):
                 import warehouse as _W_list_ws
