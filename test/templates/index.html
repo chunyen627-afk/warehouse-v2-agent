@@ -666,6 +666,8 @@
   <button class="chip" data-action="show-related-menu" style="border-color:#805ad5;color:#6b46c1">🔗 連帶備貨</button>
   <button class="chip" data-action="expiring-direct" style="border-color:#dd6b20;color:#c05621">⏰ 到期警示</button>
   <button class="chip" data-action="agent-menu" style="border-color:#3182ce;color:#fff;background:linear-gradient(135deg,#3182ce,#5a67d8);font-weight:700">🤖 智慧管家</button>
+  <button class="chip" data-action="item-create" style="border-color:#38a169;color:#38a169">➕ 新增商品</button>
+  <button class="chip" data-action="item-delete" style="border-color:#e53e3e;color:#e53e3e">🗑 刪除商品</button>
 </div>
 
 <div id="messages"></div>
@@ -2115,6 +2117,12 @@ document.querySelectorAll('#chips-bar .chip').forEach(c => {
         { label: '🛠️ 跑月底盤點', query: '幫我跑一次月底盤點' },
       ]);
       currentBotMsg = null;
+    } else if (a === 'item-create') {
+      sendQuery('新增商品');
+    } else if (a === 'item-delete') {
+      currentBotMsg = appendBot('請輸入要刪除的商品名稱（例如：火箭）');
+      currentBotMsg = null;
+      $('input-text').focus();
     }
   };
 });
