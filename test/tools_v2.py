@@ -1291,6 +1291,10 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                      r'\d+元', r'安全\d+', r'北\S*\d+', r'南\S*\d+', r'中\S*\d+', r'新增商品\s*']:
             _name = _re.sub(pat, '', _name).strip()
         if _name and _found_cat:
+            # 防呆：檢查同名
+            if any(it["name"] == _name for it in W.state().items):
+                return {"ok": True, "summary": f"⚠️ 商品「{_name}」已存在，請改用其他名稱。",
+                        "view": "item_create_step1", "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
             new_sku = _next_sku(_found_cat)
             pending = {
                 "name": _name, "category": _found_cat,
@@ -1306,6 +1310,12 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
 
     # 分步模式
     if step == 1:
+        # 防呆：檢查是否已有同名商品
+        existing = [it for it in W.state().items if it["name"] == name]
+        if existing:
+            return {"ok": True, "summary": f"⚠️ 商品「{name}」已存在（SKU: {existing[0]['sku_id']}），請改用其他名稱。",
+                    "view": "item_create_step1",
+                    "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
         return {"ok": True, "summary": f"已記錄商品名稱：「{name}」\n第二步：屬於哪一類？",
                 "view": "item_create_step2",
                 "data": {"step": 2, "name": name, "prompt": "請選擇類別"}}
