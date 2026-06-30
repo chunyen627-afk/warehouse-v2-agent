@@ -1319,10 +1319,10 @@ function renderViewCard(view, data, topSummary) {
         <div class="label">缺貨警示 (${warns.length} 項) — 按「撐幾天」排序</div>
         <table class="alert-table">
           <tr><th>商品</th><th>倉庫</th><th>現量</th><th>撐天</th><th>建議補</th></tr>
-          ${warns.slice(0, 15).map(w => {
+          ${warns.slice(0, 50).map(w => {
             const days = w.days_left;
             const daysCls = days <= 3 ? 'critical' : '';
-            const daysTxt = days >= 60 ? '60+' : (days + '天');
+            const daysTxt = days >= 999 ? '-' : (days >= 60 ? '60+' : (days + '天'));
             return `
             <tr class="${days <= 7 ? 'critical' : ''}">
               <td>${w.name}<div style="font-size:11px;color:var(--muted)">${w.category_label}</div></td>
