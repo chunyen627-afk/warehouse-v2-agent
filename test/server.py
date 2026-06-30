@@ -2127,6 +2127,13 @@ async def api_query(req: Request):
         func_name = "list_low_stock"
         func_args = {}
 
+    # ── dispatch 攔截：「哪個最多/庫存排行」→ list_hot_items stock ──
+    _stock_rank_kws = ("哪個", "哪個東西", "庫存最多", "數量最多", "哪個最多", "存貨最多", "東西最多")
+    if any(w in user_text for w in _stock_rank_kws) and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷")):
+        log.info(f"[dispatch] 庫存排行攔截: {user_text!r} → list_hot_items(stock)")
+        func_name = "list_hot_items"
+        func_args = {"rank_type": "stock"}
+
     # ── dispatch 攔截：「那個XX」被 intent_clf 誤判 query_related_items / search_log ──
     _descriptive_kws = ("的那個", "用的那個", "的那台", "的那個", "用的", "刷牙", "擦身體", "洗衣服")
     if func_name in ("query_related_items", "search_log") and any(w in user_text for w in _descriptive_kws):

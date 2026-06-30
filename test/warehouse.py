@@ -821,6 +821,36 @@ def list_hot_items(
 ) -> dict:
     """5. 熱銷 / 滯銷排行"""
     s = state()
+    # ── 庫存排行（不看出貨，只看現有庫存量）──
+    if rank_type == "stock":
+        cat_label = CATEGORY_LABEL.get(category, "") if category else ""
+        rankings = []
+        for it in s.items:
+            if category and it["category"] != category:
+                continue
+            total_qty, _ = _sku_total_stock(it["sku_id"], "all")
+            rankings.append({
+                "sku_id": sku, "name": it["name"],
+                "category": it["category"],
+                "category_label": CATEGORY_LABEL.get(it["category"], it["category"]),
+                "stock_qty": total_qty,
+                "unit_price": it["unit_price"],
+                "stock_value": total_qty * it["unit_price"],
+            })
+        rankings.sort(key=lambda r: -r["stock_qty"])
+        top = rankings[:10]
+        if top:
+            scope = f"{cat_label}類" if cat_label else "全類別"
+            top_item = top[0]
+            summary = (f"📦 {scope}庫存排行 TOP {len(top)}\n"
+                       f"第 1 名: {top_item['name']}（庫存 {top_item['stock_qty']:,} 件，"
+                       f"價值 NT$ {top_item['stock_value']:,}）")
+        else:
+            summary = "目前沒有庫存資料"
+        return {"ok": True, "summary": summary, "view": "hot_items",
+                "data": {"rank_type": "stock", "rank_label": "庫存排行",
+                         "category": category, "rankings": top}}
+
     if rank_type not in ("hot", "slow"):
         rank_type = "hot"
     if period not in ("this_week", "this_month"):
