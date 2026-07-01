@@ -2372,8 +2372,12 @@ async def api_query(req: Request):
         return JSONResponse(result)
 
     # ── dispatch 攔截：「哪個最多/庫存排行」→ list_hot_items stock ──
+    # 「哪個」單字太寬，會誤傷「北倉跟南倉哪個庫存多」這類倉庫比較句（compare_warehouses）。
+    # 判別特徵：兩倉比較句一定會提到「倉」（北倉/南倉/幾個倉），單一商品排行榜問句不會提「倉」。
     _stock_rank_kws = ("哪個", "哪個東西", "庫存最多", "數量最多", "哪個最多", "存貨最多", "東西最多")
-    if any(w in user_text for w in _stock_rank_kws) and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷")):
+    if (any(w in user_text for w in _stock_rank_kws)
+            and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷"))
+            and "倉" not in user_text):
         log.info(f"[dispatch] 庫存排行攔截: {user_text!r} → list_hot_items(stock)")
         func_name = "list_hot_items"
         func_args = {"rank_type": "stock"}
@@ -3162,8 +3166,12 @@ async def ws_handler(ws: WebSocket):
                     continue
 
                 # ── dispatch-ws：庫存排行 / 口語 pattern 攔截 ──
+                # 「哪個」單字太寬，會誤傷「北倉跟南倉哪個庫存多」這類倉庫比較句（compare_warehouses）。
+                # 判別特徵：兩倉比較句一定會提到「倉」，單一商品排行榜問句不會。
                 _stock_rank_kws_ws = ("哪個", "哪個東西", "庫存最多", "數量最多", "哪個最多", "存貨最多", "東西最多")
-                if any(w in user_text for w in _stock_rank_kws_ws) and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷")):
+                if (any(w in user_text for w in _stock_rank_kws_ws)
+                        and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷"))
+                        and "倉" not in user_text):
                     log.info(f"[dispatch-ws] 庫存排行攔截: {user_text!r} → list_hot_items(stock)")
                     func_name = "list_hot_items"
                     func_args = {"rank_type": "stock"}
