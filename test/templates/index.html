@@ -226,6 +226,23 @@
     transition: all .15s;
   }
   #send-btn:disabled { opacity: .5; cursor: not-allowed; }
+  #send-btn.sending {
+    opacity: 1;
+    background: var(--muted);
+    animation: send-spin 1s linear infinite;
+  }
+  @keyframes send-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .send-status {
+    display: none;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    padding: 2px 0 0;
+  }
+  .send-status.show { display: block; }
 
   /* 麥克風 (Web Speech API) */
   .mic-btn {
@@ -688,6 +705,7 @@
   </button>
   <button id="send-btn">▶</button>
 </div>
+<div class="send-status" id="send-status">⏳ 處理中，請稍候…</div>
 
 <script>
 // ── 關閉頁面（防誤觸）──
@@ -843,12 +861,22 @@ let isSending = false;
 let currentBotMsg = null;
 let lastBotAnchor = null;   // 最後插入在訊息泡後的元素(卡片)、follow-up 鈕接在它後面
 
+// 統一管理送出中狀態：按鈕轉圈 + 文字提示，避免使用者以為卡住而重複操作
+function setSending(sending) {
+  isSending = sending;
+  const btn = $('send-btn');
+  btn.disabled = sending;
+  btn.classList.toggle('sending', sending);
+  btn.textContent = sending ? '⟳' : '▶';
+  $('send-status').classList.toggle('show', sending);
+}
+
 function connectWS() {
   if (ws) { try { ws.close(); } catch {} }
   if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
   const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${wsProto}//${location.host}/ws`);
-  ws.onopen = () => { console.log('[ws] open'); isSending = false; };
+  ws.onopen = () => { console.log('[ws] open'); setSending(false); };
   ws.onclose = () => { console.log('[ws] close'); scheduleReconnect(); };
   ws.onerror = e => { console.log('[ws] error', e); try { ws.close(); } catch {} };
   ws.onmessage = ev => {
@@ -1189,8 +1217,7 @@ function handleMessage(msg) {
     if (currentBotMsg) currentBotMsg.remove();
     appendBot(msg.text, 'rejected');
     currentBotMsg = null;
-    isSending = false;
-    $('send-btn').disabled = false;
+    setSending(false);
     return;
   }
   if (msg.type === 'tool_call') {
@@ -1236,8 +1263,7 @@ function handleMessage(msg) {
       suggestEl.style.display = 'none';
     }
     _rcaCardId = null;
-    isSending = false;
-    $('send-btn').disabled = false;
+    setSending(false);
     return;
   }
   if (msg.type === 'done') {
@@ -1263,8 +1289,7 @@ function handleMessage(msg) {
     if (view === 'agent_rca' && lastBotAnchor && lastBotAnchor.id) {
       _rcaCardId = lastBotAnchor.id;
     }
-    isSending = false;
-    $('send-btn').disabled = false;
+    setSending(false);
     return;
   }
 }
@@ -2112,8 +2137,7 @@ function sendQuery(text) {
     setTimeout(() => sendQuery(text), 300);
     return;
   }
-  isSending = true;
-  $('send-btn').disabled = true;
+  setSending(true);
   appendUser(text);
   currentBotMsg = appendLoading();
   setTimeout(() => { if (currentBotMsg) currentBotMsg.innerHTML = ''; }, 50);
@@ -2127,8 +2151,7 @@ function sendDirectCall(func, args) {
     setTimeout(() => sendDirectCall(func, args), 300);
     return;
   }
-  isSending = true;
-  $('send-btn').disabled = true;
+  setSending(true);
   const labelMap = { list_low_stock: '🚨 庫存警示', list_expiring_items: '⏰ 到期警示' };
   appendUser(labelMap[func] || func);
   currentBotMsg = appendLoading();
