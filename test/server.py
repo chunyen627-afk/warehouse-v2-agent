@@ -918,14 +918,6 @@ def _extract_sku_keyword(text: str) -> str:
 def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> tuple[str, dict, bool]:
     """校正規則。回 (corrected_name, corrected_args, hard_corrected)。
     hard_corrected=True 表示有確定性規則命中，C18 不應再覆蓋。"""
-    # 排程/警示管理工具：Pre-C 已確定，不再校正
-    # set_alert / schedule / compare 已被 Pre-C 校正過，不需再過 C1-C18
-    # query_movement 不加在此，因為 C8 RCA 校正需要能 override 它
-    # set_alert 不 early-return —「庫存警示」可能被模型誤判 set_alert，需經 C3 校正
-    if func_name in ("set_schedule", "list_schedules", "delete_schedule",
-                     "list_alerts", "delete_alert",
-                     "compare_warehouses"):
-        return func_name, func_args, True
     text_low = user_text.lower()
 
     # C13b：即時進出貨意圖 → create_movement（輕量版，不依賴模型認得這個新 function，
@@ -958,9 +950,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _has_explicit_qty = bool(_qty13b_m)
 
     if func_name != "create_movement" and _has_movement_word and _has_explicit_qty:
+        # 句子同時提到兩個以上倉別時（如「北倉跟南倉的藍牙耳機各出貨了10個跟15個」），
+        # 單一 create_movement 呼叫無法表達「哪個倉對應哪個數量」，硬猜容易猜錯真的
+        # 異動錯倉庫。刻意不解析出 warehouse（留空），讓 tools_v2.create_movement
+        # 既有的「倉別不明 → clarify」分支接手，請使用者拆成一句一倉分別描述。
+        _wh_mentions13b = [w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
+                                        "南倉", "南區倉", "南區") if w in user_text]
+        _wh_keys13b = {w[0] for w in _wh_mentions13b}  # 北/中/南 去重
         _dir13b = "in" if any(w in user_text for w in _movement_in_words) else "out"
-        _wh13b = next((w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
-                                    "南倉", "南區倉", "南區") if w in user_text), "")
+        _wh13b = _wh_mentions13b[0] if len(_wh_keys13b) <= 1 and _wh_mentions13b else ""
         _qty13b = _qty13b_m.group(1)
         # 先剝掉進出貨專屬的動詞/時間詞/數量+量詞（這些不在共用的
         # _ALL_KEYWORD_NOISE 清單裡，因為那份清單是給查詢句設計的），
@@ -974,6 +972,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C13b] 進出貨意圖 → create_movement（原 {func_name}）kw={_kw13b!r} wh={_wh13b!r} dir={_dir13b} qty={_qty13b!r}")
         return "create_movement", {"keyword": _kw13b, "warehouse": _wh13b,
                                      "direction": _dir13b, "qty": _qty13b}, True
+
+    # 排程/警示管理工具：Pre-C 已確定，不再校正
+    # set_alert / schedule / compare 已被 Pre-C 校正過，不需再過 C1-C18
+    # query_movement 不加在此，因為 C8 RCA 校正需要能 override 它
+    # set_alert 不 early-return —「庫存警示」可能被模型誤判 set_alert，需經 C3 校正
+    if func_name in ("set_schedule", "list_schedules", "delete_schedule",
+                     "list_alerts", "delete_alert",
+                     "compare_warehouses"):
+        return func_name, func_args, True
 
     # ── C7: 到期意圖詞 → list_expiring_items(最高優先)──
     # C0：未知函式名 → 從 user_text 推斷最接近的已知函式
