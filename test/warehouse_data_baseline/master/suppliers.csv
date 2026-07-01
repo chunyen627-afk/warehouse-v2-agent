@@ -1,0 +1,7 @@
+﻿supplier_id,name,lead_time_days,categories
+SUP01,宏鼎電子,7,electronics
+SUP02,全廚實業,10,appliance_kitchen
+SUP03,鮮食物流,3,food_beverage
+SUP04,潔家日用,5,daily_goods
+SUP05,織品紡織,14,apparel
+SUP06,動能運動,9,sports

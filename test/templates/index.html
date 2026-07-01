@@ -15,6 +15,16 @@
   }
   #close-btn:hover { background: #e53e3e; }
 
+  /* 重置展示資料按鈕：低調、不搶眼，避免被觀眾誤點 */
+  #reset-demo-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(0,0,0,.15); color: rgba(255,255,255,.6); border: none;
+    font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .2s; vertical-align: middle; margin-left: 4px;
+  }
+  #reset-demo-btn:hover { background: rgba(0,0,0,.3); color: #fff; }
+
   :root {
     --bg:        #f5f7fa;
     --card:      #ffffff;
@@ -653,6 +663,7 @@
   <button id="alert-panel-btn" title="警示規則" onclick="toggleAlertPanel()">
     🔔 <span id="alert-badge" class="alert-badge" style="display:none">0</span>
   </button>
+  <button id="reset-demo-btn" title="重置展示資料（需密碼）" onclick="resetDemoData()">♻</button>
   <button id="close-btn" title="關閉頁面" onclick="closePage()">✕</button>
 </header>
 
@@ -708,6 +719,29 @@
 <div class="send-status" id="send-status">⏳ 處理中，請稍候…</div>
 
 <script>
+// ── 重置展示資料（需密碼，防止展場被玩爛回不去）──
+async function resetDemoData() {
+  const pwd = prompt('重置展示資料需要密碼（此動作將清除所有新增商品、進出貨紀錄、警示、排程，無法復原）：');
+  if (pwd === null) return;  // 取消
+  if (!confirm('再次確認：真的要重置展示資料嗎？')) return;
+  try {
+    const r = await fetch('/api/reset_demo', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: pwd}),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      alert('展示資料已重置，頁面將重新載入');
+      location.reload();
+    } else {
+      alert('重置失敗：' + (data.summary || data.error || '未知錯誤'));
+    }
+  } catch (e) {
+    alert('重置失敗：' + e);
+  }
+}
+
 // ── 關閉頁面（防誤觸）──
 function closePage() {
   if (confirm('確定要關閉倉管助理嗎？')) {
@@ -1640,6 +1674,29 @@ function renderViewCard(view, data, topSummary) {
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
         </div>
       </div>`;
+  } else if (view === 'movement_confirm') {
+    const dirColor = data.direction === 'in' ? 'var(--success)' : 'var(--accent)';
+    const dirIcon = data.direction === 'in' ? '📥' : '📤';
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header warn">${dirIcon} 確認${data.direction_label} — 請確認</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+            <tr><td>商品</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
+            <tr><td>倉別</td><td>${data.warehouse_label}</td></tr>
+            <tr><td>數量</td><td style="color:${dirColor};font-weight:600">${data.direction === 'in' ? '+' : '-'}${data.qty} 件</td></tr>
+            <tr><td>庫存變化</td><td>${data.before_qty} 件 → <b>${data.after_qty}</b> 件</td></tr>
+          </table>
+          <div class="hitl-meta">確認後將直接寫入庫存資料，重開伺服器或重整頁面不會消失。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_movement" data-payload='${JSON.stringify({pending:data})}'>✅ 確認${data.direction_label}</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
+  } else if (view === 'movement_done') {
+    card.innerHTML = `<div class="label">✅ ${data.direction_label}完成</div>
+      <div style="padding:8px;font-size:14px">${data.name} ${data.warehouse_label} 現有 <b>${data.after_qty}</b> 件</div>`;
   } else if (view === 'item_done') {
     // 新增/刪除商品後即時更新狀態列和異常橫幅
     refreshSnapshot();

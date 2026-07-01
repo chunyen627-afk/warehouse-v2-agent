@@ -350,6 +350,7 @@ _ALL_INTENT_WORDS = (
     "查", "看", "庫存", "查庫存", "還有多少", "有多少", "數量", "剩多少", "剩幾個",
     "多少", "幾個", "幾件", "多少個", "多少件",   # ← 補「多少」系列
     "進出", "進貨", "出貨", "異動", "移動", "移轉", "紀錄", "流向",
+    "進了", "出了", "到貨", "收貨", "入庫", "出庫", "賣掉", "銷貨",
     "缺貨", "低庫存", "不夠", "快沒", "即將缺貨", "需要補", "補貨",
     "熱銷", "賣得好", "最多", "暢銷", "滯銷", "賣不掉", "冷門",
     "到期", "過期", "快過期", "保存期", "效期",
@@ -1332,6 +1333,39 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                                  "交易", "採購", "主檔", "異動", "報告", "腳本") if k in user_text), "")
         log.info(f"[校正 C13] 檔案列表意圖 → list_files（原 {func_name}）")
         return "list_files", ({"area": area} if area else {}), True
+
+    # C13b：即時進出貨意圖 → create_movement（輕量版，不依賴模型認得這個新 function，
+    #   270M 沒訓練過 create_movement，靠關鍵字 + 正則抽參數，跟 list_files/set_alert 同模式）
+    #   「北倉進了藍牙耳機50件」「南倉出貨洗衣精20件」「進了咖啡豆30件」
+    #   跟「查詢過去進出貨紀錄」（query_movement）的關鍵字有重疊（進了/出貨），
+    #   判別特徵：下達指令一定有明確「數字+件」；查詢句常見疑問/回顧詞（本週/今天/多少/
+    #   什麼/怎樣/哪些/狀況），且通常沒有具體數量。兩個條件都要滿足才攔截，避免誤傷查詢句。
+    _movement_in_words = ("進了", "進貨", "到貨", "收貨", "入庫")
+    _movement_out_words = ("出貨", "出庫", "賣掉", "銷貨")
+    _movement_query_words = ("本週", "本月", "今天", "上週", "上個月", "最近",
+                              "多少", "什麼", "怎樣", "哪些", "狀況", "紀錄", "記錄")
+    _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
+    _has_explicit_qty = bool(__import__("re").search(r'\d+\s*件', user_text))
+    _looks_like_query = any(w in user_text for w in _movement_query_words)
+    if func_name != "create_movement" and _has_movement_word \
+            and _has_explicit_qty and not _looks_like_query:
+        import re as _re13b
+        _dir13b = "in" if any(w in user_text for w in _movement_in_words) else "out"
+        _wh13b = next((w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
+                                    "南倉", "南區倉", "南區") if w in user_text), "")
+        _qty13b_m = _re13b.search(r'(\d+)\s*件', user_text)
+        _qty13b = _qty13b_m.group(1) if _qty13b_m else ""
+        # 去掉倉別/方向詞/數量詞後剩下的當商品關鍵字
+        _kw13b = user_text
+        for _w in (_wh13b,) + _movement_in_words + _movement_out_words:
+            if _w:
+                _kw13b = _kw13b.replace(_w, "")
+        if _qty13b_m:
+            _kw13b = _kw13b.replace(_qty13b_m.group(0), "")
+        _kw13b = _kw13b.strip()
+        log.info(f"[校正 C13b] 進出貨意圖 → create_movement（原 {func_name}）kw={_kw13b!r} wh={_wh13b!r} dir={_dir13b} qty={_qty13b!r}")
+        return "create_movement", {"keyword": _kw13b, "warehouse": _wh13b,
+                                     "direction": _dir13b, "qty": _qty13b}, True
 
     # C14：警示設定意圖 → set_alert（第四金剛）
     #   「就通知我 / 設個提醒 / 警示我 / 低於X就告訴我」
@@ -2594,6 +2628,21 @@ async def reset():
     return JSONResponse({"ok": True, "snapshot": snap}, headers=NO_CACHE)
 
 
+@app.post("/api/reset_demo")
+async def reset_demo_data_api(req: Request):
+    """展示資料一鍵重置（獨立按鈕觸發，需密碼）。換回 warehouse_data_baseline/ 並清 session state。"""
+    import tools_v2
+    body = await req.json()
+    password = body.get("password", "")
+    res = tools_v2.commit_reset_demo_data(password=password, actor="user_confirmed")
+    if res.get("ok"):
+        _item_create_state.clear()
+        _item_delete_state.clear()
+        await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
+        log.info("[reset_demo] 展示資料已重置")
+    return JSONResponse(res, headers=NO_CACHE)
+
+
 @app.websocket("/ws/display")
 async def ws_display(ws: WebSocket):
     await ws.accept()
@@ -2674,6 +2723,10 @@ async def ws_handler(ws: WebSocket):
                     elif act == "delete_alert":
                         res = tools_v2.commit_delete_alert(
                             data.get("rule_id", ""), actor="user_confirmed", trace_id=trace_id)
+                    elif act == "create_movement":
+                        res = tools_v2.commit_movement(
+                            data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
+                        await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
                     else:
                         res = {"ok": False, "summary": "未知的確認動作", "view": "error", "data": {}}
                 except Exception as e:

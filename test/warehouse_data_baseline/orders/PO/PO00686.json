@@ -1,0 +1,13 @@
+{
+  "po_id": "PO00686",
+  "type": "PO",
+  "date": "2026-05-12",
+  "warehouse": "south",
+  "supplier": "SUP01",
+  "lines": [
+    {
+      "sku_id": "e10",
+      "order_qty": 77
+    }
+  ]
+}

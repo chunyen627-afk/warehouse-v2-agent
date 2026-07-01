@@ -1515,6 +1515,179 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
             "view": "item_done", "data": {"item": item, "trace_id": trace_id}}
 
 
+# ════════════════════════════════════════════════════════════
+# ⑧ create_movement — 自然語言即時進出貨（輕量版，非完整 PO/SO 單據）
+#    「北倉進了藍牙耳機50件」/「南倉出貨洗衣精20件」→ HITL 確認 → 真寫入
+#    stock.csv + transactions/，重開 server / 網頁重整不會消失。
+# ════════════════════════════════════════════════════════════
+def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
+                     qty: str = "") -> dict:
+    """觸發進出貨流程：找商品/倉別 → 算庫存變化 → 回確認卡（不執行寫入）。"""
+    if not keyword:
+        return W._err("請說明要異動哪個商品，例如「北倉進了藍牙耳機50件」")
+
+    scored = W.match_items(keyword)
+    if not scored:
+        return W._err(f"找不到商品「{keyword}」，請確認商品名稱")
+    # 分數斷層過濾（同 warehouse.query_inventory 的邏輯）：避免共用規格 token
+    # （如「1L」「男款」）讓不相干商品低分命中、誤觸發多筆 clarify。
+    if len(scored) > 1:
+        top_score = scored[0]["score"]
+        scored = [m for m in scored if m["score"] * 2 >= top_score]
+    matches = [m["item"] for m in scored]
+    if len(matches) > 1:
+        opts = [it["name"] for it in matches[:5]]
+        return {"ok": True,
+                "summary": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想異動哪個？",
+                "view": "clarify",
+                "data": {"question": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想異動哪個？",
+                         "options": [f"{n} {warehouse or ''}{direction or ''}{qty or ''}".strip() for n in opts],
+                         "hint": "請輸入完整商品名稱重新描述"}}
+    item = matches[0]
+    sku = item["sku_id"]
+
+    wh = (warehouse or "").strip()
+    _WH_ALIASES = {"north": "north", "北": "north", "北倉": "north", "北區倉": "north", "北區": "north",
+                   "central": "central", "中": "central", "中倉": "central", "中區倉": "central", "中區": "central",
+                   "south": "south", "南": "south", "南倉": "south", "南區倉": "south", "南區": "south"}
+    wh_key = _WH_ALIASES.get(wh, "")
+    if not wh_key:
+        return {"ok": True, "summary": f"「{item['name']}」要異動哪個倉？",
+                "view": "clarify",
+                "data": {"question": f"「{item['name']}」要異動哪個倉？",
+                         "options": [f"北倉{direction or ''}{item['name']}{qty or ''}",
+                                     f"中倉{direction or ''}{item['name']}{qty or ''}",
+                                     f"南倉{direction or ''}{item['name']}{qty or ''}"],
+                         "hint": "請輸入完整描述，例如「北倉進了{}{}件」".format(item['name'], qty or '50')}}
+
+    dir_key = "in" if any(w in direction for w in ("進", "入", "到貨", "收貨", "in")) else \
+              "out" if any(w in direction for w in ("出", "出貨", "出庫", "賣", "out")) else ""
+    if not dir_key:
+        return W._err(f"請說明是「進貨」還是「出貨」，例如「{wh}{item['name']}進了{qty or 50}件」")
+
+    try:
+        qty_val = int(str(qty).strip() or 0)
+    except ValueError:
+        qty_val = 0
+    if qty_val <= 0:
+        return W._err("請說明數量，例如「進了50件」")
+
+    s = W.state()
+    current_qty = s.stock.get(wh_key, {}).get(sku, 0)
+    new_qty = current_qty + qty_val if dir_key == "in" else current_qty - qty_val
+
+    if dir_key == "out" and new_qty < 0:
+        return {"ok": False,
+                "summary": f"⚠️ 庫存不足，無法出貨。「{item['name']}」{WH_LABEL_MAP[wh_key]}目前僅 {current_qty} 件，不足 {qty_val} 件。",
+                "view": "error", "data": {}}
+
+    wh_label = WH_LABEL_MAP[wh_key]
+    dir_label = "進貨" if dir_key == "in" else "出貨"
+    sign = "+" if dir_key == "in" else "-"
+    summary = (f"📦 確認{dir_label}\n"
+               f"商品：{item['name']}（{sku}）\n"
+               f"倉別：{wh_label}\n"
+               f"數量：{sign}{qty_val} 件\n"
+               f"目前庫存：{current_qty} 件 → {dir_label}後：{new_qty} 件")
+    return {"ok": True, "summary": summary, "view": "movement_confirm",
+            "data": {"pending": True, "sku": sku, "name": item["name"], "warehouse": wh_key,
+                     "warehouse_label": wh_label, "direction": dir_key, "direction_label": dir_label,
+                     "qty": qty_val, "before_qty": current_qty, "after_qty": new_qty}}
+
+
+WH_LABEL_MAP = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
+
+
+def commit_movement(pending: dict, actor: str = "user_confirmed",
+                     trace_id: str | None = None) -> dict:
+    """HITL 確認後真正寫入 stock.csv + transactions/ + 熱更新記憶體。"""
+    import shutil
+    dd = _data_dir()
+    ts = datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"mv-{ts}"
+    p = pending
+    sku, wh_key, dir_key, qty_val = p["sku"], p["warehouse"], p["direction"], p["qty"]
+
+    # 1. 更新 stock.csv（找到既有那行、改數字；沒有就新增一行）
+    stock_path = dd / "master" / "stock.csv"
+    shutil.copy2(stock_path, str(stock_path) + ".bak")
+    rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
+    found = False
+    for r in rows:
+        if r["warehouse"] == wh_key and r["sku_id"] == sku:
+            r["qty"] = str(p["after_qty"])
+            found = True
+            break
+    if not found:
+        rows.append({"warehouse": wh_key, "sku_id": sku, "qty": str(p["after_qty"])})
+    with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=["warehouse", "sku_id", "qty"])
+        w.writeheader(); w.writerows(rows)
+
+    # 2. 補一筆 transactions/{today}_{in|out}.csv（稽核軌跡）
+    snap_date = W.state().snapshot_date or ts[:10]
+    tx_dir = dd / "transactions"
+    tx_dir.mkdir(parents=True, exist_ok=True)
+    tx_path = tx_dir / f"{snap_date}_{dir_key}.csv"
+    is_new = not tx_path.exists()
+    with open(tx_path, "a", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        if is_new:
+            w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
+        w.writerow([snap_date, sku, wh_key, dir_key, qty_val])
+
+    # 3. audit log
+    audit_dir = dd / "audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                            "action": "create_movement", "sku": sku, "warehouse": wh_key,
+                            "direction": dir_key, "qty": qty_val,
+                            "before": p["before_qty"], "after": p["after_qty"]},
+                           ensure_ascii=False) + "\n")
+
+    # 4. 熱更新記憶體
+    s = W.state()
+    s.stock.setdefault(wh_key, {})[sku] = p["after_qty"]
+
+    return {"ok": True,
+            "summary": f"✅ 已記錄{p['direction_label']}。{p['name']} {p['warehouse_label']}現有 {p['after_qty']} 件。",
+            "view": "movement_done", "data": {"trace_id": trace_id, **p}}
+
+
+# ════════════════════════════════════════════════════════════
+# ⑨ reset_demo_data — 展示資料一鍵重置（防止展場被玩爛回不去）
+#    warehouse_data_baseline/ 是展前建立的乾淨快照，重置 = 整個資料夾換回去。
+#    不走對話式 dispatch，走前端獨立按鈕 + 密碼驗證（server.py /api/reset_demo）。
+# ════════════════════════════════════════════════════════════
+_RESET_PASSWORD = "0000"
+
+
+def commit_reset_demo_data(password: str = "", actor: str = "user_confirmed",
+                            trace_id: str | None = None) -> dict:
+    """密碼驗證通過後，把 warehouse_data/ 整個換回 warehouse_data_baseline/ 並重新載入 State。"""
+    if password != _RESET_PASSWORD:
+        return W._err("密碼錯誤，無法重置")
+
+    import shutil
+    ts = datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"reset-{ts}"
+    root = Path(__file__).parent
+    baseline = root / "warehouse_data_baseline"
+    current = root / "warehouse_data"
+    if not baseline.exists():
+        return W._err("找不到基準快照 warehouse_data_baseline/，無法重置")
+
+    shutil.rmtree(current)
+    shutil.copytree(baseline, current)
+
+    # 重新載入 State（跟開機 init() 用同一份 seed_path）
+    W.reset()
+
+    return {"ok": True, "summary": "✅ 展示資料已重置回初始狀態。",
+            "view": "reset_done", "data": {"trace_id": trace_id}}
+
+
 # 原始 60 項商品的 SKU 白名單（不可刪除）
 _PROTECTED_SKUS = {
     f"{p}{i:02d}"

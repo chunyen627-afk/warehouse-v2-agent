@@ -1529,6 +1529,7 @@ def _register_v2_tools():
         FUNCTIONS["commit_create_item"]  = tools_v2.commit_create_item
         FUNCTIONS["delete_item_start"]   = tools_v2.delete_item_start
         FUNCTIONS["commit_delete_item"]  = tools_v2.commit_delete_item
+        FUNCTIONS["create_movement"]     = tools_v2.create_movement    # 即時進出貨（輕量版）
     except Exception as e:
         _log.warning(f"[v2] 三金剛註冊失敗：{e}")
 

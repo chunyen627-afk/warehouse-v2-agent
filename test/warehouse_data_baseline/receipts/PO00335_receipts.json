@@ -1,0 +1,29 @@
+[
+  {
+    "receipt_id": "GR-PO00335-f01",
+    "po_id": "PO00335",
+    "sku_id": "f01",
+    "received_qty": 21,
+    "receipt_date": "2026-04-04",
+    "warehouse": "north",
+    "note": ""
+  },
+  {
+    "receipt_id": "GR-PO00335-f02",
+    "po_id": "PO00335",
+    "sku_id": "f02",
+    "received_qty": 31,
+    "receipt_date": "2026-04-05",
+    "warehouse": "north",
+    "note": ""
+  },
+  {
+    "receipt_id": "GR-PO00335-f07",
+    "po_id": "PO00335",
+    "sku_id": "f07",
+    "received_qty": 62,
+    "receipt_date": "2026-04-04",
+    "warehouse": "north",
+    "note": ""
+  }
+]

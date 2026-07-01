@@ -1,0 +1,10 @@
+﻿date,sku_id,warehouse,direction,qty
+2026-04-26,a08,central,in,53
+2026-04-26,c04,central,in,78
+2026-04-26,s03,central,in,61
+2026-04-26,f09,north,in,67
+2026-04-26,f09,north,in,51
+2026-04-26,e08,south,in,30
+2026-04-26,f04,south,in,33
+2026-04-26,f06,south,in,74
+2026-04-26,s09,south,in,34
