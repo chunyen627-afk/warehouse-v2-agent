@@ -351,6 +351,7 @@ _ALL_INTENT_WORDS = (
     "多少", "幾個", "幾件", "多少個", "多少件",   # ← 補「多少」系列
     "進出", "進貨", "出貨", "異動", "移動", "移轉", "紀錄", "流向",
     "進了", "出了", "到貨", "收貨", "入庫", "出庫", "賣掉", "銷貨",
+    "補了", "來貨了", "來貨", "賣了", "出貨了", "進了貨",
     "缺貨", "低庫存", "不夠", "快沒", "即將缺貨", "需要補", "補貨",
     "熱銷", "賣得好", "最多", "暢銷", "滯銷", "賣不掉", "冷門",
     "到期", "過期", "快過期", "保存期", "效期",
@@ -526,6 +527,24 @@ def _detect_clarify(user_text: str) -> dict | None:
     if any(w in t for w in _RCA_INTENT_WORDS):
         return None
 
+    # 「庫存加/減N件」語意本身模糊——可能是改安全庫存設定值，也可能是進出貨事件，
+    # 沒有明確進出貨動詞（進了/出貨等）時不要硬猜，讓訪客自己選（user 2026-07-01 要求）。
+    import re as _re_c13c
+    _movement_verbs_c13c = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
+                            "來貨了", "來貨", "出貨了", "出貨", "出庫", "賣掉了",
+                            "賣掉", "賣了", "銷貨", "出了")
+    _qty_m_c13c = _re_c13c.search(r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒)', t)
+    if (_qty_m_c13c and "庫存" in t and any(w in t for w in ("加", "減"))
+            and not any(w in t for w in _movement_verbs_c13c)):
+        kw = _extract_sku_keyword(t) or ""
+        qty = _qty_m_c13c.group(1)
+        return {
+            "question": f"「{kw or t}」要修改安全庫存設定，還是記一筆進出貨？",
+            "options": [f"修改「{kw}」的安全庫存設定", f"記一筆「{kw}」進貨 {qty} 件",
+                        f"記一筆「{kw}」出貨 {qty} 件"],
+            "hint": "輸入數字選擇，或直接輸入完整描述",
+        }
+
     has_intent = any(w in t for w in _ALL_INTENT_WORDS)
 
     # 剝通用填充詞，避免「幫我查」的「幫我」誤觸商品 match
@@ -553,6 +572,11 @@ def _detect_clarify(user_text: str) -> dict | None:
     # 如果也含類別或商品關鍵字 → 不是純倉庫查詢，不攔
     _cat_hint = next((zh for zh in ("電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動") if zh in t), None)
     _has_product = bool(W.match_items(t_clean)) if t_clean else False
+    # match_items 只做整句子字串比對，句子含雜訊（動詞/數量詞）時比對不到
+    # （「咖啡機剛進100包到北倉」match_items 抓不到「咖啡機」）。
+    # 用 _extract_sku_keyword 的多層 fuzzy 邏輯再試一次，比較不會漏判。
+    if not _has_product:
+        _has_product = bool(_extract_sku_keyword(t))
     if matched_wh and len(matched_whs) < 2 and not has_intent and not _cat_hint and not _has_product:
         return {
             "question": f"你想查「{matched_wh}」的哪個項目？",
@@ -903,6 +927,53 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                      "compare_warehouses"):
         return func_name, func_args, True
     text_low = user_text.lower()
+
+    # C13b：即時進出貨意圖 → create_movement（輕量版，不依賴模型認得這個新 function，
+    #   270M 沒訓練過 create_movement，靠關鍵字 + 正則抽參數，跟 list_files/set_alert 同模式）
+    #   放在所有規則最前面（優先權最高）：「藍牙喇叭庫存加50組」這種句子含「庫存」+
+    #   「加」，原本會被後面的 C9（→ manage_config）搶先攔走，導致 C13b 永遠跑不到。
+    #   進出貨意圖的判定條件（明確商品名+方向詞+具體數字+量詞）已經夠具體，不會誤傷
+    #   真正的 manage_config/query_movement 意圖，可以放心搶最高優先權。
+    #   商品名抽取沿用既有的 _extract_sku_keyword()（多層 fuzzy 比對，比自己 replace
+    #   噪音詞可靠很多，同一套邏輯 search_log/query_inventory 都在用）。
+    _movement_in_words = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
+                          "來貨了", "來貨", "進了貨")
+    _movement_out_words = ("出貨了", "出貨", "出庫", "賣掉了", "賣掉", "賣了",
+                           "銷貨", "出了")
+    _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
+    # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
+    # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
+    import re as _re13b_single
+    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}\d+\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒))', user_text)
+    if _single_dir_m and not _has_movement_word:
+        _has_movement_word = True
+        if _single_dir_m.group(0) == "進":
+            _movement_in_words = _movement_in_words + ("進",)
+        else:
+            _movement_out_words = _movement_out_words + ("出",)
+    # 量詞放寬：件/個/條/支/台/箱/包/瓶/罐/組/雙/套/盒；數字可能在量詞前或後
+    import re as _re13b_pre
+    _qty_re = r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒)'
+    _qty13b_m = _re13b_pre.search(_qty_re, user_text)
+    _has_explicit_qty = bool(_qty13b_m)
+
+    if func_name != "create_movement" and _has_movement_word and _has_explicit_qty:
+        _dir13b = "in" if any(w in user_text for w in _movement_in_words) else "out"
+        _wh13b = next((w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
+                                    "南倉", "南區倉", "南區") if w in user_text), "")
+        _qty13b = _qty13b_m.group(1)
+        # 先剝掉進出貨專屬的動詞/時間詞/數量+量詞（這些不在共用的
+        # _ALL_KEYWORD_NOISE 清單裡，因為那份清單是給查詢句設計的），
+        # 剩下的再交給 _extract_sku_keyword 做既有的多層 fuzzy 商品名比對。
+        _pre_clean = user_text.replace(_qty13b_m.group(0), "")
+        for _w in (_movement_in_words + _movement_out_words +
+                   ("今天", "今日", "本週", "這週", "本月", "這個月", "上午", "早上",
+                    "剛剛", "剛才", "登記", "記一下", "麻煩", "幫我", "請", "沒登記")):
+            _pre_clean = _pre_clean.replace(_w, "")
+        _kw13b = _extract_sku_keyword(_pre_clean) or _extract_sku_keyword(user_text) or ""
+        log.info(f"[校正 C13b] 進出貨意圖 → create_movement（原 {func_name}）kw={_kw13b!r} wh={_wh13b!r} dir={_dir13b} qty={_qty13b!r}")
+        return "create_movement", {"keyword": _kw13b, "warehouse": _wh13b,
+                                     "direction": _dir13b, "qty": _qty13b}, True
 
     # ── C7: 到期意圖詞 → list_expiring_items(最高優先)──
     # C0：未知函式名 → 從 user_text 推斷最接近的已知函式
@@ -1333,39 +1404,6 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                                  "交易", "採購", "主檔", "異動", "報告", "腳本") if k in user_text), "")
         log.info(f"[校正 C13] 檔案列表意圖 → list_files（原 {func_name}）")
         return "list_files", ({"area": area} if area else {}), True
-
-    # C13b：即時進出貨意圖 → create_movement（輕量版，不依賴模型認得這個新 function，
-    #   270M 沒訓練過 create_movement，靠關鍵字 + 正則抽參數，跟 list_files/set_alert 同模式）
-    #   「北倉進了藍牙耳機50件」「南倉出貨洗衣精20件」「進了咖啡豆30件」
-    #   跟「查詢過去進出貨紀錄」（query_movement）的關鍵字有重疊（進了/出貨），
-    #   判別特徵：下達指令一定有明確「數字+件」；查詢句常見疑問/回顧詞（本週/今天/多少/
-    #   什麼/怎樣/哪些/狀況），且通常沒有具體數量。兩個條件都要滿足才攔截，避免誤傷查詢句。
-    _movement_in_words = ("進了", "進貨", "到貨", "收貨", "入庫")
-    _movement_out_words = ("出貨", "出庫", "賣掉", "銷貨")
-    _movement_query_words = ("本週", "本月", "今天", "上週", "上個月", "最近",
-                              "多少", "什麼", "怎樣", "哪些", "狀況", "紀錄", "記錄")
-    _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
-    _has_explicit_qty = bool(__import__("re").search(r'\d+\s*件', user_text))
-    _looks_like_query = any(w in user_text for w in _movement_query_words)
-    if func_name != "create_movement" and _has_movement_word \
-            and _has_explicit_qty and not _looks_like_query:
-        import re as _re13b
-        _dir13b = "in" if any(w in user_text for w in _movement_in_words) else "out"
-        _wh13b = next((w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
-                                    "南倉", "南區倉", "南區") if w in user_text), "")
-        _qty13b_m = _re13b.search(r'(\d+)\s*件', user_text)
-        _qty13b = _qty13b_m.group(1) if _qty13b_m else ""
-        # 去掉倉別/方向詞/數量詞後剩下的當商品關鍵字
-        _kw13b = user_text
-        for _w in (_wh13b,) + _movement_in_words + _movement_out_words:
-            if _w:
-                _kw13b = _kw13b.replace(_w, "")
-        if _qty13b_m:
-            _kw13b = _kw13b.replace(_qty13b_m.group(0), "")
-        _kw13b = _kw13b.strip()
-        log.info(f"[校正 C13b] 進出貨意圖 → create_movement（原 {func_name}）kw={_kw13b!r} wh={_wh13b!r} dir={_dir13b} qty={_qty13b!r}")
-        return "create_movement", {"keyword": _kw13b, "warehouse": _wh13b,
-                                     "direction": _dir13b, "qty": _qty13b}, True
 
     # C14：警示設定意圖 → set_alert（第四金剛）
     #   「就通知我 / 設個提醒 / 警示我 / 低於X就告訴我」
