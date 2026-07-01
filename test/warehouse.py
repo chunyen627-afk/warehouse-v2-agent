@@ -15,6 +15,7 @@ warehouse.py — 倉管業務邏輯 (v3.8)
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from collections import defaultdict
@@ -1539,8 +1540,20 @@ def execute(name: str, args: dict) -> dict:
     fn = FUNCTIONS.get(name)
     if not fn:
         return _err(f"不支援的 function: {name}")
+    args = args or {}
+    # 270M 偶爾會抽出該工具不接受的參數名（例如 list_files 誤抽 keyword）。
+    # 過濾掉函式簽章不認識的 key，避免直接 TypeError，讓函式用預設值繼續跑。
     try:
-        return fn(**(args or {}))
+        sig_params = inspect.signature(fn).parameters
+        if not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()):
+            unknown = set(args) - set(sig_params)
+            if unknown:
+                _log.warning(f"[warehouse] {name}: 忽略未知參數 {unknown}")
+                args = {k: v for k, v in args.items() if k in sig_params}
+    except (TypeError, ValueError):
+        pass  # 拿不到簽章（如 C extension）就照原樣傳，交給下面的例外處理
+    try:
+        return fn(**args)
     except (ValueError, KeyError, TypeError) as e:
         _log.warning(f"[warehouse] {name}({args}) 參數錯誤: {e}")
         return _err(f"查詢參數有誤：{e}")

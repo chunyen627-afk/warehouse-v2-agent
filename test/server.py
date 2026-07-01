@@ -1546,7 +1546,9 @@ def _resolve_followup(user_text: str, func_name: str, func_args: dict):
     kw_is_proxy = any(w in raw_kw for w in _bad_kw_words)
     has_kw = bool(raw_kw) and not kw_is_proxy
     # 偵測功能切換（「它的進出紀錄呢？」「進出紀錄呢」「這個快到期嗎？」）
-    new_func = next((v for k, v in _CTX_FUNC_HINT.items() if k in user_text), None)
+    # 「紀錄檔」是問檔案列表（list_files），不是問進出紀錄，排除掉避免誤判成功能切換。
+    _ctx_func_hint_text = user_text.replace("紀錄檔", "").replace("記錄檔", "")
+    new_func = next((v for k, v in _CTX_FUNC_HINT.items() if k in _ctx_func_hint_text), None)
 
     # 有功能切換詞 or 追問代詞，且沒有有效 keyword → 介入
     if not (is_followup or new_func) or has_kw:
@@ -2118,18 +2120,23 @@ async def api_query(req: Request):
             prompt = build_prompt(user_text)
             # llm_lock 序列化所有對 LLM 物件的存取，避免 HTTP/WS 兩路徑並發呼叫
             # 同一個 llama_cpp 實例造成 KV cache 競爭、底層 GGML_ASSERT 崩潰。
-            async with llm_lock:
-                if hasattr(LLM, "reset"):
-                    LLM.reset()
-                r = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        LLM, prompt,
-                        max_tokens=160, temperature=0.0,
-                        stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
-                        echo=False, stream=False,
-                    ),
-                    timeout=25.0,
-                )
+            # 等待取得鎖本身也要有 timeout，否則若鎖被異常長時間佔用（例如另一
+            # 請求卡住），這裡會無限期排隊、前端永遠停在 loading 狀態沒有提示。
+            async with asyncio.timeout(40.0):
+                async with llm_lock:
+                    if hasattr(LLM, "reset"):
+                        LLM.reset()
+                    r = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            LLM, prompt,
+                            max_tokens=160, temperature=0.0,
+                            stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
+                            echo=False, stream=False,
+                        ),
+                        timeout=25.0,
+                    )
+        except (asyncio.TimeoutError, TimeoutError):
+            return JSONResponse({"ok": False, "view": "error", "summary": "系統忙碌中，請稍後再試"})
         except Exception as e:
             return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
 
@@ -2881,32 +2888,36 @@ async def ws_handler(ws: WebSocket):
 
             prompt = build_prompt(user_text)
 
-            async with llm_lock:
-                if hasattr(LLM, "reset"):
-                    LLM.reset()
-                try:
-                    r = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            LLM, prompt,
-                            max_tokens=MAX_TOKENS,
-                            temperature=TEMPERATURE,
-                            stop=GEMMA_STOP,
-                            echo=False,
-                        ),
-                        timeout=30.0,
-                    )
-                except asyncio.TimeoutError:
-                    log.warning(f"[timeout] vid={vid} 推理超時: {user_text!r}")
-                    await send({
-                        "type": "error",
-                        "text": "系統有點忙、請稍候再試（試試更簡短的講法、例如「藍牙耳機庫存」）",
-                    })
-                    continue
-                except Exception as e:
-                    log.error(f"[llm-error] vid={vid} {type(e).__name__}: {e}", exc_info=True)
-                    await send({"type": "error", "text": "推理失敗、請重試"})
-                    continue
+            # 等待取得 llm_lock 本身也要有 timeout（見 api_query 同樣的修法），
+            # 否則鎖被異常長時間佔用時，這裡會無限期排隊、前端永遠停在 loading。
+            try:
+                async with asyncio.timeout(45.0):
+                    async with llm_lock:
+                        if hasattr(LLM, "reset"):
+                            LLM.reset()
+                        r = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                LLM, prompt,
+                                max_tokens=MAX_TOKENS,
+                                temperature=TEMPERATURE,
+                                stop=GEMMA_STOP,
+                                echo=False,
+                            ),
+                            timeout=30.0,
+                        )
+            except (asyncio.TimeoutError, TimeoutError):
+                log.warning(f"[timeout] vid={vid} 推理超時: {user_text!r}")
+                await send({
+                    "type": "error",
+                    "text": "系統有點忙、請稍候再試（試試更簡短的講法、例如「藍牙耳機庫存」）",
+                })
+                continue
+            except Exception as e:
+                log.error(f"[llm-error] vid={vid} {type(e).__name__}: {e}", exc_info=True)
+                await send({"type": "error", "text": "推理失敗、請重試"})
+                continue
 
+            if True:  # 保留原本 async with llm_lock 區塊的縮排層級，避免大範圍重新縮排引入錯誤
                 output = r["choices"][0]["text"].strip()
                 log.info(f"[trace] vid={vid} model={output[:120]}")
                 await push_display({"type": "trace", "stage": "llm_output", "raw": output})
@@ -3299,13 +3310,18 @@ async def ws_handler(ws: WebSocket):
                             f"狀態：{stock_status}。建議？\n<|assistant|>\n"
                         )
                         try:
-                            async with llm_lock:
-                                if hasattr(LLM, "reset"):
-                                    LLM.reset()
-                                r2_raw = await asyncio.to_thread(
-                                    LLM, round2_prompt,
-                                    max_tokens=80, temperature=0.0, stop=["<|user|>", "\n\n"]
-                                )
+                            # 這裡是 RCA 第二輪推理（Agent 建議行動），之前完全沒有
+                            # timeout 保護：若 llm_lock 被別的請求長時間佔用，或推論
+                            # 本身卡住，前端會永遠停在「Agent 推理建議行動 ●●●」
+                            # 沒有任何錯誤提示或恢復機制。加 40 秒總時限。
+                            async with asyncio.timeout(40.0):
+                                async with llm_lock:
+                                    if hasattr(LLM, "reset"):
+                                        LLM.reset()
+                                    r2_raw = await asyncio.to_thread(
+                                        LLM, round2_prompt,
+                                        max_tokens=80, temperature=0.0, stop=["<|user|>", "\n\n"]
+                                    )
                             r2_text = r2_raw["choices"][0]["text"].strip()
                             action = "contact_supplier"
                             if "create_po" in r2_text:
