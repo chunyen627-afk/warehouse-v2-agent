@@ -1897,8 +1897,14 @@ async def get_report_file(fname: str):
     rp = _P(finance.state().v2_data_dir) / "reports" / fname
     if not rp.exists():
         return Response(status_code=404)
-    media = "image/png" if fname.endswith(".png") else "text/markdown; charset=utf-8"
-    return Response(content=rp.read_bytes(), media_type=media, headers=NO_CACHE)
+    is_png = fname.endswith(".png")
+    media = "image/png" if is_png else "text/markdown; charset=utf-8"
+    headers = dict(NO_CACHE)
+    if not is_png:
+        # .md 沒有 Content-Disposition 時瀏覽器會直接顯示原始文字（不排版）；
+        # 加 attachment 讓體驗跟 .csv 下載一致。PNG 本來就會正常顯示，不強制下載。
+        headers["Content-Disposition"] = f'attachment; filename="{fname}"'
+    return Response(content=rp.read_bytes(), media_type=media, headers=headers)
 
 
 @app.get("/audit/{fname}")
