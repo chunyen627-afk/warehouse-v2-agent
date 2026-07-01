@@ -1541,14 +1541,15 @@ def _resolve_followup(user_text: str, func_name: str, func_args: dict):
         return func_name, func_args
     is_followup = any(w in user_text for w in _CTX_FOLLOWUP_WORDS)
     raw_kw = (func_args.get("keyword") or func_args.get("target") or "").strip()
-    # keyword 本身含代詞視為無效（LLM 把「它 進出紀錄」當 keyword）
-    kw_is_proxy = any(w in raw_kw for w in _CTX_FOLLOWUP_WORDS)
+    # keyword 本身含代詞或功能詞視為無效（LLM 把「它 進出紀錄」「進出紀錄」當 keyword）
+    _bad_kw_words = list(_CTX_FOLLOWUP_WORDS) + list(_CTX_FUNC_HINT.keys())
+    kw_is_proxy = any(w in raw_kw for w in _bad_kw_words)
     has_kw = bool(raw_kw) and not kw_is_proxy
-    # 偵測功能切換（「它的進出紀錄呢？」「這個快到期嗎？」）
+    # 偵測功能切換（「它的進出紀錄呢？」「進出紀錄呢」「這個快到期嗎？」）
     new_func = next((v for k, v in _CTX_FUNC_HINT.items() if k in user_text), None)
 
-    # 只有追問詞 + 沒有有效 keyword 時才介入
-    if not is_followup or has_kw:
+    # 有功能切換詞 or 追問代詞，且沒有有效 keyword → 介入
+    if not (is_followup or new_func) or has_kw:
         return func_name, func_args
 
     new_args = dict(func_args)
