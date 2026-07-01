@@ -11,6 +11,7 @@ generate_dataset.py — 倉管版 FunctionGemma 微調資料產生器 (v3.8)
     python generate_dataset.py
     → 覆蓋 training_data.jsonl
 """
+import csv
 import json
 import random
 from pathlib import Path
@@ -18,7 +19,13 @@ from collections import Counter
 
 random.seed(42)
 OUT = Path(__file__).parent / "training_data.jsonl"
-SEED = json.loads((Path(__file__).parent / "test" / "seed_data.json").read_text(encoding="utf-8"))
+# seed_data.json 已於 2026-06-30 淘汰（commit 7d44016），資料改讀 warehouse_data/。
+# 這裡只需要 items（給 KEYWORD_SAMPLES 用 name），直接讀 items.csv，不需要完整 loader_v2。
+_ITEMS_CSV = Path(__file__).parent / "test" / "warehouse_data" / "master" / "items.csv"
+with open(_ITEMS_CSV, encoding="utf-8-sig") as _f:
+    SEED = {"items": [{"sku_id": r["sku_id"], "name": r["name"], "category": r["category"],
+                       "unit_price": int(r["unit_price"]), "safety_stock": int(r["safety_stock"])}
+                      for r in csv.DictReader(_f)]}
 samples = []
 
 
