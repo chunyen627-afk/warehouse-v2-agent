@@ -545,6 +545,19 @@ def _detect_clarify(user_text: str) -> dict | None:
             "hint": "輸入數字選擇，或直接輸入完整描述",
         }
 
+    # 「XX多了/少了N件」語意本身模糊——可能是盤點發現的庫存差異（該走 RCA 查原因），
+    # 也可能是進出貨事件的口語講法，沒有明確進出貨動詞時不要硬猜（同上一條原則）。
+    if (_qty_m_c13c and any(w in t for w in ("多了", "少了"))
+            and not any(w in t for w in _movement_verbs_c13c)):
+        kw = _extract_sku_keyword(t) or ""
+        qty = _qty_m_c13c.group(1)
+        _dir_word = "進貨" if "多了" in t else "出貨"
+        return {
+            "question": f"「{kw or t}」是盤點發現的庫存差異，還是要記一筆{_dir_word}？",
+            "options": [f"查「{kw}」的庫存差異原因", f"記一筆「{kw}」{_dir_word} {qty} 件"],
+            "hint": "輸入數字選擇，或直接輸入完整描述",
+        }
+
     has_intent = any(w in t for w in _ALL_INTENT_WORDS)
 
     # 剝通用填充詞，避免「幫我查」的「幫我」誤觸商品 match
