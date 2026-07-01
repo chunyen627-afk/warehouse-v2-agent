@@ -1520,6 +1520,16 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
 #    「北倉進了藍牙耳機50件」/「南倉出貨洗衣精20件」→ HITL 確認 → 真寫入
 #    stock.csv + transactions/，重開 server / 網頁重整不會消失。
 # ════════════════════════════════════════════════════════════
+def _movement_dir_label(direction: str) -> str:
+    """direction 可能是內部代碼 in/out，或原始中文詞；統一轉成給使用者看的中文標籤。"""
+    d = direction or ""
+    if any(w in d for w in ("進", "in")):
+        return "進了"
+    if any(w in d for w in ("出", "out")):
+        return "出貨"
+    return d
+
+
 def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                      qty: str = "") -> dict:
     """觸發進出貨流程：找商品/倉別 → 算庫存變化 → 回確認卡（不執行寫入）。"""
@@ -1537,11 +1547,13 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
     matches = [m["item"] for m in scored]
     if len(matches) > 1:
         opts = [it["name"] for it in matches[:5]]
+        _dir_label = _movement_dir_label(direction)
+        _qty_txt = f"{qty}件" if qty else ""
         return {"ok": True,
                 "summary": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想異動哪個？",
                 "view": "clarify",
                 "data": {"question": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想異動哪個？",
-                         "options": [f"{n} {warehouse or ''}{direction or ''}{qty or ''}".strip() for n in opts],
+                         "options": [f"{n} {warehouse or ''}{_dir_label}{_qty_txt}".strip() for n in opts],
                          "hint": "請輸入完整商品名稱重新描述"}}
     item = matches[0]
     sku = item["sku_id"]
@@ -1552,13 +1564,15 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                    "south": "south", "南": "south", "南倉": "south", "南區倉": "south", "南區": "south"}
     wh_key = _WH_ALIASES.get(wh, "")
     if not wh_key:
+        _dir_label_zh = _movement_dir_label(direction)
+        _qty_txt = f"{qty}件" if qty else "50件"
         return {"ok": True, "summary": f"「{item['name']}」要異動哪個倉？",
                 "view": "clarify",
                 "data": {"question": f"「{item['name']}」要異動哪個倉？",
-                         "options": [f"北倉{direction or ''}{item['name']}{qty or ''}",
-                                     f"中倉{direction or ''}{item['name']}{qty or ''}",
-                                     f"南倉{direction or ''}{item['name']}{qty or ''}"],
-                         "hint": "請輸入完整描述，例如「北倉進了{}{}件」".format(item['name'], qty or '50')}}
+                         "options": [f"北倉{_dir_label_zh}{item['name']}{_qty_txt}",
+                                     f"中倉{_dir_label_zh}{item['name']}{_qty_txt}",
+                                     f"南倉{_dir_label_zh}{item['name']}{_qty_txt}"],
+                         "hint": "請輸入完整描述，例如「北倉進了{}{}」".format(item['name'], _qty_txt)}}
 
     dir_key = "in" if any(w in direction for w in ("進", "入", "到貨", "收貨", "in")) else \
               "out" if any(w in direction for w in ("出", "出貨", "出庫", "賣", "out")) else ""
