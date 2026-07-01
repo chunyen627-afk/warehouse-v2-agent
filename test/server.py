@@ -2661,6 +2661,12 @@ async def ws_handler(ws: WebSocket):
                     elif act == "item_delete":
                         res = tools_v2.commit_delete_item(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
+                    elif act == "delete_schedule":
+                        res = tools_v2.commit_delete_schedule(
+                            data.get("job_id", ""), actor="user_confirmed", trace_id=trace_id)
+                    elif act == "delete_alert":
+                        res = tools_v2.commit_delete_alert(
+                            data.get("rule_id", ""), actor="user_confirmed", trace_id=trace_id)
                     else:
                         res = {"ok": False, "summary": "未知的確認動作", "view": "error", "data": {}}
                 except Exception as e:

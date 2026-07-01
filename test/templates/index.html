@@ -1663,6 +1663,42 @@ function renderViewCard(view, data, topSummary) {
       </div>`;
   } else if (view === 'item_delete_denied') {
     card.innerHTML = `<div class="label">🔒 無法刪除</div><div style="padding:8px">${data.summary || '此商品受系統保護，不可刪除。'}</div>`;
+  } else if (view === 'schedule_delete_confirm') {
+    const j = data.job || {};
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header danger">🗑 刪除排程 — 請確認</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+            <tr><td>ID</td><td>${data.job_id}</td></tr>
+            <tr><td>作業</td><td>${j.script_label || ''}</td></tr>
+            <tr><td>頻率</td><td>${j.freq_label || ''} ${j.time_str || ''}</td></tr>
+          </table>
+          <div class="hitl-meta">⚠ 刪除後此排程不再自動執行，此動作無法復原。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_schedule" data-payload='${JSON.stringify({job_id:data.job_id})}'>✅ 確認刪除</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
+  } else if (view === 'alert_delete_confirm') {
+    const r = data.rule || {};
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header danger">🗑 刪除警示規則 — 請確認</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+            <tr><td>ID</td><td>${data.rule_id}</td></tr>
+            <tr><td>條件</td><td>${data.condition_label || ''}</td></tr>
+            <tr><td>範圍</td><td>${r.scope_txt || '全部商品'}</td></tr>
+          </table>
+          <div class="hitl-meta">⚠ 刪除後此警示不再主動通知，此動作無法復原。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_alert" data-payload='${JSON.stringify({rule_id:data.rule_id})}'>✅ 確認刪除</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
   } else if (view === 'config_confirm' || view === 'script_confirm') {
     const isCfg = view === 'config_confirm';
     const preview = data.preview || [];

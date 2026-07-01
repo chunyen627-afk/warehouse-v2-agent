@@ -1128,9 +1128,26 @@ def list_schedules() -> dict:
 
 
 def delete_schedule(job_id: str = "") -> dict:
-    """刪除指定排程。"""
+    """刪除指定排程（HITL：先回確認卡，commit_delete_schedule() 才真正刪）。"""
     if not job_id:
         return W._err("請指定排程 ID（例如 SCH001）")
+    dd = _data_dir()
+    jobs_path = dd / "schedule_jobs.json"
+    if not jobs_path.exists():
+        return W._err("找不到排程檔")
+    data = json.loads(jobs_path.read_text("utf-8"))
+    jobs = data.get("jobs", [])
+    job = next((j for j in jobs if j["id"] == job_id), None)
+    if not job:
+        return W._err(f"找不到排程 {job_id}")
+    return {"ok": True,
+            "summary": f"確認刪除排程 {job_id}【{job.get('script_label', '')}】？此動作無法復原。",
+            "view": "schedule_delete_confirm",
+            "data": {"job_id": job_id, "job": job}}
+
+
+def commit_delete_schedule(job_id: str = "", actor: str = "user_confirmed", trace_id: str | None = None) -> dict:
+    """使用者確認後，真正從 schedule_jobs.json 刪除排程 + audit。"""
     dd = _data_dir()
     jobs_path = dd / "schedule_jobs.json"
     if not jobs_path.exists():
@@ -1141,6 +1158,12 @@ def delete_schedule(job_id: str = "") -> dict:
     if len(new_jobs) == len(jobs):
         return W._err(f"找不到排程 {job_id}")
     jobs_path.write_text(json.dumps({"jobs": new_jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
+    ts = datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"schdel-{ts}"
+    with open(dd / "audit" / f"{s_date()}_changes.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                            "action": "delete_schedule", "job_id": job_id},
+                           ensure_ascii=False) + "\n")
     return {"ok": True, "summary": f"排程 {job_id} 已刪除。",
             "view": "schedule_deleted", "data": {"job_id": job_id}}
 
@@ -1164,9 +1187,29 @@ def list_alerts() -> dict:
 
 
 def delete_alert(rule_id: str = "") -> dict:
-    """刪除指定 ID 的警示規則。"""
+    """刪除指定 ID 的警示規則（HITL：先回確認卡，commit_delete_alert() 才真正刪）。"""
     if not rule_id:
         return W._err("請指定要刪除的規則 ID（例如 AL001）")
+    dd = _data_dir()
+    rules_path = dd / "alert_rules.json"
+    if not rules_path.exists():
+        return W._err("找不到警示規則檔")
+    data = json.load(open(rules_path, encoding="utf-8"))
+    rules = data.get("rules", [])
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        return W._err(f"找不到規則 {rule_id}")
+    _cond_labels = {"below_safety": "低於安全庫存", "out_of_stock": "缺貨/斷貨",
+                    "expiring": "快到期", "below_threshold": "低於指定數量"}
+    cond_label = _cond_labels.get(rule.get("condition"), rule.get("condition", ""))
+    return {"ok": True,
+            "summary": f"確認刪除警示規則 {rule_id}【{cond_label}】？此動作無法復原。",
+            "view": "alert_delete_confirm",
+            "data": {"rule_id": rule_id, "rule": rule, "condition_label": cond_label}}
+
+
+def commit_delete_alert(rule_id: str = "", actor: str = "user_confirmed", trace_id: str | None = None) -> dict:
+    """使用者確認後，真正從 alert_rules.json 刪除規則 + audit。"""
     dd = _data_dir()
     rules_path = dd / "alert_rules.json"
     if not rules_path.exists():
@@ -1178,6 +1221,12 @@ def delete_alert(rule_id: str = "") -> dict:
     if len(rules) == before:
         return W._err(f"找不到規則 {rule_id}")
     rules_path.write_text(json.dumps({"rules": rules}, ensure_ascii=False, indent=2), encoding="utf-8")
+    ts = datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"aldel-{ts}"
+    with open(dd / "audit" / f"{s_date()}_changes.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                            "action": "delete_alert", "rule_id": rule_id},
+                           ensure_ascii=False) + "\n")
     return {"ok": True, "summary": f"警示規則 {rule_id} 已刪除。", "view": "alert_deleted",
             "data": {"rule_id": rule_id}}
 
