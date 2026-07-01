@@ -461,6 +461,13 @@ def query_inventory(
     if not matches:
         return _suggest_on_empty(keyword or category or "", action="庫存查詢")
 
+    # 過濾分數斷層：只因為分享同一個規格 token（如「1L」「男款」）而低分命中的
+    # 不相干商品，不該跟真正命中的第一名一起被算進「多筆」而觸發 clarify。
+    # 規則：只保留分數 ≥ 第一名一半的候選（第一名分數本身一定保留）。
+    if len(matches) > 1:
+        top_score = matches[0]["score"]
+        matches = [m for m in matches if m["score"] * 2 >= top_score]
+
     # 純 category 查詢 → 列出該類別所有商品（不進 clarify 選單）
     if category and not keyword:
         rows = []
