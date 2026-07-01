@@ -74,6 +74,13 @@
 - **`set_schedule`** — 自然語言設定排程（「每天早上9點跑盤點」）
 - APScheduler 每分鐘檢查，到時自動執行腳本
 - 右側 Panel 可查看 / 刪除排程，執行結果即時回傳
+- `delete_schedule` / `delete_alert` 皆有 HITL 二次確認卡（避免誤刪無法復原）
+
+### 🛠️ 商品管理（自然語言建倉）
+- **`create_item`** — 分步引導或一句話新增商品（「新增商品 環保吸管 日用品 150元 安全100」），HITL 確認卡 + 同名防呆
+- **`delete_item`** — 引導式刪除，原始 60 項商品受保護不可刪
+- **`create_movement`** — 即時進出貨（「北倉進了藍牙耳機50件」「南倉出貨洗衣精20件」）：HITL 確認卡顯示庫存變化、確認後真寫入 `stock.csv` + `transactions/`，重開伺服器 / 重整頁面不會消失；出貨庫存不足直接擋下防呆
+- **展示資料一鍵重置**：header 上的 ♻ 按鈕（需密碼），把 `warehouse_data/` 整個換回展前建立的乾淨快照 `warehouse_data_baseline/`，避免展場被玩爛回不去
 
 ---
 
@@ -139,44 +146,40 @@ LLM 輸出不穩定是 270M 小模型的先天限制，解法是 **Server 端後
 ```
 warehouse_v2/
 ├── test/                          ← RPI5 部署核心（自足）
-│   ├── server.py                  ← FastAPI 主伺服器 + WebSocket
+│   ├── server.py                  ← FastAPI 主伺服器 + WebSocket（3300+ 行）
 │   ├── warehouse.py               ← 業務邏輯（七金剛實作）
-│   ├── tools_v2.py                ← 三金剛 + 排程 + 警示工具
-│   ├── anomaly.py                 ← 背景異常掃描
-│   ├── intent_clf.py              ← FastText 意圖分類器（輔助）
-│   ├── loader_v2.py               ← 資料載入器
+│   ├── tools_v2.py                ← 三金剛 + 排程 + 警示 + 進出貨 + 商品管理
+│   ├── anomaly.py                 ← 背景異常掃描（PO短收/低庫存/暴量暴跌/呆滯品）
+│   ├── intent_clf.py              ← FastText 意圖分類器（主路由）
+│   ├── loader_v2.py               ← warehouse_data/ → seed 等價 dict 動態組合
 │   ├── system_prompt.txt          ← LLM System Prompt
-│   ├── seed_data.json             ← 商品主檔（60 SKU × 3 倉）
 │   ├── templates/
 │   │   └── index.html             ← 前端 UI（WebSocket 即時串流）
 │   ├── static/
 │   │   └── chart.umd.min.js       ← Chart.js
-│   └── warehouse_data/
-│       ├── master/                ← CSV 庫存快照
-│       ├── logs/                  ← 異常日誌
-│       ├── audit/                 ← 腳本執行產出（CSV / MD）
-│       ├── alert_rules.json       ← 警示規則（持久化）
-│       ├── schedule_jobs.json     ← 定時排程（持久化）
-│       └── scripts/               ← 腳本白名單
-│           ├── manifest.json      ← 腳本清單
-│           ├── stock_audit.py     ← 月底盤點
-│           ├── export_movements.py← 進出記錄匯出
-│           └── generate_report.py ← 庫存體檢報告
+│   ├── warehouse_data/             ← 資料層（商品/庫存唯一真值來源）
+│   │   ├── master/                ← items.csv / stock.csv / config.json / suppliers.csv
+│   │   ├── transactions/          ← 每日進出貨 CSV（{date}_in.csv / _out.csv）
+│   │   ├── orders/                ← PO/SO 種子資料（給 RCA/購物籃分析用）
+│   │   ├── receipts/               ← 進貨驗收種子資料
+│   │   ├── reports/                ← 產出的體檢報告
+│   │   ├── audit/                  ← 異常/變更 log
+│   │   ├── alert_rules.json        ← 警示規則（持久化）
+│   │   ├── schedule_jobs.json      ← 定時排程（持久化）
+│   │   └── scripts/                ← 腳本白名單（manifest.json + stock_audit.py 等）
+│   └── warehouse_data_baseline/   ← 展前建立的乾淨快照（一鍵重置用，已加入版控）
 │
 ├── data_tools/                    ← 資料維護工具
-│   ├── items_editable.csv         ← 商品主檔（Excel 可編輯）
-│   └── regenerate_seed_from_csv.py← CSV → seed_data.json
+│   └── regenerate_seed_from_csv.py← CSV → warehouse_data/ 重生
 │
-├── generate_dataset.py            ← 訓練資料生成（JSONL）
+├── generate_dataset.py            ← 訓練資料生成（JSONL，讀 warehouse_data/master/items.csv）
 ├── finetune_local.py              ← 本機微調腳本（Unsloth）
-├── build_function_declarations.py ← Function Schema 產生器
 ├── train_intent_clf.py            ← FastText 分類器訓練
 ├── system_prompt.txt              ← System Prompt 主檔
-├── V2_PLAN.md                     ← 架構設計文件
-└── claude_memory/                 ← AI 協作記憶（踩雷紀錄）
-    ├── MEMORY.md                  ← 記憶索引
-    └── warehouse_v2_project.md    ← 專案進度與待辦
+└── V2_PLAN.md                     ← 架構設計文件
 ```
+
+> **注意**：`seed_data.json` 已於 2026-06-30 完全淘汰，資料層改為 `warehouse_data/` 多目錄結構，由 `loader_v2.py` 動態組合成等價 dict 餵給既有業務邏輯，七個查詢工具完全無感。
 
 ---
 
@@ -220,14 +223,14 @@ python finetune_local.py
 
 ### 更新商品資料
 
-```bash
-# 編輯 Excel
-data_tools/items_editable.csv
+三種方式：
+1. **自然語言新增商品**（推薦，展示用）：跟 Agent 說「新增商品 環保吸管 日用品 150元 安全100」
+2. **直接編輯 CSV**：修改 `test/warehouse_data/master/items.csv`（重啟 server 生效，或呼叫 `warehouse.reset()`）
+3. **批次重生**：`python data_tools/regenerate_seed_from_csv.py`
 
-# 重生 seed_data.json
-cd warehouse_v2
-python data_tools/regenerate_seed_from_csv.py
-```
+### 展示資料重置
+
+點擊右上角低調的 ♻ 按鈕（需密碼），把 `warehouse_data/` 整個換回 `warehouse_data_baseline/` 乾淨快照，適合展場多輪測試後快速回到初始狀態。
 
 ---
 
@@ -238,6 +241,16 @@ python data_tools/regenerate_seed_from_csv.py
 「北區倉有多少洗衣精？」
 「電動牙刷庫存」
 「查一下庫存」（查全部）
+
+# 即時進出貨
+「北倉進了藍牙耳機50件」
+「南倉出貨洗衣精20件」
+「今天進了50個耳機」（時間/商品/方向/數量/單位任意詞序）
+
+# 商品管理
+「新增商品 環保吸管 日用品 150元 安全100」
+「新增商品」（分步引導）
+「刪除商品」
 
 # 異常追查（RCA）
 「抗菌洗衣精帳對不上」
@@ -296,23 +309,21 @@ python data_tools/regenerate_seed_from_csv.py
 
 ## 📋 待辦 / Roadmap
 
-- [ ] Context carry-over（「那中倉呢？」記住上輪商品名）
-- [ ] 查完庫存自動帶 Proactive 建議 button
-- [ ] set_schedule 重複時改 HITL 問覆蓋
-- [ ] RCA 第二輪 timeout 保護
-- [ ] 自然語言產腳本（Code Generation）
+- [x] Context carry-over（「那中倉呢？」記住上輪商品名）
+- [x] 查完庫存自動帶 Proactive 建議 button
+- [x] RCA 第二輪 timeout 保護
+- [x] delete_schedule / delete_alert 前端二次確認卡
+- [x] 即時進出貨（create_movement）
+- [x] 展示資料一鍵重置
+- [ ] 訓練 270M 認得 create_movement（目前靠規則式攔截，100題實測覆蓋率 99%；累積真實使用者講法達一定量後再重訓）
 - [ ] 腳本白名單擴充（到期報告 / 補貨清單）
+- [ ] win11_installer 部署目錄同步
 
 ---
 
 ## 📝 設計筆記
 
-`claude_memory/` 目錄包含開發過程中的 AI 協作記憶，記錄了：
-- 踩過的雷（模型載入 / 訓練 / 部署）
-- 架構決策與取捨原因
-- 使用者偏好與工作流程
-
-這些記憶讓 AI 助理在跨 session 的長期開發中保持一致性。
+開發過程中的 AI 協作記憶（架構決策、踩雷紀錄、使用者偏好）記錄在 Claude Code 的跨 session 記憶系統中，讓 AI 助理在長期開發中保持一致性。
 
 ---
 
@@ -325,4 +336,5 @@ python data_tools/regenerate_seed_from_csv.py
 
 ---
 
-*最後更新：2026-06-30 | v6 模型 5,849 筆 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5%*
+*最後更新：2026-07-02 | v6 模型 5,849 筆訓練（部署中）| intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | 進出貨規則式覆蓋率: 99%*
+*註：training_data.jsonl 生成腳本已修復（讀 warehouse_data/ 而非已淘汰的 seed_data.json），目前重新生成得 5,415 筆（60 SKU 乾淨版，未含灌水的 create_movement 樣本），尚未重新訓練，部署模型仍是 v6 舊版權重。*
