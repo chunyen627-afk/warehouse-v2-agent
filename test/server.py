@@ -533,7 +533,7 @@ def _detect_clarify(user_text: str) -> dict | None:
     _movement_verbs_c13c = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
                             "來貨了", "來貨", "出貨了", "出貨", "出庫", "賣掉了",
                             "賣掉", "賣了", "銷貨", "出了")
-    _qty_m_c13c = _re_c13c.search(r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒)', t)
+    _qty_m_c13c = _re_c13c.search(r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副)', t)
     if (_qty_m_c13c and "庫存" in t and any(w in t for w in ("加", "減"))
             and not any(w in t for w in _movement_verbs_c13c)):
         kw = _extract_sku_keyword(t) or ""
@@ -937,14 +937,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   商品名抽取沿用既有的 _extract_sku_keyword()（多層 fuzzy 比對，比自己 replace
     #   噪音詞可靠很多，同一套邏輯 search_log/query_inventory 都在用）。
     _movement_in_words = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
-                          "來貨了", "來貨", "進了貨")
+                          "來貨了", "來貨", "進了貨", "來了")
     _movement_out_words = ("出貨了", "出貨", "出庫", "賣掉了", "賣掉", "賣了",
-                           "銷貨", "出了")
+                           "銷貨", "出了", "買走了", "買走")
     _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
     import re as _re13b_single
-    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}\d+\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒))', user_text)
+    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}\d+\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副))', user_text)
     if _single_dir_m and not _has_movement_word:
         _has_movement_word = True
         if _single_dir_m.group(0) == "進":
@@ -953,7 +953,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _movement_out_words = _movement_out_words + ("出",)
     # 量詞放寬：件/個/條/支/台/箱/包/瓶/罐/組/雙/套/盒；數字可能在量詞前或後
     import re as _re13b_pre
-    _qty_re = r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒)'
+    _qty_re = r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副)'
     _qty13b_m = _re13b_pre.search(_qty_re, user_text)
     _has_explicit_qty = bool(_qty13b_m)
 
