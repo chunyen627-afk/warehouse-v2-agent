@@ -2110,15 +2110,20 @@ async def api_query(req: Request):
     if not _clf_skip_llm:
         try:
             prompt = build_prompt(user_text)
-            r = await asyncio.wait_for(
-                asyncio.to_thread(
-                    LLM, prompt,
-                    max_tokens=160, temperature=0.0,
-                    stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
-                    echo=False, stream=False,
-                ),
-                timeout=25.0,
-            )
+            # llm_lock 序列化所有對 LLM 物件的存取，避免 HTTP/WS 兩路徑並發呼叫
+            # 同一個 llama_cpp 實例造成 KV cache 競爭、底層 GGML_ASSERT 崩潰。
+            async with llm_lock:
+                if hasattr(LLM, "reset"):
+                    LLM.reset()
+                r = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        LLM, prompt,
+                        max_tokens=160, temperature=0.0,
+                        stop=["</s>", "<end_of_turn>", "<start_of_turn>"],
+                        echo=False, stream=False,
+                    ),
+                    timeout=25.0,
+                )
         except Exception as e:
             return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
 
@@ -3282,10 +3287,13 @@ async def ws_handler(ws: WebSocket):
                             f"狀態：{stock_status}。建議？\n<|assistant|>\n"
                         )
                         try:
-                            r2_raw = await asyncio.to_thread(
-                                LLM, round2_prompt,
-                                max_tokens=80, temperature=0.0, stop=["<|user|>", "\n\n"]
-                            )
+                            async with llm_lock:
+                                if hasattr(LLM, "reset"):
+                                    LLM.reset()
+                                r2_raw = await asyncio.to_thread(
+                                    LLM, round2_prompt,
+                                    max_tokens=80, temperature=0.0, stop=["<|user|>", "\n\n"]
+                                )
                             r2_text = r2_raw["choices"][0]["text"].strip()
                             action = "contact_supplier"
                             if "create_po" in r2_text:
