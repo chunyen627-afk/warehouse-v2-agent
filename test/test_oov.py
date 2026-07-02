@@ -1,21 +1,30 @@
 """
 test_oov.py — OOV 容錯系統性驗證
-打 /api/query HTTP endpoint，測打字錯誤 / 不完整 / 模糊輸入的補救能力
+走 /ws（跟瀏覽器一模一樣的真實路徑），測打字錯誤 / 不完整 / 模糊輸入的補救能力。
+2026-07-02 從 HTTP /api/query 改成 WS：實測發現 WS 和 HTTP 的伺服器端處理順序
+可能不同步（校正 vs OOV 判斷順序反了），只測 HTTP 會漏掉這類問題。
 """
-import urllib.request, json, sys, io
-# 強制 UTF-8 stdout
+import asyncio, json, sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import websockets
 
-API = "http://localhost:8000/api/query"
+WS_URI = "ws://localhost:8000/ws"
+
+async def _q_async(text):
+    async with websockets.connect(WS_URI, max_size=None) as ws:
+        await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
+        while True:
+            raw = await asyncio.wait_for(ws.recv(), timeout=30)
+            msg = json.loads(raw)
+            if msg.get("type") == "done":
+                return msg.get("result", {})
 
 def q(text, label=""):
-    """打 API，回 (ok, view, func_name, keyword, summary_preview)"""
-    data = json.dumps({"text": text}).encode("utf-8")
+    """走 WS 送一句話，回 (ok, view, keyword, summary_preview)"""
     try:
-        req = urllib.request.Request(API, data=data, headers={"Content-Type": "application/json"})
-        r = json.loads(urllib.request.urlopen(req, timeout=30).read().decode("utf-8"))
+        r = asyncio.run(_q_async(text))
     except Exception as e:
-        return False, "error", "", "", str(e)
+        return False, "error", "", str(e)
     ok = r.get("ok", False)
     view = r.get("view", "?")
     d = r.get("data", {})
