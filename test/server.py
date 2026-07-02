@@ -938,6 +938,41 @@ def _extract_sku_keyword(text: str) -> str:
     return cleaned if len(cleaned) >= 2 else ""
 
 
+_CN_NUM = {"零": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5,
+           "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+
+
+def _cn_to_int(s: str):
+    """把中文數字字串轉阿拉伯整數，支援 1-999 的常見口語（三、十、十五、
+    二十、二十五、一百、一百二十）。無法解析回 None。展場訪客講「三箱」
+    「五個」「十件」很自然，C13b 的量詞抽取原本只認阿拉伯數字會全漏。"""
+    s = s.strip()
+    if not s:
+        return None
+    if s.isdigit():
+        return int(s)
+    total = 0
+    section = 0
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "百":
+            section = (section or 1) * 100
+            total += section
+            section = 0
+        elif ch == "十":
+            section = (section or 1) * 10
+            total += section
+            section = 0
+        elif ch in _CN_NUM:
+            section = _CN_NUM[ch]
+        else:
+            return None
+        i += 1
+    total += section
+    return total if total > 0 else None
+
+
 def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> tuple[str, dict, bool]:
     """校正規則。回 (corrected_name, corrected_args, hard_corrected)。
     hard_corrected=True 表示有確定性規則命中，C18 不應再覆蓋。"""
@@ -959,18 +994,23 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
     import re as _re13b_single
-    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}\d+\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副))', user_text)
+    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}(?:[0-9]+|[零一二兩三四五六七八九十百]+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副))', user_text)
     if _single_dir_m and not _has_movement_word:
         _has_movement_word = True
         if _single_dir_m.group(0) == "進":
             _movement_in_words = _movement_in_words + ("進",)
         else:
             _movement_out_words = _movement_out_words + ("出",)
-    # 量詞放寬：件/個/條/支/台/箱/包/瓶/罐/組/雙/套/盒；數字可能在量詞前或後
+    # 量詞放寬：件/個/條/支/台/箱/包/瓶/罐/組/雙/套/盒；數字可能是阿拉伯或中文
+    #   （「三箱」「十個」這種口語，2026-07-02 實測「剛剛入庫三箱衛生紙」抓到：
+    #    原本正則只認阿拉伯數字，中文數字全漏，整句 C13b 不觸發跌回誤判）。
     import re as _re13b_pre
-    _qty_re = r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副)'
+    _qunit = r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副)'
+    _qty_re = r'([0-9]+|[零一二兩三四五六七八九十百]+)\s*' + _qunit
     _qty13b_m = _re13b_pre.search(_qty_re, user_text)
-    _has_explicit_qty = bool(_qty13b_m)
+    # 中文數字要能真的轉成整數才算數（避免「幾個」的「幾」等非數字被誤收）
+    _qty13b_int = _cn_to_int(_qty13b_m.group(1)) if _qty13b_m else None
+    _has_explicit_qty = _qty13b_int is not None
 
     if func_name != "create_movement" and _has_movement_word and _has_explicit_qty:
         # 句子同時提到兩個以上倉別時（如「北倉跟南倉的藍牙耳機各出貨了10個跟15個」），
@@ -982,7 +1022,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _wh_keys13b = {w[0] for w in _wh_mentions13b}  # 北/中/南 去重
         _dir13b = "in" if any(w in user_text for w in _movement_in_words) else "out"
         _wh13b = _wh_mentions13b[0] if len(_wh_keys13b) <= 1 and _wh_mentions13b else ""
-        _qty13b = _qty13b_m.group(1)
+        _qty13b = str(_qty13b_int)  # 統一成阿拉伯數字（中文數字已轉整數）
         # 先剝掉進出貨專屬的動詞/時間詞/數量+量詞（這些不在共用的
         # _ALL_KEYWORD_NOISE 清單裡，因為那份清單是給查詢句設計的），
         # 剩下的再交給 _extract_sku_keyword 做既有的多層 fuzzy 商品名比對。
