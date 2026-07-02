@@ -472,14 +472,25 @@
     animation: traceIn .4s ease forwards;
   }
   /* ── HITL 確認框 ── */
-  .clarify-opts { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 8px; }
-  .clarify-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
-  .clarify-num {
-    min-width: 22px; height: 22px; line-height: 22px; text-align: center;
-    background: var(--accent); color: #fff; border-radius: 50%;
-    font-size: 12px; font-weight: 700; flex-shrink: 0;
+  .clarify-opts { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 8px; }
+  /* 選項做成大按鈕：min-height 48px 是手機/平板可靠的觸控目標下限，
+     整行可點 + 明顯邊框 + 按壓回饋，避免展場小螢幕難點 */
+  .clarify-row {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; min-height: 48px; padding: 10px 14px;
+    background: var(--card, #fff); border: 1.5px solid var(--accent);
+    border-radius: 10px; cursor: pointer; text-align: left;
+    font: inherit; -webkit-tap-highlight-color: transparent;
   }
-  .clarify-text { font-size: 14px; color: var(--fg); }
+  .clarify-row:hover { background: rgba(237,137,54,.10); }
+  .clarify-row:active { background: var(--accent); }
+  .clarify-row:active .clarify-text { color: #fff; }
+  .clarify-num {
+    min-width: 24px; height: 24px; line-height: 24px; text-align: center;
+    background: var(--accent); color: #fff; border-radius: 50%;
+    font-size: 13px; font-weight: 700; flex-shrink: 0;
+  }
+  .clarify-text { font-size: 15px; color: var(--fg); }
   .clarify-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .confirm-box { background: rgba(255,180,80,.10); border: 1px solid var(--warn,#ed8936);
     border-radius: 8px; padding: 12px; }
@@ -1977,21 +1988,36 @@ function renderViewCard(view, data, topSummary) {
         <td style="color:${r.delta>0?'#5cb85c':'#d9534f'};font-weight:700">${r.delta>0?'+':''}${r.delta} (${r.pct>0?'+':''}${r.pct}%)</td></tr>`).join('')}
       </table>`;
   } else if (view === 'clarify') {
-    // 意圖澄清選項 — 數字選單，輸入 1/2/3/4 送出
+    // 意圖澄清選項 — 可直接點選的大按鈕（手機/平板友善），也保留輸入數字的方式
     const opts = data.options || [];
     card.innerHTML = `
       <div class="label" style="margin-bottom:8px">❓ ${data.question}</div>
       <div class="clarify-opts">
         ${opts.map((opt, i) =>
-          `<div class="clarify-row"><span class="clarify-num">${i+1}</span><span class="clarify-text">${opt}</span></div>`
+          `<button class="clarify-row" data-copt="${i}"><span class="clarify-num">${i+1}</span><span class="clarify-text">${opt}</span></button>`
         ).join('')}
       </div>
-      <div class="clarify-hint">輸入數字 1~${opts.length} 選擇，或直接輸入完整問題</div>
+      <div class="clarify-hint">點選項目，或輸入數字 1~${opts.length} / 直接輸入完整問題</div>
     `;
     // 把選項存到 window，讓送出時能展開數字
     window._clarifyOpts = opts;
     // actions：實際送出的指令（沒有就 fallback 用 opts）
     window._clarifyActions = data.actions || opts;
+    // 點選項 = 跟打數字走同一條路（解析成實際指令 → sendQuery）
+    card.querySelectorAll('.clarify-row').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.copt);
+        const actions = window._clarifyActions || window._clarifyOpts;
+        if (!actions || idx < 0 || idx >= actions.length) return;
+        const resolved = actions[idx] || (window._clarifyOpts || [])[idx];
+        window._clarifyOpts = null;
+        window._clarifyActions = null;
+        document.querySelectorAll('.view-card').forEach(el => {
+          if (el.querySelector('.clarify-opts')) el.remove();
+        });
+        sendQuery(resolved);
+      };
+    });
   } else {
     return;
   }
