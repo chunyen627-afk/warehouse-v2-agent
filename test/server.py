@@ -3001,38 +3001,70 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": result})
                 continue
 
-            prompt = build_prompt(user_text)
-
-            # 等待取得 llm_lock 本身也要有 timeout（見 api_query 同樣的修法），
-            # 否則鎖被異常長時間佔用時，這裡會無限期排隊、前端永遠停在 loading。
+            # ── intent_clf 主要路由（跟 HTTP 版 api_query 同一套邏輯，2026-07-02
+            #   補齊：WS 端原本完全沒有這層，導致 query_movement 這類「LLM 容易
+            #   誤抽時間/動作詞當 keyword」的句子路由準確率明顯偏低，見
+            #   memory warehouse_v2_project 的「WS 缺 intent_clf」記錄）──
+            _clf_func_ws = None
+            _clf_conf_ws = 0.0
             try:
-                async with asyncio.timeout(45.0):
-                    async with llm_lock:
-                        if hasattr(LLM, "reset"):
-                            LLM.reset()
-                        r = await asyncio.wait_for(
-                            asyncio.to_thread(
-                                LLM, prompt,
-                                max_tokens=MAX_TOKENS,
-                                temperature=TEMPERATURE,
-                                stop=GEMMA_STOP,
-                                echo=False,
-                            ),
-                            timeout=30.0,
-                        )
-            except (asyncio.TimeoutError, TimeoutError):
-                log.warning(f"[timeout] vid={vid} 推理超時: {user_text!r}")
-                await send({
-                    "type": "error",
-                    "text": "系統有點忙、請稍候再試（試試更簡短的講法、例如「藍牙耳機庫存」）",
-                })
-                continue
-            except Exception as e:
-                log.error(f"[llm-error] vid={vid} {type(e).__name__}: {e}", exc_info=True)
-                await send({"type": "error", "text": "推理失敗、請重試"})
-                continue
+                _clf_func_ws, _clf_conf_ws = intent_clf.predict(user_text)
+            except Exception:
+                pass
+            _pre_kw_ws = _extract_sku_keyword(user_text)
+            _clf_skip_llm_ws = False
+            if _clf_func_ws and _clf_func_ws not in ("unknown", "unclear") and _clf_conf_ws >= 0.8:
+                log.info(f"[intent_clf primary] vid={vid} {user_text!r} → {_clf_func_ws} (conf={_clf_conf_ws:.2f})")
+                func_name = _clf_func_ws
+                _needs_llm_ws = func_name in ("manage_config", "run_script", "set_alert",
+                                               "set_schedule", "generate_po", "generate_report",
+                                               "query_movement", "compare_warehouses")
+                if not _needs_llm_ws:
+                    func_args = {}
+                    if func_name in ("query_inventory", "search_log", "query_related_items"):
+                        if _pre_kw_ws and len(_pre_kw_ws) >= 2:
+                            func_args["keyword"] = _pre_kw_ws
+                    elif func_name == "query_movement":
+                        func_args["period"] = "this_month"; func_args["direction"] = "both"
+                        # movement 不從 user_text 抽 keyword（容易誤抽時間/動作詞）
+                    _clf_skip_llm_ws = True
+                    raw_call = f"{func_name}({func_args})"
+                    await push_display({"type": "trace", "stage": "llm_output",
+                                         "raw": f"[intent_clf] {func_name} (conf={_clf_conf_ws:.2f})"})
+                    log.info(f"[intent_clf primary] vid={vid} skip LLM, func={func_name} args={func_args}")
 
-            if True:  # 保留原本 async with llm_lock 區塊的縮排層級，避免大範圍重新縮排引入錯誤
+            if not _clf_skip_llm_ws:
+                prompt = build_prompt(user_text)
+
+                # 等待取得 llm_lock 本身也要有 timeout（見 api_query 同樣的修法），
+                # 否則鎖被異常長時間佔用時，這裡會無限期排隊、前端永遠停在 loading。
+                try:
+                    async with asyncio.timeout(45.0):
+                        async with llm_lock:
+                            if hasattr(LLM, "reset"):
+                                LLM.reset()
+                            r = await asyncio.wait_for(
+                                asyncio.to_thread(
+                                    LLM, prompt,
+                                    max_tokens=MAX_TOKENS,
+                                    temperature=TEMPERATURE,
+                                    stop=GEMMA_STOP,
+                                    echo=False,
+                                ),
+                                timeout=30.0,
+                            )
+                except (asyncio.TimeoutError, TimeoutError):
+                    log.warning(f"[timeout] vid={vid} 推理超時: {user_text!r}")
+                    await send({
+                        "type": "error",
+                        "text": "系統有點忙、請稍候再試（試試更簡短的講法、例如「藍牙耳機庫存」）",
+                    })
+                    continue
+                except Exception as e:
+                    log.error(f"[llm-error] vid={vid} {type(e).__name__}: {e}", exc_info=True)
+                    await send({"type": "error", "text": "推理失敗、請重試"})
+                    continue
+
                 output = r["choices"][0]["text"].strip()
                 log.info(f"[trace] vid={vid} model={output[:120]}")
                 await push_display({"type": "trace", "stage": "llm_output", "raw": output})
@@ -3048,6 +3080,9 @@ async def ws_handler(ws: WebSocket):
                 func_name, func_args = parsed
                 raw_call = f"{func_name}({func_args})"
 
+            # ── intent_clf 命中時也走到這裡（跟 LLM 分支匯流，同一縮排層繼續
+            #   下面共用的 Pre-C 規則 / 校正流程，維持跟 HTTP 版一致的行為）──
+            if True:
                 # ── Pre-C-Schedule：定時排程意圖攔截 ──
                 _list_alert_kws = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示")
                 _list_sched_kws = ("查看排程", "查排程", "看排程", "有哪些排程", "排程列表", "目前排程")
