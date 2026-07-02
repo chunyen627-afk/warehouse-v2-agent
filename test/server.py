@@ -1057,10 +1057,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   真正的 manage_config/query_movement 意圖，可以放心搶最高優先權。
     #   商品名抽取沿用既有的 _extract_sku_keyword()（多層 fuzzy 比對，比自己 replace
     #   噪音詞可靠很多，同一套邏輯 search_log/query_inventory 都在用）。
+    # 退貨（客人退回來）= 庫存增加，當進貨的特例（2026-07-03 新增）。退貨詞放
+    #   進 in words，並另外標記 is_return 讓顯示/紀錄標「退貨」而不是「進貨」。
+    _movement_return_words = ("退貨", "退回", "退還", "退了", "客人退", "顧客退",
+                              "被退", "退回來", "退貨回來")
     _movement_in_words = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
-                          "來貨了", "來貨", "進了貨", "來了")
+                          "來貨了", "來貨", "進了貨", "來了") + _movement_return_words
     _movement_out_words = ("出貨了", "出貨", "出庫", "賣掉了", "賣掉", "賣了",
                            "銷貨", "銷出", "銷售", "售出", "出了", "買走了", "買走", "拿走")
+    _is_return13b = any(w in user_text for w in _movement_return_words)
     _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
@@ -1094,6 +1099,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _dir13b = "in" if any(w in user_text for w in _movement_in_words) else "out"
         _wh13b = _wh_mentions13b[0] if len(_wh_keys13b) <= 1 and _wh_mentions13b else ""
         _qty13b = str(_qty13b_int)  # 統一成阿拉伯數字（中文數字已轉整數）
+        # 退貨用 in 的算法，但下面 return 帶 is_return 讓工具函式標「退貨」
         # 先剝掉進出貨專屬的動詞/時間詞/數量+量詞（這些不在共用的
         # _ALL_KEYWORD_NOISE 清單裡，因為那份清單是給查詢句設計的），
         # 剩下的再交給 _extract_sku_keyword 做既有的多層 fuzzy 商品名比對。
@@ -1103,9 +1109,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     "剛剛", "剛才", "登記", "記一下", "麻煩", "幫我", "請", "沒登記")):
             _pre_clean = _pre_clean.replace(_w, "")
         _kw13b = _extract_sku_keyword(_pre_clean) or _extract_sku_keyword(user_text) or ""
-        log.info(f"[校正 C13b] 進出貨意圖 → create_movement（原 {func_name}）kw={_kw13b!r} wh={_wh13b!r} dir={_dir13b} qty={_qty13b!r}")
-        return "create_movement", {"keyword": _kw13b, "warehouse": _wh13b,
-                                     "direction": _dir13b, "qty": _qty13b}, True
+        log.info(f"[校正 C13b] 進出貨意圖 → create_movement（原 {func_name}）kw={_kw13b!r} wh={_wh13b!r} dir={_dir13b} qty={_qty13b!r} return={_is_return13b}")
+        _args13b = {"keyword": _kw13b, "warehouse": _wh13b,
+                    "direction": _dir13b, "qty": _qty13b}
+        if _is_return13b:
+            _args13b["is_return"] = True
+        return "create_movement", _args13b, True
 
     # 排程/警示管理工具：Pre-C 已確定，不再校正
     # set_alert / schedule / compare 已被 Pre-C 校正過，不需再過 C1-C18

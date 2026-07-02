@@ -1533,8 +1533,9 @@ def _movement_dir_label(direction: str) -> str:
 
 
 def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
-                     qty: str = "") -> dict:
-    """觸發進出貨流程：找商品/倉別 → 算庫存變化 → 回確認卡（不執行寫入）。"""
+                     qty: str = "", is_return: bool = False) -> dict:
+    """觸發進出貨流程：找商品/倉別 → 算庫存變化 → 回確認卡（不執行寫入）。
+    is_return=True 表示客人退貨（庫存增加，走 in 的算法，但顯示/紀錄標「退貨」）。"""
     if not keyword:
         return W._err("請說明要異動哪個商品，例如「北倉進了藍牙耳機50件」")
 
@@ -1576,8 +1577,12 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                                      f"南倉{_dir_label_zh}{item['name']}{_qty_txt}"],
                          "hint": "請輸入完整描述，例如「北倉進了{}{}」".format(item['name'], _qty_txt)}}
 
-    dir_key = "in" if any(w in direction for w in ("進", "入", "到貨", "收貨", "in")) else \
-              "out" if any(w in direction for w in ("出", "出貨", "出庫", "賣", "out")) else ""
+    # 退貨（客人退回來）= 庫存增加，走 in 的算法，不需要判斷方向詞
+    if is_return:
+        dir_key = "in"
+    else:
+        dir_key = "in" if any(w in direction for w in ("進", "入", "到貨", "收貨", "in")) else \
+                  "out" if any(w in direction for w in ("出", "出貨", "出庫", "賣", "out")) else ""
     if not dir_key:
         return W._err(f"請說明是「進貨」還是「出貨」，例如「{wh}{item['name']}進了{qty or 50}件」")
 
@@ -1598,9 +1603,11 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                 "view": "error", "data": {}}
 
     wh_label = WH_LABEL_MAP[wh_key]
-    dir_label = "進貨" if dir_key == "in" else "出貨"
+    # 退貨顯示「退貨」、圖示不同，但庫存跟 in 一樣是加（sign=+）
+    dir_label = "退貨" if is_return else ("進貨" if dir_key == "in" else "出貨")
+    icon = "↩️" if is_return else "📦"
     sign = "+" if dir_key == "in" else "-"
-    summary = (f"📦 確認{dir_label}\n"
+    summary = (f"{icon} 確認{dir_label}\n"
                f"商品：{item['name']}（{sku}）\n"
                f"倉別：{wh_label}\n"
                f"數量：{sign}{qty_val} 件\n"
@@ -1608,7 +1615,8 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
     return {"ok": True, "summary": summary, "view": "movement_confirm",
             "data": {"pending": True, "sku": sku, "name": item["name"], "warehouse": wh_key,
                      "warehouse_label": wh_label, "direction": dir_key, "direction_label": dir_label,
-                     "qty": qty_val, "before_qty": current_qty, "after_qty": new_qty}}
+                     "qty": qty_val, "before_qty": current_qty, "after_qty": new_qty,
+                     "is_return": is_return}}
 
 
 WH_LABEL_MAP = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
@@ -1652,12 +1660,13 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
             w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
         w.writerow([snap_date, sku, wh_key, dir_key, qty_val])
 
-    # 3. audit log
+    # 3. audit log（退貨標 create_return，交易紀錄仍記 in，方便 RCA/報表統一處理）
     audit_dir = dd / "audit"
     audit_dir.mkdir(parents=True, exist_ok=True)
+    _audit_action = "create_return" if p.get("is_return") else "create_movement"
     with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
         f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
-                            "action": "create_movement", "sku": sku, "warehouse": wh_key,
+                            "action": _audit_action, "sku": sku, "warehouse": wh_key,
                             "direction": dir_key, "qty": qty_val,
                             "before": p["before_qty"], "after": p["after_qty"]},
                            ensure_ascii=False) + "\n")
