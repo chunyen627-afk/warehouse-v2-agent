@@ -96,7 +96,8 @@ GATEKEEPER_KEYWORDS = {
     "氣泡水", "咖啡", "咖啡豆", "茶", "檸檬茶", "堅果", "餅", "蘇打餅",
     "洗衣精", "洗劑", "衛生紙", "紙巾", "沐浴乳", "蚊香", "垃圾袋",
     "t 恤", "素t", "襪", "羊毛襪", "外套", "羽絨", "牛仔", "牛仔褲", "內衣",
-    "瑜珈墊", "瑜珈", "水壺", "健身環", "慢跑鞋", "毛巾",
+    "瑜珈墊", "瑜珈", "水壺", "健身環", "慢跑鞋", "毛巾", "帽子", "毛帽",
+    "拖鞋", "手套", "睡袋", "拖把",
     # 倉庫
     "北倉", "北區倉", "北區", "北部",
     "中倉", "中區倉", "中區", "中部",
@@ -126,8 +127,8 @@ GATEKEEPER_KEYWORDS = {
     "月度", "週度", "本日", "目前", "現在", "當下",
     "最近", "這幾天", "這陣子", "近", "month", "week", "today",
     # 動作補強 (v3.8 round 2)
-    "記錄", "明細", "清單", "排行", "所有", "全部", "查", "看", "顯示",
-    "最差", "最好", "賣", "進", "出", "貨",
+    "記錄", "紀錄", "明細", "清單", "排行", "所有", "全部", "查", "看", "顯示",
+    "最差", "最好", "賣", "進", "出", "貨", "交易", "報表", "自動", "沒了", "快要沒",
     # 保存期限(v3.9 連動)
     "到期", "過期", "快到期", "即將到期", "保存期限", "效期", "保鮮",
     "賞味", "新鮮度", "快爛", "即期", "expire", "expiring", "shelf life",
@@ -340,7 +341,7 @@ _RCA_INTENT_WORDS = (
 _CONFIG_KEY_WORDS = ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置",
                      "安全水位倍數", "補貨目標天數", "lead", "safety stock")
 _CONFIG_SET_WORDS = ("改成", "設成", "設為", "調成", "調到", "改為", "設定為",
-                     "調高", "調低", "加", "減", "+", "改", "設")
+                     "調高", "調低", "提高", "提升", "降低", "加", "減", "+", "改", "設")
 _CONFIG_READ_WORDS = ("是多少", "設多少", "多少", "現在設", "目前", "查一下", "看一下", "設定值")
 # C10 run_script：執行白名單腳本
 _SCRIPT_INTENT_WORDS = ("跑一次", "執行", "跑個", "跑一下", "幫我跑", "做一次", "做個",
@@ -1366,7 +1367,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         return "search_log", new_args, True
 
     # C9：含設定項詞 + 動作詞 → 強轉 manage_config（set_alert 已有自己的路由不干涉）
-    if has_cfgkey and func_name not in ("manage_config", "set_alert"):
+    # 也涵蓋 LLM 已經正確輸出 manage_config、但 key/value 自己抽壞（常見：抽成空
+    # 字串）的情況——原本只在 func_name 不是 manage_config 時才校正，等於預設
+    # LLM 判對功能就一定也抽對參數，2026-07-02 實測「北倉安全水位提高20」戳破
+    # 這個假設：func_name 正確是 manage_config，但 key 抽成空字串直接報錯。
+    _c9_needs_fix = func_name == "manage_config" and not (func_args.get("key") or "").strip()
+    if has_cfgkey and (func_name not in ("manage_config", "set_alert") or _c9_needs_fix):
         action = "set" if has_cfgset and not any(w in user_text for w in ("是多少", "設多少", "查")) else "read"
         # 抽 key
         key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
@@ -3238,7 +3244,10 @@ async def ws_handler(ws: WebSocket):
                 if mismatch and not _hard and clf_intent != "unknown":
                     log.info(f"[C18] clf={clf_intent}({clf_conf:.2f}) vs model={func_name} → 校正")
                     func_name = intent_clf.LABEL_TO_FUNC.get(clf_intent, clf_intent)
-                    # C18 改了 func_name 後，若轉成 search_log 須重新清 args
+                    # C18 改了 func_name 後，舊 func_args 是照舊 func_name 的參數格式
+                    # （例如 set_alert 的 condition/target），直接沿用到新功能會
+                    # 完全對不上、甚至讓工具函式收到空必填參數而報錯。轉成
+                    # search_log / manage_config 都要照各自參數格式重新組。
                     if func_name == "search_log":
                         from tools_v2 import _RCA_NOISE, _RCA_GENERIC
                         _raw = user_text
@@ -3246,6 +3255,27 @@ async def ws_handler(ws: WebSocket):
                         for _gz in _RCA_GENERIC: _raw = _raw.replace(_gz, "")
                         _raw = _raw.strip()
                         func_args = {"keyword": _raw if _raw else func_args.get("keyword", "")}
+                    elif func_name == "manage_config":
+                        # C18 把 set_alert（或其他功能）改判成 manage_config 時，
+                        # 舊參數（如 set_alert 的 condition/target）沒有 key/value
+                        # 可用，靠 _CONFIG_KEY_WORDS 從 user_text 重新抽（同 C9 邏輯，
+                        # 2026-07-02 實測「北倉安全水位提高20」抓到：clf 判斷正確
+                        # 但 func_args 沒跟著轉換，manage_config 收到空 key 直接報錯）。
+                        _c18_action = "set" if any(w in user_text for w in _CONFIG_SET_WORDS) and not any(
+                            w in user_text for w in ("是多少", "設多少", "查")) else "read"
+                        _c18_key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
+                        func_args = {"action": _c18_action, "key": _c18_key}
+                        for _zh, _en in _WH_ZH_MAP.items():
+                            if _zh in user_text:
+                                func_args["warehouse"] = _en
+                                break
+                        if _c18_action == "set":
+                            _m18rel = re.search(r"[加+]\s*(\d+)", user_text) or re.search(r"高\s*(\d+)", user_text)
+                            _m18abs = re.search(r"(?:改成|設成|設為|改為|設定為|調到|改|設)\s*(\d+)", user_text)
+                            if _m18rel:
+                                func_args["value"] = f"+{_m18rel.group(1)}"
+                            elif _m18abs:
+                                func_args["value"] = _m18abs.group(1)
                     corrected_call = f"[C18]{func_name}({func_args})"
                 if corrected_call != raw_call:
                     log.info(f"[trace] vid={vid} corrected: {raw_call} → {corrected_call}")
