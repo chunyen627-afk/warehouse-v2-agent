@@ -111,7 +111,10 @@ def _suggest_on_empty(keyword: str, action: str = "庫存") -> dict:
         opts.append(f"{guessed_label}類 缺貨警示")
         opts.append(f"{guessed_label}類 熱銷排行")
     else:
-        opts.append(f"所有商品 {action}")
+        # 注意：這裡不能用「所有商品」開頭——dispatch 有條「所有商品/商品清單」
+        # 攔截規則會搶先把整句話判成商品列表顯示，蓋掉後面接的 action 字樣
+        # （2026-07-02 實測「所有商品 進出貨紀錄」被誤判成純商品清單抓到）。
+        opts.append(f"全倉{action}")
         opts.append("哪些商品快缺貨")
         opts.append("本月熱銷商品")
     opts.append("查倉管")  # 永遠有個「看功能列表」兜底
@@ -589,7 +592,12 @@ def query_movement(
             else:
                 matched_item_label = f"{len(matches)} 筆相關商品"
         else:
-            return _suggest_on_empty(keyword, action="進出貨紀錄")
+            # keyword 比對不到任何商品時，不直接 clarify——這個 keyword 常常是
+            # LLM 從「今天到現在進了哪些貨」這類句子誤抓的動詞/時間詞雜訊
+            # （不是使用者真的講了不存在的商品名），2026-07-02 實測抓到。
+            # 沒有明確商品意圖時，忽略 keyword、退回全倉查詢，比起打斷使用者
+            # 問「你是想查什麼」更符合原本句子的語意。
+            keyword = None
 
     agg = _aggregate_movements(
         period,
