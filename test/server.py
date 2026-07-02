@@ -2345,7 +2345,7 @@ async def api_query(req: Request):
         func_name = "list_schedules"
         func_args = {}
     else:
-        _sched_time_kws = ("每天", "每日", "每週", "每周", "每月", "定時", "排程", "固定時間",
+        _sched_time_kws = ("每天", "每日", "天天", "每週", "每周", "每月", "定時", "排程", "固定時間",
                            "每天早上", "每天晚上", "每天中午", "自動執行", "自動跑")
         _sched_act_kws  = ("盤點", "匯出", "報告", "體檢", "腳本", "跑")
         if (any(w in user_text for w in _sched_time_kws) and
@@ -3180,7 +3180,7 @@ async def ws_handler(ws: WebSocket):
                     func_args = {}
                     log.info("[Pre-C-Sched] 查排程攔截 → list_schedules")
                 else:
-                    _sched_time_kws = ("每天", "每日", "每週", "每周", "每月", "定時", "自動", "排程",
+                    _sched_time_kws = ("每天", "每日", "天天", "每週", "每周", "每月", "定時", "自動", "排程",
                                        "每天早上", "每天晚上", "每天中午", "固定")
                     _sched_act_kws  = ("盤點", "匯出", "報告", "體檢", "腳本", "跑")
                     _has_sched_time = any(w in user_text for w in _sched_time_kws)
