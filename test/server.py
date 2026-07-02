@@ -1027,7 +1027,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 解析來源倉 / 目標倉：目標倉通常緊跟在「到/去/過去/調到」之後。
         _WH_ZH2KEY = {"北": "北倉", "中": "中倉", "南": "南倉"}
         _to_key = ""
-        _to_m = _re13a.search(r'(?:到|去|過去)\s*([北中南])', user_text)
+        _to_m = _re13a.search(r'(?:到|去|過去|給)\s*([北中南])', user_text)
         if _to_m:
             _to_key = _to_m.group(1)
         # 來源倉：第一個出現、且不是目標倉的倉名
@@ -1042,7 +1042,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 商品名：剝掉動詞/時間詞/數量量詞/倉名後交給 _extract_sku_keyword
         _pre13a = user_text.replace(_qty13a_m.group(0), "")
         for _w in (_transfer_verbs + tuple(_wh_mentions13a) +
-                   ("今天", "今日", "剛剛", "剛才", "幫我", "麻煩", "請", "從", "到", "去", "過去")):
+                   ("今天", "今日", "剛剛", "剛才", "幫我", "麻煩", "請", "從", "到", "去", "過去", "給")):
             _pre13a = _pre13a.replace(_w, "")
         _kw13a = _extract_sku_keyword(_pre13a) or _extract_sku_keyword(user_text) or ""
         log.info(f"[校正 C13a] 調貨意圖 → create_transfer kw={_kw13a!r} from={_from_zh!r} to={_to_zh!r} qty={_qty13a_int}")
