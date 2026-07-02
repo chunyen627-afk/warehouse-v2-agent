@@ -3119,6 +3119,13 @@ async def ws_handler(ws: WebSocket):
                     }})
                     continue
 
+                # ── 校正（一定要在 task_plan / OOV 判斷之前：這兩者都是根據 func_name
+                #   決定顯示內容跟商品比對邏輯，若 C13b 等規則會把 func_name 校正成
+                #   create_movement，校正前的 keyword 可能還帶著數字量詞雜訊，直接
+                #   餵給 OOV 找不到商品會誤判成查詢失敗，task_plan 也會顯示錯的步驟，
+                #   see HTTP 版 api_query 的同一個順序，2026-07-02 修 WS/HTTP 不同步）──
+                func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
+
                 # ── 任務拆解進度樹：根據工具送出計劃步驟 ──
                 _TASK_PLANS = {
                     "query_inventory":    ["解析查詢關鍵字", "查詢各倉庫庫存", "彙整結果"],
@@ -3134,6 +3141,7 @@ async def ws_handler(ws: WebSocket):
                     "query_related_items":["解析商品關鍵字", "搜尋關聯品項", "產生推薦清單"],
                     "list_expiring_items":["掃描保存期限", "找出即將到期品項", "產生警示清單"],
                     "generate_report":    ["收集報表資料", "產生報表內容", "輸出檔案"],
+                    "create_movement":    ["解析商品與數量", "比對倉庫與庫存", "產生確認卡"],
                 }
                 plan_steps = _TASK_PLANS.get(func_name, ["分析請求", "執行查詢", "回傳結果"])
                 # search_log 有自己的 trace UI，不需要 task_plan
@@ -3172,9 +3180,6 @@ async def ws_handler(ws: WebSocket):
                         continue
                 else:
                     _oov_hint = None
-
-                # ── 校正 ──
-                func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
 
                 # Context carry-over：追問句補 keyword/warehouse
                 func_name, func_args = _resolve_followup(user_text, func_name, func_args)
