@@ -906,14 +906,20 @@ function setSending(sending) {
 }
 
 function connectWS() {
-  if (ws) { try { ws.close(); } catch {} }
   if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+  // 舊 socket 先解除事件 handler 再關：ws.close() 的 onclose 是非同步觸發的，
+  // 若不解除，遲到的 onclose 會在新連線建好後才排一個 3 秒 reconnect，
+  // 3 秒後 connectWS 又把健康的新連線關掉 → 無限「每 3 秒殺一次連線」循環，
+  // 訊息送出後推論還沒跑完連線就被殺，回覆永遠到不了（2026-07-02 實測抓到）。
+  if (ws) { const old = ws; old.onclose = null; old.onerror = null; old.onmessage = null; try { old.close(); } catch {} }
   const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${wsProto}//${location.host}/ws`);
-  ws.onopen = () => { console.log('[ws] open'); setSending(false); };
-  ws.onclose = () => { console.log('[ws] close'); scheduleReconnect(); };
-  ws.onerror = e => { console.log('[ws] error', e); try { ws.close(); } catch {} };
-  ws.onmessage = ev => {
+  const sock = new WebSocket(`${wsProto}//${location.host}/ws`);
+  ws = sock;
+  sock.onopen = () => { console.log('[ws] open'); setSending(false); };
+  // 守衛：只有「自己還是當前連線」才排重連，被汰換掉的舊 socket 不排
+  sock.onclose = () => { console.log('[ws] close'); if (ws === sock) scheduleReconnect(); };
+  sock.onerror = e => { console.log('[ws] error', e); try { sock.close(); } catch {} };
+  sock.onmessage = ev => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     handleMessage(msg);
@@ -926,7 +932,8 @@ function scheduleReconnect() {
 }
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    if (ws) { try { ws.close(); } catch {} }
+    // 切回分頁時若連線還健康就不動它（connectWS 會殺掉重建，白白斷一次）
+    if (ws && ws.readyState === WebSocket.OPEN) return;
     setTimeout(connectWS, 100);
   }
 });
