@@ -153,7 +153,9 @@ GATEKEEPER_KEYWORDS = {
     "刷牙", "洗衣服", "擦身體", "裝水", "煮咖啡", "運動用的", "充電的",
     "那個", "這", "哪", "啥", "怎", "嗎", "呢", "啊", "吧", "喔",
     "壺", "線", "乳", "精", "機器", "墊子", "咖啡", "衣服", "手機",
-    "洗澡", "牙刷", "牙膏", "毛巾", "肥皂", "洗髮", "戶外", "壞掉", "問題", "東西",
+    "洗澡", "牙刷", "牙膏", "毛巾", "肥皂", "洗髮", "戶外", "壞掉", "快壞", "問題", "東西",
+    # 品項/報表口語（新增商品/報告類）
+    "品項", "新品", "月報", "週報", "日報", "統計", "報告", "整理", "產出", "產生",
     # 助理代名
     "我", "my", "i ",
 }
@@ -973,6 +975,30 @@ def _cn_to_int(s: str):
     return total if total > 0 else None
 
 
+# 數字部分：阿拉伯 or 中文，用於 manage_config 的 value 抽取
+_NUM_PART = r'([0-9]+|[零一二兩三四五六七八九十百]+)'
+
+
+def _extract_config_value(user_text: str):
+    """從句子抽 manage_config 的設定值，回傳字串（"+30"/"-15"/"100"）或 None。
+    同時支援阿拉伯與中文數字（2026-07-02：「改成五天」「調到一百」原本中文
+    數字整段漏抽）。相對值（加/提高/降低）帶正負號，絕對值（改成/調到）純數字。"""
+    import re as _re
+    _rel_pos = _re.search(r"(?:[加+]|提高|提升|調高|高)\s*" + _NUM_PART, user_text)
+    _rel_neg = _re.search(r"(?:[降減]|調低|低)\s*" + _NUM_PART, user_text)
+    _abs = _re.search(r"(?:改成|設成|設為|改為|設定為|調到|改到|調整為|改|設)\s*" + _NUM_PART, user_text)
+    if _rel_pos:
+        n = _cn_to_int(_rel_pos.group(1))
+        return f"+{n}" if n is not None else None
+    if _rel_neg:
+        n = _cn_to_int(_rel_neg.group(1))
+        return f"-{n}" if n is not None else None
+    if _abs:
+        n = _cn_to_int(_abs.group(1))
+        return str(n) if n is not None else None
+    return None
+
+
 def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> tuple[str, dict, bool]:
     """校正規則。回 (corrected_name, corrected_args, hard_corrected)。
     hard_corrected=True 表示有確定性規則命中，C18 不應再覆蓋。"""
@@ -1429,21 +1455,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             if zh in user_text:
                 new_args["warehouse"] = en
                 break
-        # 抽 value（+N/-N / 數字）
-        import re as _re
-        mrel_pos = _re.search(r"[加+]\s*(\d+)", user_text) or _re.search(r"高\s*(\d+)", user_text)
-        # 「降低15/減少15/調低15」→ 負向相對值，跟「提高/加」是相反方向，
-        # 2026-07-02 實測「北倉安全水位降低15」抓到：原本只認正向詞，這句話
-        # 明明有具體數字卻因為沒匹配到任何 relative pattern 而漏抽 value。
-        mrel_neg = _re.search(r"[降減低]\s*(\d+)", user_text)
-        mabs = _re.search(r"(?:改成|設成|設為|改為|設定為|調到|改|設)\s*(\d+)", user_text)
+        # 抽 value（+N/-N / 數字，阿拉伯或中文，見 _extract_config_value）
         if action == "set":
-            if mrel_pos:
-                new_args["value"] = f"+{mrel_pos.group(1)}"
-            elif mrel_neg:
-                new_args["value"] = f"-{mrel_neg.group(1)}"
-            elif mabs:
-                new_args["value"] = mabs.group(1)
+            _cv = _extract_config_value(user_text)
+            if _cv is not None:
+                new_args["value"] = _cv
         log.info(f"[校正 C9] 設定意圖 → manage_config{{{action}}}（原 {func_name}）")
         return "manage_config", new_args, True
 
@@ -1539,8 +1555,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _set_verbs = ("改成", "設成", "調成", "改為", "設為", "調整為", "改為", "修改成",
                   "調到", "改到", "設定成", "更改為", "更改成",
                   "降低", "提升", "提高", "調低", "調高")
+    # 「加N/減N」（後面緊跟數字）也是設定動作，但單獨「加/減」太寬不能直接收
+    # （「加起來」的「加」）；用 _extract_config_value 抓得到值就代表是設定意圖。
+    _c11pre0_is_set = any(v in user_text for v in _set_verbs) or (
+        _extract_config_value(user_text) is not None)
     if func_name == "manage_config" and func_args.get("action") == "read" \
-            and any(v in user_text for v in _set_verbs):
+            and _c11pre0_is_set:
         func_args = {**func_args, "action": "set"}
         log.info("[校正 C11-pre0] manage_config action read→set（含改/設/調動詞）")
 
@@ -1565,29 +1585,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         func_args.setdefault("warehouse", "all")
         log.info(f"[校正 C11] manage_config set 補 warehouse={func_args['warehouse']}")
 
-    # C11b：manage_config value 補全：加減N → ±N；改成N → N；空白 → 從 user_text 找
+    # C11b：manage_config value 補全（加減N → ±N；改成N → N；中文數字也支援）
     import re as _re
     if func_name == "manage_config" and func_args.get("action") == "set":
         raw_v = str(func_args.get("value", "")).strip()
-        # 1. 已是合法數字（含 ±）→ 不動
-        if _re.match(r'^[+\-]?\d+$', raw_v):
-            pass
-        else:
-            # 2. 找「加N / 減N / +N / -N / 提高N / 降低N」（可含「全部」前綴）
-            #   同義動詞跟 C9/C18 的 value 抽取正則保持一致，2026-07-02 補齊
-            #   「降低/提升/提高/調低/調高」這類不帶「成/為/到」的直接動詞。
-            _adj = _re.search(r'(?:全部)?(加|減|\+|-|提高|提升|調高|降低|調低)(\d+)', raw_v) or \
-                   _re.search(r'(?:全部)?(加|減|\+|-|提高|提升|調高|降低|調低)(\d+)', user_text)
-            if _adj:
-                sign = "-" if _adj.group(1) in ("減", "-", "降低", "調低") else "+"
-                func_args["value"] = f"{sign}{_adj.group(2)}"
+        # 已是合法阿拉伯數字（含 ±）→ 不動；否則從 user_text 用統一函式重抽
+        if not _re.match(r'^[+\-]?\d+$', raw_v):
+            _cv = _extract_config_value(user_text)
+            if _cv is not None:
+                func_args["value"] = _cv
                 log.info(f"[校正 C11b] manage_config value {raw_v!r} → {func_args['value']!r}")
-            else:
-                # 3. 找「改成N / 設成N / 調整為N」→ 直接設值
-                _set_m = _re.search(r'(?:改成|設成|調整為|設定為|改為|設為|調到|改到)\s*(\d+)', user_text)
-                if _set_m:
-                    func_args["value"] = _set_m.group(1)
-                    log.info(f"[校正 C11b] manage_config value 從 user_text 直接設 {func_args['value']!r}")
 
     # C17：search_log 參數清理 + keyword 抽取（_extract_sku_keyword）
     if func_name == "search_log":
@@ -3329,15 +3336,9 @@ async def ws_handler(ws: WebSocket):
                                 func_args["warehouse"] = _en
                                 break
                         if _c18_action == "set":
-                            _m18rel = re.search(r"[加+]\s*(\d+)", user_text) or re.search(r"高\s*(\d+)", user_text)
-                            _m18rel_neg = re.search(r"[降減低]\s*(\d+)", user_text)
-                            _m18abs = re.search(r"(?:改成|設成|設為|改為|設定為|調到|改|設)\s*(\d+)", user_text)
-                            if _m18rel:
-                                func_args["value"] = f"+{_m18rel.group(1)}"
-                            elif _m18rel_neg:
-                                func_args["value"] = f"-{_m18rel_neg.group(1)}"
-                            elif _m18abs:
-                                func_args["value"] = _m18abs.group(1)
+                            _c18v = _extract_config_value(user_text)
+                            if _c18v is not None:
+                                func_args["value"] = _c18v
                     corrected_call = f"[C18]{func_name}({func_args})"
                 if corrected_call != raw_call:
                     log.info(f"[trace] vid={vid} corrected: {raw_call} → {corrected_call}")
