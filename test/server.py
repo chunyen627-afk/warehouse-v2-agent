@@ -325,6 +325,8 @@ _EXPIRING_INTENT_WORDS = (
 _MOVEMENT_PROTECT_WORDS = (
     "進出紀錄", "進出狀況", "動了多少", "異動紀錄", "流水紀錄",
     "進出了多少", "這個月動", "上個月動",
+    "出了多少貨", "進了多少貨", "出多少貨", "進多少貨",
+    "出了多少", "進了多少",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -1330,7 +1332,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             return "query_inventory", {"keyword": kw}, True
 
     # ── C7b: 含 movement 保護詞 → 強制 query_movement，不被 RCA 攔截 ──
-    if any(w in user_text for w in _MOVEMENT_PROTECT_WORDS):
+    _c7b_hit = any(w in user_text for w in _MOVEMENT_PROTECT_WORDS)
+    if _c7b_hit:
         kw = func_args.get("keyword", "") or _extract_sku_keyword(user_text)
         log.info(f"[校正 C7b] movement 保護詞 → query_movement kw={kw!r}")
         func_name = "query_movement"
@@ -1346,7 +1349,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     "commit_po", "run_script", "generate_report"}
     # 兩倉比較意圖（如「北倉和南倉庫存差異比一下」）→ RCA 不搶
     _two_whs_in_text = sum(1 for zh in _WH_ZH_MAP if zh in user_text) >= 2
-    if has_rca and func_name not in _rca_exclude and not _two_whs_in_text:
+    # C7b 剛判斷過這句話含明確的 movement 保護詞（不是 RCA 意圖）→ RCA 不搶。
+    # 沒有這道防線的話，「南倉這禮拜出了多少貨」的「多少貨」子字串會誤命中
+    # _RCA_INTENT_WORDS 的「少貨」，把 C7b 剛修正好的 query_movement 蓋回
+    # search_log（2026-07-02 實測抓到：字元級子字串誤判，跟商品/RCA語意無關）。
+    if has_rca and func_name not in _rca_exclude and not _two_whs_in_text and not _c7b_hit:
         kw = func_args.get("keyword", "")
         # C8 轉換時就補好 keyword，否則 C17 沒機會跑
         if not kw:
