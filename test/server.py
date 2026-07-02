@@ -97,7 +97,7 @@ GATEKEEPER_KEYWORDS = {
     "洗衣精", "洗劑", "衛生紙", "紙巾", "沐浴乳", "蚊香", "垃圾袋",
     "t 恤", "素t", "襪", "羊毛襪", "外套", "羽絨", "牛仔", "牛仔褲", "內衣",
     "瑜珈墊", "瑜珈", "水壺", "健身環", "慢跑鞋", "毛巾", "帽子", "毛帽",
-    "拖鞋", "手套", "睡袋", "拖把",
+    "拖鞋", "手套", "睡袋", "拖把", "背包", "太陽眼鏡", "野餐墊", "地墊", "毛毯",
     # 倉庫
     "北倉", "北區倉", "北區", "北部",
     "中倉", "中區倉", "中區", "中部",
@@ -111,6 +111,7 @@ GATEKEEPER_KEYWORDS = {
     "取消", "退出", "停止",
     "進貨", "出貨", "入庫", "出庫", "進倉", "出倉", "進出",
     "庫存量", "庫存價值", "週轉", "週轉率",
+    "前置", "天數", "前置天數", "延長", "縮短", "安全水位",
     "缺貨", "補貨", "警示", "警報", "告急", "快沒", "不足", "低庫存", "庫存警示",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
     "冠軍", "最熱門", "最冷門", "銷量",
@@ -1367,11 +1368,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         return "search_log", new_args, True
 
     # C9：含設定項詞 + 動作詞 → 強轉 manage_config（set_alert 已有自己的路由不干涉）
-    # 也涵蓋 LLM 已經正確輸出 manage_config、但 key/value 自己抽壞（常見：抽成空
-    # 字串）的情況——原本只在 func_name 不是 manage_config 時才校正，等於預設
-    # LLM 判對功能就一定也抽對參數，2026-07-02 實測「北倉安全水位提高20」戳破
-    # 這個假設：func_name 正確是 manage_config，但 key 抽成空字串直接報錯。
-    _c9_needs_fix = func_name == "manage_config" and not (func_args.get("key") or "").strip()
+    # 也涵蓋 LLM 已經正確輸出 manage_config、但 key/value 自己抽壞的情況——原本
+    # 只在 func_name 不是 manage_config 時才校正，等於預設 LLM 判對功能就一定
+    # 也抽對參數，2026-07-02 實測連續兩句戳破這個假設：
+    #   「北倉安全水位提高20」key 抽成空字串
+    #   「把安全庫存提升一下」key 抽成「提升」（把動詞誤當設定項名稱）
+    # 判斷條件除了 key 是空字串，也要涵蓋 key 不在已知設定項清單裡的情況
+    # （代表抽到的不是真正的設定項名稱，是雜訊詞）。
+    _c9_raw_key = (func_args.get("key") or "").strip()
+    _c9_needs_fix = func_name == "manage_config" and (
+        not _c9_raw_key or not any(_c9_raw_key in w or w in _c9_raw_key for w in _CONFIG_KEY_WORDS)
+    )
     if has_cfgkey and (func_name not in ("manage_config", "set_alert") or _c9_needs_fix):
         action = "set" if has_cfgset and not any(w in user_text for w in ("是多少", "設多少", "查")) else "read"
         # 抽 key
@@ -1382,13 +1389,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             if zh in user_text:
                 new_args["warehouse"] = en
                 break
-        # 抽 value（+N / 數字）
+        # 抽 value（+N/-N / 數字）
         import re as _re
-        mrel = _re.search(r"[加+]\s*(\d+)", user_text) or _re.search(r"高\s*(\d+)", user_text)
+        mrel_pos = _re.search(r"[加+]\s*(\d+)", user_text) or _re.search(r"高\s*(\d+)", user_text)
+        # 「降低15/減少15/調低15」→ 負向相對值，跟「提高/加」是相反方向，
+        # 2026-07-02 實測「北倉安全水位降低15」抓到：原本只認正向詞，這句話
+        # 明明有具體數字卻因為沒匹配到任何 relative pattern 而漏抽 value。
+        mrel_neg = _re.search(r"[降減低]\s*(\d+)", user_text)
         mabs = _re.search(r"(?:改成|設成|設為|改為|設定為|調到|改|設)\s*(\d+)", user_text)
         if action == "set":
-            if mrel:
-                new_args["value"] = f"+{mrel.group(1)}"
+            if mrel_pos:
+                new_args["value"] = f"+{mrel_pos.group(1)}"
+            elif mrel_neg:
+                new_args["value"] = f"-{mrel_neg.group(1)}"
             elif mabs:
                 new_args["value"] = mabs.group(1)
         log.info(f"[校正 C9] 設定意圖 → manage_config{{{action}}}（原 {func_name}）")
@@ -1480,8 +1493,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         return "compare_periods", {"metric": "out"}, True
 
     # C11-pre0：manage_config action 修正 — 含「改成/設成/調成/改為/設為」→ set
+    # 也涵蓋「降低/提升/提高/調低/調高」這類不帶「成/為/到」的直接動詞（2026-07-02
+    # 實測「北倉安全水位降低15」抓到：LLM 把 action 判成 read，這類詞沒被
+    # _set_verbs 涵蓋，C11-pre0 沒機會校正，value 也就跟著沒被抽）。
     _set_verbs = ("改成", "設成", "調成", "改為", "設為", "調整為", "改為", "修改成",
-                  "調到", "改到", "設定成", "更改為", "更改成")
+                  "調到", "改到", "設定成", "更改為", "更改成",
+                  "降低", "提升", "提高", "調低", "調高")
     if func_name == "manage_config" and func_args.get("action") == "read" \
             and any(v in user_text for v in _set_verbs):
         func_args = {**func_args, "action": "set"}
@@ -1516,11 +1533,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         if _re.match(r'^[+\-]?\d+$', raw_v):
             pass
         else:
-            # 2. 找「加N / 減N / +N / -N」（可含「全部」前綴）
-            _adj = _re.search(r'(?:全部)?(加|減|\+|-)(\d+)', raw_v) or \
-                   _re.search(r'(?:全部)?(加|減|\+|-)(\d+)', user_text)
+            # 2. 找「加N / 減N / +N / -N / 提高N / 降低N」（可含「全部」前綴）
+            #   同義動詞跟 C9/C18 的 value 抽取正則保持一致，2026-07-02 補齊
+            #   「降低/提升/提高/調低/調高」這類不帶「成/為/到」的直接動詞。
+            _adj = _re.search(r'(?:全部)?(加|減|\+|-|提高|提升|調高|降低|調低)(\d+)', raw_v) or \
+                   _re.search(r'(?:全部)?(加|減|\+|-|提高|提升|調高|降低|調低)(\d+)', user_text)
             if _adj:
-                sign = "+" if _adj.group(1) in ("加", "+") else "-"
+                sign = "-" if _adj.group(1) in ("減", "-", "降低", "調低") else "+"
                 func_args["value"] = f"{sign}{_adj.group(2)}"
                 log.info(f"[校正 C11b] manage_config value {raw_v!r} → {func_args['value']!r}")
             else:
@@ -3271,9 +3290,12 @@ async def ws_handler(ws: WebSocket):
                                 break
                         if _c18_action == "set":
                             _m18rel = re.search(r"[加+]\s*(\d+)", user_text) or re.search(r"高\s*(\d+)", user_text)
+                            _m18rel_neg = re.search(r"[降減低]\s*(\d+)", user_text)
                             _m18abs = re.search(r"(?:改成|設成|設為|改為|設定為|調到|改|設)\s*(\d+)", user_text)
                             if _m18rel:
                                 func_args["value"] = f"+{_m18rel.group(1)}"
+                            elif _m18rel_neg:
+                                func_args["value"] = f"-{_m18rel_neg.group(1)}"
                             elif _m18abs:
                                 func_args["value"] = _m18abs.group(1)
                     corrected_call = f"[C18]{func_name}({func_args})"
