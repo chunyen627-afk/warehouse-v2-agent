@@ -408,7 +408,9 @@ def manage_config(action: str = "read", key: str = "", value=None,
     if action == "set":
         mode, num = _parse_value(value)
         if mode is None:
-            return W._err(f"看不懂要把設定改成什麼值：「{value}」")
+            if value:
+                return W._err(f"看不懂要把設定改成什麼值：「{value}」")
+            return W._err("請說明要改成多少，例如「南倉安全庫存加30」或「補貨前置天數改成5天」")
 
         # 算受影響範圍 + 預覽 diff（不寫入！）
         whs = ["north", "central", "south"] if warehouse == "all" else [warehouse]
