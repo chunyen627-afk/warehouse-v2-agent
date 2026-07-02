@@ -1721,6 +1721,27 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'movement_done') {
     card.innerHTML = `<div class="label">✅ ${data.direction_label}完成</div>
       <div style="padding:8px;font-size:14px">${data.name} ${data.warehouse_label} 現有 <b>${data.after_qty}</b> 件</div>`;
+  } else if (view === 'transfer_confirm') {
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header warn">🔄 確認調貨 — 請確認</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+            <tr><td>商品</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
+            <tr><td>調貨數量</td><td style="font-weight:600">${data.qty} 件</td></tr>
+            <tr><td>${data.from_label}</td><td style="color:var(--accent)">${data.from_before} 件 → <b>${data.from_after}</b> 件</td></tr>
+            <tr><td>${data.to_label}</td><td style="color:var(--success)">${data.to_before} 件 → <b>${data.to_after}</b> 件</td></tr>
+          </table>
+          <div class="hitl-meta">確認後 ${data.from_label} 扣 ${data.qty} 件、${data.to_label} 加 ${data.qty} 件，總量不變。重開伺服器或重整頁面不會消失。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_transfer" data-payload='${JSON.stringify({pending:data})}'>✅ 確認調貨</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
+  } else if (view === 'transfer_done') {
+    card.innerHTML = `<div class="label">✅ 調貨完成</div>
+      <div style="padding:8px;font-size:14px">${data.name} ${data.qty} 件：${data.from_label} 現有 <b>${data.from_after}</b> 件、${data.to_label} 現有 <b>${data.to_after}</b> 件</div>`;
   } else if (view === 'item_done') {
     // 新增/刪除商品後即時更新狀態列和異常橫幅
     refreshSnapshot();

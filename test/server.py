@@ -946,38 +946,37 @@ _CN_NUM = {"零": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5,
 
 
 def _cn_to_int(s: str):
-    """把中文數字字串轉阿拉伯整數，支援 1-999 的常見口語（三、十、十五、
-    二十、二十五、一百、一百二十）。無法解析回 None。展場訪客講「三箱」
-    「五個」「十件」很自然，C13b 的量詞抽取原本只認阿拉伯數字會全漏。"""
+    """把中文數字字串轉阿拉伯整數，支援 1-9999 的常見口語（三、十、十五、
+    二十、一百二十、一千、兩千五百）。無法解析回 None。展場訪客講「三箱」
+    「五十個」「一千件」很自然，量詞抽取原本只認阿拉伯數字會全漏。"""
     s = s.strip()
     if not s:
         return None
     if s.isdigit():
         return int(s)
-    total = 0
-    section = 0
-    i = 0
-    while i < len(s):
-        ch = s[i]
-        if ch == "百":
-            section = (section or 1) * 100
-            total += section
-            section = 0
+    total = 0      # 已結算的部分（千/百段）
+    section = 0    # 當前累積的「十位以下」段
+    digit = 0      # 剛讀到的個位數字
+    for ch in s:
+        if ch == "千":
+            section += (digit or 1) * 1000
+            total += section; section = 0; digit = 0
+        elif ch == "百":
+            section += (digit or 1) * 100
+            digit = 0
         elif ch == "十":
-            section = (section or 1) * 10
-            total += section
-            section = 0
+            section += (digit or 1) * 10
+            digit = 0
         elif ch in _CN_NUM:
-            section = _CN_NUM[ch]
+            digit = _CN_NUM[ch]
         else:
             return None
-        i += 1
-    total += section
-    return total if total > 0 else None
+    result = total + section + digit
+    return result if result > 0 else None
 
 
 # 數字部分：阿拉伯 or 中文，用於 manage_config 的 value 抽取
-_NUM_PART = r'([0-9]+|[零一二兩三四五六七八九十百]+)'
+_NUM_PART = r'([0-9]+|[零一二兩三四五六七八九十百千]+)'
 
 
 def _extract_config_value(user_text: str):
@@ -1005,6 +1004,51 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     hard_corrected=True 表示有確定性規則命中，C18 不應再覆蓋。"""
     text_low = user_text.lower()
 
+    # C13a：跨倉調貨意圖 → create_transfer（2026-07-02 新增）。放在 C13b（進出貨）
+    #   之前，因為調貨句同時含「調」動詞+數量+兩個倉名，元素跟進出貨重疊，要先
+    #   攔截才不會被 C13b 誤判成單倉進出貨。判別特徵：含明確調貨動詞（調/調撥/
+    #   調貨/移/搬）+ 具體數字量詞 + 兩個不同倉名（一來源一目標）。
+    import re as _re13a
+    # 單字「調/搬/移/撥」搭配「兩個倉名 + 數字量詞」已經夠精準（純進出貨句不會
+    #   同時提到兩個倉），可以放心收單字動詞（「搬30個到南倉」的「搬」）。
+    _transfer_verbs = ("調貨", "調撥", "調到", "調去", "調過去", "調", "搬到", "搬去",
+                       "搬", "移到", "移去", "移過去", "移", "撥到", "撥去", "撥")
+    _qty13a_m = _re13a.search(
+        r'([0-9]+|[零一二兩三四五六七八九十百千]+)\s*'
+        r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副)', user_text)
+    _qty13a_int = _cn_to_int(_qty13a_m.group(1)) if _qty13a_m else None
+    _has_transfer_verb = any(w in user_text for w in _transfer_verbs)
+    # 兩個不同倉名（北/中/南去重後 >= 2）才算調貨
+    _wh_mentions13a = [w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
+                                    "南倉", "南區倉", "南區") if w in user_text]
+    _wh_keys13a = {w[0] for w in _wh_mentions13a}
+    if (func_name != "create_transfer" and _has_transfer_verb
+            and _qty13a_int is not None and len(_wh_keys13a) >= 2):
+        # 解析來源倉 / 目標倉：目標倉通常緊跟在「到/去/過去/調到」之後。
+        _WH_ZH2KEY = {"北": "北倉", "中": "中倉", "南": "南倉"}
+        _to_key = ""
+        _to_m = _re13a.search(r'(?:到|去|過去)\s*([北中南])', user_text)
+        if _to_m:
+            _to_key = _to_m.group(1)
+        # 來源倉：第一個出現、且不是目標倉的倉名
+        _from_key = ""
+        for _w in _wh_mentions13a:
+            if _w[0] != _to_key:
+                _from_key = _w[0]
+                break
+        # 目標倉沒抓到（例如「北倉南倉調20個」沒有明確到/去）→ 留空讓 clarify 問
+        _from_zh = _WH_ZH2KEY.get(_from_key, "")
+        _to_zh = _WH_ZH2KEY.get(_to_key, "")
+        # 商品名：剝掉動詞/時間詞/數量量詞/倉名後交給 _extract_sku_keyword
+        _pre13a = user_text.replace(_qty13a_m.group(0), "")
+        for _w in (_transfer_verbs + tuple(_wh_mentions13a) +
+                   ("今天", "今日", "剛剛", "剛才", "幫我", "麻煩", "請", "從", "到", "去", "過去")):
+            _pre13a = _pre13a.replace(_w, "")
+        _kw13a = _extract_sku_keyword(_pre13a) or _extract_sku_keyword(user_text) or ""
+        log.info(f"[校正 C13a] 調貨意圖 → create_transfer kw={_kw13a!r} from={_from_zh!r} to={_to_zh!r} qty={_qty13a_int}")
+        return "create_transfer", {"keyword": _kw13a, "from_wh": _from_zh,
+                                    "to_wh": _to_zh, "qty": str(_qty13a_int)}, True
+
     # C13b：即時進出貨意圖 → create_movement（輕量版，不依賴模型認得這個新 function，
     #   270M 沒訓練過 create_movement，靠關鍵字 + 正則抽參數，跟 list_files/set_alert 同模式）
     #   放在所有規則最前面（優先權最高）：「藍牙喇叭庫存加50組」這種句子含「庫存」+
@@ -1021,7 +1065,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
     import re as _re13b_single
-    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}(?:[0-9]+|[零一二兩三四五六七八九十百]+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副))', user_text)
+    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}(?:[0-9]+|[零一二兩三四五六七八九十百千]+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副))', user_text)
     if _single_dir_m and not _has_movement_word:
         _has_movement_word = True
         if _single_dir_m.group(0) == "進":
@@ -1033,7 +1077,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #    原本正則只認阿拉伯數字，中文數字全漏，整句 C13b 不觸發跌回誤判）。
     import re as _re13b_pre
     _qunit = r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副)'
-    _qty_re = r'([0-9]+|[零一二兩三四五六七八九十百]+)\s*' + _qunit
+    _qty_re = r'([0-9]+|[零一二兩三四五六七八九十百千]+)\s*' + _qunit
     _qty13b_m = _re13b_pre.search(_qty_re, user_text)
     # 中文數字要能真的轉成整數才算數（避免「幾個」的「幾」等非數字被誤收）
     _qty13b_int = _cn_to_int(_qty13b_m.group(1)) if _qty13b_m else None
@@ -1079,7 +1123,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                "search_log","manage_config","run_script","generate_report","list_files",
                "set_alert","generate_po","compare_periods",
                "set_schedule","list_schedules","delete_schedule",
-               "list_alerts","delete_alert"}
+               "list_alerts","delete_alert","create_movement","create_transfer"}
     if func_name not in _KNOWN:
         log.info(f"[校正 C0] 未知函式 {func_name!r}，嘗試從 user_text 推斷")
         # 用 C8-C16 的 intent 詞來推斷
@@ -2869,6 +2913,10 @@ async def ws_handler(ws: WebSocket):
                             data.get("rule_id", ""), actor="user_confirmed", trace_id=trace_id)
                     elif act == "create_movement":
                         res = tools_v2.commit_movement(
+                            data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
+                        await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
+                    elif act == "create_transfer":
+                        res = tools_v2.commit_transfer(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                         await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
                     else:

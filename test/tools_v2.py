@@ -1672,6 +1672,149 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
 
 
 # ════════════════════════════════════════════════════════════
+# ⑧b create_transfer / commit_transfer — 跨倉調貨（A 倉 → B 倉）
+#    調貨 = 同時扣來源倉、加目標倉，總量不變。走 HITL 確認卡（同進出貨），
+#    來源倉不足擋下，交易紀錄拆成「來源倉 out + 目標倉 in」兩筆（跟現有
+#    transactions 格式一致，RCA/報表完全不用改）。2026-07-02 新增。
+# ════════════════════════════════════════════════════════════
+_WH_ALIASES_TF = {"north": "north", "北": "north", "北倉": "north", "北區倉": "north", "北區": "north",
+                  "central": "central", "中": "central", "中倉": "central", "中區倉": "central", "中區": "central",
+                  "south": "south", "南": "south", "南倉": "south", "南區倉": "south", "南區": "south"}
+
+
+def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
+                    qty: str = "") -> dict:
+    """觸發調貨流程：找商品 → 解析來源/目標倉 → 檢查來源庫存 → 回確認卡（不寫入）。"""
+    if not keyword:
+        return W._err("請說明要調哪個商品，例如「北倉調20個藍牙耳機去南倉」")
+
+    scored = W.match_items(keyword)
+    if not scored:
+        return W._err(f"找不到商品「{keyword}」，請確認商品名稱")
+    if len(scored) > 1:
+        top_score = scored[0]["score"]
+        scored = [m for m in scored if m["score"] * 2 >= top_score]
+    matches = [m["item"] for m in scored]
+    if len(matches) > 1:
+        opts = [it["name"] for it in matches[:5]]
+        return {"ok": True,
+                "summary": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想調哪個？",
+                "view": "clarify",
+                "data": {"question": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想調哪個？",
+                         "options": [f"{n} 從{from_wh or ''}調到{to_wh or ''}" for n in opts],
+                         "hint": "請輸入完整商品名稱重新描述"}}
+    item = matches[0]
+    sku = item["sku_id"]
+
+    from_key = _WH_ALIASES_TF.get((from_wh or "").strip(), "")
+    to_key = _WH_ALIASES_TF.get((to_wh or "").strip(), "")
+    if not from_key or not to_key:
+        return {"ok": True, "summary": f"「{item['name']}」要從哪個倉調到哪個倉？",
+                "view": "clarify",
+                "data": {"question": f"「{item['name']}」要從哪個倉調到哪個倉？",
+                         "options": [f"北倉調{item['name']}去南倉{qty or 20}件",
+                                     f"南倉調{item['name']}去北倉{qty or 20}件",
+                                     f"中倉調{item['name']}去北倉{qty or 20}件"],
+                         "hint": "請講清楚來源倉跟目標倉，例如「北倉調{}去南倉」".format(item['name'])}}
+    if from_key == to_key:
+        return W._err("來源倉跟目標倉不能是同一個，請確認一下要從哪調到哪。")
+
+    try:
+        qty_val = int(str(qty).strip() or 0)
+    except ValueError:
+        qty_val = 0
+    if qty_val <= 0:
+        return W._err("請說明調貨數量，例如「調20件」")
+
+    s = W.state()
+    from_cur = s.stock.get(from_key, {}).get(sku, 0)
+    to_cur = s.stock.get(to_key, {}).get(sku, 0)
+    if qty_val > from_cur:
+        return {"ok": False,
+                "summary": f"⚠️ 庫存不足，無法調貨。「{item['name']}」{WH_LABEL_MAP[from_key]}目前僅 {from_cur} 件，不足 {qty_val} 件。",
+                "view": "error", "data": {}}
+
+    from_label, to_label = WH_LABEL_MAP[from_key], WH_LABEL_MAP[to_key]
+    summary = (f"🔄 確認調貨\n"
+               f"商品：{item['name']}（{sku}）\n"
+               f"數量：{qty_val} 件\n"
+               f"{from_label}：{from_cur} 件 → {from_cur - qty_val} 件\n"
+               f"{to_label}：{to_cur} 件 → {to_cur + qty_val} 件")
+    return {"ok": True, "summary": summary, "view": "transfer_confirm",
+            "data": {"pending": True, "sku": sku, "name": item["name"],
+                     "from_wh": from_key, "from_label": from_label,
+                     "to_wh": to_key, "to_label": to_label, "qty": qty_val,
+                     "from_before": from_cur, "from_after": from_cur - qty_val,
+                     "to_before": to_cur, "to_after": to_cur + qty_val}}
+
+
+def commit_transfer(pending: dict, actor: str = "user_confirmed",
+                    trace_id: str | None = None) -> dict:
+    """HITL 確認後真正寫入：來源倉扣、目標倉加，交易記兩筆（out + in），熱更新記憶體。"""
+    import shutil
+    dd = _data_dir()
+    ts = datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"tf-{ts}"
+    p = pending
+    sku = p["sku"]
+    from_key, to_key, qty_val = p["from_wh"], p["to_wh"], p["qty"]
+
+    # 1. 更新 stock.csv（來源倉、目標倉兩行都改）
+    stock_path = dd / "master" / "stock.csv"
+    shutil.copy2(stock_path, str(stock_path) + ".bak")
+    rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
+    _seen_from = _seen_to = False
+    for r in rows:
+        if r["sku_id"] == sku and r["warehouse"] == from_key:
+            r["qty"] = str(p["from_after"]); _seen_from = True
+        elif r["sku_id"] == sku and r["warehouse"] == to_key:
+            r["qty"] = str(p["to_after"]); _seen_to = True
+    if not _seen_from:
+        rows.append({"warehouse": from_key, "sku_id": sku, "qty": str(p["from_after"])})
+    if not _seen_to:
+        rows.append({"warehouse": to_key, "sku_id": sku, "qty": str(p["to_after"])})
+    with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=["warehouse", "sku_id", "qty"])
+        w.writeheader(); w.writerows(rows)
+
+    # 2. 交易紀錄拆兩筆：來源倉 out、目標倉 in（跟現有格式一致）
+    snap_date = W.state().snapshot_date or ts[:10]
+    tx_dir = dd / "transactions"
+    tx_dir.mkdir(parents=True, exist_ok=True)
+    for _dir, _wh in (("out", from_key), ("in", to_key)):
+        tx_path = tx_dir / f"{snap_date}_{_dir}.csv"
+        is_new = not tx_path.exists()
+        with open(tx_path, "a", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            if is_new:
+                w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
+            w.writerow([snap_date, sku, _wh, _dir, qty_val])
+
+    # 3. audit log
+    audit_dir = dd / "audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                            "action": "create_transfer", "sku": sku,
+                            "from_wh": from_key, "to_wh": to_key, "qty": qty_val,
+                            "from_before": p["from_before"], "from_after": p["from_after"],
+                            "to_before": p["to_before"], "to_after": p["to_after"]},
+                           ensure_ascii=False) + "\n")
+
+    # 4. 熱更新記憶體
+    s = W.state()
+    s.stock.setdefault(from_key, {})[sku] = p["from_after"]
+    s.stock.setdefault(to_key, {})[sku] = p["to_after"]
+
+    return {"ok": True,
+            "summary": (f"✅ 已完成調貨。{p['name']} {p['qty']} 件從 {p['from_label']}"
+                        f"調到 {p['to_label']}。\n"
+                        f"{p['from_label']}現有 {p['from_after']} 件、"
+                        f"{p['to_label']}現有 {p['to_after']} 件。"),
+            "view": "transfer_done", "data": {"trace_id": trace_id, **p}}
+
+
+# ════════════════════════════════════════════════════════════
 # ⑨ reset_demo_data — 展示資料一鍵重置（防止展場被玩爛回不去）
 #    warehouse_data_baseline/ 是展前建立的乾淨快照，重置 = 整個資料夾換回去。
 #    不走對話式 dispatch，走前端獨立按鈕 + 密碼驗證（server.py /api/reset_demo）。
