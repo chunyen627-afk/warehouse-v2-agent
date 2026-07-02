@@ -1322,6 +1322,12 @@ function handleMessage(msg) {
     const result = msg.result || {};
     const view = result.view;
     const data = result.data || {};
+    // HITL 確認送出後，doConfirm() 把按鈕列換成「執行中…」，但原本的確認卡沒有
+    // 隨著新結果卡一起被清掉，導致「執行中…」永久卡著（2026-07-02 實測抓到）。
+    // done 必然緊接在確認動作之後送達，此時清掉所有殘留的執行中提示是安全的。
+    document.querySelectorAll('.hitl-btns').forEach(el => {
+      if (el.textContent.includes('執行中')) el.remove();
+    });
     // 若 loading-dots 還在（例如取消直接跳 done，沒有 token），清空文字但保留節點，
     // 讓 renderViewCard 仍有掛載點可插入卡片（先前整個 remove()+null 會導致卡片沒渲染出來）
     if (currentBotMsg && currentBotMsg.querySelector('.loading-dots')) {
