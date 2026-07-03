@@ -114,7 +114,7 @@ GATEKEEPER_KEYWORDS = {
     "前置", "天數", "前置天數", "延長", "縮短", "安全水位",
     "缺貨", "補貨", "警示", "警報", "告急", "快沒", "不足", "低庫存", "庫存警示",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
-    "冠軍", "最熱門", "最冷門", "銷量",
+    "冠軍", "最熱門", "最冷門", "銷量", "搶手", "熱賣", "賣得最兇", "最夯",
     "比較", "比", "跟", "和", "vs", "對比",
     "查", "看", "顯示", "列", "看一下", "查一下",
     # 連帶分析 (v3.8 連鎖網)
@@ -295,14 +295,15 @@ _INVENTORY_INTENT_WORDS = (
 # 缺貨意圖詞（C3 用）
 _LOW_STOCK_INTENT_WORDS = (
     "快沒", "缺貨", "補貨", "庫存警示", "庫存告急", "存量不足",
-    "庫存不足", "低庫存", "存量警報", "警示", "告急",
+    "庫存不足", "低庫存", "存量警報", "警示", "告急", "補不上", "見底",
     "low stock", "restock", "running low", "alert",
 )
 
 # 熱銷意圖詞（C4 用）
 _HOT_INTENT_WORDS_HOT = (
     "賣最好", "最熱門", "熱銷", "暢銷", "賣最多",
-    "銷量第一", "銷量冠軍", "top selling", "best seller", "hot",
+    "銷量第一", "銷量冠軍", "搶手", "熱賣榜", "熱賣", "賣得最兇", "賣最兇",
+    "top selling", "best seller", "hot",
 )
 _HOT_INTENT_WORDS_SLOW = (
     "賣最差", "滯銷", "賣不掉", "最冷門", "賣最少", "銷量最差",
@@ -336,6 +337,7 @@ _MOVEMENT_PROTECT_WORDS = (
     "進出了多少", "這個月動", "上個月動",
     "出了多少貨", "進了多少貨", "出多少貨", "進多少貨",
     "出了多少", "進了多少",
+    "進什麼貨", "出什麼貨", "有進什麼", "有出什麼",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -343,6 +345,7 @@ _RCA_INTENT_WORDS = (
     "對不上", "對不起來", "兜不攏", "帳不對", "短少", "短收", "少貨", "少了",
     "怎麼少", "為什麼少", "異常", "誰改的", "誰動的", "查原因", "追原因",
     "差異", "不對", "對帳", "怪怪的", "莫名其妙", "有問題", "有鬼",
+    "有出入", "帳面", "差好多", "詭異",
     "discrepancy", "why", "who changed", "trace",
 )
 # C9 manage_config：改設定（設定項詞 + 動作詞）
@@ -626,7 +629,9 @@ def _detect_clarify(user_text: str) -> dict | None:
     _po_direct = ("產採購", "下採購", "補貨單下單", "幫我叫貨", "開採購", "幫我把缺貨",
                   "缺貨清單轉採購", "缺貨的產", "幫我補貨", "產po",
                   # 「出一張採購單」「列成採購單」這類明確開單動詞（第9輪測試補）
-                  "出一張", "開一張", "生一張", "出採購", "列成採購", "列採購", "該補的")
+                  "出一張", "開一張", "生一張", "出採購", "列成採購", "列採購", "該補的",
+                  # 「幫我開單採購」（第10輪測試補）
+                  "開單採購", "開單補貨", "開單")
     has_po_intent = any(w in user_text for w in _po_kw)
     has_po_direct = any(w in user_text for w in _po_direct)
     # 兩個倉名同時出現 → 比較意圖，放行（不攔）
@@ -691,7 +696,8 @@ def _detect_clarify(user_text: str) -> dict | None:
 
     # ⑥ 純模糊短句（查/看/確認等）— 用 t_clean 或 t 都檢查，剝掉填充詞後剩「查」也算
     #    也涵蓋「幫偶查」→ strip「幫」→「偶查」太短且無具體目標 → clarify
-    _vague = {"查", "查詢", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看", "那個", "這個", "欸", "誒", "喂", "嗨", "查個東西", "有個問題", "有問題", "問題"}
+    _vague = {"查", "查詢", "看", "確認", "了解", "瞭解", "問一下", "查一下", "看一下", "看看", "那個", "這個", "欸", "誒", "喂", "嗨", "查個東西", "有個問題", "有問題", "問題",
+              "然後", "然後呢", "接下來", "接下來呢", "接著呢", "再來", "再來呢"}
     # 剝完填充詞只剩 1-3 字且有動作意圖 → clarify（但含類別關鍵字則放行，如「查食品」）
     _has_cat = any(zh in t for zh in ("電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動"))
     _too_short = len(t_clean) <= 3 and has_intent and not _has_cat
@@ -1015,7 +1021,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # func_name 是什麼都要 hard-return——「出一張缺貨採購單」的「出一張」會被
     # C13b 的單字「出」+數字量詞規則搶成出貨 1 張，即使 intent_clf 已正確判成
     # generate_po 也會被劫走（第9輪測試抓到）。
-    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單"))
+    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單", "開單採購", "開單補貨"))
             and any(v in user_text for v in ("出", "開", "產", "生", "列", "建", "做", "給我"))
             and not any(w in user_text for w in ("查", "看", "哪些", "紀錄", "記錄", "歷史", "對帳", "短收"))):
         log.info("[校正 C-PO] 開採購單意圖 → generate_po")
@@ -1029,7 +1035,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 單字「調/搬/移/撥」搭配「兩個倉名 + 數字量詞」已經夠精準（純進出貨句不會
     #   同時提到兩個倉），可以放心收單字動詞（「搬30個到南倉」的「搬」）。
     _transfer_verbs = ("調貨", "調撥", "調到", "調去", "調過去", "調", "搬到", "搬去",
-                       "搬", "移到", "移去", "移過去", "移", "撥到", "撥去", "撥")
+                       "搬", "移到", "移去", "移過去", "移", "撥到", "撥去", "撥",
+                       "挪到", "挪去", "挪過去", "挪")
     _qty13a_m = _re13a.search(
         r'([0-9]+|[零一二兩三四五六七八九十百千]+)\s*'
         r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副)', user_text)
@@ -1040,7 +1047,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                                     "南倉", "南區倉", "南區") if w in user_text]
     _wh_keys13a = {w[0] for w in _wh_mentions13a}
     if (func_name != "create_transfer" and _has_transfer_verb
-            and _qty13a_int is not None and len(_wh_keys13a) >= 2):
+            and _qty13a_int is not None
+            and (len(_wh_keys13a) >= 2
+                 # 單倉 + 強調貨動詞（兩字以上，不含單字「調/搬/移/撥」）也算調貨
+                 # 意圖：「調撥25個藍牙耳機給南倉」只提到目標倉，來源留空讓
+                 # create_transfer 的 clarify 問「從哪個倉調」（守衛庫抓到的回歸：
+                 # 這種句曾跑去查庫存）
+                 or (len(_wh_keys13a) == 1 and any(w in user_text for w in (
+                     "調撥", "調貨", "轉倉", "調到", "調去", "調過去",
+                     "搬到", "搬去", "移到", "移去", "移過去",
+                     "撥到", "撥去", "挪到", "挪去", "挪過去"))))):
         # 解析來源倉 / 目標倉：目標倉通常緊跟在「到/去/過去/調到」之後。
         _WH_ZH2KEY = {"北": "北倉", "中": "中倉", "南": "南倉"}
         _to_key = ""
@@ -1080,10 +1096,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                               "被退", "退回來", "退貨回來")
     _movement_in_words = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
                           "來貨了", "來貨", "進了貨", "來了",
-                          "收了", "送來", "送到", "送了") + _movement_return_words
+                          "收了", "送來", "送到", "送了",
+                          "卸了", "卸貨", "卸下", "入了") + _movement_return_words
     _movement_out_words = ("出貨了", "出貨", "出庫", "賣掉了", "賣掉", "賣了",
                            "銷貨", "銷出", "銷售", "售出", "出了", "買走了", "買走",
-                           "拿走", "提走", "取走", "載走")
+                           "拿走", "提走", "取走", "載走", "銷了", "賣出")
     _is_return13b = any(w in user_text for w in _movement_return_words)
     _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
@@ -1142,7 +1159,30 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if func_name in ("set_schedule", "list_schedules", "delete_schedule",
                      "list_alerts", "delete_alert",
                      "compare_warehouses"):
-        return func_name, func_args, True
+        # 例外：compare 但句中沒有兩個倉名、且含強 RCA 意圖詞（「純棉素T帳面
+        # 跟實際差好多」的「跟…差」讓 intent_clf 誤判 compare）→ 不保護，
+        # 放行給 C8 轉 search_log（第10輪測試抓到）
+        _cmp_rca_leak = (func_name == "compare_warehouses"
+                         and len(_wh_keys13a) < 2
+                         and any(w in user_text for w in _RCA_INTENT_WORDS))
+        if not _cmp_rca_leak:
+            return func_name, func_args, True
+
+    # C9c：LLM 偶爾輸出非標準 action（increase/decrease/add…）→ 正規化成 set/read。
+    # 「南倉安全庫存提高40」曾吐 action=increase 直接報「不支援的 config 動作」
+    # （第10輪測試抓到）。相對意圖的 value 常沒帶正負號，一律重抽原句。
+    if func_name == "manage_config":
+        _act_raw = str(func_args.get("action") or "").lower()
+        if _act_raw and _act_raw not in ("set", "read"):
+            _norm = "set" if _act_raw in ("increase", "decrease", "add", "raise",
+                                           "reduce", "update", "change", "increment",
+                                           "decrement", "adjust", "modify", "write") else "read"
+            func_args = {**func_args, "action": _norm}
+            if _norm == "set":
+                _cv9c = _extract_config_value(user_text)
+                if _cv9c is not None:
+                    func_args["value"] = _cv9c
+            log.info(f"[校正 C9c] 非標準 action {_act_raw!r} → {_norm}")
 
     # C9b：manage_config 問句防護——「…設定多少」「…是多少」是查詢不是設值。
     # intent_clf 直判 manage_config 時 LLM 常自己標 action=set 且沒 value，
@@ -1483,12 +1523,20 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             return "query_inventory", {"keyword": kw}, True
 
     # ── C7b: 含 movement 保護詞 → 強制 query_movement，不被 RCA 攔截 ──
+    # ⚠️ 一定要 hard-return——C7b 之前只改 func_name 不返回，「最近有進什麼貨嗎」
+    # 被 C7b 正確轉成 movement 後，C18 又拿 intent_clf 的 query_inventory 蓋回去
+    # （第10輪測試抓到）。hard=True 讓 C18 不碰。
     _c7b_hit = any(w in user_text for w in _MOVEMENT_PROTECT_WORDS)
     if _c7b_hit:
         kw = func_args.get("keyword", "") or _extract_sku_keyword(user_text)
-        log.info(f"[校正 C7b] movement 保護詞 → query_movement kw={kw!r}")
-        func_name = "query_movement"
-        func_args = {"keyword": kw} if kw else {}
+        # keyword 髒掉（帶時間/疑問詞，如「最近 進什麼貨」）比對不到商品就丟掉
+        # → 全品項進出統計；否則後面 OOV 檢查會誤判成「找不到商品」clarify
+        if kw:
+            import warehouse as _WC7
+            if not _WC7.match_items(kw):
+                kw = ""
+        log.info(f"[校正 C7b] movement 保護詞 → query_movement kw={kw!r}（hard）")
+        return "query_movement", ({"keyword": kw} if kw else {}), True
 
     has_rca    = any(w in user_text for w in _RCA_INTENT_WORDS)
     has_cfgkey = any(w in user_text for w in _CONFIG_KEY_WORDS)

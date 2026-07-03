@@ -25,6 +25,7 @@ ACCEPT = {
     "mv":    lambda v: v == "movement_confirm",
     "tf":    lambda v: v == "transfer_confirm",
     "tf_insuff": lambda v: v == "error",   # 來源倉庫存不足 → 擋下是正確行為
+    "tf_clarify": lambda v: v in ("transfer_confirm", "clarify"),  # 單倉調貨 → 問來源倉
     "inv":   lambda v: v in ("inventory", "inventory_single", "clarify", "low_stock"),
     "low":   lambda v: v == "low_stock",
     "exp":   lambda v: v == "expiring",
