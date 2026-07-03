@@ -41,6 +41,11 @@ ACCEPT = {
     "chat":   lambda v: v in ("rejected", "guide", "clarify"),
     "guidey": lambda v: v in ("guide", "rejected", "clarify"),
     "probe":  lambda v: v in ("rejected", "guide", "clarify", "error"),
+    # 半倉管（第19輪）：問有沒有賣/多少錢，顯示庫存是好回答；只擋寫入確認卡
+    "semi":   lambda v: v not in ("movement_confirm", "transfer_confirm",
+                                   "config_confirm", "po_confirm", "alert_confirm",
+                                   "schedule_confirm", "item_list", "item_delete_denied",
+                                   "error"),
 }
 
 
