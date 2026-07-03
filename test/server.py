@@ -94,6 +94,7 @@ GATEKEEPER_KEYWORDS = {
     "耳機", "藍牙", "藍芽", "喇叭", "充電", "充電線", "行動電源", "電源", "手環",
     "悶燒罐", "熨斗", "電熨斗", "鍋", "不沾鍋", "牙刷", "果汁機",
     "氣泡水", "咖啡", "咖啡豆", "茶", "檸檬茶", "堅果", "餅", "蘇打餅",
+    "啤酒", "可可", "乳清", "運動飲",
     "洗衣精", "洗劑", "衛生紙", "紙巾", "沐浴乳", "蚊香", "垃圾袋",
     "t 恤", "素t", "襪", "羊毛襪", "外套", "羽絨", "牛仔", "牛仔褲", "內衣",
     "瑜珈墊", "瑜珈", "水壺", "健身環", "慢跑鞋", "毛巾", "帽子", "毛帽",
@@ -342,6 +343,7 @@ _MOVEMENT_PROTECT_WORDS = (
     "出了多少", "進了多少",
     "進什麼貨", "出什麼貨", "有進什麼", "有出什麼",
     "進出明細", "出貨明細", "進貨明細", "異動明細", "進出流水",
+    "最近的進出", "的進出", "進出統計", "進出量",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -564,7 +566,7 @@ def _detect_clarify(user_text: str) -> dict | None:
     _movement_verbs_c13c = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
                             "來貨了", "來貨", "出貨了", "出貨", "出庫", "賣掉了",
                             "賣掉", "賣了", "銷貨", "出了")
-    _qty_m_c13c = _re_c13c.search(r'(\d+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲)', t)
+    _qty_m_c13c = _re_c13c.search(r'(\d+)\s*(?:件|個(?!月|星期|禮拜|小時|鐘頭)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲)', t)
     if (_qty_m_c13c and "庫存" in t and any(w in t for w in ("加", "減"))
             and not any(w in t for w in _movement_verbs_c13c)):
         kw = _extract_sku_keyword(t) or ""
@@ -1087,7 +1089,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                        "勻給", "勻", "送到", "送去", "運到", "運去", "運過去", "拉到", "拉去")
     _qty13a_m = _re13a.search(
         r'([0-9]+|[零一二兩三四五六七八九十百千]+)\s*'
-        r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲)', user_text)
+        r'(?:件|個(?!月|星期|禮拜|小時|鐘頭)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲)', user_text)
     _qty13a_int = _cn_to_int(_qty13a_m.group(1)) if _qty13a_m else None
     # 動詞跟介系詞被商品隔開的句型：「北倉送20個藍牙耳機到南倉」的「送…到」
     # 子字串比對不到（第11輪抓到）。兩倉名+數量的前提下跨距比對安全。
@@ -1164,7 +1166,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
     import re as _re13b_single
-    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}(?:[0-9]+|[零一二兩三四五六七八九十百千]+)\s*(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲))', user_text)
+    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿]{0,8}(?:[0-9]+|[零一二兩三四五六七八九十百千]+)\s*(?:件|個(?!月|星期|禮拜|小時|鐘頭)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲))', user_text)
     if _single_dir_m and not _has_movement_word:
         _has_movement_word = True
         if _single_dir_m.group(0) == "進":
@@ -1175,7 +1177,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   （「三箱」「十個」這種口語，2026-07-02 實測「剛剛入庫三箱衛生紙」抓到：
     #    原本正則只認阿拉伯數字，中文數字全漏，整句 C13b 不觸發跌回誤判）。
     import re as _re13b_pre
-    _qunit = r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲)'
+    _qunit = r'(?:件|個(?!月|星期|禮拜|小時|鐘頭)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲)'
     _qty_re = r'([0-9]+|[零一二兩三四五六七八九十百千]+)\s*' + _qunit
     _qty13b_m = _re13b_pre.search(_qty_re, user_text)
     # 中文數字要能真的轉成整數才算數（避免「幾個」的「幾」等非數字被誤收）
@@ -1321,7 +1323,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
              any(kw in text_low for kw in _HOT_INTENT_WORDS_HOT)
     is_slow = any(kw in user_text for kw in _HOT_INTENT_WORDS_SLOW) or \
               any(kw in text_low for kw in _HOT_INTENT_WORDS_SLOW)
-    if (is_hot or is_slow) and func_name != "list_hot_items":
+    # 連帶意圖詞在場時熱銷不搶——「帳篷跟什麼一起賣最多」的「賣最多」是
+    # 連帶語境，不是排行榜（第14輪抓到）
+    _c4_related_block = any(w in user_text for w in _RELATED_INTENT_WORDS)
+    if (is_hot or is_slow) and not _c4_related_block and func_name != "list_hot_items":
         log.info(f"[校正 C4] {func_name} → list_hot_items ({'hot' if is_hot else 'slow'})")
         # 從 user_text 抽 period / category
         period = "this_week"
@@ -1410,18 +1415,29 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _has_related = any(kw in user_text for kw in _RELATED_INTENT_WORDS) or \
                    any(kw in text_low for kw in _RELATED_INTENT_WORDS)
     if _has_related:
-        # keyword:優先用 LLM 已抽的,否則從 user_text 去掉意圖詞+雜詞當 keyword
+        # keyword:LLM 已抽的要先驗證比對得到商品才用（「帳篷跟什麼一起賣最多」
+        # LLM 曾把整句當 keyword → related_empty，第14輪抓到），否則從
+        # user_text 去掉意圖詞+雜詞重抽
+        import warehouse as _WC6
         kw = func_args.get("keyword")
+        if kw and not _WC6.match_items(kw):
+            kw = None
         if not kw:
             cleaned = user_text
             for w in _RELATED_INTENT_WORDS + (
                 "買", "的人", "什麼", "啥", "哪些", "通常", "跟", "和",
                 "查", "看", "會", "還", "了", "嗎", "呢", "?", "？",
                 "的有", "有哪", "的", "有", "商品", "產品",
+                "一起", "賣最多", "最常", "拿",
             ):
                 cleaned = cleaned.replace(w, " ")
             cleaned = " ".join(cleaned.split())
-            kw = cleaned if len(cleaned) >= 2 else (func_args.get("keyword") or "")
+            kw = cleaned if len(cleaned) >= 2 else ""
+            # 清完還是比對不到 → 用多層 fuzzy 抽取器兜底
+            if not kw or not _WC6.match_items(kw):
+                _kw6 = _extract_sku_keyword(user_text)
+                if _kw6 and _WC6.match_items(_kw6):
+                    kw = _kw6
         if func_name != "query_related_items":
             log.info(f"[校正 C6] {func_name} → query_related_items (連帶意圖)")
             new_args = {"keyword": kw}
@@ -1594,8 +1610,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             import warehouse as _WC7
             if not _WC7.match_items(kw):
                 kw = ""
-        log.info(f"[校正 C7b] movement 保護詞 → query_movement kw={kw!r}（hard）")
-        return "query_movement", ({"keyword": kw} if kw else {}), True
+        # period 從原句推斷（hard-return 會跳過後面的 C2 時間詞規則，
+        # 「最近一個月進貨多少」曾顯示成今天的數字，第14輪抓到）
+        _c7b_period = ("this_month" if any(w in user_text for w in ("這個月", "本月", "一個月", "上個月", "月")) else
+                       "this_week" if any(w in user_text for w in ("這週", "本週", "這禮拜", "上週", "週", "禮拜")) else
+                       "today" if any(w in user_text for w in ("今天", "今日")) else
+                       "this_month")
+        _c7b_args = {"period": _c7b_period, "direction": "both"}
+        if kw:
+            _c7b_args["keyword"] = kw
+        log.info(f"[校正 C7b] movement 保護詞 → query_movement kw={kw!r} period={_c7b_period}（hard）")
+        return "query_movement", _c7b_args, True
 
     has_rca    = any(w in user_text for w in _RCA_INTENT_WORDS)
     has_cfgkey = any(w in user_text for w in _CONFIG_KEY_WORDS)
