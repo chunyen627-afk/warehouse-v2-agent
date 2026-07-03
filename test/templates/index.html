@@ -1004,6 +1004,13 @@ function appendBot(text, klass) {
   scrollBottom();
   return div;
 }
+// HTML 轉義：任何「回顯使用者輸入」的字串進 innerHTML 前都要過這層，
+// 否則訪客打 <img onerror=...> 之類的字串會直接執行（展場防亂搞）
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function appendUser(text) {
   const div = document.createElement('div');
   div.className = 'msg user';
@@ -2021,10 +2028,10 @@ function renderViewCard(view, data, topSummary) {
     // 意圖澄清選項 — 可直接點選的大按鈕（手機/平板友善），也保留輸入數字的方式
     const opts = data.options || [];
     card.innerHTML = `
-      <div class="label" style="margin-bottom:8px">❓ ${data.question}</div>
+      <div class="label" style="margin-bottom:8px">❓ ${esc(data.question)}</div>
       <div class="clarify-opts">
         ${opts.map((opt, i) =>
-          `<button class="clarify-row" data-copt="${i}"><span class="clarify-num">${i+1}</span><span class="clarify-text">${opt}</span></button>`
+          `<button class="clarify-row" data-copt="${i}"><span class="clarify-num">${i+1}</span><span class="clarify-text">${esc(opt)}</span></button>`
         ).join('')}
       </div>
       <div class="clarify-hint">點選項目，或輸入數字 1~${opts.length} / 直接輸入完整問題</div>
@@ -2070,13 +2077,28 @@ function doConfirm(btn) {
   const action = btn.dataset.action;
   const payload = JSON.parse(btn.dataset.payload || '{}');
   const btnsEl = btn.closest('.hitl-btns');
+  const origHtml = btnsEl ? btnsEl.innerHTML : '';
   if (btnsEl) btnsEl.innerHTML = '<div style="padding:10px;color:var(--muted)">執行中…</div>';
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    connectWS();
-    setTimeout(() => ws.send(JSON.stringify({type:'confirm', action, ...payload})), 1200);
+  const msg = JSON.stringify({type:'confirm', action, ...payload});
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(msg);
     return;
   }
-  ws.send(JSON.stringify({type:'confirm', action, ...payload}));
+  // 斷線：重連後「等到真的 OPEN」才送，等不到就還原按鈕讓使用者重按
+  // （原本固定 1200ms 硬送，重連沒完成 ws.send 會 throw，確認永久丟失、UI 卡「執行中…」）
+  connectWS();
+  let tries = 0;
+  const timer = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      clearInterval(timer);
+      ws.send(msg);
+    } else if (++tries >= 20) {   // 最多等 20 × 300ms = 6 秒
+      clearInterval(timer);
+      if (btnsEl) btnsEl.innerHTML = origHtml;   // 還原按鈕，可重按
+      appendBot('⚠️ 連線中斷，剛才的確認沒有送出，請再按一次確認。');
+      currentBotMsg = null;
+    }
+  }, 300);
 }
 
 function formatMetric(metric, val) {

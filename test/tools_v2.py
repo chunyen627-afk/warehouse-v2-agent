@@ -18,11 +18,19 @@ import csv
 import json
 import subprocess
 import sys
+import threading
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
 import warehouse as W   # 用 W.state() / W.match_items() / W._err()
+
+# ── stock.csv 寫入鎖 ──────────────────────────────────────────
+# stock.csv 是進出貨/調貨/新增/刪除商品共用的檔案，這四個 commit 都是
+# read-modify-write，多裝置（手機掃 QR + 平板）同時確認會互相蓋寫。
+# 跟 server.py 的 llm_lock 同思路：所有寫入序列化。用 RLock 是因為
+# commit 內部可能呼叫也要拿鎖的輔助函式。
+_STOCK_LOCK = threading.RLock()
 
 
 # ════════════════════════════════════════════════════════════
@@ -1451,16 +1459,17 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
     shutil.copy2(cfg_path, str(cfg_path) + ".bak")
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # 3. 寫入 stock.csv（初始庫存）
-    stock_path = dd / "master" / "stock.csv"
-    shutil.copy2(stock_path, str(stock_path) + ".bak")
-    with open(stock_path, "a", encoding="utf-8-sig", newline="") as f:
-        writer = csv.writer(f)
-        for wh, qty in [("north", item.get("stock_north", 0)),
-                         ("central", item.get("stock_central", 0)),
-                         ("south", item.get("stock_south", 0))]:
-            if qty > 0:
-                writer.writerow([wh, item["sku"], qty])
+    # 3. 寫入 stock.csv（初始庫存）—— 進鎖，跟進出貨/調貨的寫入序列化
+    with _STOCK_LOCK:
+        stock_path = dd / "master" / "stock.csv"
+        shutil.copy2(stock_path, str(stock_path) + ".bak")
+        with open(stock_path, "a", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            for wh, qty in [("north", item.get("stock_north", 0)),
+                             ("central", item.get("stock_central", 0)),
+                             ("south", item.get("stock_south", 0))]:
+                if qty > 0:
+                    writer.writerow([wh, item["sku"], qty])
 
     # 4. audit log
     audit_dir = dd / "audit"
@@ -1502,16 +1511,17 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
                         "category": item["category"], "category_label": item.get("category_label",""),
                         "unit_price": item["price"], "safety_stock": item["safety"]})
             w.writerow(row)
-    # stock.csv：更新或新增各倉庫存
-    stock_path = master / "stock.csv"
-    stock_rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
-    updated = {(r["warehouse"], r["sku_id"]): r for r in stock_rows}
-    for wh_key in ("north", "central", "south"):
-        qty = item.get(f"stock_{wh_key}", 0)
-        updated[(wh_key, new_sku)] = {"warehouse": wh_key, "sku_id": new_sku, "qty": qty}
-    with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=["warehouse","sku_id","qty"])
-        w.writeheader(); w.writerows(updated.values())
+    # stock.csv：更新或新增各倉庫存（全檔重寫 → 進鎖防並發蓋寫）
+    with _STOCK_LOCK:
+        stock_path = master / "stock.csv"
+        stock_rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
+        updated = {(r["warehouse"], r["sku_id"]): r for r in stock_rows}
+        for wh_key in ("north", "central", "south"):
+            qty = item.get(f"stock_{wh_key}", 0)
+            updated[(wh_key, new_sku)] = {"warehouse": wh_key, "sku_id": new_sku, "qty": qty}
+        with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.DictWriter(f, fieldnames=["warehouse","sku_id","qty"])
+            w.writeheader(); w.writerows(updated.values())
 
     return {"ok": True, "summary": f"✅ 已新增商品「{item['name']}」（SKU: {item['sku']}）",
             "view": "item_done", "data": {"item": item, "trace_id": trace_id}}
@@ -1624,60 +1634,84 @@ WH_LABEL_MAP = {"north": "北區倉", "central": "中區倉", "south": "南區�
 
 def commit_movement(pending: dict, actor: str = "user_confirmed",
                      trace_id: str | None = None) -> dict:
-    """HITL 確認後真正寫入 stock.csv + transactions/ + 熱更新記憶體。"""
+    """HITL 確認後真正寫入 stock.csv + transactions/ + 熱更新記憶體。
+
+    確認卡上的 before/after 只是「開卡當下」的預覽——開卡到按確認之間庫存
+    可能被別的操作改過（另一張卡 / 另一台裝置），所以 commit 一律在鎖內
+    重讀當下庫存、重新驗證、重新計算，絕不直接寫 pending 帶來的絕對值
+    （否則會把中間發生的異動整筆蓋掉，帳就對不上了）。
+    """
     import shutil
     dd = _data_dir()
     ts = datetime.now().isoformat(timespec="seconds")
     trace_id = trace_id or f"mv-{ts}"
     p = pending
-    sku, wh_key, dir_key, qty_val = p["sku"], p["warehouse"], p["direction"], p["qty"]
+    sku, wh_key, dir_key = p["sku"], p["warehouse"], p["direction"]
+    qty_val = int(p["qty"])
+    if qty_val <= 0:
+        return W._err("數量異常，無法寫入。")
 
-    # 1. 更新 stock.csv（找到既有那行、改數字；沒有就新增一行）
-    stock_path = dd / "master" / "stock.csv"
-    shutil.copy2(stock_path, str(stock_path) + ".bak")
-    rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
-    found = False
-    for r in rows:
-        if r["warehouse"] == wh_key and r["sku_id"] == sku:
-            r["qty"] = str(p["after_qty"])
-            found = True
-            break
-    if not found:
-        rows.append({"warehouse": wh_key, "sku_id": sku, "qty": str(p["after_qty"])})
-    with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=["warehouse", "sku_id", "qty"])
-        w.writeheader(); w.writerows(rows)
+    with _STOCK_LOCK:
+        # 0. 在鎖內重讀當下庫存 → 重驗 → 重算（防 TOCTOU 陳舊寫入）
+        s = W.state()
+        current = s.stock.get(wh_key, {}).get(sku, 0)
+        if dir_key == "out":
+            if qty_val > current:
+                return {"ok": False,
+                        "summary": (f"⚠️ 庫存已變動，無法出貨。「{p['name']}」"
+                                    f"{p['warehouse_label']}目前僅 {current} 件，"
+                                    f"不足 {qty_val} 件（確認卡開立後庫存被其他操作改過）。"),
+                        "view": "error", "data": {}}
+            after_qty = current - qty_val
+        else:
+            after_qty = current + qty_val
 
-    # 2. 補一筆 transactions/{today}_{in|out}.csv（稽核軌跡）
-    snap_date = W.state().snapshot_date or ts[:10]
-    tx_dir = dd / "transactions"
-    tx_dir.mkdir(parents=True, exist_ok=True)
-    tx_path = tx_dir / f"{snap_date}_{dir_key}.csv"
-    is_new = not tx_path.exists()
-    with open(tx_path, "a", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        if is_new:
-            w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
-        w.writerow([snap_date, sku, wh_key, dir_key, qty_val])
+        # 1. 更新 stock.csv（找到既有那行、改數字；沒有就新增一行）
+        stock_path = dd / "master" / "stock.csv"
+        shutil.copy2(stock_path, str(stock_path) + ".bak")
+        rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
+        found = False
+        for r in rows:
+            if r["warehouse"] == wh_key and r["sku_id"] == sku:
+                r["qty"] = str(after_qty)
+                found = True
+                break
+        if not found:
+            rows.append({"warehouse": wh_key, "sku_id": sku, "qty": str(after_qty)})
+        with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.DictWriter(f, fieldnames=["warehouse", "sku_id", "qty"])
+            w.writeheader(); w.writerows(rows)
 
-    # 3. audit log（退貨標 create_return，交易紀錄仍記 in，方便 RCA/報表統一處理）
-    audit_dir = dd / "audit"
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    _audit_action = "create_return" if p.get("is_return") else "create_movement"
-    with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
-        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
-                            "action": _audit_action, "sku": sku, "warehouse": wh_key,
-                            "direction": dir_key, "qty": qty_val,
-                            "before": p["before_qty"], "after": p["after_qty"]},
-                           ensure_ascii=False) + "\n")
+        # 2. 補一筆 transactions/{today}_{in|out}.csv（稽核軌跡）
+        snap_date = W.state().snapshot_date or ts[:10]
+        tx_dir = dd / "transactions"
+        tx_dir.mkdir(parents=True, exist_ok=True)
+        tx_path = tx_dir / f"{snap_date}_{dir_key}.csv"
+        is_new = not tx_path.exists()
+        with open(tx_path, "a", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            if is_new:
+                w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
+            w.writerow([snap_date, sku, wh_key, dir_key, qty_val])
 
-    # 4. 熱更新記憶體
-    s = W.state()
-    s.stock.setdefault(wh_key, {})[sku] = p["after_qty"]
+        # 3. audit log（退貨標 create_return，交易紀錄仍記 in，方便 RCA/報表統一處理）
+        audit_dir = dd / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        _audit_action = "create_return" if p.get("is_return") else "create_movement"
+        with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                                "action": _audit_action, "sku": sku, "warehouse": wh_key,
+                                "direction": dir_key, "qty": qty_val,
+                                "before": current, "after": after_qty},
+                               ensure_ascii=False) + "\n")
 
+        # 4. 熱更新記憶體
+        s.stock.setdefault(wh_key, {})[sku] = after_qty
+
+    _done = {**p, "before_qty": current, "after_qty": after_qty}
     return {"ok": True,
-            "summary": f"✅ 已記錄{p['direction_label']}。{p['name']} {p['warehouse_label']}現有 {p['after_qty']} 件。",
-            "view": "movement_done", "data": {"trace_id": trace_id, **p}}
+            "summary": f"✅ 已記錄{p['direction_label']}。{p['name']} {p['warehouse_label']}現有 {after_qty} 件。",
+            "view": "movement_done", "data": {"trace_id": trace_id, **_done}}
 
 
 # ════════════════════════════════════════════════════════════
@@ -1759,68 +1793,90 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
 
 def commit_transfer(pending: dict, actor: str = "user_confirmed",
                     trace_id: str | None = None) -> dict:
-    """HITL 確認後真正寫入：來源倉扣、目標倉加，交易記兩筆（out + in），熱更新記憶體。"""
+    """HITL 確認後真正寫入：來源倉扣、目標倉加，交易記兩筆（out + in），熱更新記憶體。
+
+    同 commit_movement：在鎖內重讀當下庫存、重驗來源倉足夠、重算 after，
+    不直接寫 pending 帶來的絕對值（防 TOCTOU 陳舊寫入蓋掉中間異動）。
+    """
     import shutil
     dd = _data_dir()
     ts = datetime.now().isoformat(timespec="seconds")
     trace_id = trace_id or f"tf-{ts}"
     p = pending
     sku = p["sku"]
-    from_key, to_key, qty_val = p["from_wh"], p["to_wh"], p["qty"]
+    from_key, to_key = p["from_wh"], p["to_wh"]
+    qty_val = int(p["qty"])
+    if qty_val <= 0:
+        return W._err("數量異常，無法調貨。")
 
-    # 1. 更新 stock.csv（來源倉、目標倉兩行都改）
-    stock_path = dd / "master" / "stock.csv"
-    shutil.copy2(stock_path, str(stock_path) + ".bak")
-    rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
-    _seen_from = _seen_to = False
-    for r in rows:
-        if r["sku_id"] == sku and r["warehouse"] == from_key:
-            r["qty"] = str(p["from_after"]); _seen_from = True
-        elif r["sku_id"] == sku and r["warehouse"] == to_key:
-            r["qty"] = str(p["to_after"]); _seen_to = True
-    if not _seen_from:
-        rows.append({"warehouse": from_key, "sku_id": sku, "qty": str(p["from_after"])})
-    if not _seen_to:
-        rows.append({"warehouse": to_key, "sku_id": sku, "qty": str(p["to_after"])})
-    with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=["warehouse", "sku_id", "qty"])
-        w.writeheader(); w.writerows(rows)
+    with _STOCK_LOCK:
+        # 0. 鎖內重讀 → 重驗 → 重算
+        s = W.state()
+        from_cur = s.stock.get(from_key, {}).get(sku, 0)
+        to_cur = s.stock.get(to_key, {}).get(sku, 0)
+        if qty_val > from_cur:
+            return {"ok": False,
+                    "summary": (f"⚠️ 庫存已變動，無法調貨。「{p['name']}」"
+                                f"{p['from_label']}目前僅 {from_cur} 件，"
+                                f"不足 {qty_val} 件（確認卡開立後庫存被其他操作改過）。"),
+                    "view": "error", "data": {}}
+        from_after = from_cur - qty_val
+        to_after = to_cur + qty_val
 
-    # 2. 交易紀錄拆兩筆：來源倉 out、目標倉 in（跟現有格式一致）
-    snap_date = W.state().snapshot_date or ts[:10]
-    tx_dir = dd / "transactions"
-    tx_dir.mkdir(parents=True, exist_ok=True)
-    for _dir, _wh in (("out", from_key), ("in", to_key)):
-        tx_path = tx_dir / f"{snap_date}_{_dir}.csv"
-        is_new = not tx_path.exists()
-        with open(tx_path, "a", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f)
-            if is_new:
-                w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
-            w.writerow([snap_date, sku, _wh, _dir, qty_val])
+        # 1. 更新 stock.csv（來源倉、目標倉兩行都改）
+        stock_path = dd / "master" / "stock.csv"
+        shutil.copy2(stock_path, str(stock_path) + ".bak")
+        rows = list(csv.DictReader(open(stock_path, encoding="utf-8-sig")))
+        _seen_from = _seen_to = False
+        for r in rows:
+            if r["sku_id"] == sku and r["warehouse"] == from_key:
+                r["qty"] = str(from_after); _seen_from = True
+            elif r["sku_id"] == sku and r["warehouse"] == to_key:
+                r["qty"] = str(to_after); _seen_to = True
+        if not _seen_from:
+            rows.append({"warehouse": from_key, "sku_id": sku, "qty": str(from_after)})
+        if not _seen_to:
+            rows.append({"warehouse": to_key, "sku_id": sku, "qty": str(to_after)})
+        with open(stock_path, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.DictWriter(f, fieldnames=["warehouse", "sku_id", "qty"])
+            w.writeheader(); w.writerows(rows)
 
-    # 3. audit log
-    audit_dir = dd / "audit"
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
-        f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
-                            "action": "create_transfer", "sku": sku,
-                            "from_wh": from_key, "to_wh": to_key, "qty": qty_val,
-                            "from_before": p["from_before"], "from_after": p["from_after"],
-                            "to_before": p["to_before"], "to_after": p["to_after"]},
-                           ensure_ascii=False) + "\n")
+        # 2. 交易紀錄拆兩筆：來源倉 out、目標倉 in（跟現有格式一致）
+        snap_date = W.state().snapshot_date or ts[:10]
+        tx_dir = dd / "transactions"
+        tx_dir.mkdir(parents=True, exist_ok=True)
+        for _dir, _wh in (("out", from_key), ("in", to_key)):
+            tx_path = tx_dir / f"{snap_date}_{_dir}.csv"
+            is_new = not tx_path.exists()
+            with open(tx_path, "a", newline="", encoding="utf-8-sig") as f:
+                w = csv.writer(f)
+                if is_new:
+                    w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
+                w.writerow([snap_date, sku, _wh, _dir, qty_val])
 
-    # 4. 熱更新記憶體
-    s = W.state()
-    s.stock.setdefault(from_key, {})[sku] = p["from_after"]
-    s.stock.setdefault(to_key, {})[sku] = p["to_after"]
+        # 3. audit log
+        audit_dir = dd / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                                "action": "create_transfer", "sku": sku,
+                                "from_wh": from_key, "to_wh": to_key, "qty": qty_val,
+                                "from_before": from_cur, "from_after": from_after,
+                                "to_before": to_cur, "to_after": to_after},
+                               ensure_ascii=False) + "\n")
 
+        # 4. 熱更新記憶體
+        s.stock.setdefault(from_key, {})[sku] = from_after
+        s.stock.setdefault(to_key, {})[sku] = to_after
+
+    _done = {**p, "from_before": from_cur, "from_after": from_after,
+             "to_before": to_cur, "to_after": to_after}
     return {"ok": True,
-            "summary": (f"✅ 已完成調貨。{p['name']} {p['qty']} 件從 {p['from_label']}"
+            "summary": (f"✅ 已完成調貨。{p['name']} {qty_val} 件從 {p['from_label']}"
                         f"調到 {p['to_label']}。\n"
-                        f"{p['from_label']}現有 {p['from_after']} 件、"
-                        f"{p['to_label']}現有 {p['to_after']} 件。"),
-            "view": "transfer_done", "data": {"trace_id": trace_id, **p}}
+                        f"{p['from_label']}現有 {from_after} 件、"
+                        f"{p['to_label']}現有 {to_after} 件。"),
+            "view": "transfer_done", "data": {"trace_id": trace_id, **_done}}
 
 
 # ════════════════════════════════════════════════════════════
@@ -1906,14 +1962,15 @@ def commit_delete_item(pending: dict, actor: str = "user_confirmed",
     skus_to_delete = {it["sku_id"] for it in deletable}
     deleted_names = ", ".join(it["name"] for it in deletable)
 
-    # 1. 從 items.csv 移除
-    items_path = dd / "master" / "items.csv"
-    shutil.copy2(items_path, str(items_path) + ".bak")
-    rows = list(csv.DictReader(open(items_path, encoding="utf-8-sig")))
-    kept = [r for r in rows if r["sku_id"] not in skus_to_delete]
-    with open(items_path, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=rows[0].keys())
-        w.writeheader(); w.writerows(kept)
+    # 1. 從 items.csv 移除（全檔重寫 → 進鎖，避免跟新增商品的追加互相蓋寫）
+    with _STOCK_LOCK:
+        items_path = dd / "master" / "items.csv"
+        shutil.copy2(items_path, str(items_path) + ".bak")
+        rows = list(csv.DictReader(open(items_path, encoding="utf-8-sig")))
+        kept = [r for r in rows if r["sku_id"] not in skus_to_delete]
+        with open(items_path, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=rows[0].keys())
+            w.writeheader(); w.writerows(kept)
 
     # 2. 從 config.json 移除 safety_stock
     cfg_path = dd / "master" / "config.json"
