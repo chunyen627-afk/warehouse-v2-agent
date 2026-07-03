@@ -72,7 +72,7 @@ METRIC_VALUES = "stock_value, item_count, turnover"
 # 排行類型
 RANK_TYPE_VALUES = "hot, slow"
 
-# v2 三金剛：config 動作
+# v2 Agent 進階工具：config 動作
 CONFIG_ACTION_VALUES = "read, set"
 
 # ============================================================
@@ -138,7 +138,7 @@ DECLARATIONS = [
         ],
         ["keyword"],
     ),
-    # ── v2 三金剛（Agentic 工具）────────────────────────────────
+    # ── v2 Agent 進階工具（Agentic 工具）────────────────────────────────
     make_decl(
         "search_log",
         "root-cause of stock discrepancy (對不上/異常)",

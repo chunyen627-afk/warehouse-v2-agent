@@ -38,7 +38,7 @@ def add(user_content, tool_name, tool_args):
 
 
 # ════════════════════════════════════════════════════════════
-# v2 三金剛訓練資料（search_log / manage_config / run_script）
+# v2 Agent 進階工具訓練資料（search_log / manage_config / run_script）
 #   原則：會變動的清單（商品名/設定項/腳本名）一律 keyword verbatim 抽取，
 #         模型抽出原文，server 端 match → 不進 enum（守 D5）。
 # ════════════════════════════════════════════════════════════
@@ -176,7 +176,7 @@ def gen_v2_tools():
     for t, area in LF_AREA:
         add(t, "list_files", {"area": area})
 
-    # ── ⑥ set_alert（第四金剛：警示規則）──────────────────────
+    # ── ⑥ set_alert（自動化工具：警示規則）──────────────────────
     AL_COND = {
         "below_safety": ["低於安全庫存", "快缺貨", "庫存不足", "低於安全線"],
         "out_of_stock": ["缺貨", "斷貨", "沒貨", "零庫存"],
@@ -817,7 +817,7 @@ for kw in ["bluetooth earphone", "coffee machine", "diaper", "tent", "yoga mat"]
 # ════════════════════════════════════════════════════════════════════
 # 寫檔 + 統計
 # ════════════════════════════════════════════════════════════════════
-gen_v2_tools()   # v2 三金剛 + A/B 波樣本（ITEMS 已就緒）
+gen_v2_tools()   # v2 Agent 進階工具 + A/B 波樣本（ITEMS 已就緒）
 gen_v2_judge()   # C 波 judge_cause_found 試訓樣本
 
 random.shuffle(samples)

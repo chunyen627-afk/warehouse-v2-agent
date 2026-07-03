@@ -17,7 +17,7 @@
 
 - **重訓**：max_length 1152→1216（容納 C 波 context，VRAM 7.3GB 不撞雷4），loss 0.028。
 - **校正新增**：C12（報告意圖→generate_report，蓋過 C3/C7）、C13（找檔→list_files）。
-- **端到端複驗**：A/B/三金剛/v1 共 18 案路由全綠、報告真寫檔、報告意圖 vs 查詢意圖 6/6 分清。
+- **端到端複驗**：A/B/Agent 進階工具/v1 共 18 案路由全綠、報告真寫檔、報告意圖 vs 查詢意圖 6/6 分清。
 - **結論**：A+B 是 270M 能做的「真開放」；C（自主決策）證實是尺寸極限，業界用 3B+ 才做 → 留 server 編排或未來換 base。判 declaration 不進 prompt。
 - **GGUF**：v2.1 部署 test/models/ + win11；v2.0 已驗證版備份在 `~/.cache/.../v2.0_verified.q8_0.gguf` 可回滾。
 
@@ -26,12 +26,12 @@
 ## ✅ 終極版（2026-06-23）— 補完所有規劃功能（15 function）
 
 把規劃過沒做的全部實現（都在 tools_v2.py，校正 C14-C16，前端 view 全加）：
-- **set_alert（第四金剛 Edge Alerter）**：半固定 enum condition（below_safety|out_of_stock|expiring）+ target keyword → 寫 `alert_rules.json`，**串 anomaly.py**：被訂閱商品的異常 ⭐ 升級。
+- **set_alert（自動化工具 Edge Alerter）**：半固定 enum condition（below_safety|out_of_stock|expiring）+ target keyword → 寫 `alert_rules.json`，**串 anomaly.py**：被訂閱商品的異常 ⭐ 升級。
 - **generate_po（閉環）**：缺貨清單 / PO 短收 → 自動產採購單草稿（含供應商+金額）→ HITL 確認 → 寫 `orders/PO_draft/`。
 - **compare_periods（跨期比較）**：近兩個月出庫量，找變化最大 SKU（成長/衰退）。
 - **報告加圖表**：generate_report 嵌 matplotlib PNG（各倉市值長條 + 缺貨撐天橫條），`/reports/{fname}` 端點供讀（路徑穿越防護）。
 - **UX 引導**：開場「能力地圖」（6 類事 + 可點範例）+ 動態引導（讀當下異常丟具體可點問題）→ 解「知道能打字但想不出問什麼」。
-- **驗收**：端到端 12/12（含 4 新功能路由）+ 圖表端點 200 + 路徑穿越擋 404 + set_alert 串 anomaly 訂閱升級 + v1/三金剛零回歸。
+- **驗收**：端到端 12/12（含 4 新功能路由）+ 圖表端點 200 + 路徑穿越擋 404 + set_alert 串 anomaly 訂閱升級 + v1/Agent 進階工具零回歸。
 
 ---
 
@@ -49,7 +49,7 @@
 
 ---
 
-## v2.0 梯次（三金剛 + 多檔資料層）
+## v2.0 梯次（Agent 進階工具 + 多檔資料層）
 
 ---
 
@@ -60,7 +60,7 @@
 | D1 | Loop 架構 | **Host 編排**。模型只出單步 JSON（+v2.1 的 B 類小標籤）。270M 不跑自由 reasoning loop。 |
 | D2 | set_alert.condition | **半固定 enum** `below_safety \| out_of_stock \| expiring`，target 走 keyword。自由條件留 v3。→ **v2.1 才做** |
 | D3 | choose_next_source | **不交給模型**。追查順序 `log→orders→config` 由 server 規則固定，模型只做 `judge_cause_found`（v2.1）。 |
-| D4 | 重訓梯次 | **v2.0**=A 類三金剛（一次重訓）；**v2.1**=B 類 judge_cause_found（壓縮 context 試訓）+ set_alert。 |
+| D4 | 重訓梯次 | **v2.0**=A 類Agent 進階工具（一次重訓）；**v2.1**=B 類 judge_cause_found（壓縮 context 試訓）+ set_alert。 |
 | D5 | keyword 免重訓鐵則 | 會變動清單（SKU/log 檔名/設定項/腳本名）一律 keyword 抽取 + server match，**絕不寫進 enum**（雷 6）。 |
 
 ---
@@ -195,8 +195,8 @@ manage_config set 範例（寫入護欄）：
 | 階段 | 產出 | 驗收 | 狀態 |
 |---|---|---|---|
 | **S1** 資料層 | warehouse_data/ + loader_v2 + DATA_MODE | v1 七 function multi 零回歸 | ✅ |
-| **S2** dispatcher | tools_v2.py 三金剛 + C8-C11 + confirm 端點 | 手打JSON正確 + RCA追到PO對不上 + C8-C11 7/7 | ✅ |
-| **S3** 訓練資料 | generate_dataset(4555條,三金剛634) + 9 decl | 生成OK、樣本 max 1057<1152 不踩雷4 | ✅ |
+| **S2** dispatcher | tools_v2.py Agent 進階工具 + C8-C11 + confirm 端點 | 手打JSON正確 + RCA追到PO對不上 + C8-C11 7/7 | ✅ |
+| **S3** 訓練資料 | generate_dataset(4555條,Agent 進階工具634) + 9 decl | 生成OK、樣本 max 1057<1152 不踩雷4 | ✅ |
 | **S4** 重訓量化 | Q8_0 GGUF | full FT loss **0.81→0.0296**、Q8_0 部署 test/models/ | ✅ |
 | **S5** 前端 | Agent trace UI + HITL 確認框 + 🤖管家chip | 6 view + chip + 語法OK | ✅ |
 | **S6** 同步 | TRAINING_BACKLOG✓ / win11 同步待裁示 | — | 🔄 |
@@ -205,7 +205,7 @@ manage_config set 範例（寫入護欄）：
 
 **🎉 端到端驗收（2026-06-22 完成）**：
 - 模型 raw 命中（v1 舊測試集）93.1%（比 v1 77.6% 高很多）
-- **v2 自測：總 16/16、三金剛 9/9**（search_log 3/3·manage_config 3/3·run_script 3/3·v1七function 7/7）
+- **v2 自測：總 16/16、Agent 進階工具 9/9**（search_log 3/3·manage_config 3/3·run_script 3/3·v1七function 7/7）
 - **RCA 深度驗證**：「智慧手環怎麼少這麼多」→ 真追到 PO00116 應收48/實收36/短12、trace[glob→grep→read→reason]、cause_found=True
 - **WS 全鏈**：agent_rca trace 卡片、config_confirm HITL gate、v1 inventory 都正確回傳
 - 校正層 C8-C11 全作用（C8 query_inventory→search_log、C10 manage_config→run_script）

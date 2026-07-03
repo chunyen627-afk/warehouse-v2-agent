@@ -326,7 +326,7 @@ _EXPIRING_INTENT_WORDS = (
     "expire", "expiring", "expired", "shelf life", "best before",
 )
 
-# ── v2 三金剛校正詞（C8-C11）──────────────────────────────────
+# ── v2 Agent 進階工具校正詞（C8-C11）──────────────────────────────────
 # C7b query_movement 保護詞：含這些詞 → 強制 movement，不被 RCA 攔截
 _MOVEMENT_PROTECT_WORDS = (
     "進出紀錄", "進出狀況", "動了多少", "異動紀錄", "流水紀錄",
@@ -1441,7 +1441,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             log.info(f"[校正 C13] 明確庫存查詢 → query_inventory({kw!r})")
             return "query_inventory", {**func_args, "keyword": kw}, True
 
-    # ══════════════ v2 三金剛校正（C8-C11）══════════════
+    # ══════════════ v2 Agent 進階工具校正（C8-C11）══════════════
 
     # ── C8-pre: 「還有嗎/夠不夠/有沒有貨」被 LLM 誤判 RCA → 攔回 inventory ──
     _is_stock_question = any(w in user_text for w in (
@@ -1567,7 +1567,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C13] 檔案列表意圖 → list_files（原 {func_name}）")
         return "list_files", ({"area": area} if area else {}), True
 
-    # C14：警示設定意圖 → set_alert（第四金剛）
+    # C14：警示設定意圖 → set_alert（自動化工具）
     #   「就通知我 / 設個提醒 / 警示我 / 低於X就告訴我」
     _alert_words = ("通知我", "提醒我", "警示", "告訴我", "就通知", "設個提醒",
                     "設定警示", "低於就", "缺貨就", "到期就", "alert", "提醒")
@@ -2884,7 +2884,7 @@ async def ws_handler(ws: WebSocket):
 
             msg_type = data.get("type")
 
-            # ── confirm：三金剛寫入/執行的二次確認（HITL gate）──
+            # ── confirm：Agent 進階工具寫入/執行的二次確認（HITL gate）──
             #   前端在收到 view=config_confirm / script_confirm 後，訪客按「確認」才送這個。
             if msg_type == "confirm":
                 import tools_v2

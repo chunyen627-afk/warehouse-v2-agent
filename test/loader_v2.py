@@ -6,7 +6,7 @@ loader_v2.py — 從 warehouse_data/ 多檔讀回，重組成「seed 等價 dict
   為了不動那些 function，loader 的責任是「把多檔讀回成跟 seed_data.json 一模一樣的 dict」，
   再餵給現有的 State。v1 function 完全無感，但資料來源已經是 warehouse_data/。
 
-  額外回傳 v2 專屬區塊（config / suppliers / manifest），給三金剛（search_log/
+  額外回傳 v2 專屬區塊（config / suppliers / manifest），給Agent 進階工具（search_log/
   manage_config/run_script）用，不影響 v1。
 
 stock 從哪來？

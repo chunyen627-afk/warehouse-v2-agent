@@ -12,13 +12,13 @@ metadata:
 **架構決策（已鎖定）**：
 - Loop 由 server 編排，270M 只出單步 JSON。
 - 資料層：`test/warehouse_data/`，stock 讀 master/stock.csv 快照真值。
-- `test/tools_v2.py` 三金剛：search_log（RCA）/ manage_config（HITL）/ run_script（白名單）。
+- `test/tools_v2.py` Agent 進階工具：search_log（RCA）/ manage_config（HITL）/ run_script（白名單）。
 - 校正層 C0-C18 + Pre-C 攔截（server.py）。
 - 訓練：full FT Q8_0，不用 LoRA。
 
 **目前功能（2026-06-29）**：
-- ✅ 七金剛（query_inventory / query_movement / list_low_stock / compare_warehouses / list_hot_items / query_related_items / list_expiring_items）
-- ✅ 三金剛（search_log / manage_config / run_script）
+- ✅ 查詢工具（query_inventory / query_movement / list_low_stock / compare_warehouses / list_hot_items / query_related_items / list_expiring_items）
+- ✅ Agent 進階工具（search_log / manage_config / run_script）
 - ✅ RCA ReAct 2-step loop（search_log → rca_context → suggest_action），前端 Agent trace 卡
 - ✅ 腳本執行 + CSV 下載（stock_audit / movement_export / health_check）
 - ✅ set_alert + alert_rules.json 持久化 + 背景 3600s 掃描

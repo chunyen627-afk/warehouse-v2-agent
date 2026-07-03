@@ -37,7 +37,7 @@
 [校正層 C0-C18 + Pre-C]  ← 最後防線修正
     │
     ▼
-[業務工具執行]  ← 七金剛查詢 / 三金剛 Agent / 腳本執行
+[業務工具執行]  ← 查詢工具 / Agent 進階工具 / 庫存異動 / 腳本執行
     │
     ▼
 前端展示（WebSocket 即時串流）
@@ -47,40 +47,44 @@
 
 ## 🎯 核心功能
 
-### 📊 七金剛 — 倉庫查詢
+### 📊 查詢工具（Query Tools）— 唯讀查詢
 | 功能 | 說明 | 範例 |
 |------|------|------|
 | `query_inventory` | 庫存查詢（商品 / 倉庫 / 類別） | 「北區倉洗衣精還有多少？」 |
 | `query_movement` | 進出記錄（時間範圍 / 方向） | 「上個月出貨記錄」 |
-| `list_low_stock` | 缺貨警示（低於安全庫存） | 「哪些商品快沒貨了？」 |
+| `list_low_stock` | 缺貨警示（低於安全庫存 + 撐天/建議補） | 「哪些商品快沒貨了？」 |
 | `compare_warehouses` | 倉庫比較（任意兩倉對比） | 「北倉跟中倉差多少？」 |
 | `list_hot_items` | 熱銷排行（期間 / 類別） | 「最近賣最好的是什麼？」 |
 | `list_expiring_items` | 到期預警（N 天內） | 「本月快過期的商品」 |
-| `query_related_items` | 相關商品推薦 | 「跟洗衣精類似的有哪些？」 |
+| `query_related_items` | 相關商品推薦（購物籃分析） | 「跟洗衣精類似的有哪些？」 |
 
-### 🤖 三金剛 — Agent 進階工具
+### 📦 庫存異動工具（Inventory Tools）— 一句話改庫存，皆走 HITL 確認卡
+| 功能 | 說明 | 範例 |
+|------|------|------|
+| `create_movement` | 即時進出貨，確認後寫入 `stock.csv` + `transactions/`，出貨庫存不足直接擋下 | 「北倉進了藍牙耳機50件」 |
+| `create_transfer` | 跨倉調貨，來源倉扣 / 目標倉加，交易拆兩筆（out + in），來源不足擋下 | 「北倉調30個藍牙耳機給南倉」 |
+| `create_movement`（退貨） | 客人退貨（`is_return`），庫存加回、audit 標 `create_return` | 「客人退了3個藍牙耳機」 |
+| `create_item` | 自然語言新增商品，HITL + 同名防呆 | 「新增商品 環保吸管 日用品 150元 安全100」 |
+| `delete_item` | 引導式刪除，原始 60 項商品受保護不可刪 | 「刪除商品」 |
+
+> 進出貨 / 調貨 / 退貨都支援中文數字（「三箱」「一百二十」）與任意詞序，確認後真寫入資料層，重開伺服器 / 重整頁面不會消失。
+
+### 🤖 Agent 進階工具（Agent Tools）— 多步推理
 | 功能 | 說明 |
 |------|------|
-| `search_log` | 搜尋異常日誌，啟動 RCA 根因分析 |
-| `manage_config` | 調整安全庫存 / 補貨閾值（HITL 確認） |
+| `search_log` | 搜尋異常日誌，啟動 RCA 根因分析（ReAct 3-step loop） |
+| `manage_config` | 調整安全庫存 / 補貨閾值（HITL 確認，支援中文數字與 +N/-N/絕對值） |
 | `run_script` | 執行白名單腳本，產出 CSV / MD 報告並下載 |
+| `generate_po` | 缺貨自動產採購單草稿 |
+| `compare_periods` | 期間比較（這月 vs 上月變化） |
 
-### ⚡ 第四金剛 — 主動警示
-- **`set_alert`** — 設定缺貨 / 到期警示規則，持久化到 `alert_rules.json`
-- 背景每小時掃描一次，觸發時透過 WebSocket 主動推送通知
-- 右側 Panel 可查看 / 刪除現有警示規則
+### ⚙️ 自動化工具（Automation Tools）— 警示 / 排程
+- **`set_alert`** — 設定缺貨 / 到期警示規則，持久化到 `alert_rules.json`；背景每小時掃描，觸發時透過 WebSocket 主動推送
+- **`set_schedule`** — 自然語言設定排程（「每天早上9點跑盤點」），APScheduler 每分鐘檢查，到時自動執行腳本
+- **`list_alerts` / `delete_alert` / `list_schedules` / `delete_schedule`** — 右側 Panel 查看 / 刪除，刪除皆有 HITL 二次確認卡（避免誤刪無法復原）
 
-### ⏰ 第五金剛 — 定時排程
-- **`set_schedule`** — 自然語言設定排程（「每天早上9點跑盤點」）
-- APScheduler 每分鐘檢查，到時自動執行腳本
-- 右側 Panel 可查看 / 刪除排程，執行結果即時回傳
-- `delete_schedule` / `delete_alert` 皆有 HITL 二次確認卡（避免誤刪無法復原）
-
-### 🛠️ 商品管理（自然語言建倉）
-- **`create_item`** — 分步引導或一句話新增商品（「新增商品 環保吸管 日用品 150元 安全100」），HITL 確認卡 + 同名防呆
-- **`delete_item`** — 引導式刪除，原始 60 項商品受保護不可刪
-- **`create_movement`** — 即時進出貨（「北倉進了藍牙耳機50件」「南倉出貨洗衣精20件」）：HITL 確認卡顯示庫存變化、確認後真寫入 `stock.csv` + `transactions/`，重開伺服器 / 重整頁面不會消失；出貨庫存不足直接擋下防呆
-- **展示資料一鍵重置**：header 上的 ♻ 按鈕（需密碼），把 `warehouse_data/` 整個換回展前建立的乾淨快照 `warehouse_data_baseline/`，避免展場被玩爛回不去
+### 🛠️ 展示資料一鍵重置
+- header 上的 ♻ 按鈕（需密碼），把 `warehouse_data/` 整個換回展前建立的乾淨快照 `warehouse_data_baseline/`，避免展場被玩爛回不去
 
 ---
 
@@ -147,8 +151,8 @@ LLM 輸出不穩定是 270M 小模型的先天限制，解法是 **Server 端後
 warehouse_v2/
 ├── test/                          ← RPI5 部署核心（自足）
 │   ├── server.py                  ← FastAPI 主伺服器 + WebSocket（3300+ 行）
-│   ├── warehouse.py               ← 業務邏輯（七金剛實作）
-│   ├── tools_v2.py                ← 三金剛 + 排程 + 警示 + 進出貨 + 商品管理
+│   ├── warehouse.py               ← 業務邏輯（查詢工具實作 + 工具註冊表）
+│   ├── tools_v2.py                ← Agent 進階工具 + 自動化 + 進出貨/調貨/退貨 + 商品管理
 │   ├── anomaly.py                 ← 背景異常掃描（PO短收/低庫存/暴量暴跌/呆滯品）
 │   ├── intent_clf.py              ← FastText 意圖分類器（主路由）
 │   ├── loader_v2.py               ← warehouse_data/ → seed 等價 dict 動態組合
@@ -244,8 +248,18 @@ python finetune_local.py
 
 # 即時進出貨
 「北倉進了藍牙耳機50件」
-「南倉出貨洗衣精20件」
-「今天進了50個耳機」（時間/商品/方向/數量/單位任意詞序）
+「南倉出貨行動電源20個」
+「中倉進三箱智慧手環」（中文數字 / 時間/商品/方向/數量/單位任意詞序）
+
+# 跨倉調貨
+「北倉調30個藍牙耳機給南倉」
+「中倉搬20台藍牙喇叭到北倉」
+「南倉撥15個行動電源到中倉」（來源倉不足會擋下）
+
+# 退貨（客人退、庫存加回）
+「客人退了3個藍牙耳機」
+「南倉顧客退2台藍牙喇叭」
+「中倉被退5個智慧手環」
 
 # 商品管理
 「新增商品 環保吸管 日用品 150元 安全100」
@@ -291,8 +305,8 @@ python finetune_local.py
 │  [Pre-C 攔截層]    [C0-C18 校正層]           │
 │       ↓                    ↓                 │
 │  [業務工具 Dispatch]                          │
-│       ├── warehouse.py（七金剛）              │
-│       ├── tools_v2.py（三金剛 + 排程 + 警示）│
+│       ├── warehouse.py（查詢工具）           │
+│       ├── tools_v2.py（異動/Agent/自動化）  │
 │       └── ReAct Loop（RCA 根因分析）          │
 │                                              │
 │  背景任務：alert 掃描(1h) / schedule(1min)   │
@@ -314,8 +328,13 @@ python finetune_local.py
 - [x] RCA 第二輪 timeout 保護
 - [x] delete_schedule / delete_alert 前端二次確認卡
 - [x] 即時進出貨（create_movement）
+- [x] 跨倉調貨（create_transfer）
+- [x] 客人退貨（create_movement + is_return）
+- [x] 中文數字支援（進出貨/調貨/退貨/改設定，「三箱」「一百二十」）
 - [x] 展示資料一鍵重置
-- [ ] 訓練 270M 認得 create_movement（目前靠規則式攔截，100題實測覆蓋率 99%；累積真實使用者講法達一定量後再重訓）
+- [x] 能力地圖重排（進出貨/調貨/退貨提為主打，冷門功能收次選單）
+- [ ] 訓練 270M 認得 create_movement / create_transfer（目前靠規則式攔截，實測覆蓋率 99%；累積真實使用者講法達一定量後再重訓）
+- [ ] 退供應商方向的退貨（庫存減、涉金額）
 - [ ] 腳本白名單擴充（到期報告 / 補貨清單）
 - [ ] win11_installer 部署目錄同步
 
@@ -336,5 +355,5 @@ python finetune_local.py
 
 ---
 
-*最後更新：2026-07-02 | v6 模型 5,849 筆訓練（部署中）| intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | 進出貨規則式覆蓋率: 99%*
+*最後更新：2026-07-03 | v6 模型 5,849 筆訓練（部署中）| intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | 進出貨/調貨/退貨規則式覆蓋率: 99% | 203 句 WS 綜合大測試零真 bug*
 *註：training_data.jsonl 生成腳本已修復（讀 warehouse_data/ 而非已淘汰的 seed_data.json），目前重新生成得 5,415 筆（60 SKU 乾淨版，未含灌水的 create_movement 樣本），尚未重新訓練，部署模型仍是 v6 舊版權重。*

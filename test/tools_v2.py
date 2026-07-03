@@ -1,5 +1,5 @@
 """
-tools_v2.py — v2 三金剛 Agentic 工具（search_log / manage_config / run_script）。
+tools_v2.py — v2 Agent 進階工具（search_log / manage_config / run_script）。
 
 職責分離：
   - 模型只出單步 JSON（function + 參數）。多步探索（Glob→Read→Reason）由本檔的
@@ -839,7 +839,7 @@ def list_files(area: str = "") -> dict:
 
 
 # ════════════════════════════════════════════════════════════
-# ⑥ set_alert — 第四金剛：邊緣警示規則設定（半固定 enum）
+# ⑥ set_alert — 自動化工具：邊緣警示規則設定（半固定 enum）
 #    condition: below_safety | out_of_stock | expiring（不用自由字串，270M 好抽）
 #    target: keyword（哪個商品/倉，可空=全部）
 #    寫入 alert_rules.json，背景異常掃描會讀它（跟 anomaly.py 串）。

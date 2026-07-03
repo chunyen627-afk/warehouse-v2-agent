@@ -207,7 +207,7 @@ class State:
         self._items_by_sku  = {it["sku_id"]: it for it in self.items}
         # 購物籃索引（給 query_related_items 用、reset 時重算）
         self._basket_index  = _build_basket_index(self.orders)
-        # ── v2 專屬區塊（multi 模式才有；給三金剛用，v1 function 不讀）──
+        # ── v2 專屬區塊（multi 模式才有；給 Agent 進階工具用，v1 function 不讀）──
         self.v2_config    = seed.get("_v2_config", {})
         self.v2_suppliers = seed.get("_v2_suppliers", [])
         self.v2_data_dir  = seed.get("_v2_data_dir", "")
@@ -1514,7 +1514,7 @@ FUNCTIONS = {
     "list_expiring_items": list_expiring_items,
 }
 
-# ── v2 三金剛（Agentic 工具）：延遲註冊，避免 import 循環 ──
+# ── v2 Agent 進階工具（Agentic 工具）：延遲註冊，避免 import 循環 ──
 def _register_v2_tools():
     try:
         import tools_v2
@@ -1523,7 +1523,7 @@ def _register_v2_tools():
         FUNCTIONS["run_script"]      = tools_v2.run_script
         FUNCTIONS["generate_report"] = tools_v2.generate_report   # A 波：寫報告
         FUNCTIONS["list_files"]      = tools_v2.list_files         # B 波：動態找檔
-        FUNCTIONS["set_alert"]           = tools_v2.set_alert           # 第四金剛：警示規則
+        FUNCTIONS["set_alert"]           = tools_v2.set_alert           # 自動化工具：警示規則
         FUNCTIONS["generate_po"]         = tools_v2.generate_po         # 閉環：產採購單草稿
         FUNCTIONS["compare_periods"]     = tools_v2.compare_periods     # 跨期比較
         FUNCTIONS["set_schedule"]        = tools_v2.set_schedule        # 定時排程設定
@@ -1540,7 +1540,7 @@ def _register_v2_tools():
         FUNCTIONS["create_movement"]     = tools_v2.create_movement    # 即時進出貨（輕量版）
         FUNCTIONS["create_transfer"]     = tools_v2.create_transfer    # 跨倉調貨（A倉→B倉）
     except Exception as e:
-        _log.warning(f"[v2] 三金剛註冊失敗：{e}")
+        _log.warning(f"[v2] Agent 進階工具註冊失敗：{e}")
 
 _register_v2_tools()
 
