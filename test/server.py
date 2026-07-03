@@ -646,6 +646,12 @@ def _detect_clarify(user_text: str) -> dict | None:
                   "開進採購", "擬一張", "擬張", "擬採購", "轉採購", "開張採購")
     has_po_intent = any(w in user_text for w in _po_kw)
     has_po_direct = any(w in user_text for w in _po_direct)
+    # 系統性防漏：跟 C-PO 同一組判斷——「採購單/採購草稿/補貨單 + 開單動詞」
+    # 一律當明確開單意圖直接放行，不再逐字追 _po_direct 同義詞
+    # （出一張/開單採購/擬一張/給我一張…已經漏了三輪，第13輪定案）
+    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單", "開單採購", "開單補貨"))
+            and any(v in user_text for v in ("出", "開", "產", "生", "列", "建", "做", "給我", "擬", "轉", "來一"))):
+        has_po_direct = True
     # 兩個倉名同時出現 → 比較意圖，放行（不攔）
     has_two_whs = len(matched_whs) >= 2
     if has_po_intent and not has_po_direct and not has_two_whs:
@@ -2583,8 +2589,14 @@ async def api_query(req: Request):
     _compare_kws = ("比較各倉庫庫存", "各倉庫比較", "三個倉庫比較", "北中南倉",
                     "倉庫比較", "倉庫對比", "比較倉庫",
                     "三個倉", "三倉", "各倉", "每個倉", "哪個倉", "哪一倉")
+    # 句中有具體商品名時不攔——「牛仔長褲各倉還有幾條」是查該商品的分倉庫存，
+    # 不是倉庫比較（第13輪抓到：加「各倉」後誤劫帶商品名的查詢）
+    _cmp_kw_prod = _extract_sku_keyword(user_text)
+    import warehouse as _W_cmp
+    _cmp_has_prod = bool(_cmp_kw_prod and _W_cmp.match_items(_cmp_kw_prod))
     if (func_name != "compare_warehouses" and
             func_name not in ("run_script", "set_schedule", "list_schedules") and
+            not _cmp_has_prod and
             any(w in user_text for w in _compare_kws)):
         func_name = "compare_warehouses"
         func_args = {}
@@ -3429,6 +3441,11 @@ async def ws_handler(ws: WebSocket):
                 _skip_override = ("run_script", "set_schedule", "list_schedules",
                                   "list_alerts", "delete_alert", "delete_schedule")
                 _has_rca_kw_ws = any(w in user_text for w in _RCA_INTENT_WORDS)
+                # 帶具體商品名 → 查該商品分倉庫存，不是倉庫比較
+                # （第13輪抓到：「牛仔長褲各倉還有幾條」被「各倉」誤劫）
+                import warehouse as _W_cmp_ws
+                _cmp_prod_kw_ws = _extract_sku_keyword(user_text)
+                _cmp_has_prod_ws = bool(_cmp_prod_kw_ws and _W_cmp_ws.match_items(_cmp_prod_kw_ws))
                 if func_name not in _skip_override:
                     if (not _has_rca_kw_ws and
                             func_name != "query_movement" and
@@ -3436,7 +3453,9 @@ async def ws_handler(ws: WebSocket):
                         func_name = "query_movement"
                         func_args = {"period": "this_month", "direction": "both"}
                         log.info("[Pre-C-Mov] → query_movement")
-                    elif func_name != "compare_warehouses" and any(w in user_text for w in _compare_kws_ws):
+                    elif (func_name != "compare_warehouses"
+                          and not _cmp_has_prod_ws
+                          and any(w in user_text for w in _compare_kws_ws)):
                         func_name = "compare_warehouses"
                         func_args = {}
                         log.info("[Pre-C-Cmp] → compare_warehouses")
