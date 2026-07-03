@@ -37,6 +37,10 @@ ACCEPT = {
     "vague": lambda v: v in ("clarify", "guide", "rejected", "inventory"),
     "noex":  lambda v: v in ("clarify", "rejected", "error", "related_empty", "guide"),
     "any":   lambda v: v not in ("error", "clarify", "rejected"),
+    # 訪客閒聊/搗蛋防禦（第17輪）：優雅拒絕/引導/追問，不可幻覺商品或開卡
+    "chat":   lambda v: v in ("rejected", "guide", "clarify"),
+    "guidey": lambda v: v in ("guide", "rejected", "clarify"),
+    "probe":  lambda v: v in ("rejected", "guide", "clarify", "error"),
 }
 
 

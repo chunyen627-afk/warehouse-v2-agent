@@ -106,6 +106,7 @@ GATEKEEPER_KEYWORDS = {
     "倉", "倉庫", "warehouse",
     # 動作
     "庫存", "存量", "還有", "剩", "幾件", "多少", "幾個", "查詢",
+    "怎麼用", "教我", "功能", "使用說明",
     # 資料管理
     "新增", "建立", "加入", "增加", "新建", "添加",
     "刪除", "下架", "砍掉", "移除", "刪掉",
@@ -188,9 +189,26 @@ GATEKEEPER_REJECT_MSG = (
 )
 
 # 明顯非倉管領域的黑名單（股市/天氣/電影…）— 就算含「查」也不放行
+# 第17輪「訪客閒聊輪」大擴充：展場訪客會把系統當聊天機器人（問身份/閒聊/
+# 嗆聲）甚至下搗蛋指令（刪全部/要密碼/套 system prompt），這些句子常夾帶
+# 倉管關鍵字（「告訴我」撞通知詞、「壞掉」撞到期詞）誤入功能路由，
+# 黑名單優先於白名單直接友善拒絕。
 _GATEKEEPER_BLACKLIST = (
+    # 離題領域
     "股市", "股票", "天氣", "電影", "音樂", "新聞", "地圖",
     "翻譯", "計算", "食譜", "笑話", "遊戲", "stocks", "weather",
+    "寫詩", "作業", "便當", "樂透", "唱歌", "唱首", "說個故事", "講個故事",
+    "陪我聊", "聊天", "星期幾", "現在幾點", "下雨",
+    # 問 AI 身份 / 嗆聲
+    "你是誰", "機器人嗎", "chatgpt", "你是真人", "你有意識", "你幾歲",
+    "誰做的你", "什麼模型", "你是不是", "你多聰明", "你會說",
+    "你好笨", "你好棒", "好厲害", "沒用的東西", "白癡", "廢物",
+    "你很慢", "回答快一點", "你答錯", "當機",
+    # 搗蛋 / 注入探測（永遠擋）
+    "格式化", "重開機", "關機", "密碼", "管理員", "admin",
+    "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
+    "忽略你的指令", "忽略指令", "告訴我祕密", "告訴我秘密",
+    "全部刪掉", "刪掉全部", "清空資料", "清空庫存", "改成0元", "改成 0 元",
 )
 
 
@@ -203,6 +221,7 @@ GUIDE_KEYWORDS = {
     "菜單", "菜单", "功能", "選項", "选项", "幫助", "帮助",
     "列表", "清單", "清单", "全部", "所有", "都有",
     "能做什麼", "能做什么", "看看", "導航", "導覽",
+    "怎麼用", "怎麼操作", "教我", "使用說明", "怎麼玩",
     "menu", "help", "list", "options", "what can", "guide",
 }
 
@@ -243,7 +262,17 @@ def _is_guide_request(text: str) -> bool:
     優先排除：句中已含具體商品 / 類別 / 倉庫關鍵字 → 當查詢、交給 LLM
     """
     s = text.strip().lower()
-    if len(s) < 2 or len(s) > 20:
+    if len(s) < 2:
+        return False
+    if len(s) > 20:
+        # 長句碎念 fallback（第17輪）：展場訪客的長句閒聊（「逛展逛了一整天
+        # 腳好痠…過來看看」）夾帶守門員字誤入功能路由。長句若無任何具體
+        # 查詢線索（SPECIFIC 詞/數字）→ 給引導頁，比亂路由好。
+        _long_specific = ("庫存", "進", "出", "調", "退", "缺", "到期", "熱銷",
+                          "報告", "警示", "排程", "採購", "盤點", "安全", "倉")
+        if (not any(w in s for w in _long_specific)
+                and not re.search(r"\d", s)):
+            return True
         return False
     if re.fullmatch(r"\d+", s):
         return False
@@ -3202,6 +3231,17 @@ async def ws_handler(ws: WebSocket):
                 "stage":     "user_input",
                 "user_text": user_text,
             })
+
+            # ── 黑名單閘門（最高優先，在刪除/商品清單等任何功能攔截之前）──
+            # HTTP 端守門員本來就在功能攔截之前，WS 端順序相反導致「把庫存
+            # 全部刪掉」等搗蛋句先被刪除攔截接走，黑名單沒機會擋（第17輪）。
+            _bl_hit_ws = next((b for b in _GATEKEEPER_BLACKLIST if b in user_text.lower()), None)
+            if _bl_hit_ws:
+                log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
+                await push_display({"type": "trace", "stage": "rejected",
+                                    "reason": f"blacklist:{_bl_hit_ws}"})
+                await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                continue
 
             # ── 刪除/下架（優先於 clarify）──
             _delete_kws_ws = ("刪除", "下架", "砍掉", "移除", "刪掉")
