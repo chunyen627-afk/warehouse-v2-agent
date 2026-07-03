@@ -297,7 +297,7 @@ _INVENTORY_INTENT_WORDS = (
 _LOW_STOCK_INTENT_WORDS = (
     "快沒", "缺貨", "補貨", "庫存警示", "庫存告急", "存量不足",
     "庫存不足", "低庫存", "存量警報", "警示", "告急", "補不上", "見底",
-    "斷貨", "斷貨危機", "需要進貨", "該進貨", "警戒線", "緊急補",
+    "斷貨", "斷貨危機", "需要進貨", "該進貨", "警戒線", "緊急補", "該補",
     "low stock", "restock", "running low", "alert",
 )
 
@@ -651,7 +651,7 @@ def _detect_clarify(user_text: str) -> dict | None:
     # 系統性防漏：跟 C-PO 同一組判斷——「採購單/採購草稿/補貨單 + 開單動詞」
     # 一律當明確開單意圖直接放行，不再逐字追 _po_direct 同義詞
     # （出一張/開單採購/擬一張/給我一張…已經漏了三輪，第13輪定案）
-    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單", "開單採購", "開單補貨"))
+    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單", "補貨草稿", "補貨採購", "開單採購", "開單補貨"))
             and any(v in user_text for v in ("出", "開", "產", "生", "列", "建", "做", "給我", "擬", "轉", "來一"))):
         has_po_direct = True
     # 兩個倉名同時出現 → 比較意圖，放行（不攔）
@@ -883,11 +883,13 @@ def _fuzzy_score(keyword: str, name: str) -> float:
     # 共用修飾字會亂配：「電鍋」滑窗跟「電解質運動飲」的「電解」拿 50 分超過
     # Layer-4 門檻 40，自信地回錯商品（第12輪抓到）。共用頭名詞（電鍋 vs
     # 陶瓷不沾鍋的「鍋」）仍放行，clarify 建議近似品是好體驗。
+    # 第16輪補強：共用字還必須位於商品核心名的「字尾」——中文複合詞頭名詞
+    # 在末位，「冷氣」的頭「氣」出現在「蒸氣電熨斗」中段只是修飾字，曾誤配。
     if len(keyword) == 2:
         _ov = kw_set & core_set
         if len(_ov) == 1:
             _head = keyword[0] if keyword.endswith(("子", "們")) else keyword[-1]
-            if _ov != {_head}:
+            if _ov != {_head} or not core.endswith(_head):
                 best = min(best, 39.0)
 
     return best
@@ -1060,7 +1062,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # func_name 是什麼都要 hard-return——「出一張缺貨採購單」的「出一張」會被
     # C13b 的單字「出」+數字量詞規則搶成出貨 1 張，即使 intent_clf 已正確判成
     # generate_po 也會被劫走（第9輪測試抓到）。
-    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單", "開單採購", "開單補貨"))
+    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單", "補貨草稿", "補貨採購", "開單採購", "開單補貨"))
             and any(v in user_text for v in ("出", "開", "產", "生", "列", "建", "做", "給我", "擬", "轉"))
             and not any(w in user_text for w in ("查", "看", "哪些", "紀錄", "記錄", "歷史", "對帳", "短收"))):
         log.info("[校正 C-PO] 開採購單意圖 → generate_po")
