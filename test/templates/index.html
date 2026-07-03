@@ -699,14 +699,16 @@
 
 <div id="chips-bar">
   <!-- 鉤子入口(隨機輪播、勾起好奇)由 JS 動態插入到這 -->
+  <!-- 主打:會「改動庫存數字」的操作(進出貨/調貨/退貨)—— demo 訪客最直覺想玩的 -->
   <button class="chip primary" data-action="show-inventory-menu">📦 庫存查詢</button>
+  <button class="chip" data-action="movement-menu" style="border-color:#2b6cb0;color:#fff;background:linear-gradient(135deg,#2b6cb0,#3182ce);font-weight:700">📥 進出貨</button>
+  <button class="chip" data-action="transfer-menu" style="border-color:#0987a0;color:#fff;background:linear-gradient(135deg,#0987a0,#38b2ac);font-weight:700">🔄 調貨</button>
+  <button class="chip" data-action="return-menu" style="border-color:#b7791f;color:#fff;background:linear-gradient(135deg,#b7791f,#d69e2e);font-weight:700">↩️ 退貨</button>
   <button class="chip warning" data-action="low-stock-direct">🚨 缺貨警示</button>
   <button class="chip gold"    data-action="hot-items">🔥 熱銷排行</button>
-  <button class="chip" data-action="show-related-menu" style="border-color:#805ad5;color:#6b46c1">🔗 連帶備貨</button>
   <button class="chip" data-action="expiring-direct" style="border-color:#dd6b20;color:#c05621">⏰ 到期警示</button>
+  <button class="chip" data-action="show-related-menu" style="border-color:#805ad5;color:#6b46c1">🔗 連帶備貨</button>
   <button class="chip" data-action="agent-menu" style="border-color:#3182ce;color:#fff;background:linear-gradient(135deg,#3182ce,#5a67d8);font-weight:700">🤖 智慧管家</button>
-  <button class="chip" data-action="item-create" style="border-color:#38a169;color:#38a169">➕ 新增商品</button>
-  <button class="chip" data-action="item-delete" style="border-color:#e53e3e;color:#e53e3e">🗑 刪除商品</button>
 </div>
 
 <div id="messages"></div>
@@ -1043,15 +1045,16 @@ function showSuggestions(items) {
   scrollBottom();
 }
 
-// ── 能力地圖：明白告訴使用者「我懂這 7 類事」，每類給可點範例 ──
+// ── 能力地圖：明白告訴使用者「我會這幾類事」，每類給可點範例 ──
 const CAPABILITIES = [
-  { icon:'🛠️', name:'建立 / 管理商品', egs:['新增商品 環保吸管 日用品 150元 安全100', '新增商品', '刪除商品'] },
-  { icon:'📦', name:'查庫存 / 進出貨', egs:['藍牙耳機庫存', '北倉進了藍牙耳機50件', '南倉出貨洗衣精20件'] },
-  { icon:'🔍', name:'追查「帳對不上」', egs:['智慧手環怎麼少這麼多', '抗菌洗衣精帳對不上'] },
-  { icon:'⚙️', name:'改設定（要你確認）', egs:['南倉安全庫存全部加30', '現在的補貨前置天數是多少'] },
-  { icon:'📄', name:'產生報告', egs:['幫我出個全倉體檢報告', '出個缺貨報表'] },
-  { icon:'🗂️', name:'看有哪些資料可查', egs:['倉庫裡有哪些紀錄檔'] },
+  { icon:'📦', name:'查庫存', egs:['藍牙耳機庫存', '行動電源還有多少', '看一下悶燒罐'] },
+  { icon:'📥', name:'進貨 / 出貨', egs:['北倉進了藍牙耳機50件', '南倉出貨行動電源20個', '中倉進三箱智慧手環'] },
+  { icon:'🔄', name:'調貨（倉間調撥）', egs:['北倉調30個藍牙耳機給南倉', '中倉搬20台藍牙喇叭到北倉'] },
+  { icon:'↩️', name:'退貨（客人退、庫存加回）', egs:['北倉客人退了3個藍牙耳機', '中倉被退5個智慧手環'] },
   { icon:'🚨', name:'缺貨 / 到期 / 熱銷', egs:['缺貨的有哪些', '快到期的有哪些', '這週哪些賣最好'] },
+  { icon:'🔍', name:'追查「帳對不上」', egs:['智慧手環怎麼少這麼多', '行動電源帳對不上'] },
+  { icon:'📄', name:'產生報告 / 採購單', egs:['幫我出個全倉體檢報告', '幫我把缺貨的產採購單'] },
+  { icon:'⚙️', name:'改設定 / 管商品（要你確認）', egs:['南倉安全庫存全部加30', '新增商品', '刪除商品'] },
 ];
 function renderCapabilityMap() {
   if (!currentBotMsg) return;
@@ -2300,24 +2303,49 @@ document.querySelectorAll('#chips-bar .chip').forEach(c => {
       currentBotMsg = null;
     } else if (a === 'expiring-direct') {
       sendDirectCall('list_expiring_items', { within_days: 30 });
+    } else if (a === 'movement-menu') {
+      // ── 進出貨：demo 訪客一句話改庫存數字，走 HITL 確認卡 ──
+      currentBotMsg = appendBot('📥 進貨 / 出貨，一句話就好（會先給你確認卡，確認後才寫入）。點一個試試:');
+      showSuggestions([
+        { label: '📥 北倉進了藍牙耳機50件', query: '北倉進了藍牙耳機50件' },
+        { label: '📤 南倉出貨行動電源20個', query: '南倉出貨行動電源20個' },
+        { label: '📥 中倉進三箱智慧手環', query: '中倉進三箱智慧手環' },
+        { label: '📤 北倉賣掉8支無線滑鼠', query: '北倉賣掉8支無線滑鼠' },
+      ]);
+      currentBotMsg = null;
+    } else if (a === 'transfer-menu') {
+      // ── 調貨：跨倉調撥，demo 最直覺想玩的「貨在倉間移動」 ──
+      currentBotMsg = appendBot('🔄 把貨從一個倉調到另一個倉（來源倉不夠會擋下）。點一個試試:');
+      showSuggestions([
+        { label: '🔄 北倉調30個藍牙耳機給南倉', query: '北倉調30個藍牙耳機給南倉' },
+        { label: '🔄 中倉搬20台藍牙喇叭到北倉', query: '中倉搬20台藍牙喇叭到北倉' },
+        { label: '🔄 南倉撥15個行動電源到中倉', query: '南倉撥15個行動電源到中倉' },
+      ]);
+      currentBotMsg = null;
+    } else if (a === 'return-menu') {
+      // ── 退貨：客人退貨（庫存加回），走 HITL 確認卡 ──
+      currentBotMsg = appendBot('↩️ 客人退貨，庫存會加回來（一樣先給確認卡）。點一個試試:');
+      showSuggestions([
+        { label: '↩️ 客人退了3個藍牙耳機', query: '北倉客人退了3個藍牙耳機' },
+        { label: '↩️ 顧客退2台藍牙喇叭', query: '南倉顧客退2台藍牙喇叭' },
+        { label: '↩️ 中倉被退5個智慧手環', query: '中倉被退5個智慧手環' },
+      ]);
+      currentBotMsg = null;
     } else if (a === 'agent-menu') {
-      // ── v2 智慧管家：三金剛示範（展場訪客一鍵體驗 Agent）──
-      currentBotMsg = appendBot('🤖 智慧管家能「追原因 / 改設定 / 跑作業」。挑一個看看 Agent 怎麼多步思考:');
+      // ── v2 智慧管家：進階 Agent 能力 + 商品管理/改設定收進這裡當次選單 ──
+      currentBotMsg = appendBot('🤖 智慧管家能「追原因 / 改設定 / 跑作業 / 管商品」。挑一個看看 Agent 怎麼多步思考:');
       showSuggestions([
         { label: '🔍 追查庫存對不上', query: '智慧手環怎麼少這麼多' },
-        { label: '⚙️ 南倉安全庫存全部+30', query: '南倉安全庫存全部加30' },
         { label: '📄 產全倉體檢報告(含圖表)', query: '幫我出個全倉體檢報告' },
         { label: '📋 缺貨→自動產採購單', query: '幫我把缺貨的產採購單' },
         { label: '🔔 設警示(缺貨就通知)', query: '藍牙耳機缺貨就通知我' },
         { label: '📈 這月vs上月變化', query: '這個月跟上個月哪些變化大' },
-        { label: '🗂️ 看有哪些資料可查', query: '倉庫裡有哪些紀錄檔' },
+        { label: '⚙️ 南倉安全庫存全部+30', query: '南倉安全庫存全部加30' },
+        { label: '➕ 新增商品', query: '新增商品' },
+        { label: '🗑 刪除商品', query: '刪除商品' },
         { label: '🛠️ 跑月底盤點', query: '幫我跑一次月底盤點' },
       ]);
       currentBotMsg = null;
-    } else if (a === 'item-create') {
-      sendQuery('新增商品');
-    } else if (a === 'item-delete') {
-      sendQuery('刪除商品');  // 透過 WS 觸發，讓 server 設 delete session state
     }
   };
 });
@@ -2471,9 +2499,9 @@ const HOOK_POOL = [
 
 currentBotMsg = appendBot(
   '👋 嗨！我是倉管 Agent。你可以「直接打字問我」，像跟同事講話一樣。\n\n' +
-  '我懂這 7 類事 —— 不知道怎麼問的話，下面的範例點一下就會幫你送出 👇'
+  '我會這幾類事 —— 不知道怎麼問的話，下面的範例點一下就會幫你送出 👇'
 );
-// ── 能力地圖：明白告訴使用者「我懂哪 7 類事」+ 每類給可點範例 ──
+// ── 能力地圖：明白告訴使用者「我會哪幾類事」+ 每類給可點範例 ──
 renderCapabilityMap();
 currentBotMsg = null;
 
