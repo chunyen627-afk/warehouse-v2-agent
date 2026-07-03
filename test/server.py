@@ -1551,12 +1551,23 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             func_args = dict(func_args)
             func_args["warehouse_b"] = "central"
 
+    # C3c：「低於安全庫存/跌破安全水位」是查缺貨清單，不是查改設定
+    # （第15輪抓到：「低於安全庫存的品項」被 config key 詞搶成 config_read）
+    if (("低於" in user_text or "跌破" in user_text)
+            and any(w in user_text for w in ("安全庫存", "安全水位", "安全線", "警戒"))):
+        log.info("[校正 C3c] 低於安全庫存 → list_low_stock")
+        return "list_low_stock", {}, True
+
     # C13：明確查庫存意圖 + SKU → hard-return query_inventory（防止 C18 誤覆蓋）
-    # RCA 意圖詞（對帳/異常/少了）優先於 C13，不搶
+    # RCA 意圖詞（對帳/異常/少了）優先於 C13，不搶。
+    # 含設定項詞（安全庫存/前置天數）時也不搶——「現在安全庫存是多少」的
+    # 「庫存」曾讓 C13 在 C9 之前 hard-return 搶走 config 查詢（第15輪抓到）
     _c13_has_rca = any(w in user_text for w in _RCA_INTENT_WORDS)
+    _c13_has_cfg = any(w in user_text for w in _CONFIG_KEY_WORDS)
     _inv_intent = ("庫存", "剩多少", "還有多少", "有多少", "幾個", "數量", "查庫存",
                    "inventory", "stock", "查一下庫存", "看庫存", "查看庫存")
-    if not _c13_has_rca and any(w in user_text for w in _inv_intent) and func_name == "query_inventory":
+    if (not _c13_has_rca and not _c13_has_cfg
+            and any(w in user_text for w in _inv_intent) and func_name == "query_inventory"):
         kw = _extract_sku_keyword(user_text) or func_args.get("keyword", "")
         if kw:
             # 檢查 keyword 是否其實是類別名（如「電子產品庫存」→ category=electronics）
