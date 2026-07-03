@@ -151,16 +151,25 @@ GATEKEEPER_KEYWORDS = {
     # 錯字容錯關鍵字（避免 OOV 被守門員擋掉）
     "芽", "汽", "灌", "精", "只", "基", "郭", "伽", "店", "員", "文", "窄", "胡", "湖",
     "容", "鬥", "挖", "帶", "素", "協", "一", "運", "允", "燙",
-    # 口語關鍵字（避免「刷牙的那個」被 reject）
+    # 口語關鍵字（避免「刷牙的那個」被 reject）——只留「指向具體商品用途」的
+    # 實詞。第18輪移除純虛詞/單字助詞（我/這/哪/嗎/呢/啊/吧/喔/怎/問題/東西/
+    # 機器/壞掉…）：它們讓幾乎任何中文閒聊句都矇混過門（「你好嗎朋友」命中
+    # 「嗎」、「你有感情嗎」命中「嗎」），守門形同虛設。錯字容錯字元另有
+    # 上面那組（芽/汽/灌…）針對特定商品錯字，不受影響。
     "刷牙", "洗衣服", "擦身體", "裝水", "煮咖啡", "運動用的", "充電的",
-    "那個", "這", "哪", "啥", "怎", "嗎", "呢", "啊", "吧", "喔",
-    "壺", "線", "乳", "精", "機器", "墊子", "咖啡", "衣服", "手機",
-    "洗澡", "牙刷", "牙膏", "毛巾", "肥皂", "洗髮", "戶外", "壞掉", "快壞", "問題", "東西",
+    "墊子", "衣服", "手機殼",
+    "洗澡", "牙刷", "牙膏", "毛巾", "肥皂", "洗髮", "戶外", "快壞",
+    # 回歸驗證後補回的實詞（第18輪瘦身誤傷）：這幾個有真實倉管用途——
+    # 「那個」是 carry-over 代詞、「有個問題」是模糊求助、「快要壞掉」是
+    # 到期口語、「我想知道」是查詢開頭。閒聊濫用風險由黑名單先擋
+    # （「你是不是壞掉」有 你是不是 黑名單）。
+    "那個", "問題", "壞掉", "想知道", "想查", "想問",
     # 品項/報表口語（新增商品/報告類）
     "品項", "新品", "月報", "週報", "日報", "統計", "報告", "整理", "產出", "產生",
     "體檢", "健檢", "報表",
-    # 助理代名
-    "我", "my", "i ",
+    # 簡體常見倉管詞（陸港訪客，第18輪）
+    "库存", "耳机", "进货", "出货", "调货", "缺货", "补货", "报表", "报告",
+    "仓库", "查询", "热销", "滞销",
 }
 
 
@@ -209,6 +218,18 @@ _GATEKEEPER_BLACKLIST = (
     "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
     "忽略你的指令", "忽略指令", "告訴我祕密", "告訴我秘密",
     "全部刪掉", "刪掉全部", "清空資料", "清空庫存", "改成0元", "改成 0 元",
+    # 第18輪：假授權/反串/注入變體
+    "後台", "後台權限", "重設系統", "測試模式", "除錯模式", "debug模式",
+    "沒有任何限制", "沒有規則", "沒有限制的ai", "設定檔", "原始指令",
+    "無視前面", "無視所有", "無視規則", "以管理員", "工程師 給我", "工程師給我",
+    "sudo", "drop table", "delete from", "ignore all", "ignore previous",
+    "圖靈測試", "你的system", "顯示所有密碼",
+    # 第18輪：情緒/裝熟/離題閒聊
+    "心情不好", "好難過", "陪我玩", "陪我聊", "你愛我", "晚安", "誇獎我",
+    "好無聊", "唐詩", "唐詩", "做菜", "餐廳", "匯率", "email", "e-mail",
+    "穿什麼", "朋友嗎", "是朋友", "掰掰", "再見", "謝謝掰", "bye",
+    "感情嗎", "有感情", "會累", "會學習", "自己學習",
+    "傳說中", "真的假的", "隔壁攤", "機器手臂",
 )
 
 
@@ -268,8 +289,13 @@ def _is_guide_request(text: str) -> bool:
         # 長句碎念 fallback（第17輪）：展場訪客的長句閒聊（「逛展逛了一整天
         # 腳好痠…過來看看」）夾帶守門員字誤入功能路由。長句若無任何具體
         # 查詢線索（SPECIFIC 詞/數字）→ 給引導頁，比亂路由好。
+        # 第18輪回歸補：線索詞要涵蓋連帶（買）/查詢（多少/剩）/紀錄/比較/
+        # 警示等所有意圖家族，「買 coffee machine 的人還買什麼」曾被誤攔。
         _long_specific = ("庫存", "進", "出", "調", "退", "缺", "到期", "熱銷",
-                          "報告", "警示", "排程", "採購", "盤點", "安全", "倉")
+                          "報告", "警示", "排程", "採購", "盤點", "安全", "倉",
+                          "買", "賣", "多少", "剩", "紀錄", "記錄", "明細",
+                          "比較", "通知", "提醒", "月報", "報表", "體檢",
+                          "對帳", "少了", "怪", "coffee", "stock", "buy")
         if (not any(w in s for w in _long_specific)
                 and not re.search(r"\d", s)):
             return True
@@ -383,6 +409,29 @@ _RCA_INTENT_WORDS = (
     "有出入", "帳面", "差好多", "詭異", "蒸發",
     "discrepancy", "why", "who changed", "trace",
 )
+
+# 寫入/複雜工具的「意圖詞閘門」——LLM 對閒聊句常自由發揮輸出 set_alert /
+# generate_po / query_related 這類「不需要商品名就能開卡」的功能（WS 端沒有
+# intent_clf 兜底時尤其嚴重）。execute 之前檢查：這些工具若句中完全沒有對應
+# 意圖詞 → 判定為 LLM 幻覺，降級 rejected（第18輪訪客閒聊II抓到大量此類）。
+_TOOL_INTENT_GUARD = {
+    "set_alert":        ("通知", "提醒", "警示", "告訴我", "就通知", "缺貨就", "低於", "盯"),
+    "generate_po":      ("採購", "補貨", "叫貨", "進貨單", "po", "下單"),
+    "generate_report":  ("報告", "報表", "體檢", "健檢", "月報", "週報", "彙整", "摘要", "總結"),
+    "query_related_items": ("買", "連帶", "一起", "搭配", "還會", "順便", "加購", "夥伴", "帶動", "連帶備貨"),
+    "search_log":       _RCA_INTENT_WORDS,
+    "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料"),
+}
+
+
+def _tool_intent_ok(func_name: str, user_text: str) -> bool:
+    """該工具需要意圖詞才合理時，檢查句中有沒有。沒列在 guard 裡的工具一律放行。"""
+    words = _TOOL_INTENT_GUARD.get(func_name)
+    if not words:
+        return True
+    return any(w in user_text for w in words)
+
+
 # C9 manage_config：改設定（設定項詞 + 動作詞）
 _CONFIG_KEY_WORDS = ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置",
                      "安全水位倍數", "補貨目標天數", "lead", "safety stock")
@@ -2933,6 +2982,10 @@ async def api_query(req: Request):
         if _ck != _raw_kw:
             log.info(f"[dispatch] keyword 清理: 「{_raw_kw}」→「{_ck}」")
             func_args = {**func_args, _kw_field: _ck}
+    # ── 意圖閘門（HTTP 版，同 WS）──
+    if not _tool_intent_ok(func_name, user_text):
+        log.info(f"[gate] {func_name} 缺意圖詞 → rejected: {user_text!r}")
+        return JSONResponse({"ok": False, "view": "rejected", "summary": GATEKEEPER_REJECT_MSG})
     result = finance.execute(func_name, func_args)
     if isinstance(result, dict) and result.get("ok"):
         _update_ctx(vid, func_name, func_args)
@@ -3802,6 +3855,14 @@ async def ws_handler(ws: WebSocket):
                     if _ck2 != _raw2:
                         log.info(f"[dispatch-ws] keyword 清理: 「{_raw2}」→「{_ck2}」")
                         func_args = {**func_args, _kw_f2: _ck2}
+                # ── 意圖閘門：LLM 對閒聊句幻覺出寫入/複雜工具時擋下（第18輪）──
+                if not _tool_intent_ok(func_name, user_text):
+                    log.info(f"[gate] {func_name} 缺意圖詞 → rejected: {user_text!r}")
+                    await push_display({"type": "trace", "stage": "rejected",
+                                        "reason": f"no_intent:{func_name}"})
+                    await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                    continue
+
                 # ── 執行（先通知前端 tool call）──
                 _arg_preview = ", ".join(f"{k}={v!r}" for k, v in list(func_args.items())[:2])
                 await send({"type": "tool_call", "func": func_name, "args_preview": _arg_preview})
