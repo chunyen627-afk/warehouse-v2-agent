@@ -1035,6 +1035,8 @@ _SCHEDULE_SCRIPT_MAP = {
     "匯出":     "export_movements",
     "體檢報告": "generate_report",
     "報告":     "generate_report",
+    "月報":     "generate_report",
+    "週報":     "generate_report",
 }
 _SCHEDULE_TIME_MAP = {
     "早上": "09:00", "上午": "09:00", "早": "09:00",
