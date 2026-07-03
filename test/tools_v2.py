@@ -1047,29 +1047,53 @@ _SCHEDULE_FREQ_MAP = {
     "每月": "monthly", "每個月": "monthly", "月底": "monthly",
 }
 
+_CN_HOUR = {"零": 0, "一": 1, "兩": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
+            "七": 7, "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12}
+
+
 def _parse_schedule_intent(text: str) -> dict:
-    """從自然語言解析排程意圖，回傳 {script_id, freq, time_str}。"""
+    """從自然語言解析排程意圖。
+    回傳 {script_id, freq, time_str, freq_explicit, time_explicit}——
+    explicit 旗標讓 set_schedule 知道原句有沒有明講，明講的才覆蓋 LLM 給的參數。"""
     import re as _re
     script_id = next((v for k, v in _SCHEDULE_SCRIPT_MAP.items() if k in text), None)
-    freq = next((v for k, v in _SCHEDULE_FREQ_MAP.items() if k in text), "daily")
-    # 解析時間（幾點）
-    m = _re.search(r'(\d{1,2})\s*[點:](\d{0,2})', text)
+    _freq_hit = next((v for k, v in _SCHEDULE_FREQ_MAP.items() if k in text), None)
+    freq = _freq_hit or "daily"
+    # 解析時間（幾點）——阿拉伯數字或中文數字（「八點」「十一點」，第9輪測試補：
+    # 原本只認阿拉伯，「每天早上八點」落到「早上」預設 09:00 跟既有排程撞名）
+    time_str = None
+    m = _re.search(r'([0-9]{1,2}|十[一二]?|[一兩二三四五六七八九])\s*[點:](\d{0,2})', text)
     if m:
-        h, mi = int(m.group(1)), int(m.group(2)) if m.group(2) else 0
+        g = m.group(1)
+        h = int(g) if g.isdigit() else _CN_HOUR.get(g, 9)
+        mi = int(m.group(2)) if m.group(2) else 0
+        # 下午/晚上 + 12 小時制轉換
+        if h < 12 and any(w in text for w in ("下午", "晚上", "傍晚", "晚間", "夜裡")):
+            h += 12
         time_str = f"{h:02d}:{mi:02d}"
     else:
-        time_str = next((v for k, v in _SCHEDULE_TIME_MAP.items() if k in text), "09:00")
-    return {"script_id": script_id, "freq": freq, "time_str": time_str}
+        _t_hit = next((v for k, v in _SCHEDULE_TIME_MAP.items() if k in text), None)
+        time_str = _t_hit
+    return {"script_id": script_id, "freq": freq, "time_str": time_str or "09:00",
+            "freq_explicit": _freq_hit is not None,
+            "time_explicit": (m is not None) or (time_str is not None)}
 
 def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09:00",
                  raw_text: str = "") -> dict:
-    """設定定時排程：讓 Agent 在指定時間自動執行腳本。"""
-    # 若有 raw_text 就從自然語言解析
-    if raw_text and not script_name:
+    """設定定時排程：讓 Agent 在指定時間自動執行腳本。
+
+    raw_text 明講的 freq/時間一律優先於 LLM 傳的參數——LLM 常自己亂填
+    script_name 導致原本「只有 script_name 為空才解析 raw_text」的邏輯整段
+    跳過，freq 停在預設 daily 而誤判成重複排程（第9輪測試抓到：
+    「每週一匯出進出報表」被回「已有相同排程 daily」）。"""
+    if raw_text:
         parsed = _parse_schedule_intent(raw_text)
-        script_name = parsed["script_id"] or script_name
-        freq = parsed.get("freq", freq)
-        time_str = parsed.get("time_str", time_str)
+        if not script_name:
+            script_name = parsed["script_id"] or script_name
+        if parsed["freq_explicit"]:
+            freq = parsed["freq"]
+        if parsed["time_explicit"]:
+            time_str = parsed["time_str"]
 
     sc = _match_script(script_name or "")
     if not sc:
@@ -1082,8 +1106,10 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
     if jobs_path.exists():
         jobs = json.loads(jobs_path.read_text("utf-8")).get("jobs", [])
 
-    # 防止重複
-    existing = next((j for j in jobs if j["script_id"] == sc["id"] and j["freq"] == freq), None)
+    # 防止重複——script + freq + 時間三者都相同才算重複
+    # （同腳本同頻率但不同時間是合法的兩個排程，第9輪測試修）
+    existing = next((j for j in jobs if j["script_id"] == sc["id"]
+                     and j["freq"] == freq and j.get("time_str") == time_str), None)
     if existing:
         return W._err(f"已有相同排程：{sc['label']} {freq} {existing['time_str']}（ID: {existing['id']}）")
 

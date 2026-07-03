@@ -251,9 +251,12 @@ def _is_guide_request(text: str) -> bool:
         "電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動",
         "北倉", "中倉", "南倉", "北區", "中區", "南區",
         "耳機", "悶燒", "氣泡", "咖啡", "洗衣", "衛生", "瑜珈", "水壺",
-        "藍牙", "充電", "蚊香", "牛仔",
+        "藍牙", "充電", "蚊香", "牛仔", "筆電",
         "庫存", "缺貨", "斷貨", "補貨", "警示", "熱銷", "滯銷", "進貨", "出貨",
-        "週轉",
+        "週轉", "進出",
+        # 「剩多少 / 還剩 / 幾個」是具體查詢語氣，不是要看功能總覽
+        # （「看看14吋筆電包剩多少」「今天有什麼進出嗎」曾被 guide 誤攔）
+        "剩", "多少", "幾個", "還有",
         "連帶", "也買", "一起買", "搭配", "帶動", "好夥伴",
         "到期", "過期", "保存期限", "效期", "保鮮", "賞味", "即期",
         "壞掉", "快壞", "快爛", "快過期",
@@ -339,13 +342,14 @@ _MOVEMENT_PROTECT_WORDS = (
 _RCA_INTENT_WORDS = (
     "對不上", "對不起來", "兜不攏", "帳不對", "短少", "短收", "少貨", "少了",
     "怎麼少", "為什麼少", "異常", "誰改的", "誰動的", "查原因", "追原因",
-    "差異", "不對", "對帳", "discrepancy", "why", "who changed", "trace",
+    "差異", "不對", "對帳", "怪怪的", "莫名其妙", "有問題", "有鬼",
+    "discrepancy", "why", "who changed", "trace",
 )
 # C9 manage_config：改設定（設定項詞 + 動作詞）
 _CONFIG_KEY_WORDS = ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置",
                      "安全水位倍數", "補貨目標天數", "lead", "safety stock")
 _CONFIG_SET_WORDS = ("改成", "設成", "設為", "調成", "調到", "改為", "設定為",
-                     "調高", "調低", "提高", "提升", "降低", "加", "減", "+", "改", "設")
+                     "調高", "調低", "提高", "提升", "降低", "降", "加", "減", "+", "改", "設")
 _CONFIG_READ_WORDS = ("是多少", "設多少", "多少", "現在設", "目前", "查一下", "看一下", "設定值")
 # C10 run_script：執行白名單腳本
 _SCRIPT_INTENT_WORDS = ("跑一次", "執行", "跑個", "跑一下", "幫我跑", "做一次", "做個",
@@ -386,11 +390,12 @@ _ALL_INTENT_WORDS = (
 import re as _re
 
 _REWRITE_RULES: list[tuple] = [
-    # ── 排程設定（優先於腳本，避免「每天跑盤點」被誤吃成 run_script）──
-    (_re.compile(r"(每天|每日|每週|每周|每月|定時|固定時間|自動執行|自動跑).*(盤點|匯出|報告|體檢|健診|腳本|跑)"),
-                                                                    "每天定時執行盤點"),
-    (_re.compile(r"(盤點|匯出|報告|體檢).*(每天|每日|每週|每周|每月|定時)"),
-                                                                    "每天定時執行盤點"),
+    # ⚠️ 排程「設定」不做 rewrite——曾有兩條規則把「每週一匯出進出報表」
+    # 「每天早上八點盤點」全改寫成同一句死字串「每天定時執行盤點」，時間/頻率/
+    # 腳本資訊全毀（每週匯出變每天盤點、八點變預設 09:00 還誤判重複排程）。
+    # 路由安全交給 Pre-C-Sched 攔截（每天/每週 + 盤點/匯出 → set_schedule
+    # raw_text=原句），時間頻率由 tools_v2._parse_schedule_intent 解析原句。
+    # 教訓同 set_alert：rewrite 成固定句 = 資訊銷毀，只適合「查詢類」意圖。
 
     # ── 排程查詢 ──
     (_re.compile(r"(看|查|查看|顯示|列出|有哪些|目前|現在).*(排程|定時任務)"),
@@ -619,7 +624,9 @@ def _detect_clarify(user_text: str) -> dict | None:
     _po_kw = {"短少", "短收", "PO", "po", "訂單", "採購單", "採購", "對帳", "帳對不上"}
     # 明確產採購單意圖 → 直接放行，不攔
     _po_direct = ("產採購", "下採購", "補貨單下單", "幫我叫貨", "開採購", "幫我把缺貨",
-                  "缺貨清單轉採購", "缺貨的產", "幫我補貨", "產po")
+                  "缺貨清單轉採購", "缺貨的產", "幫我補貨", "產po",
+                  # 「出一張採購單」「列成採購單」這類明確開單動詞（第9輪測試補）
+                  "出一張", "開一張", "生一張", "出採購", "列成採購", "列採購", "該補的")
     has_po_intent = any(w in user_text for w in _po_kw)
     has_po_direct = any(w in user_text for w in _po_direct)
     # 兩個倉名同時出現 → 比較意圖，放行（不攔）
@@ -1004,6 +1011,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     hard_corrected=True 表示有確定性規則命中，C18 不應再覆蓋。"""
     text_low = user_text.lower()
 
+    # C-PO：明確「開採購單」意圖 → generate_po。一定要在 C13b 之前、且不管
+    # func_name 是什麼都要 hard-return——「出一張缺貨採購單」的「出一張」會被
+    # C13b 的單字「出」+數字量詞規則搶成出貨 1 張，即使 intent_clf 已正確判成
+    # generate_po 也會被劫走（第9輪測試抓到）。
+    if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單"))
+            and any(v in user_text for v in ("出", "開", "產", "生", "列", "建", "做", "給我"))
+            and not any(w in user_text for w in ("查", "看", "哪些", "紀錄", "記錄", "歷史", "對帳", "短收"))):
+        log.info("[校正 C-PO] 開採購單意圖 → generate_po")
+        return "generate_po", {"source": "low_stock"}, True
+
     # C13a：跨倉調貨意圖 → create_transfer（2026-07-02 新增）。放在 C13b（進出貨）
     #   之前，因為調貨句同時含「調」動詞+數量+兩個倉名，元素跟進出貨重疊，要先
     #   攔截才不會被 C13b 誤判成單倉進出貨。判別特徵：含明確調貨動詞（調/調撥/
@@ -1062,9 +1079,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _movement_return_words = ("退貨", "退回", "退還", "退了", "客人退", "顧客退",
                               "被退", "退回來", "退貨回來")
     _movement_in_words = ("進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨",
-                          "來貨了", "來貨", "進了貨", "來了") + _movement_return_words
+                          "來貨了", "來貨", "進了貨", "來了",
+                          "收了", "送來", "送到", "送了") + _movement_return_words
     _movement_out_words = ("出貨了", "出貨", "出庫", "賣掉了", "賣掉", "賣了",
-                           "銷貨", "銷出", "銷售", "售出", "出了", "買走了", "買走", "拿走")
+                           "銷貨", "銷出", "銷售", "售出", "出了", "買走了", "買走",
+                           "拿走", "提走", "取走", "載走")
     _is_return13b = any(w in user_text for w in _movement_return_words)
     _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
@@ -1124,6 +1143,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                      "list_alerts", "delete_alert",
                      "compare_warehouses"):
         return func_name, func_args, True
+
+    # C9b：manage_config 問句防護——「…設定多少」「…是多少」是查詢不是設值。
+    # intent_clf 直判 manage_config 時 LLM 常自己標 action=set 且沒 value，
+    # C9/C18 都沒機會翻正（第9輪測試補）。
+    if (func_name == "manage_config" and func_args.get("action") == "set"
+            and not str(func_args.get("value") or "").strip()
+            and "多少" in user_text and _extract_config_value(user_text) is None):
+        log.info("[校正 C9b] 問句「多少」→ manage_config action=read")
+        func_args = {**func_args, "action": "read"}
 
     # ── C7: 到期意圖詞 → list_expiring_items(最高優先)──
     # C0：未知函式名 → 從 user_text 推斷最接近的已知函式
@@ -1500,7 +1528,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         not _c9_raw_key or not any(_c9_raw_key in w or w in _c9_raw_key for w in _CONFIG_KEY_WORDS)
     )
     if has_cfgkey and (func_name not in ("manage_config", "set_alert") or _c9_needs_fix):
-        action = "set" if has_cfgset and not any(w in user_text for w in ("是多少", "設多少", "查")) else "read"
+        # 「多少」是問句語氣（「設定多少」「是多少」），有它一律當 read——
+        # 曾經只擋「是多少/設多少」，「補貨前置天數設定多少」被「設」搶成 set 而報錯
+        action = "set" if has_cfgset and not any(w in user_text for w in ("多少", "查")) else "read"
         # 抽 key
         key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
         new_args = {"action": action, "key": key}
@@ -1741,7 +1771,18 @@ all_sockets:     set[WebSocket] = set()
 _visitor_closed = False
 _item_create_state: dict = {}
 _item_delete_state: dict = {}  # 刪除模式的 session state
-_ctx: dict = {}                # Context carry-over：記住上一輪的 sku/warehouse/func
+# Context carry-over：記住上一輪的 sku/warehouse/func。
+# ⚠️ 一定要按訪客(vid)隔離——曾經是單一全域 dict，展場多裝置時 A 訪客問的
+# 商品會污染 B 訪客的「那個呢」追問（2026-07-03 第9輪測試抓到：不同 WS 連線
+# 之間 context 互相滲透）。
+_ctx_by_vid: dict = {}         # vid → {"last_sku":…, "last_wh":…, "last_func":…}
+_CTX_MAX_VISITORS = 500        # 防止長期展示無上限成長
+
+
+def _ctx_for(vid) -> dict:
+    if vid not in _ctx_by_vid and len(_ctx_by_vid) >= _CTX_MAX_VISITORS:
+        _ctx_by_vid.clear()    # 展場簡單粗暴：滿了整個重置（context 丟了頂多多問一句）
+    return _ctx_by_vid.setdefault(vid, {})
 
 
 # ─── Context carry-over ────────────────────────────────────
@@ -1752,8 +1793,9 @@ _CTX_FUNC_HINT = {
     "到期": "list_expiring_items", "保存": "list_expiring_items",
 }
 
-def _update_ctx(func_name: str, func_args: dict):
-    """每輪成功執行後更新 context。"""
+def _update_ctx(vid, func_name: str, func_args: dict):
+    """每輪成功執行後更新該訪客的 context。"""
+    _ctx = _ctx_for(vid)
     kw = func_args.get("keyword") or func_args.get("target") or func_args.get("script_name")
     wh = func_args.get("warehouse")
     if kw:
@@ -1762,12 +1804,13 @@ def _update_ctx(func_name: str, func_args: dict):
         _ctx["last_wh"] = wh
     _ctx["last_func"] = func_name
 
-def _resolve_followup(user_text: str, func_name: str, func_args: dict):
+def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
     """
     若 user_text 是追問句（含代詞/倉庫切換）且 func_args 沒有 keyword，
-    嘗試從 _ctx 補上 last_sku / last_wh。
+    嘗試從該訪客的 _ctx 補上 last_sku / last_wh。
     回傳 (new_func_name, new_func_args) 或原值。
     """
+    _ctx = _ctx_for(vid)
     if not _ctx.get("last_sku"):
         return func_name, func_args
     is_followup = any(w in user_text for w in _CTX_FOLLOWUP_WORDS)
@@ -2402,10 +2445,14 @@ async def api_query(req: Request):
                            "每天早上", "每天晚上", "每天中午", "自動執行", "自動跑")
         _sched_act_kws  = ("盤點", "匯出", "報告", "體檢", "腳本", "跑")
         if (any(w in user_text for w in _sched_time_kws) and
-                any(w in user_text for w in _sched_act_kws) and
-                func_name != "set_schedule"):
-            func_name = "set_schedule"
-            func_args = {"raw_text": user_text}
+                any(w in user_text for w in _sched_act_kws)):
+            if func_name != "set_schedule":
+                func_name = "set_schedule"
+                func_args = {"raw_text": user_text}
+            else:
+                # LLM 已判 set_schedule 但自己亂填 script_name/freq 時，
+                # 一定要把原句帶給 tools 重新解析（freq/時間以原句明講的為準）
+                func_args["raw_text"] = user_text
 
     # ── Pre-C10（HTTP 版）──
     _prec_skip = ("run_script", "set_schedule", "list_schedules", "delete_schedule",
@@ -2450,8 +2497,8 @@ async def api_query(req: Request):
     # correct（先校正，OOV 才能對正確的 func_name/keyword 做判斷）
     func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
 
-    # Context carry-over：追問句補 keyword/warehouse
-    func_name, func_args = _resolve_followup(user_text, func_name, func_args)
+    # Context carry-over：追問句補 keyword/warehouse（按訪客 vid 隔離）
+    func_name, func_args = _resolve_followup(vid, user_text, func_name, func_args)
 
     # C18
     mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
@@ -2703,7 +2750,7 @@ async def api_query(req: Request):
             func_args = {**func_args, _kw_field: _ck}
     result = finance.execute(func_name, func_args)
     if isinstance(result, dict) and result.get("ok"):
-        _update_ctx(func_name, func_args)
+        _update_ctx(vid, func_name, func_args)
     # ── 參數錯誤時，從 user_text 推測正確意圖 → clarify ──
     if isinstance(result, dict) and not result.get("ok") and "unexpected keyword" in str(result.get("summary", "")):
         log.info(f"[dispatch] 參數錯誤 {func_name}: {result['summary']!r} → clarify")
@@ -3242,10 +3289,14 @@ async def ws_handler(ws: WebSocket):
                     _sched_act_kws  = ("盤點", "匯出", "報告", "體檢", "腳本", "跑")
                     _has_sched_time = any(w in user_text for w in _sched_time_kws)
                     _has_sched_act  = any(w in user_text for w in _sched_act_kws)
-                    if _has_sched_time and _has_sched_act and func_name != "set_schedule":
-                        func_name = "set_schedule"
-                        func_args = {"raw_text": user_text}
-                        log.info(f"[Pre-C-Sched] 排程意圖攔截 → set_schedule raw_text={user_text!r}")
+                    if _has_sched_time and _has_sched_act:
+                        if func_name != "set_schedule":
+                            func_name = "set_schedule"
+                            func_args = {"raw_text": user_text}
+                            log.info(f"[Pre-C-Sched] 排程意圖攔截 → set_schedule raw_text={user_text!r}")
+                        else:
+                            # LLM 已判 set_schedule 但自己亂填參數時，原句一定要帶給 tools 重解析
+                            func_args["raw_text"] = user_text
 
                 # ── Pre-C10：腳本意圖強攔截（在 clarify / LLM 校正之前）──
                 _prec10_skip = ("run_script", "set_schedule", "query_movement", "compare_warehouses")
@@ -3359,8 +3410,8 @@ async def ws_handler(ws: WebSocket):
                 else:
                     _oov_hint = None
 
-                # Context carry-over：追問句補 keyword/warehouse
-                func_name, func_args = _resolve_followup(user_text, func_name, func_args)
+                # Context carry-over：追問句補 keyword/warehouse（按訪客 vid 隔離）
+                func_name, func_args = _resolve_followup(vid, user_text, func_name, func_args)
                 corrected_call = f"{func_name}({func_args})"
 
                 # ── C18：clf mismatch 檢查（hard_corrected 時不蓋過）──
@@ -3386,7 +3437,7 @@ async def ws_handler(ws: WebSocket):
                         # 2026-07-02 實測「北倉安全水位提高20」抓到：clf 判斷正確
                         # 但 func_args 沒跟著轉換，manage_config 收到空 key 直接報錯）。
                         _c18_action = "set" if any(w in user_text for w in _CONFIG_SET_WORDS) and not any(
-                            w in user_text for w in ("是多少", "設多少", "查")) else "read"
+                            w in user_text for w in ("多少", "查")) else "read"
                         _c18_key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
                         func_args = {"action": _c18_action, "key": _c18_key}
                         for _zh, _en in _WH_ZH_MAP.items():
@@ -3549,7 +3600,7 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "tool_call", "func": func_name, "args_preview": _arg_preview})
                 result = finance.execute(func_name, func_args)
                 if isinstance(result, dict) and result.get("ok"):
-                    _update_ctx(func_name, func_args)
+                    _update_ctx(vid, func_name, func_args)
                 log.info(f"[trace] vid={vid} result={result.get('summary', '')[:80]!r}")
 
                 # ── 逐步送出 trace steps（讓前端看到內部執行過程）──
@@ -3668,6 +3719,7 @@ async def ws_handler(ws: WebSocket):
         log.error(f"WS error: {e}", exc_info=True)
     finally:
         all_sockets.discard(ws)
+        _ctx_by_vid.pop(vid, None)   # 斷線清掉該訪客 context，避免殘留
         log.info(f"訪客斷線（剩 {len(all_sockets)}）")
 
 
