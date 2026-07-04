@@ -118,6 +118,8 @@ GATEKEEPER_KEYWORDS = {
     # 補貨口語核心字（RPI5 v21：「什麼得補了」「該補些什麼」的裸「補」沒命中
     # 守門員關鍵字被判無意義擋掉，沒機會走 C3 low_stock）
     "補", "要補", "該補", "得補", "缺", "缺的",
+    # 缺貨/滯銷口語變體（RPI5 conv100-r2）
+    "拉警報", "警報", "水位", "撐不住", "叫貨", "斷貨", "見底", "賣不動", "賣不出",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
     "冠軍", "最熱門", "最冷門", "銷量", "搶手", "熱賣", "賣得最兇", "最夯",
     "比較", "比", "跟", "和", "vs", "對比",
@@ -372,6 +374,9 @@ _LOW_STOCK_INTENT_WORDS = (
     "要補", "趕快補", "該補的", "要補的", "得補", "需要補", "快點補",
     "缺的東西", "缺什麼", "缺哪些", "補多少", "要補多少", "補幾個",
     "補一補", "補一下", "該補", "得補了", "缺的補", "要補了",
+    # 缺貨口語變體（RPI5 conv100-r2：拉警報/水位過低/撐不住/叫貨 誤走 run_script/movement/hot）
+    "拉警報", "警報", "水位過低", "水位太低", "水位低", "撐不住", "撐不下去",
+    "叫貨", "趕緊叫貨", "要叫貨", "該叫貨", "快斷", "見底", "快見底", "存量太低",
     "low stock", "restock", "running low", "alert",
 )
 
@@ -384,6 +389,8 @@ _HOT_INTENT_WORDS_HOT = (
 )
 _HOT_INTENT_WORDS_SLOW = (
     "賣最差", "滯銷", "賣不掉", "最冷門", "賣最少", "銷量最差",
+    # 滯銷口語（RPI5 conv100-r2：「哪些貨賣不動」誤走 movement）
+    "賣不動", "賣不出去", "動不了", "乏人問津", "沒人買", "賣不太動",
     "worst selling", "slow", "slow mover",
 )
 
@@ -487,6 +494,14 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
         cand = kw if (kw and _WR.match_items(kw)) else _extract_sku_keyword(user_text)
         if cand and _WR.match_items(cand):
             log.info(f"[gate-rescue] search_log 缺RCA詞但有商品名 → query_inventory kw={cand!r}")
+            return "query_inventory", {"keyword": cand}
+
+    # query_related_items 缺連帶詞、但有商品名 → 其實是查庫存（RPI5 conv100-r3：
+    # 「北中南倉的滑鼠各有幾個」LLM 誤投 related → 閘門擋 rejected，該查庫存）
+    if func_name == "query_related_items":
+        cand = kw if (kw and _WR.match_items(kw)) else _extract_sku_keyword(user_text)
+        if cand and _WR.match_items(cand):
+            log.info(f"[gate-rescue] query_related 缺連帶詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
 
     # Bug2: set_alert 缺意圖詞、但句含「安全庫存」+設定動作詞 → 是改設定，轉 manage_config
@@ -1211,7 +1226,7 @@ def _extract_config_value(user_text: str):
     _rel_neg = _re.search(r"(?:[降減]|調低|調降|下修|低)\s*" + _NUM_PART, user_text)
     # 「設定成/設定到」補進絕對值（原本只有「設成/設為/設定為」，RPI5 v21
     # 「前置天數設定成7天」漏抽）
-    _abs = _re.search(r"(?:改成|設成|設為|改為|設定為|設定成|調到|改到|調整為|改|設)\s*"
+    _abs = _re.search(r"(?:改成|設成|設為|改為|設定為|設定成|調成|調整成|調到|改到|調整為|改|設)\s*"
                       + _NUM_PART, user_text)
     if _abs_to:
         n = _cn_to_int(_abs_to.group(1))
@@ -1263,31 +1278,38 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _transfer_verbs = ("調貨", "調撥", "調到", "調去", "調過去", "調給", "調", "搬到", "搬去",
                        "搬", "移到", "移去", "移過去", "移撥", "移", "撥到", "撥去", "撥出", "撥",
                        "挪到", "挪去", "挪過去", "挪", "轉到", "轉去", "轉過去", "轉倉", "轉",
-                       "勻給", "勻", "送到", "送去", "運到", "運去", "運過去", "拉到", "拉去")
+                       "勻給", "勻", "送到", "送去", "運到", "運去", "運過去", "拉到", "拉去",
+                       # RPI5 conv100-r2：「分5台熨斗到北倉」的「分…到」漏收
+                       "分到", "分去", "分給", "分過去")
     _qty13a_m = _re13a.search(
         r'([0-9]+|[零一二兩三四五六七八九十百千]+)\s*'
         r'(?:件|個(?!月|星期|禮拜|小時|鐘頭)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲)', user_text)
     _qty13a_int = _cn_to_int(_qty13a_m.group(1)) if _qty13a_m else None
     # 動詞跟介系詞被商品隔開的句型：「北倉送20個藍牙耳機到南倉」的「送…到」
     # 子字串比對不到（第11輪抓到）。兩倉名+數量的前提下跨距比對安全。
-    _sep_verb_m = _re13a.search(r'[送運搬移調撥挪轉勻].{0,18}?[到去給]', user_text)
+    _sep_verb_m = _re13a.search(r'[送運搬移調撥挪轉勻分].{0,18}?[到去給]', user_text)
     _has_transfer_verb = any(w in user_text for w in _transfer_verbs) or _sep_verb_m is not None
+    # 模糊量詞（「調一批悶燒罐到南倉」無精確數字）：有調貨動詞+兩倉時也算調貨，
+    # qty 留 None 讓 create_transfer clarify 問數量（RPI5 conv100-r2：原本落 config）
+    _vague_qty13a = any(w in user_text for w in ("一批", "一些", "些", "若干", "幾個", "幾件",
+                        "一點", "一部分", "部分", "一半", "半數", "分點", "勻一點", "勻些"))
     # 兩個不同倉名（北/中/南去重後 >= 2）才算調貨
     _wh_mentions13a = [w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
                                     "南倉", "南區倉", "南區") if w in user_text]
     _wh_keys13a = {w[0] for w in _wh_mentions13a}
     if (func_name != "create_transfer" and _has_transfer_verb
-            and _qty13a_int is not None
+            and (_qty13a_int is not None or _vague_qty13a)
             and (len(_wh_keys13a) >= 2
                  # 單倉 + 強調貨動詞（兩字以上，不含單字「調/搬/移/撥」）也算調貨
                  # 意圖：「調撥25個藍牙耳機給南倉」只提到目標倉，來源留空讓
                  # create_transfer 的 clarify 問「從哪個倉調」（守衛庫抓到的回歸：
                  # 這種句曾跑去查庫存）
-                 or (len(_wh_keys13a) == 1 and any(w in user_text for w in (
+                 or (len(_wh_keys13a) == 1 and (_sep_verb_m is not None or any(
+                     w in user_text for w in (
                      "調撥", "調貨", "轉倉", "調到", "調去", "調過去", "調給",
                      "搬到", "搬去", "移到", "移去", "移過去", "移撥",
                      "撥到", "撥去", "挪到", "挪去", "挪過去",
-                     "轉到", "轉去", "轉過去", "勻給"))))):
+                     "轉到", "轉去", "轉過去", "勻給")))))):
         # 解析來源倉 / 目標倉：目標倉通常緊跟在「到/去/過去/調到」之後。
         _WH_ZH2KEY = {"北": "北倉", "中": "中倉", "南": "南倉"}
         _to_key = ""
@@ -1304,11 +1326,28 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _from_zh = _WH_ZH2KEY.get(_from_key, "")
         _to_zh = _WH_ZH2KEY.get(_to_key, "")
         # 商品名：剝掉動詞/時間詞/數量量詞/倉名後交給 _extract_sku_keyword
-        _pre13a = user_text.replace(_qty13a_m.group(0), "")
+        # （_qty13a_m 可能為 None——模糊量詞「一批」路徑無精確數字，見 _vague_qty13a）
+        _pre13a = user_text.replace(_qty13a_m.group(0), "") if _qty13a_m else user_text
+        # 模糊量詞也要從商品名剝掉，避免「一批悶燒罐」把「一批」當商品名一部分
+        # （RPI5 conv100-r3：漏剝「一半/一部分/分點」→ kw 抽成「把 耳機一半」雜訊）
+        for _vq in ("一部分", "一批", "一些", "半數", "一半", "部分", "若干", "一點",
+                    "分點", "勻一點", "勻些", "些"):
+            _pre13a = _pre13a.replace(_vq, "")
         for _w in (_transfer_verbs + tuple(_wh_mentions13a) +
-                   ("今天", "今日", "剛剛", "剛才", "幫我", "麻煩", "請", "從", "到", "去", "過去", "給")):
+                   ("今天", "今日", "剛剛", "剛才", "幫我", "麻煩", "請", "從", "到", "去",
+                    "過去", "給", "把", "庫存", "的貨", "的")):
             _pre13a = _pre13a.replace(_w, "")
         _kw13a = _extract_sku_keyword(_pre13a) or _extract_sku_keyword(user_text) or ""
+        # 商品名防呆（RPI5 conv100-r3：「把中倉庫存移一些去南倉」抽成雜訊
+        # 「把 移一些去」）。kw 比對不到真商品 → 不硬轉 transfer 帶雜訊，退回
+        # clarify 問要調哪個商品，比 create_transfer 拿爛 kw 報錯好。
+        import warehouse as _W13a
+        _m13a = _W13a.match_items(_kw13a) if _kw13a else []
+        # 最高分 <3 = 雜訊靠單字亂中（「把 移一些去」靠「移」中行動電源 score 1），
+        # 不算真商品名 → 退回查詢概覽（RPI5 conv100-r3）
+        if not _kw13a or not _m13a or _m13a[0].get("score", 0) < 3:
+            log.info(f"[校正 C13a] 調貨但商品名抽壞/低分 kw={_kw13a!r} → 查詢概覽")
+            return "query_inventory", {"keyword": ""}, True
         log.info(f"[校正 C13a] 調貨意圖 → create_transfer kw={_kw13a!r} from={_from_zh!r} to={_to_zh!r} qty={_qty13a_int}")
         return "create_transfer", {"keyword": _kw13a, "from_wh": _from_zh,
                                     "to_wh": _to_zh, "qty": str(_qty13a_int)}, True
@@ -1479,7 +1518,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                            ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置", "前置時間"))
     _report_in_text = any(w in user_text for w in ("報表", "報告", "體檢", "健檢"))
     _alert_in_text = any(w in user_text for w in ("通知", "提醒", "警示我", "就通知", "就提醒", "告訴我"))
-    _po_in_text = any(w in user_text for w in ("採購單", "下單", "產採購", "叫貨", "補貨單"))
+    # 「叫貨」從 PO 排除詞移除：叫貨=缺貨要補的查詢語意，讓 C3 轉 low_stock
+    # （開採購單是「採購單/下單/產採購/補貨單」等明確 PO 詞，RPI5 conv100-r2）
+    _po_in_text = any(w in user_text for w in ("採購單", "下單", "產採購", "補貨單"))
     if (any(kw in user_text for kw in _LOW_STOCK_INTENT_WORDS) or
         any(kw in text_low for kw in _LOW_STOCK_INTENT_WORDS)) \
        and not _cfg_key_in_text and not _report_in_text \
@@ -2047,6 +2088,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 func_args = {**func_args, "warehouse": en}
                 log.info(f"[校正 C17a] {func_name} 補 warehouse={en}")
                 break
+
+    # C17a2：query_inventory 的 keyword 其實是純倉名（「北倉總共值多少」LLM 把
+    #   「北倉」當商品 → clarify「找不到北倉」）。清掉 keyword、補 warehouse，
+    #   讓它查該倉概覽（RPI5 conv100-r3）。
+    if func_name == "query_inventory":
+        _kw_wh = (func_args.get("keyword") or "").strip()
+        _WH_NAMES = ("北倉", "中倉", "南倉", "北區倉", "中區倉", "南區倉",
+                     "北區", "中區", "南區", "全倉", "所有倉", "各倉")
+        if _kw_wh in _WH_NAMES:
+            _en = _WH_ZH_MAP.get(_kw_wh, "all")
+            func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+            func_args["warehouse"] = _en
+            log.info(f"[校正 C17a2] keyword 是倉名「{_kw_wh}」→ 清 keyword、warehouse={_en}")
 
     # C17b：set_alert 參數清理 — 只保留 condition / target，清掉 keyword 等非法參數
     if func_name == "set_alert":

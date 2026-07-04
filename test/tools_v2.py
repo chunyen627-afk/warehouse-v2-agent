@@ -1801,7 +1801,13 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
     except ValueError:
         qty_val = 0
     if qty_val <= 0:
-        return W._err("請說明調貨數量，例如「調20件」")
+        # 缺數量→clarify 追問（非 error 紅字）。RPI5 conv100-r2：「調一批…到」
+        # 模糊量詞無精確數，友善問數量比報錯好。帶已知商品/來源/目標讓前端可續填。
+        _kwn = keyword or ""
+        return {"ok": True, "view": "clarify",
+                "summary": f"要調多少{('「'+_kwn+'」') if _kwn else ''}呢？請說個數量，例如「調20件」。",
+                "data": {"pending_transfer": True, "keyword": _kwn,
+                         "from_wh": from_wh, "to_wh": to_wh}}
 
     s = W.state()
     from_cur = s.stock.get(from_key, {}).get(sku, 0)

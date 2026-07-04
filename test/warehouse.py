@@ -360,6 +360,21 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
         # 整串 keyword 命中(含去空白版)→ bonus
         if keyword in name or (kw_ns and kw_ns in name_ns):
             score += 5
+        # 簡稱 fallback（RPI5 conv100-r2：「無線耳機」比不到「無線藍牙耳機」、
+        # 「機械鍵盤」比不到「機械式鍵盤」——中間插字讓子字串失效）。整串都沒
+        # 命中時，用中文單字重疊度補分：token 的字幾乎都在商品名裡才算(≥3字且
+        # 覆蓋率≥0.85)。⚠️只對「純中文詞、無數字/英數雜訊」的 token 啟用——
+        # 進貨句 keyword 常帶量詞數字（「藍牙喇叭40台」），對它做 fallback 會
+        # 亂中、把 C13b 進貨判定帶歪成 clarify（回歸抓到，改嚴門檻+排除含數字）。
+        if score == 0:
+            for tok in tokens:
+                if any(c.isdigit() or c.isascii() for c in tok):
+                    continue  # 含數字/英文的 token 跳過(進貨量詞、型號雜訊)
+                cjk = [c for c in tok if '一' <= c <= '鿿']
+                if len(cjk) >= 3:
+                    hit = sum(1 for c in cjk if c in name_ns)
+                    if hit / len(cjk) >= 0.85:
+                        score += hit
         if score > 0:
             results.append({"item": it, "score": score})
 
