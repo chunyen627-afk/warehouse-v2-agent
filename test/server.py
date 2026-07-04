@@ -2159,14 +2159,21 @@ def load_model():
 
     def _self_check():
         try:
-            r = llm("Hi", max_tokens=3, echo=False, temperature=0.0)
+            # 自我檢測 + KV cache 暖機二合一：用真實 build_prompt（完整
+            # system_prompt ~1236 tok）跑一次，讓 KV cache 熱的是正確的
+            # system_prompt 內容。第一個真訪客的 prompt 前綴命中快取，
+            # 首句延遲從冷啟 ~2.9s 降到 ~1.1s（RPI5 實測，2026-07-04）。
+            # 舊版用 "Hi"（1 tok）自檢，快取熱錯內容，第一句仍全量重算。
+            warm_prompt = build_prompt("藍牙耳機庫存")
+            r = llm(warm_prompt, max_tokens=8, echo=False, temperature=0.0,
+                    stop=GEMMA_STOP)
             result_holder["text"] = r["choices"][0]["text"]
         except Exception as e:
             result_holder["error"] = e
 
     t = threading.Thread(target=_self_check, daemon=True)
     t.start()
-    t.join(timeout=10.0)
+    t.join(timeout=20.0)   # 完整 prompt 首次 eval 較久（冷啟 ~3s），放寬 timeout
 
     if t.is_alive():
         err_msg = (
@@ -2651,8 +2658,9 @@ async def api_query(req: Request):
             # 請求卡住），這裡會無限期排隊、前端永遠停在 loading 狀態沒有提示。
             async with asyncio.timeout(40.0):
                 async with llm_lock:
-                    if hasattr(LLM, "reset"):
-                        LLM.reset()
+                    # 不 reset：llama-cpp 前綴快取讓相同 system_prompt（~1236 tok）
+                    # 跳過重算，RPI5 首結果延遲 3.3s→~1.1s。temperature=0 貪婪
+                    # 解碼輸出只由 prompt 決定，不 reset 無狀態污染（2026-07-04）。
                     r = await asyncio.wait_for(
                         asyncio.to_thread(
                             LLM, prompt,
@@ -3507,8 +3515,7 @@ async def ws_handler(ws: WebSocket):
                 try:
                     async with asyncio.timeout(45.0):
                         async with llm_lock:
-                            if hasattr(LLM, "reset"):
-                                LLM.reset()
+                            # 不 reset：保留 KV 前綴快取（見上方說明），RPI5 首結果 3.3s→~1.1s
                             r = await asyncio.wait_for(
                                 asyncio.to_thread(
                                     LLM, prompt,
@@ -3979,8 +3986,7 @@ async def ws_handler(ws: WebSocket):
                             # 沒有任何錯誤提示或恢復機制。加 40 秒總時限。
                             async with asyncio.timeout(40.0):
                                 async with llm_lock:
-                                    if hasattr(LLM, "reset"):
-                                        LLM.reset()
+                                    # 不 reset：保留 KV 前綴快取（見主推論路徑說明）
                                     r2_raw = await asyncio.to_thread(
                                         LLM, round2_prompt,
                                         max_tokens=80, temperature=0.0, stop=["<|user|>", "\n\n"]
