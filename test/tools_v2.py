@@ -382,7 +382,13 @@ def manage_config(action: str = "read", key: str = "", value=None,
     cfg = W.state().v2_config
     canon = _resolve_key(key)
     if not canon:
-        return W._err(f"看不懂要查/改哪個設定項：「{key}」")
+        # key 不是合法設定項（LLM 把「空間/容量」這種非設定問題誤投 manage_config）
+        # → 不暴露內部設定項名，改友善引導（RPI5 v21：「倉庫空間夠不夠」露「哪個設定項:空間」）
+        return {"ok": True, "view": "guide", "summary": (
+            "我能調的是庫存相關設定（安全庫存、補貨前置天數）。\n"
+            "試試這樣說：「北倉安全庫存改成50」「補貨前置天數設成7天」，\n"
+            "或問「安全庫存現在設多少」查目前設定。"
+        ), "data": {}}
 
     # ── read ──
     if action == "read":

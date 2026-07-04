@@ -115,6 +115,9 @@ GATEKEEPER_KEYWORDS = {
     "庫存量", "庫存價值", "週轉", "週轉率",
     "前置", "天數", "前置天數", "延長", "縮短", "安全水位",
     "缺貨", "補貨", "警示", "警報", "告急", "快沒", "不足", "低庫存", "庫存警示",
+    # 補貨口語核心字（RPI5 v21：「什麼得補了」「該補些什麼」的裸「補」沒命中
+    # 守門員關鍵字被判無意義擋掉，沒機會走 C3 low_stock）
+    "補", "要補", "該補", "得補", "缺", "缺的",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
     "冠軍", "最熱門", "最冷門", "銷量", "搶手", "熱賣", "賣得最兇", "最夯",
     "比較", "比", "跟", "和", "vs", "對比",
@@ -220,6 +223,9 @@ _GATEKEEPER_BLACKLIST = (
     "全部刪掉", "刪掉全部", "全部刪光", "刪光", "刪除全部", "清空資料",
     "清空庫存", "清倉", "改成0元", "改成 0 元", "改成1元", "價格改成",
     "改成0", "全部改成", "所有商品改", "全部價格",
+    # 清空/歸零變體（RPI5 v21：「把庫存全部清掉」被當商品查詢問你要查啥）
+    "全部清掉", "清掉庫存", "庫存清掉", "清掉所有", "清光", "全部清光",
+    "庫存歸零", "全部歸零", "歸零", "全部清空", "清除全部", "清除所有",
     # 第18輪：假授權/反串/注入變體
     "後台", "後台權限", "重設系統", "測試模式", "除錯模式", "debug模式",
     "沒有任何限制", "沒有規則", "沒有限制的ai", "設定檔", "原始指令",
@@ -313,6 +319,8 @@ def _is_guide_request(text: str) -> bool:
         "藍牙", "充電", "蚊香", "牛仔", "筆電",
         "庫存", "缺貨", "斷貨", "補貨", "警示", "熱銷", "滯銷", "進貨", "出貨",
         "週轉", "進出",
+        # 補貨口語（RPI5 v21：「幫我看看哪些要補」被 guide 攔，沒進 C3 low_stock）
+        "要補", "該補", "得補", "快補", "趕快補", "需要補", "缺的",
         # 「剩多少 / 還剩 / 幾個 / 夠不夠」是具體查詢語氣，不是要看功能總覽
         # （「看看14吋筆電包剩多少」「今天有什麼進出嗎」曾被 guide 誤攔）
         "剩", "多少", "幾個", "還有", "夠不夠", "夠賣", "堅果",
@@ -356,6 +364,14 @@ _LOW_STOCK_INTENT_WORDS = (
     "快沒", "缺貨", "補貨", "庫存警示", "庫存告急", "存量不足",
     "庫存不足", "低庫存", "存量警報", "警示", "告急", "補不上", "見底",
     "斷貨", "斷貨危機", "需要進貨", "該進貨", "警戒線", "緊急補", "該補",
+    # 補貨口語（RPI5 v21 抓到：「有哪些是要趕快補的」誤走 hot、
+    # 「缺的東西大概要補多少」誤走 manage_config → 缺貨清單已含 days_left/
+    # suggest_qty，正好回答「要補什麼、補多少」）
+    # 注意：這清單要跟 _is_guide_request 的 SPECIFIC 補貨詞對齊，否則「得補」
+    # 躲過 guide 卻沒被 C3 接住 → 落 rejected（RPI5 v21 二輪抓到）
+    "要補", "趕快補", "該補的", "要補的", "得補", "需要補", "快點補",
+    "缺的東西", "缺什麼", "缺哪些", "補多少", "要補多少", "補幾個",
+    "補一補", "補一下", "該補", "得補了", "缺的補", "要補了",
     "low stock", "restock", "running low", "alert",
 )
 
@@ -425,9 +441,18 @@ _TOOL_INTENT_GUARD = {
     "set_alert":        ("通知", "提醒", "警示", "告訴我", "就通知", "缺貨就", "低於", "盯"),
     "generate_po":      ("採購", "補貨", "叫貨", "進貨單", "po", "下單"),
     "generate_report":  ("報告", "報表", "體檢", "健檢", "月報", "週報", "彙整", "摘要", "總結"),
-    "query_related_items": ("買", "連帶", "一起", "搭配", "還會", "順便", "加購", "夥伴", "帶動", "連帶備貨"),
+    # 「一起/順便/還會」裸字太寬（「一起吃飯」誤命中 → related_empty，RPI5/WIN
+    #  硬體分歧：本機 intent_clf route 判 related 繞過 C6-skip）。收緊成購物詞組。
+    "query_related_items": ("買", "連帶", "搭配", "加購", "夥伴", "帶動", "連帶備貨",
+                            "一起買", "一起賣", "一起結帳", "還會買", "還會帶", "也買",
+                            "還配", "還扛", "順手帶"),
     "search_log":       _RCA_INTENT_WORDS,
     "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料"),
+    # run_script：需含腳本動作詞，否則閒聊句「一起吃飯」被 LLM 幻覺成
+    # run_script{一起吃飯} → 執行時回「不在白名單，可用：月底盤點…」把內部
+    # 腳本清單暴露給訪客（RPI5 v21 抓到）。沒動作詞 → 閘門擋成 rejected 婉拒。
+    "run_script":       ("跑", "執行", "盤點", "匯出", "產出", "重產", "重新產生",
+                         "重生", "重建", "做一次", "做個", "run", "export", "regenerate"),
     # query_movement：需進出貨/紀錄/期間意圖詞。閒聊句「今天過得如何」的
     # 「今天」曾讓 LLM 幻覺 movement（第19輪）。含商品名的進出貨已走 C13b
     # create_movement，這裡只擋純幻覺的空 movement。
@@ -446,6 +471,45 @@ def _tool_intent_ok(func_name: str, user_text: str) -> bool:
     if not words:
         return True
     return any(w in user_text for w in words)
+
+
+def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
+    """意圖閘門攔下前的降級救援（RPI5 壓測 v21）：
+    口語前綴會讓 LLM 對正經句輸出錯 function（查庫存→search_log、
+    設安全庫存→set_alert），再被意圖閘門當幻覺 reject。這裡在 reject 前
+    先看句子的真實意圖，能救則轉正確 function，救不了才回 None 讓它 reject。
+    回傳 (new_func, new_args) 或 None。"""
+    import warehouse as _WR
+    kw = func_args.get("keyword") or func_args.get("target") or ""
+
+    # Bug1: search_log 缺 RCA 意圖詞、但帶到有效商品名 → 其實是查庫存，降級 query_inventory
+    if func_name == "search_log":
+        cand = kw if (kw and _WR.match_items(kw)) else _extract_sku_keyword(user_text)
+        if cand and _WR.match_items(cand):
+            log.info(f"[gate-rescue] search_log 缺RCA詞但有商品名 → query_inventory kw={cand!r}")
+            return "query_inventory", {"keyword": cand}
+
+    # Bug2: set_alert 缺意圖詞、但句含「安全庫存」+設定動作詞 → 是改設定，轉 manage_config
+    # （C9 校正故意跳過 set_alert，導致這種句子一路走到閘門被 reject。這裡用
+    #  跟 C9 相同的 args 組法救回：action/key/warehouse/value 結構化參數。）
+    if func_name == "set_alert":
+        if any(k in user_text for k in _CONFIG_KEY_WORDS) and \
+           any(a in user_text for a in _CONFIG_SET_WORDS):
+            _action = ("set" if not (any(w in user_text for w in _CONFIG_READ_CUES)
+                       and _extract_config_value(user_text) is None) else "read")
+            _key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
+            new_args = {"action": _action, "key": _key}
+            for zh, en in _WH_ZH_MAP.items():
+                if zh in user_text:
+                    new_args["warehouse"] = en
+                    break
+            if _action == "set":
+                _cv = _extract_config_value(user_text)
+                if _cv is not None:
+                    new_args["value"] = _cv
+            log.info(f"[gate-rescue] set_alert 實為改安全庫存 → manage_config{{{_action}}}: {user_text!r}")
+            return "manage_config", new_args
+    return None
 
 
 # C9 manage_config：改設定（設定項詞 + 動作詞）
@@ -1138,10 +1202,17 @@ def _extract_config_value(user_text: str):
     import re as _re
     # 「到」結尾的動詞是絕對值語氣（調升到40=設成40，不是+40），要在相對值之前檢查
     # （第11輪抓到：「調升到40」的 rel/abs 都比對不到，value 整個漏抽）
-    _abs_to = _re.search(r"(?:調升到|升到|調降到|降到|調到|改到|拉到|調整到)\s*" + _NUM_PART, user_text)
+    # 「動詞+到」是絕對值語氣（調高到100=設成100，不是+100）。RPI5 v21 抓到
+    # 「調高到100」「拉高到」漏抽——把所有「(調|提|拉|升)+高?+到」都收進絕對值。
+    _abs_to = _re.search(r"(?:調升到|升到|調降到|降到|調到|改到|拉到|調整到|"
+                         r"調高到|提高到|拉高到|升高到|調低到|降低到|設到|設定到)\s*"
+                         + _NUM_PART, user_text)
     _rel_pos = _re.search(r"(?:[加+]|提高|提升|調高|調升|上修|高)\s*" + _NUM_PART, user_text)
     _rel_neg = _re.search(r"(?:[降減]|調低|調降|下修|低)\s*" + _NUM_PART, user_text)
-    _abs = _re.search(r"(?:改成|設成|設為|改為|設定為|調到|改到|調整為|改|設)\s*" + _NUM_PART, user_text)
+    # 「設定成/設定到」補進絕對值（原本只有「設成/設為/設定為」，RPI5 v21
+    # 「前置天數設定成7天」漏抽）
+    _abs = _re.search(r"(?:改成|設成|設為|改為|設定為|設定成|調到|改到|調整為|改|設)\s*"
+                      + _NUM_PART, user_text)
     if _abs_to:
         n = _cn_to_int(_abs_to.group(1))
         return str(n) if n is not None else None
@@ -1523,6 +1594,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # ── C6: 連帶意圖詞 → query_related_items ──
     _has_related = any(kw in user_text for kw in _RELATED_INTENT_WORDS) or \
                    any(kw in text_low for kw in _RELATED_INTENT_WORDS)
+    # 「順便問/順便看/順便查」是語氣詞（順便＝附帶問一句），不是「順便買」的
+    # 連帶購物意圖。若唯一命中的連帶詞是「順便」且後面接問句動詞，且沒有其他
+    # 明確連帶詞（買/一起/搭配/連帶/夥伴/加購/還會買），則不觸發 C6。
+    # （RPI5 壓測 v21 抓到：「順便問一下USB風扇還有嗎」被誤判 related）
+    if _has_related:
+        _strong_related = ("連帶", "也買", "還會買", "一起買", "順便買", "搭配",
+                           "帶動", "好夥伴", "加購", "一起結帳", "還會拿", "還買")
+        _has_strong = any(w in user_text for w in _strong_related)
+        _shunbian_ask = any(p in user_text for p in
+                            ("順便問", "順便看", "順便查", "順便瞧", "順便瞄", "順便了解"))
+        if _shunbian_ask and not _has_strong:
+            _has_related = False
+            log.info(f"[校正 C6-skip] 「順便問/看/查」為語氣詞非連帶意圖: {user_text!r}")
     if _has_related:
         # keyword:LLM 已抽的要先驗證比對得到商品才用（「帳篷跟什麼一起賣最多」
         # LLM 曾把整句當 keyword → related_empty，第14輪抓到），否則從
@@ -3040,8 +3124,13 @@ async def api_query(req: Request):
             func_args = {**func_args, _kw_field: _ck}
     # ── 意圖閘門（HTTP 版，同 WS）──
     if not _tool_intent_ok(func_name, user_text):
-        log.info(f"[gate] {func_name} 缺意圖詞 → rejected: {user_text!r}")
-        return JSONResponse({"ok": False, "view": "rejected", "summary": GATEKEEPER_REJECT_MSG})
+        # reject 前先試降級救援（口語前綴害 LLM 輸出錯 function，RPI5 v21）
+        _rescue = _intent_guard_rescue(func_name, func_args, user_text)
+        if _rescue:
+            func_name, func_args = _rescue
+        else:
+            log.info(f"[gate] {func_name} 缺意圖詞 → rejected: {user_text!r}")
+            return JSONResponse({"ok": False, "view": "rejected", "summary": GATEKEEPER_REJECT_MSG})
     result = finance.execute(func_name, func_args)
     if isinstance(result, dict) and result.get("ok"):
         _update_ctx(vid, func_name, func_args)
@@ -3922,11 +4011,16 @@ async def ws_handler(ws: WebSocket):
                         func_args = {**func_args, _kw_f2: _ck2}
                 # ── 意圖閘門：LLM 對閒聊句幻覺出寫入/複雜工具時擋下（第18輪）──
                 if not _tool_intent_ok(func_name, user_text):
-                    log.info(f"[gate] {func_name} 缺意圖詞 → rejected: {user_text!r}")
-                    await push_display({"type": "trace", "stage": "rejected",
-                                        "reason": f"no_intent:{func_name}"})
-                    await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
-                    continue
+                    # reject 前先試降級救援（口語前綴害 LLM 輸出錯 function，RPI5 v21）
+                    _rescue = _intent_guard_rescue(func_name, func_args, user_text)
+                    if _rescue:
+                        func_name, func_args = _rescue
+                    else:
+                        log.info(f"[gate] {func_name} 缺意圖詞 → rejected: {user_text!r}")
+                        await push_display({"type": "trace", "stage": "rejected",
+                                            "reason": f"no_intent:{func_name}"})
+                        await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                        continue
 
                 # ── 執行（先通知前端 tool call）──
                 _arg_preview = ", ".join(f"{k}={v!r}" for k, v in list(func_args.items())[:2])

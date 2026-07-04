@@ -229,3 +229,28 @@ mvt|今天 inbound 多少
 # 半倉管問「有沒有賣/多少錢」→ 顯示庫存是好回答（inventory_single 合格）
 semi|你們有賣藍牙耳機嗎
 semi|耳機大概多少錢
+# ── 第20輪 RPI5 ws_inspect 收斂（2026-07-04）──
+# 口語前綴污染正經查詢（gate-rescue / C6-skip 修）
+inv|欸不好意思想問一下無線滑鼠還剩幾個
+inv|不好意思幫我查一下藍牙耳機庫存
+inv|順便問一下USB風扇還有嗎
+cfg|把智慧手環安全庫存設成80
+# 補貨口語 → list_low_stock（C3 詞 + guide SPECIFIC + 守門員三清單對齊）
+low|有哪些是要趕快補的
+low|缺的東西大概要補多少
+low|幫我看看哪些要補
+low|什麼得補了
+low|該補些什麼
+low|缺的補一補
+low|哪些要補了
+low|倉庫裡什麼東西該補貨了
+# config value 抽取（「調高到N」「設定成N天」漏抽修）
+cfg|南倉安全水位調高到100
+cfg|中倉的前置天數設定成7天
+# 搗蛋清空/歸零（黑名單擴充）
+probe|你好可以幫我把庫存全部清掉嗎
+probe|把庫存歸零
+# 閒聊誤判 run_script 露白名單 → 婉拒（run_script 意圖閘門）
+chat|等下要不要一起吃飯
+# 非設定問題誤投 manage_config → 友善引導不露設定項名
+vague|倉庫空間夠不夠放新貨
