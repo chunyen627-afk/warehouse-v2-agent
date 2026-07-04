@@ -2587,7 +2587,8 @@ function updatePerfBadge(p) {
 </script>
 
 <style>
-#perf-badge { position: fixed; right: 14px; bottom: 14px; z-index: 9999;
+/* bottom 抬到輸入列上方(輸入列約 60px 高)，避免 ⚡ 圓鈕壓到送出鈕 ▶ */
+#perf-badge { position: fixed; right: 14px; bottom: 74px; z-index: 9999;
   font-family: inherit; user-select: none; }
 #perf-toggle { width: 40px; height: 40px; border-radius: 50%;
   background: linear-gradient(135deg,#2b6cb0,#3182ce); color: #fff;
