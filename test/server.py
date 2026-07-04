@@ -2019,6 +2019,19 @@ MODEL_FILE: str    = ""
 SYSTEM_PROMPT: str = ""
 LLM = None          # set by _background_init (via load_model)
 llm_lock = asyncio.Lock()
+
+# ── 效能量測：最近一次 LLM 推論的 token 速度（給前端效能徽章）──
+_last_perf = {"tok": 0, "ms": 0, "tps": 0.0}
+
+
+def _record_perf(r, t0):
+    """LLM 呼叫後記錄 completion tokens / wall time / tok每秒。"""
+    import time as _t
+    ms = (_t.perf_counter() - t0) * 1000.0
+    ct = (r.get("usage") or {}).get("completion_tokens", 0) if isinstance(r, dict) else 0
+    _last_perf["tok"] = ct
+    _last_perf["ms"] = round(ms)
+    _last_perf["tps"] = round(ct / (ms / 1000.0), 1) if ms > 0 and ct else 0.0
 display_sockets: set[WebSocket] = set()
 all_sockets:     set[WebSocket] = set()
 _visitor_closed = False
@@ -2393,6 +2406,12 @@ def _background_init():
         intent_clf.load()
         SYSTEM_PROMPT = load_system_prompt()
         LLM, MODEL_FILE = load_model()
+        # intent_clf 暖機：首次 predict 要載 jieba 分詞詞典（~900ms），先跑一句
+        # 讓第一個真訪客的路由就快（2026-07-04）
+        try:
+            intent_clf.predict("藍牙耳機庫存")
+        except Exception:
+            pass
         snap = finance.state()
         log.info(f"快照日期：{snap.snapshot_date}")
         log.info(f"SKU 數：{len(snap.items)} / 倉庫：{len(snap.warehouses)} / 類別：{len(snap.categories)}")
@@ -3481,10 +3500,12 @@ async def ws_handler(ws: WebSocket):
             #   memory warehouse_v2_project 的「WS 缺 intent_clf」記錄）──
             _clf_func_ws = None
             _clf_conf_ws = 0.0
+            _clf_t0 = __import__("time").perf_counter()
             try:
                 _clf_func_ws, _clf_conf_ws = intent_clf.predict(user_text)
             except Exception:
                 pass
+            _clf_ms = round((__import__("time").perf_counter() - _clf_t0) * 1000)
             _pre_kw_ws = _extract_sku_keyword(user_text)
             _clf_skip_llm_ws = False
             if _clf_func_ws and _clf_func_ws not in ("unknown", "unclear") and _clf_conf_ws >= 0.8:
@@ -3505,6 +3526,10 @@ async def ws_handler(ws: WebSocket):
                     raw_call = f"{func_name}({func_args})"
                     await push_display({"type": "trace", "stage": "llm_output",
                                          "raw": f"[intent_clf] {func_name} (conf={_clf_conf_ws:.2f})"})
+                    # 效能徽章：純分類路由（沒跑 LLM），送路由延遲，tok/s 維持上次
+                    await send({"type": "perf", "mode": "route", "ms": _clf_ms,
+                                "conf": round(_clf_conf_ws, 2),
+                                "tok": _last_perf["tok"], "tps": _last_perf["tps"]})
                     log.info(f"[intent_clf primary] vid={vid} skip LLM, func={func_name} args={func_args}")
 
             if not _clf_skip_llm_ws:
@@ -3516,6 +3541,7 @@ async def ws_handler(ws: WebSocket):
                     async with asyncio.timeout(45.0):
                         async with llm_lock:
                             # 不 reset：保留 KV 前綴快取（見上方說明），RPI5 首結果 3.3s→~1.1s
+                            _perf_t0 = __import__("time").perf_counter()
                             r = await asyncio.wait_for(
                                 asyncio.to_thread(
                                     LLM, prompt,
@@ -3526,6 +3552,7 @@ async def ws_handler(ws: WebSocket):
                                 ),
                                 timeout=30.0,
                             )
+                            _record_perf(r, _perf_t0)
                 except (asyncio.TimeoutError, TimeoutError):
                     log.warning(f"[timeout] vid={vid} 推理超時: {user_text!r}")
                     await send({
@@ -3540,6 +3567,8 @@ async def ws_handler(ws: WebSocket):
 
                 output = r["choices"][0]["text"].strip()
                 log.info(f"[trace] vid={vid} model={output[:120]}")
+                # 效能徽章：推論完成即送 tok/s 給前端
+                await send({"type": "perf", "mode": "llm", **_last_perf})
                 await push_display({"type": "trace", "stage": "llm_output", "raw": output})
 
                 parsed = parse_function_call(output)
