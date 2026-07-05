@@ -340,8 +340,8 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
 #    模型只抽意圖；實際寫入由 server 二次確認後 commit（見 commit_config_set）。
 # ════════════════════════════════════════════════════════════
 _KEY_ALIASES = {
-    "safety_stock":      ["安全庫存", "安全存量", "安全水位", "safety stock", "safety_stock"],
-    "reorder_lead_days": ["前置天數", "補貨前置", "前置時間", "lead time", "lead_days", "前置"],
+    "safety_stock":      ["安全庫存", "安全存量", "安全水位", "警戒值", "警戒水位", "safety stock", "safety_stock"],
+    "reorder_lead_days": ["前置天數", "補貨前置", "前置時間", "補貨天數", "lead time", "lead_days", "前置"],
     "safety_buffer_ratio": ["安全水位倍數", "安全倍數", "buffer", "緩衝倍數"],
     "restock_target_days": ["補貨目標天數", "補到撐", "target days", "撐幾天"],
 }
@@ -379,7 +379,9 @@ def _parse_value(value):
 
 
 def manage_config(action: str = "read", key: str = "", value=None,
-                  warehouse: str = "all") -> dict:
+                  warehouse: str = "all", item: str = "") -> dict:
+    # item：server 校正層從原句抽出的商品名（LLM 常漏抽，導致「瑜珈墊安全庫存
+    # 加20」的影響範圍變成全部商品 183 項，RPI5 conv100-r5 抓到）
     steps: list[dict] = []
     cfg = W.state().v2_config
     canon = _resolve_key(key)
@@ -399,7 +401,7 @@ def manage_config(action: str = "read", key: str = "", value=None,
             base = cfg.get("safety_stock_base", {})
             ov = cfg.get("safety_stock_override", {})
             # 若指定 keyword 對應某些 SKU，回那些；否則回整體說明
-            skus = _kw_to_skus(key)  # key 可能含商品名
+            skus = _kw_to_skus(item) or _kw_to_skus(key)  # item/key 可能含商品名
             rows = []
             target_skus = [it["sku_id"] for it in skus] or list(base.keys())[:10]
             for sku in target_skus:
@@ -437,7 +439,7 @@ def manage_config(action: str = "read", key: str = "", value=None,
         if canon == "safety_stock":
             base = cfg.get("safety_stock_base", {})
             ov = cfg.get("safety_stock_override", {})
-            skus = _kw_to_skus(key)
+            skus = _kw_to_skus(item) or _kw_to_skus(key)
             target_skus = [it["sku_id"] for it in skus] or list(base.keys())
             preview = []
             for sku in target_skus:
@@ -1049,6 +1051,12 @@ _SCHEDULE_SCRIPT_MAP = {
     "報告":     "generate_report",
     "月報":     "generate_report",
     "週報":     "generate_report",
+    # 「每天晚上七點自動出缺貨警示」→ 盤點腳本本來就是掃全倉跟安全庫存比對，
+    # 語意等同缺貨檢查（RPI5 conv100-r5）
+    "缺貨警示": "stock_audit",
+    "庫存警示": "stock_audit",
+    "缺貨":     "stock_audit",
+    "警示":     "stock_audit",
 }
 _SCHEDULE_TIME_MAP = {
     "早上": "09:00", "上午": "09:00", "早": "09:00",
