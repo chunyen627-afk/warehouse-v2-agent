@@ -1060,6 +1060,10 @@ _SCHEDULE_SCRIPT_MAP = {
     "庫存警示": "stock_audit",
     "缺貨":     "stock_audit",
     "警示":     "stock_audit",
+    # 「每週三下午三點出貨報表」（conv100-r9）
+    "出貨報表": "export_movements",
+    "進出報表": "export_movements",
+    "報表":     "generate_report",
 }
 _SCHEDULE_TIME_MAP = {
     "早上": "09:00", "上午": "09:00", "早": "09:00",

@@ -260,6 +260,8 @@ _GATEKEEPER_BLACKLIST = (
     "價格全部", "打對折", "全部打折",
     # conv100-r8：破壞語 + 改庫存數字變體（「調成」漏擋）
     "炸掉", "炸了", "燒掉", "數字調成", "庫存數字調",
+    # conv100-r9：抱怨系統（「壞掉」會撞到期詞）
+    "系統壞",
 )
 
 
@@ -589,6 +591,14 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
         cand = kw if _match_solid(kw) else _extract_sku_keyword(user_text)
         if _match_solid(cand):
             log.info(f"[gate-rescue] query_related 缺連帶詞但有商品名 → query_inventory kw={cand!r}")
+            return "query_inventory", {"keyword": cand}
+
+    # query_movement 缺進出詞、但有商品名 → 查該商品分倉庫存
+    # （「藍牙喇叭中倉南倉哪邊多」LLM 誤投 movement 被閘門拒，conv100-r9）
+    if func_name == "query_movement":
+        cand = kw if _match_solid(kw) else _extract_sku_keyword(user_text)
+        if _match_solid(cand):
+            log.info(f"[gate-rescue] query_movement 缺進出詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
 
     # Bug2: set_alert 缺意圖詞、但句含「安全庫存」+設定動作詞 → 是改設定，轉 manage_config
@@ -1570,7 +1580,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                           # conv100-r6：「北倉新到一批LED露營燈」
                           "新到", "收進",
                           # conv100-r7：「北倉剛進一批玻璃保鮮盒」
-                          "剛進") + _movement_return_words
+                          "剛進",
+                          # conv100-r9：「幫我叫30包嬰兒濕紙巾的貨」（qty 前提下單字安全）
+                          "叫") + _movement_return_words
     _movement_out_words = ("出貨了", "出貨", "出庫", "賣掉了", "賣掉", "賣了",
                            "銷貨", "銷出", "銷售", "售出", "出了", "買走了", "買走",
                            "拿走", "提走", "取走", "載走", "銷了", "賣出",
@@ -1726,8 +1738,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   排除：含「報告/報表」時讓給 C12 generate_report（出報告 ≠ 查清單）。
     _has_report = any(w in user_text for w in ("報告", "報表", "彙整"))
     _has_alert = any(w in user_text for w in ("通知", "提醒", "就通知", "就提醒", "警示我"))
+    # 「系統壞掉了啦」的「壞掉」是抱怨系統不是問效期（conv100-r9）→ 排除機器語境
+    _c7_sys_ctx = any(w in user_text for w in ("系統", "當機", "網站", "機器", "程式", "app"))
     if (any(kw in user_text for kw in _EXPIRING_INTENT_WORDS) or
-        any(kw in text_low for kw in _EXPIRING_INTENT_WORDS)) and not _has_report and not _has_alert:
+        any(kw in text_low for kw in _EXPIRING_INTENT_WORDS)) and not _has_report and not _has_alert \
+            and not _c7_sys_ctx:
         # category 幻覺防呆：句中沒類別詞就丟棄（「到期壓力最大的是哪批貨」被 LLM
         # 塞 apparel 回「服飾類沒有快到期」漏報全局，conv100-r6）
         _c7_cat_words = {"electronics": ("電子", "3c"), "appliance_kitchen": ("家電", "廚具", "廚房"),
@@ -1920,8 +1935,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 進出貨/紀錄語彙 → 查庫存。
     if func_name == "query_movement":
         _c2d_inv_cue = any(w in user_text for w in (
-            "庫存", "還剩", "還有多少", "有多少件", "有多少個", "剩多少", "存量", "多少件",
-            "多少錢", "值多少"))
+            "庫存", "還剩", "還有多少", "有多少", "剩多少", "存量", "多少件",
+            "多少錢", "值多少", "剩幾", "還有幾"))
         _c2d_mv_cue = any(w in user_text for w in (
             "進", "出", "入庫", "退", "紀錄", "記錄", "明細", "異動", "流水",
             "動了", "賣", "銷", "補", "inbound", "outbound", "movement"))
@@ -4188,7 +4203,8 @@ async def ws_handler(ws: WebSocket):
                                        "每星期", "每禮拜", "定時", "自動", "排程",
                                        "每天早上", "每天晚上", "每天中午", "固定")
                     # 「缺貨警示/警示」入列：「每天晚上七點自動出缺貨警示」是排程不是立即查（conv100-r5）
-                    _sched_act_kws  = ("盤點", "匯出", "報告", "體檢", "腳本", "跑", "月報", "週報",
+                    # 「報表」入列：「每週三下午三點出貨報表」曾立即產報告（conv100-r9）
+                    _sched_act_kws  = ("盤點", "匯出", "報告", "報表", "體檢", "腳本", "跑", "月報", "週報",
                                        "缺貨警示", "警示", "缺貨")
                     _has_sched_time = any(w in user_text for w in _sched_time_kws)
                     _has_sched_act  = any(w in user_text for w in _sched_act_kws)
