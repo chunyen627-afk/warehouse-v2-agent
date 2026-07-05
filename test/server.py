@@ -264,6 +264,8 @@ _GATEKEEPER_BLACKLIST = (
     "系統壞",
     # conv100-r10：資料外傳
     "傳到我", "資料傳",
+    # conv100-r11：白拿/問展示機價格
+    "免費送我", "這台機器",
 )
 
 
@@ -456,6 +458,8 @@ _RELATED_INTENT_WORDS = (
     "購物車", "黃金組合", "順手抓",
     # conv100-r7：速配
     "速配", "最速配",
+    # conv100-r11：通常還拿什麼
+    "還拿什麼", "通常還拿",
     # 「順便帶啥/順便買啥」的「順便」（RPI5 壓測抓到：只有「順便買」時
     # 「順便帶啥」落到 LLM 自由判斷，WIN11 判 related、RPI5 判 hot_items
     # ——硬體敏感的分歧。加規則 hard-return 消除不確定性）
@@ -490,6 +494,8 @@ _MOVEMENT_PROTECT_WORDS = (
     "賣得動", "有出貨", "有進貨",
     # conv100-r10：「慢跑鞋最近有人買嗎」
     "有人買",
+    # conv100-r11：「這個月出貨幾台」
+    "出貨幾", "進貨幾",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -506,6 +512,8 @@ _RCA_INTENT_WORDS = (
     "兜不上", "少掉", "怎麼回事",
     # conv100-r7：對不太起來/縮水/怪異/落差/追查
     "對不太起來", "縮水", "怪異", "落差", "追查",
+    # conv100-r11：帳對嗎
+    "帳對嗎", "的帳對",
     "discrepancy", "why", "who changed", "trace",
 )
 
@@ -515,7 +523,7 @@ _RCA_INTENT_WORDS = (
 # 意圖詞 → 判定為 LLM 幻覺，降級 rejected（第18輪訪客閒聊II抓到大量此類）。
 _TOOL_INTENT_GUARD = {
     "set_alert":        ("通知", "提醒", "警示", "告訴我", "就通知", "缺貨就", "低於", "盯"),
-    "generate_po":      ("採購", "補貨", "叫貨", "進貨單", "po", "下單"),
+    "generate_po":      ("採購", "補貨", "叫貨", "進貨單", "po", "下單", "開單", "該補"),
     "generate_report":  ("報告", "報表", "體檢", "健檢", "月報", "週報", "彙整", "摘要", "總結"),
     # 「一起/順便/還會」裸字太寬（「一起吃飯」誤命中 → related_empty，RPI5/WIN
     #  硬體分歧：本機 intent_clf route 判 related 繞過 C6-skip）。收緊成購物詞組。
@@ -648,7 +656,10 @@ _CONFIG_READ_WORDS = ("是多少", "設多少", "多少", "現在設", "目前",
 # C9 / C9b / C18 三處共用（曾經三處各自維護，「設定給我看」只修了 C9b 又被
 # 之後執行的 C9 蓋回 set，第12輪抓到）
 _CONFIG_READ_CUES = ("多少", "查", "給我看", "看一下", "看看", "是什麼", "是啥",
-                     "目前", "現在的", "列給我", "秀給我")
+                     "目前", "現在的", "列給我", "秀給我",
+                     # conv100-r11：「幫我看智慧手環的安全庫存設定」曾被當 set 追問值
+                     # （單字「看」受「句中抽不到數值才轉 read」保護，不會誤傷 set 句）
+                     "幫我看", "看", "的設定")
 # C10 run_script：執行白名單腳本
 _SCRIPT_INTENT_WORDS = ("跑一次", "執行", "跑個", "跑一下", "幫我跑", "做一次", "做個",
                         "盤點", "匯出", "重產", "重新產生", "重生", "重建", "run", "export", "regenerate")
@@ -1441,7 +1452,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # C13b 的單字「出」+數字量詞規則搶成出貨 1 張，即使 intent_clf 已正確判成
     # generate_po 也會被劫走（第9輪測試抓到）。
     if (any(w in user_text for w in ("採購單", "採購草稿", "補貨單", "補貨草稿", "補貨採購", "開單採購", "開單補貨",
-                                     "一張單"))
+                                     "一張單", "開單"))
             and any(v in user_text for v in ("出", "開", "產", "生", "列", "建", "做", "給我", "擬", "轉", "拉"))
             and not any(w in user_text for w in ("查", "看", "哪些", "紀錄", "記錄", "歷史", "對帳", "短收"))):
         log.info("[校正 C-PO] 開採購單意圖 → generate_po")
@@ -1943,9 +1954,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _c2d_inv_cue = any(w in user_text for w in (
             "庫存", "還剩", "還有多少", "有多少", "剩多少", "存量", "多少件",
             "多少錢", "值多少", "剩幾", "還有幾"))
+        # 「賣」收斂成賣了/賣出/賣掉——「這個帳篷賣多少錢」是問價不是進出（conv100-r11）
         _c2d_mv_cue = any(w in user_text for w in (
             "進", "出", "入庫", "退", "紀錄", "記錄", "明細", "異動", "流水",
-            "動了", "賣", "銷", "補", "inbound", "outbound", "movement"))
+            "動了", "賣了", "賣出", "賣掉", "銷", "補", "inbound", "outbound", "movement"))
         if _c2d_inv_cue and not _c2d_mv_cue:
             _kw2d = _extract_sku_keyword(user_text)
             # kw 要真的比對得到商品才帶——「塞 貨」這種殘字 hard-return 後
@@ -3992,7 +4004,9 @@ async def ws_handler(ws: WebSocket):
             # ── 列出所有商品（優先於引導）──
             # 含設定關鍵字時不攔（「中倉全部商品安全庫存改成六十」是 config 句）
             if (any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱"))
-                    and not any(w in user_text for w in _CONFIG_KEY_WORDS)):
+                    and not any(w in user_text for w in _CONFIG_KEY_WORDS)
+                    # 搗蛋語境不觸發列表（「所有商品免費送我」曾吐 61 項全清單，conv100-r11）
+                    and not any(w in user_text for w in ("免費", "送我", "送給", "白拿", "改成", "刪"))):
                 import warehouse as _W_list_ws
                 snap = _W_list_ws.state()
                 rows = [f"{it['sku_id']} {it['name']} ({_W_list_ws.CATEGORY_LABEL.get(it['category'], it['category'])}) NT${it['unit_price']}" for it in snap.items]
