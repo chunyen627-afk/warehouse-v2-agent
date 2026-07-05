@@ -1051,6 +1051,9 @@ _SCHEDULE_SCRIPT_MAP = {
     "報告":     "generate_report",
     "月報":     "generate_report",
     "週報":     "generate_report",
+    # 「每天半夜兩點自動跑庫存體檢」只講「體檢」沒講「報告」（conv100-r6）
+    "體檢":     "generate_report",
+    "健檢":     "generate_report",
     # 「每天晚上七點自動出缺貨警示」→ 盤點腳本本來就是掃全倉跟安全庫存比對，
     # 語意等同缺貨檢查（RPI5 conv100-r5）
     "缺貨警示": "stock_audit",
