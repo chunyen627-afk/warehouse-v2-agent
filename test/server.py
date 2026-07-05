@@ -262,6 +262,8 @@ _GATEKEEPER_BLACKLIST = (
     "炸掉", "炸了", "燒掉", "數字調成", "庫存數字調",
     # conv100-r9：抱怨系統（「壞掉」會撞到期詞）
     "系統壞",
+    # conv100-r10：資料外傳
+    "傳到我", "資料傳",
 )
 
 
@@ -273,7 +275,7 @@ GUIDE_KEYWORDS = {
     "有什麼", "有什么", "可以查", "能查",
     "菜單", "菜单", "功能", "選項", "选项", "幫助", "帮助",
     "列表", "清單", "清单", "全部", "所有", "都有",
-    "能做什麼", "能做什么", "看看", "導航", "導覽",
+    "能做什麼", "能做什么", "可以做什麼", "會做什麼", "看看", "導航", "導覽",
     "怎麼用", "怎麼操作", "教我", "使用說明", "怎麼玩",
     "menu", "help", "list", "options", "what can", "guide",
 }
@@ -432,6 +434,8 @@ _HOT_INTENT_WORDS_SLOW = (
     "墊底", "銷售墊底",
     # conv100-r7：賣況最差/沒動靜
     "賣況最差", "沒動靜",
+    # conv100-r10：賣不好
+    "賣不好",
     "worst selling", "slow", "slow mover",
 )
 
@@ -484,6 +488,8 @@ _MOVEMENT_PROTECT_WORDS = (
     "賣了幾", "賣了多少", "異動歷史",
     # conv100-r8：「慢跑鞋這季賣得動嗎」「昨天有出貨嗎」
     "賣得動", "有出貨", "有進貨",
+    # conv100-r10：「慢跑鞋最近有人買嗎」
+    "有人買",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -4282,6 +4288,16 @@ async def ws_handler(ws: WebSocket):
                 # LLM 對 compare 的 warehouse_a/b 常自由發揮（「北倉和中倉哪邊的貨
                 # 比較齊」回 central vs south，conv100-r5）。句中點名 2 倉 → 依出現
                 # 順序覆寫；點名 <2 倉且有排名語氣 → 三倉排名；指標詞覆寫 metric。
+                if func_name == "compare_warehouses" and _cmp_has_prod_ws:
+                    # 帶真商品名的「XX北倉中倉哪邊多」是查該商品分倉庫存，
+                    # 不是倉庫總量比較（conv100-r10；LLM 直接輸出 compare 時
+                    # elif 的商品守衛擋不到）
+                    import warehouse as _W_cmp2
+                    _m_cmp2 = _W_cmp2.match_items(_cmp_prod_kw_ws)
+                    if _m_cmp2 and _m_cmp2[0].get("score", 0) >= 3:
+                        func_name = "query_inventory"
+                        func_args = {"keyword": _cmp_prod_kw_ws}
+                        log.info(f"[Pre-C-Cmp2] compare 帶商品名 → query_inventory kw={_cmp_prod_kw_ws!r}")
                 if func_name == "compare_warehouses" and any(
                         w in user_text for w in ("缺貨", "低庫存")):
                     # 「三個倉的缺貨數量比一比」問的是缺貨，排名商品總數答非所問
@@ -4440,6 +4456,34 @@ async def ws_handler(ws: WebSocket):
                         _c18_item = _config_item_kw(user_text)
                         if _c18_item:
                             func_args["item"] = _c18_item
+                    elif func_name == "compare_warehouses":
+                        # C18 在所有 compare 守衛之後執行，轉 compare 要自帶守衛：
+                        # 帶真商品名 → 查分倉庫存；否則從原句重建倉名/指標
+                        # （「無線滑鼠北倉中倉哪邊多」曾被 clf 0.98 蓋成北/南總量比較，conv100-r10）
+                        import warehouse as _W_c18cmp
+                        _c18_kw2 = _extract_sku_keyword(user_text)
+                        _c18_m2 = _W_c18cmp.match_items(_c18_kw2) if _c18_kw2 else []
+                        if _c18_m2 and _c18_m2[0].get("score", 0) >= 3:
+                            func_name = "query_inventory"
+                            func_args = {"keyword": _c18_kw2}
+                        else:
+                            _pos18 = []
+                            for _zh18, _en18 in (("北倉", "north"), ("北區", "north"),
+                                                 ("中倉", "central"), ("中區", "central"),
+                                                 ("南倉", "south"), ("南區", "south")):
+                                _p18 = user_text.find(_zh18)
+                                if _p18 >= 0 and _en18 not in [e for _, e in _pos18]:
+                                    _pos18.append((_p18, _en18))
+                            _seq18 = [e for _, e in sorted(_pos18)]
+                            if len(_seq18) == 2:
+                                func_args = {"warehouse_a": _seq18[0], "warehouse_b": _seq18[1]}
+                            else:
+                                func_args = {"warehouse_a": "all", "warehouse_b": "all",
+                                             "metric": "item_count"}
+                            if "週轉" in user_text:
+                                func_args["metric"] = "turnover"
+                            elif any(w in user_text for w in ("價值", "總值", "金額")):
+                                func_args["metric"] = "stock_value"
                     corrected_call = f"[C18]{func_name}({func_args})"
                 if corrected_call != raw_call:
                     log.info(f"[trace] vid={vid} corrected: {raw_call} → {corrected_call}")
