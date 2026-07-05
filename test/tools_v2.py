@@ -340,7 +340,7 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
 #    模型只抽意圖；實際寫入由 server 二次確認後 commit（見 commit_config_set）。
 # ════════════════════════════════════════════════════════════
 _KEY_ALIASES = {
-    "safety_stock":      ["安全庫存", "安全存量", "安全水位", "警戒值", "警戒水位", "safety stock", "safety_stock"],
+    "safety_stock":      ["安全庫存", "安全存量", "安全水位", "警戒值", "警戒水位", "安全量", "safety stock", "safety_stock"],
     "reorder_lead_days": ["前置天數", "補貨前置", "前置時間", "補貨天數", "lead time", "lead_days", "前置"],
     "safety_buffer_ratio": ["安全水位倍數", "安全倍數", "buffer", "緩衝倍數"],
     "restock_target_days": ["補貨目標天數", "補到撐", "target days", "撐幾天"],
