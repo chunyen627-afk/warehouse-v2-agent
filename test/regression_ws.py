@@ -10,7 +10,11 @@ dispatch / rewrite / 關鍵字清單，跑這支全量驗證。
     python regression_ws.py mv tf      # 只跑指定類別
 
 題庫格式（regression_corpus.txt）：
-    類別|題目          # 井號開頭為註解
+    類別|題目               # 井號開頭為註解
+    類別|題目|內容關鍵字     # 第三欄（選填）：回答 summary 必須包含該字串
+內容欄是「view 對但內容錯」級 bug 的守衛（第8輪起）——例如「瑜珈墊安全庫存
+加20」view=config_confirm 永遠對，但影響範圍曾是全部商品 183 項，只有驗
+summary 含「瑜珈墊」才擋得住回退。
 類別 → 判定規則見 ACCEPT。
 """
 import asyncio, json, sys, io
@@ -68,17 +72,20 @@ def main():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        cat, _, text = line.partition("|")
-        cat, text = cat.strip(), text.strip()
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 2:
+            continue
+        cat, text = parts[0], parts[1]
+        must = parts[2] if len(parts) >= 3 else ""
         if cat not in ACCEPT or not text:
             continue
         if only and cat not in only:
             continue
-        qa.append((cat, text))
+        qa.append((cat, text, must))
 
     total = ok = 0
     fails = []
-    for cat, text in qa:
+    for cat, text, must in qa:
         total += 1
         try:
             r = asyncio.run(_q(text))
@@ -86,10 +93,13 @@ def main():
             fails.append((cat, text, f"WS error: {e}", ""))
             continue
         view = r.get("view", "?")
-        if ACCEPT[cat](view):
-            ok += 1
+        summary = r.get("summary") or ""
+        if not ACCEPT[cat](view):
+            fails.append((cat, text, view, summary[:70]))
+        elif must and must not in summary:
+            fails.append((cat, text, f"{view}(內容缺「{must}」)", summary[:70]))
         else:
-            fails.append((cat, text, view, (r.get("summary") or "")[:70]))
+            ok += 1
 
     print(f"\n{'='*66}\n累積回歸: {ok}/{total} ({ok/total*100:.1f}%)\n")
     for cat, text, view, s in fails:

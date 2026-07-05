@@ -258,6 +258,8 @@ _GATEKEEPER_BLACKLIST = (
     "資料庫",
     # conv100-r7：改價搗蛋
     "價格全部", "打對折", "全部打折",
+    # conv100-r8：破壞語 + 改庫存數字變體（「調成」漏擋）
+    "炸掉", "炸了", "燒掉", "數字調成", "庫存數字調",
 )
 
 
@@ -478,6 +480,8 @@ _MOVEMENT_PROTECT_WORDS = (
     "流向", "吞吐", "進倉的",
     # conv100-r7：「純棉素T這週賣了幾件」「玻璃保鮮盒的異動歷史」
     "賣了幾", "賣了多少", "異動歷史",
+    # conv100-r8：「慢跑鞋這季賣得動嗎」「昨天有出貨嗎」
+    "賣得動", "有出貨", "有進貨",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -548,10 +552,18 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
     import warehouse as _WR
     kw = func_args.get("keyword") or func_args.get("target") or ""
 
+    def _match_solid(cand: str) -> bool:
+        """商品比對要有足夠分數才算真商品——「把 炸掉」靠單字「把」中拖把
+        score=1，rescue 拿雜訊開庫存卡回無關商品（conv100-r8 幻覺三連發）。"""
+        if not cand:
+            return False
+        m = _WR.match_items(cand)
+        return bool(m) and m[0].get("score", 0) >= 3
+
     # Bug1: search_log 缺 RCA 意圖詞、但帶到有效商品名 → 其實是查庫存，降級 query_inventory
     if func_name == "search_log":
-        cand = kw if (kw and _WR.match_items(kw)) else _extract_sku_keyword(user_text)
-        if cand and _WR.match_items(cand):
+        cand = kw if _match_solid(kw) else _extract_sku_keyword(user_text)
+        if _match_solid(cand):
             log.info(f"[gate-rescue] search_log 缺RCA詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
 
@@ -559,15 +571,23 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
     # 「想確認一下咖啡濾紙100入的量」LLM 誤投 run_script → 閘門擋 rejected）
     if func_name == "run_script":
         cand = _extract_sku_keyword(user_text)
-        if cand and _WR.match_items(cand):
+        if _match_solid(cand):
             log.info(f"[gate-rescue] run_script 缺腳本詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
+        # 沒商品名但有進出貨語彙 → 是進出統計（「昨天有出貨嗎」LLM 誤投
+        # run_script{出貨} 被閘門拒，conv100-r8）
+        if any(w in user_text for w in ("出貨", "進貨", "進出", "入庫", "出庫")):
+            _rs_period = ("this_month" if any(w in user_text for w in ("這個月", "本月", "月")) else
+                          "today" if any(w in user_text for w in ("今天", "今日")) else
+                          "this_week")
+            log.info(f"[gate-rescue] run_script 實為進出查詢 → query_movement period={_rs_period}")
+            return "query_movement", {"period": _rs_period, "direction": "both"}
 
     # query_related_items 缺連帶詞、但有商品名 → 其實是查庫存（RPI5 conv100-r3：
     # 「北中南倉的滑鼠各有幾個」LLM 誤投 related → 閘門擋 rejected，該查庫存）
     if func_name == "query_related_items":
-        cand = kw if (kw and _WR.match_items(kw)) else _extract_sku_keyword(user_text)
-        if cand and _WR.match_items(cand):
+        cand = kw if _match_solid(kw) else _extract_sku_keyword(user_text)
+        if _match_solid(cand):
             log.info(f"[gate-rescue] query_related 缺連帶詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
 
@@ -606,7 +626,7 @@ _CONFIG_SET_WORDS = ("改成", "設成", "設為", "調成", "調到", "改為",
                      "調升", "調降", "上修", "下修", "升到", "降到",
                      "訂在", "訂為", "定在", "定為", "縮短成", "縮短到", "縮成",
                      "歸", "拉長", "拉長到", "延長到", "加長到",
-                     "上調", "下調", "壓到")
+                     "上調", "下調", "壓到", "改回")
 _CONFIG_READ_WORDS = ("是多少", "設多少", "多少", "現在設", "目前", "查一下", "看一下", "設定值")
 # 問句/讀取語氣詞：出現這些且句中抽不到數值 → manage_config 一律當 read。
 # C9 / C9b / C18 三處共用（曾經三處各自維護，「設定給我看」只修了 C9b 又被
@@ -628,6 +648,7 @@ _WH_ZH_MAP = {"北倉": "north", "北區": "north", "北邊": "north", "北部":
 _ALL_INTENT_WORDS = (
     "查", "看", "庫存", "查庫存", "還有多少", "有多少", "數量", "剩多少", "剩幾個",
     "存貨", "狀態",   # conv100-r6：「橡膠清潔手套存貨狀態」被類別 clarify 攔
+    "賣得", "熱銷",   # conv100-r8：「電子產品賣得如何」被類別 clarify 攔
 
     "多少", "幾個", "幾件", "多少個", "多少件",   # ← 補「多少」系列
     "進出", "進貨", "出貨", "異動", "移動", "移轉", "紀錄", "流向",
@@ -801,9 +822,14 @@ def _rewrite_query(user_text: str) -> str:
     # 句中已點名 ≥2 倉、或含指標詞（週轉/價值/缺貨）→ 保留原句給 LLM + Pre-C-Cmp。
     _cmp_wh_cnt = len({z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in t})
     _cmp_keep = _cmp_wh_cnt >= 2 or any(w in t for w in ("週轉", "價值", "總值", "缺貨"))
+    # 熱銷 rewrite 同病：「這個月熱銷排行」被改成固定句「熱銷商品排行」→ 時間詞
+    # 銷毀，C4b 拿改寫後句子校 period 校不回 this_month（conv100-r8）
+    _hot_keep = any(w in t for w in ("本月", "這個月", "上個月", "月", "今天", "本週", "這週"))
     _GENERIC_RCA_HEADS = ("庫存", "數量", "進貨", "帳", "對不上", "差異")
     for pattern, replacement in _REWRITE_RULES:
         if _cmp_keep and replacement == "比較各倉庫庫存":
+            continue
+        if _hot_keep and replacement == "熱銷商品排行":
             continue
         m = pattern.search(t)
         if m:
@@ -1334,7 +1360,7 @@ def _extract_config_value(user_text: str):
     _rel_neg = _re.search(r"(?:[降減]|調低|調降|下修|下調|低)\s*" + _NUM_PART, user_text)
     # 「設定成/設定到」補進絕對值（原本只有「設成/設為/設定為」，RPI5 v21
     # 「前置天數設定成7天」漏抽）
-    _abs = _re.search(r"(?:改成|設成|設為|改為|設定為|設定成|調成|調整成|調到|改到|調整為|縮短成|縮成|改|設)\s*"
+    _abs = _re.search(r"(?:改成|設成|設為|改為|設定為|設定成|調成|調整成|調到|改到|調整為|縮短成|縮成|改回|改|設)\s*"
                       + _NUM_PART, user_text)
     if _abs_to:
         n = _cn_to_int(_abs_to.group(1))
@@ -1373,6 +1399,20 @@ def _config_item_kw(user_text: str) -> str:
     if m and m[0].get("score", 0) >= 3:
         return kw
     return ""
+
+
+def _kw_grounded(kw: str, user_text: str) -> bool:
+    """extractor 的 fuzzy 結果要跟原句「接地」才可信：全名的任一連續兩字、
+    或商品核心尾字（非把/的等虛字）出現在原句。「把北倉的傘」被 fuzzy 成
+    「除塵電動拖把」——兩者毫無重疊、只靠介詞「把」亂中（conv100-r8）。
+    正向案例要保住：「帽子」→防曬遮陽帽（尾字帽 ✓）、「電鍋」→陶瓷不沾鍋（尾字鍋 ✓）。"""
+    k = (kw or "").replace(" ", "")
+    if len(k) < 2:
+        return bool(k) and k in user_text
+    if any(k[i:i + 2] in user_text for i in range(len(k) - 1)):
+        return True
+    _tail = k[-1]
+    return _tail in user_text and _tail not in "把的了個包入款"
 
 
 def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> tuple[str, dict, bool]:
@@ -1790,6 +1830,22 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         if func_args.get("rank_type") not in ("hot", "slow"):
             func_args = {**func_args, "rank_type": "slow" if is_slow else "hot"}
             log.info(f"[校正 C4] rank_type 校準 → {func_args['rank_type']}")
+        # period 也要一起校——hard-return 會跳過 C4b（「這個月熱銷排行」曾顯示本週，conv100-r8）
+        _c4p = ("this_month" if any(w in user_text for w in ("本月", "這個月", "月度")) else "this_week")
+        if func_args.get("period") != _c4p:
+            func_args = {**func_args, "period": _c4p}
+            log.info(f"[校正 C4] period 校準 → {_c4p}")
+        # category 也是（「電子產品賣得如何」曾回全類別，conv100-r8）
+        if func_args.get("category") not in VALID_CATEGORIES:
+            for _zh4, _cat4 in {"電子": "electronics", "3c": "electronics",
+                                "家電": "appliance_kitchen", "廚具": "appliance_kitchen",
+                                "食品": "food_beverage", "飲料": "food_beverage",
+                                "日用": "daily_goods", "服飾": "apparel", "衣服": "apparel",
+                                "運動": "sports", "露營": "sports", "戶外": "sports"}.items():
+                if _zh4 in user_text:
+                    func_args = {**func_args, "category": _cat4}
+                    log.info(f"[校正 C4] 補 category={_cat4}")
+                    break
         return func_name, func_args, True
 
     # ── C4e: 存量問句被 LLM 誤投 hot_items → 攔回 inventory ──
@@ -1864,14 +1920,26 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 進出貨/紀錄語彙 → 查庫存。
     if func_name == "query_movement":
         _c2d_inv_cue = any(w in user_text for w in (
-            "庫存", "還剩", "還有多少", "有多少件", "有多少個", "剩多少", "存量", "多少件"))
+            "庫存", "還剩", "還有多少", "有多少件", "有多少個", "剩多少", "存量", "多少件",
+            "多少錢", "值多少"))
         _c2d_mv_cue = any(w in user_text for w in (
             "進", "出", "入庫", "退", "紀錄", "記錄", "明細", "異動", "流水",
             "動了", "賣", "銷", "補", "inbound", "outbound", "movement"))
         if _c2d_inv_cue and not _c2d_mv_cue:
             _kw2d = _extract_sku_keyword(user_text)
+            # kw 要真的比對得到商品才帶——「塞 貨」這種殘字 hard-return 後
+            # 沒人清得掉，會 clarify 找不到（conv100-r8）
+            import warehouse as _W2d
+            _m2d = _W2d.match_items(_kw2d) if _kw2d else []
+            if not _m2d or _m2d[0].get("score", 0) < 3:
+                _kw2d = ""
             log.info(f"[校正 C2d] 存量問句誤投 movement → query_inventory kw={_kw2d!r}")
-            return "query_inventory", ({"keyword": _kw2d} if _kw2d else {}), True
+            _a2d = {"keyword": _kw2d} if _kw2d else {}
+            for _zh2d, _en2d in _WH_ZH_MAP.items():
+                if _zh2d in user_text:
+                    _a2d["warehouse"] = _en2d
+                    break
+            return "query_inventory", _a2d, True
 
     # ── C6: 連帶意圖詞 → query_related_items ──
     _has_related = any(kw in user_text for kw in _RELATED_INTENT_WORDS) or \
@@ -1942,7 +2010,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             # 若 user_text 含意圖詞 → 把去掉意圖詞跟時間詞的剩餘字當 keyword
             if any(w in user_text for w in _INVENTORY_INTENT_WORDS):
                 cleaned = _extract_sku_keyword(user_text)
-                if cleaned and len(cleaned) >= 2:
+                if cleaned and len(cleaned) >= 2 and _kw_grounded(cleaned, user_text):
                     log.info(f"[校正 C1] query_inventory 補 keyword: {cleaned!r}")
                     func_args = dict(func_args)
                     func_args["keyword"] = cleaned
@@ -2058,6 +2126,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if (not _c13_has_rca and not _c13_has_cfg and not _c13_has_sale
             and any(w in user_text for w in _inv_intent) and func_name == "query_inventory"):
         kw = _extract_sku_keyword(user_text) or func_args.get("keyword", "")
+        if kw and not _kw_grounded(kw, user_text):
+            kw = ""  # fuzzy 亂中的全名不可信（conv100-r8）
         if kw:
             # 檢查 keyword 是否其實是類別名（如「電子產品庫存」→ category=electronics）
             _CAT_ZH_MAP = {
@@ -2113,7 +2183,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # period 從原句推斷（hard-return 會跳過後面的 C2 時間詞規則，
         # 「最近一個月進貨多少」曾顯示成今天的數字，第14輪抓到）
         _c7b_period = ("this_month" if any(w in user_text for w in ("這個月", "本月", "一個月", "上個月", "月")) else
-                       "this_week" if any(w in user_text for w in ("這週", "本週", "這禮拜", "上週", "週", "禮拜")) else
+                       "this_week" if any(w in user_text for w in ("這週", "本週", "這禮拜", "上週", "週", "禮拜",
+                                                                    "昨天", "昨晚", "前天")) else
                        "today" if any(w in user_text for w in ("今天", "今日")) else
                        "this_month")
         _c7b_args = {"period": _c7b_period, "direction": "both"}
@@ -2428,6 +2499,27 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         elif _kw_wh and any(w in _kw_wh for w in ("全店", "總庫存", "全部商品", "所有商品")):
             func_args = {k: v for k, v in func_args.items() if k != "keyword"}
             log.info(f"[校正 C17a2b] keyword 含全店/總庫存 → 清 keyword 查概覽")
+        # 問價值的句子 kw 抽成雜訊（「北倉塞了多少錢的貨」→ kw「塞 貨」）
+        # → 清 kw 查該倉概覽（conv100-r8）
+        elif _kw_wh and any(w in user_text for w in ("多少錢", "值多少", "總值")):
+            import warehouse as _W_17c
+            _m17c = _W_17c.match_items(_kw_wh)
+            if not _m17c or _m17c[0].get("score", 0) < 3:
+                func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                log.info(f"[校正 C17a2c] 價值問句 kw 雜訊「{_kw_wh}」→ 清 keyword 查概覽")
+        # C17a2d：kw 只靠單字雜訊低分亂中 → 剝雜訊字留純殘字，讓工具誠實回
+        # 「找不到」而不是回無關商品（「把 傘都調去」score=1 中拖把，conv100-r8）
+        elif _kw_wh:
+            import warehouse as _W_17d
+            _m17d = _W_17d.match_items(_kw_wh)
+            if _m17d and _m17d[0].get("score", 0) < 3:
+                _kw17d = _kw_wh
+                for _nz in ("把", "都", "調去", "調到", "移去", "搬去", "的", "了",
+                            "去", "到", "給", "從", "幫我", " "):
+                    _kw17d = _kw17d.replace(_nz, "")
+                if _kw17d and _kw17d != _kw_wh:
+                    func_args = {**func_args, "keyword": _kw17d}
+                    log.info(f"[校正 C17a2d] kw 低分雜訊「{_kw_wh}」→「{_kw17d}」")
 
     # C17b：set_alert 參數清理 — 只保留 condition / target，清掉 keyword 等非法參數
     if func_name == "set_alert":
@@ -3434,7 +3526,7 @@ async def api_query(req: Request):
     if (any(w in user_text for w in _stock_rank_kws)
             and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷",
                                                   "業績", "冠軍", "銷", "墊底"))
-            and "倉" not in user_text):
+            and not any(w in user_text for w in ("倉", "北區", "中區", "南區"))):
         log.info(f"[dispatch] 庫存排行攔截: {user_text!r} → list_hot_items(stock)")
         func_name = "list_hot_items"
         func_args = {"rank_type": "stock"}
@@ -4450,7 +4542,8 @@ async def ws_handler(ws: WebSocket):
                 if (any(w in user_text for w in _stock_rank_kws_ws)
                         and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷",
                                                               "業績", "冠軍", "銷", "墊底"))
-                        and "倉" not in user_text):
+                        # 「北區跟南區哪個庫存比較多」沒有「倉」字也是倉庫比較（conv100-r8）
+                        and not any(w in user_text for w in ("倉", "北區", "中區", "南區"))):
                     log.info(f"[dispatch-ws] 庫存排行攔截: {user_text!r} → list_hot_items(stock)")
                     func_name = "list_hot_items"
                     func_args = {"rank_type": "stock"}
