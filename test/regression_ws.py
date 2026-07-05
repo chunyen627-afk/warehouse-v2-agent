@@ -32,6 +32,8 @@ ACCEPT = {
     "hot":   lambda v: v == "hot_items",
     "rca":   lambda v: v == "agent_rca",
     "cfg":   lambda v: v in ("config_confirm", "config", "config_read"),
+    # config 諮詢/缺值/搗蛋負數 → clarify 友善追問（不 crash 不亂寫）
+    "cfg_clarify": lambda v: v in ("clarify", "config_read", "guide"),
     "rel":   lambda v: v in ("related", "related_help", "related_empty"),
     "mvt":   lambda v: v == "movement",
     "vague": lambda v: v in ("clarify", "guide", "rejected", "inventory"),

@@ -366,10 +366,12 @@ def _parse_value(value):
     if value is None:
         return None, None
     sv = str(value).strip()
+    # +N/-N 但 N 不是數字（LLM 把範例佔位符「+N」當值 → int('N') crash，
+    # RPI5 conv100-r4 抓到）→ 當沒給值，回 None 讓上層轉 read/clarify
     if sv.startswith("+"):
-        return "delta", int(sv[1:])
-    if sv.startswith("-") and sv[1:].isdigit():
-        return "delta", -int(sv[1:])
+        return ("delta", int(sv[1:])) if sv[1:].isdigit() else (None, None)
+    if sv.startswith("-"):
+        return ("delta", -int(sv[1:])) if sv[1:].isdigit() else (None, None)
     try:
         return "abs", int(float(sv))
     except ValueError:
@@ -422,9 +424,13 @@ def manage_config(action: str = "read", key: str = "", value=None,
     if action == "set":
         mode, num = _parse_value(value)
         if mode is None:
-            if value:
-                return W._err(f"看不懂要把設定改成什麼值：「{value}」")
-            return W._err("請說明要改成多少，例如「南倉安全庫存加30」或「補貨前置天數改成5天」")
+            # 沒給有效數值（含 LLM 佔位符「+N」）→ 不報 error，改 clarify 友善追問
+            # （RPI5 conv100-r4：「安全水位要怎麼設定」諮詢句被判 set 卻無值）
+            _lbl = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
+                    "safety_stock": "安全庫存"}.get(canon, "安全庫存")
+            return {"ok": True, "view": "clarify", "summary": (
+                f"要把「{_lbl}」設成多少呢？例如「{_lbl}改成50」或「加30」。"
+            ), "data": {"canon": canon, "label": _lbl, "pending_config": True}}
 
         # 算受影響範圍 + 預覽 diff（不寫入！）
         whs = ["north", "central", "south"] if warehouse == "all" else [warehouse]

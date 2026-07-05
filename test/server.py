@@ -695,9 +695,19 @@ def _has_product_or_wh_keyword(text: str) -> bool:
     return len(text) > 6 or any(w in text for w in wh_words)
 
 
+# 倉管高頻簡體字→繁體（陸港訪客，RPI5 conv100-r4：「调货30个耳机到南仓」
+# 的簡體讓 C13a 調貨/倉名偵測全失效 → 誤判 config）。只轉語境明確的字避免誤傷。
+_S2T = str.maketrans({
+    "调": "調", "货": "貨", "仓": "倉", "机": "機", "库": "庫", "存": "存",
+    "进": "進", "个": "個", "补": "補", "销": "銷", "转": "轉", "价": "價",
+    "报": "報", "总": "總", "查": "查", "过": "過", "还": "還", "东": "東",
+    "买": "買", "卖": "賣", "会": "會", "内": "內", "两": "兩", "几": "幾",
+})
+
+
 def _rewrite_query(user_text: str) -> str:
     """將口語/模糊輸入改寫成 LLM 訓練時的標準句型。"""
-    t = user_text.strip()
+    t = user_text.strip().translate(_S2T)
     _GENERIC_RCA_HEADS = ("庫存", "數量", "進貨", "帳", "對不上", "差異")
     for pattern, replacement in _REWRITE_RULES:
         m = pattern.search(t)
@@ -1772,6 +1782,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         valid_wh_pair = {"north", "central", "south"}
         wa = func_args.get("warehouse_a")
         wb = func_args.get("warehouse_b")
+        # 三倉排名意圖（「哪個倉最多/最空」「各倉分布」「三個倉比一比」）：句中
+        # 沒明確點名 2 個倉、卻問排名/分布 → warehouse_a=all 觸發三倉排名
+        # （RPI5 conv100-r4：這類原本只比 2 倉、答非所問）
+        _named_whs = sum(1 for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text)
+        _rank3_cue = any(w in user_text for w in (
+            "哪個倉", "哪倉", "各倉", "三倉", "三個倉", "每個倉", "最多", "最空",
+            "最滿", "分布", "佔比", "哪個最", "誰最"))
+        if _rank3_cue and _named_whs < 2:
+            _mt = func_args.get("metric") if func_args.get("metric") in ("stock_value", "item_count", "turnover") else "item_count"
+            log.info(f"[校正 C5-rank3] 三倉排名意圖 → compare(all) metric={_mt}")
+            return "compare_warehouses", {"warehouse_a": "all", "warehouse_b": "all", "metric": _mt}, True
         if wa not in valid_wh_pair and wb not in valid_wh_pair:
             # 兩個都沒給 → 給預設值（北倉 vs 中倉）
             func_args = dict(func_args)
@@ -3796,8 +3817,15 @@ async def ws_handler(ws: WebSocket):
                           and not _cmp_has_prod_ws
                           and any(w in user_text for w in _compare_kws_ws)):
                         func_name = "compare_warehouses"
-                        func_args = {}
-                        log.info("[Pre-C-Cmp] → compare_warehouses")
+                        # 三倉排名 cue（哪個最多/最空/各倉/分布，且沒點名 2 倉）→ warehouse_a=all
+                        # 觸發三倉排名，而非只比 2 倉（RPI5 conv100-r4）
+                        _named2 = sum(1 for z in ("北倉","北區","中倉","中區","南倉","南區") if z in user_text)
+                        _rank3 = any(w in user_text for w in (
+                            "哪個倉","哪倉","各倉","三倉","三個倉","每個倉","最多","最空",
+                            "最滿","分布","佔比","哪個最","誰最"))
+                        _mt3 = "item_count" if any(w in user_text for w in ("東西","商品","幾件","幾項","數量","最多","最空","最滿","塞")) else "stock_value"
+                        func_args = {"warehouse_a": "all", "warehouse_b": "all", "metric": _mt3} if (_rank3 and _named2 < 2) else {}
+                        log.info(f"[Pre-C-Cmp] → compare_warehouses args={func_args}")
                     elif func_name not in ("set_alert", "list_alerts") and any(w in user_text for w in _alert_set_kws_ws):
                         func_name = "set_alert"
                         func_args = {"raw_text": user_text}

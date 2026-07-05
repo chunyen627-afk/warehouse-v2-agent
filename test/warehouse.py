@@ -763,9 +763,44 @@ def compare_warehouses(
     warehouse_b: str,
     metric: str = "stock_value",
 ) -> dict:
-    """4. 兩倉比較"""
+    """4. 兩倉比較；warehouse_a=='all' 時回三倉排名（「哪個倉最多/最空/各倉分布」）"""
     s = state()
     valid_wh = {"north", "central", "south"}
+    if metric not in METRIC_LABEL:
+        metric = "stock_value"
+
+    def _calc3(wh_key):
+        stock = s.stock.get(wh_key, {})
+        if metric == "stock_value":
+            return sum(qty * s._items_by_sku.get(sku, {}).get("unit_price", 0)
+                       for sku, qty in stock.items())
+        elif metric == "item_count":
+            return sum(stock.values())
+        elif metric == "turnover":
+            total_stock = sum(stock.values()) or 1
+            start = _snapshot_date() - _td(days=30)
+            out_qty = sum(m["qty"] for m in s.movements
+                          if m["warehouse"] == wh_key and m["direction"] == "out"
+                          and _date.fromisoformat(m["date"]) >= start)
+            return round(out_qty / total_stock, 3)
+        return 0
+
+    # 三倉排名（「哪個倉東西最多」「三個倉哪個最空」「各倉分布」）
+    if warehouse_a == "all" or warehouse_b == "all":
+        _ml = METRIC_LABEL[metric]
+        ranked = sorted((("north", "北區倉"), ("central", "中區倉"), ("south", "南區倉")),
+                        key=lambda w: _calc3(w[0]), reverse=True)
+        def _fmt(v):
+            return (f"NT$ {v:,}" if metric == "stock_value"
+                    else f"{v:,} 件" if metric == "item_count" else f"{v:.3f}")
+        lines = [f"三倉{_ml}排名：",
+                 *[f"{i}. {lbl}：{_fmt(_calc3(k))}" for i, (k, lbl) in enumerate(ranked, 1)]]
+        return {"ok": True, "summary": "\n".join(lines),
+                "data": {"metric": metric, "metric_label": _ml,
+                         "ranked": [{"wh": k, "label": lbl, "value": _calc3(k)}
+                                    for k, lbl in ranked]},
+                "view": "compare_warehouses"}
+
     if warehouse_a not in valid_wh or warehouse_b not in valid_wh:
         return _err(f"倉庫只支援 north/central/south，請重新指定")
     if warehouse_a == warehouse_b:
