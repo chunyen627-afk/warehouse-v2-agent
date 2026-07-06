@@ -271,6 +271,8 @@ _GATEKEEPER_BLACKLIST = (
     "傳到我", "資料傳",
     # conv100-r11：白拿/問展示機價格
     "免費送我", "這台機器",
+    # conv100-r15：白拿變體
+    "算零元", "算我的",
 )
 
 
@@ -2562,6 +2564,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # C17a-pre：query_inventory 的 warehouse 幻覺防呆——LLM 給了單倉、句中卻沒
     # 提那個倉（「氣泡水三個倉加起來有幾瓶」被塞 central 只回中倉，conv100-r5）
     # → 丟掉讓它查三倉總量。
+    # LLM 自帶的 keyword 也要接地——「給我來一下」曾幻覺 kw=耳機回無關商品
+    # （conv100-r15；C1 只驗「補」的 kw，LLM 直接給的沒人驗）
+    if func_name == "query_inventory" and func_args.get("keyword"):
+        _kw_llm = func_args["keyword"]
+        import warehouse as _W_g
+        if _W_g.match_items(_kw_llm) and not _kw_grounded(_kw_llm, user_text):
+            func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+            log.info(f"[校正 C1c] LLM kw「{_kw_llm}」與原句不接地 → 清 keyword")
+
     if func_name == "query_inventory" and func_args.get("warehouse") in ("north", "central", "south"):
         _wh_zh_names = {"north": ("北倉", "北區", "北邊", "北部"),
                         "central": ("中倉", "中區"),
@@ -4093,8 +4104,9 @@ async def ws_handler(ws: WebSocket):
             # 含設定關鍵字時不攔（「中倉全部商品安全庫存改成六十」是 config 句）
             if (any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱"))
                     and not any(w in user_text for w in _CONFIG_KEY_WORDS)
-                    # 搗蛋語境不觸發列表（「所有商品免費送我」曾吐 61 項全清單，conv100-r11）
-                    and not any(w in user_text for w in ("免費", "送我", "送給", "白拿", "改成", "刪"))):
+                    # 搗蛋語境不觸發列表（「所有商品免費送我」「全部商品算零元」曾吐 61 項全清單）
+                    and not any(w in user_text for w in ("免費", "送我", "送給", "白拿", "改成", "刪",
+                                                          "零元", "0元", "算我的", "打包"))):
                 import warehouse as _W_list_ws
                 snap = _W_list_ws.state()
                 rows = [f"{it['sku_id']} {it['name']} ({_W_list_ws.CATEGORY_LABEL.get(it['category'], it['category'])}) NT${it['unit_price']}" for it in snap.items]
