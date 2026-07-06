@@ -391,7 +391,7 @@ def _is_guide_request(text: str) -> bool:
 
 VALID_CATEGORIES = set(finance.CATEGORY_LABEL.keys())
 VALID_WAREHOUSES = {"north", "central", "south", "all"}
-VALID_PERIODS    = {"today", "this_week", "this_month"}
+VALID_PERIODS    = {"today", "yesterday", "this_week", "last_week", "this_month"}
 
 # 商品意圖詞（C1 用）
 _INVENTORY_INTENT_WORDS = (
@@ -613,6 +613,8 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
         # run_script{出貨} 被閘門拒，conv100-r8）
         if any(w in user_text for w in ("出貨", "進貨", "進出", "入庫", "出庫")):
             _rs_period = ("this_month" if any(w in user_text for w in ("這個月", "本月", "月")) else
+                          "yesterday" if any(w in user_text for w in ("昨天", "昨晚")) else
+                          "last_week" if any(w in user_text for w in ("上週", "上禮拜")) else
                           "today" if any(w in user_text for w in ("今天", "今日")) else
                           "this_week")
             log.info(f"[gate-rescue] run_script 實為進出查詢 → query_movement period={_rs_period}")
@@ -2078,6 +2080,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             func_args = _drop_ungrounded_category(func_args, user_text)
             return func_name, func_args, True
 
+    # ── C2e: 原句明講昨天/上週 → 覆寫 period（LLM 常給「合法但錯」的
+    #   this_week，容錯 map 只救非法值管不到，2026-07-06 加 yesterday/last_week
+    #   支援時抓到）──
+    if func_name == "query_movement":
+        _c2e = ("yesterday" if any(w in user_text for w in ("昨天", "昨晚", "昨日")) else
+                "last_week" if any(w in user_text for w in ("上週", "上周", "上禮拜")) else None)
+        if _c2e and func_args.get("period") != _c2e:
+            func_args = {**func_args, "period": _c2e}
+            log.info(f"[校正 C2e] 原句時間詞 → period={_c2e}")
+
     # ── C2: 模糊時間詞 → period rewrite ──
     if func_name == "query_movement":
         if any(kw in user_text for kw in _VAGUE_TIME_WORDS):
@@ -2154,7 +2166,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if "period" in func_args and func_args["period"] not in VALID_PERIODS:
         period_map = {
             "today": "today", "今天": "today", "今日": "today", "本日": "today",
+            "yesterday": "yesterday", "昨天": "yesterday", "昨日": "yesterday",
             "this_week": "this_week", "本週": "this_week", "這週": "this_week", "this week": "this_week",
+            "last_week": "last_week", "上週": "last_week", "上周": "last_week", "上禮拜": "last_week",
             "this_month": "this_month", "本月": "this_month", "這個月": "this_month", "this month": "this_month",
         }
         v = func_args["period"]
@@ -2281,8 +2295,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # period 從原句推斷（hard-return 會跳過後面的 C2 時間詞規則，
         # 「最近一個月進貨多少」曾顯示成今天的數字，第14輪抓到）
         _c7b_period = ("this_month" if any(w in user_text for w in ("這個月", "本月", "一個月", "上個月", "月")) else
-                       "this_week" if any(w in user_text for w in ("這週", "本週", "這禮拜", "上週", "週", "禮拜",
-                                                                    "昨天", "昨晚", "前天")) else
+                       "yesterday" if any(w in user_text for w in ("昨天", "昨晚", "昨日")) else
+                       "last_week" if any(w in user_text for w in ("上週", "上周", "上禮拜")) else
+                       "this_week" if any(w in user_text for w in ("這週", "本週", "這禮拜", "週", "禮拜", "前天")) else
                        "today" if any(w in user_text for w in ("今天", "今日")) else
                        "this_month")
         _c7b_args = {"period": _c7b_period, "direction": "both"}
@@ -4512,7 +4527,10 @@ async def ws_handler(ws: WebSocket):
                         log.info(f"[oov:auto_fix] vid={vid} {oov['original_keyword']!r} → {oov['fixed_keyword']!r} (score={oov['score']:.0f})")
                         func_args["keyword"] = oov["fixed_keyword"]
                         # 把修復提示帶入後續 result，由工具回傳後前端顯示
-                        _oov_hint = f"（已自動對應至「{oov['fixed_keyword']}」）"
+                        # （fixed_keyword 為空時不加提示——「昨天進了什麼貨」的
+                        # 雜訊 kw 被修成空字串曾顯示「已自動對應至「」」）
+                        _oov_hint = (f"（已自動對應至「{oov['fixed_keyword']}」）"
+                                     if oov.get("fixed_keyword") else "")
                     else:
                         # 給選單：回傳 clarify，等使用者選
                         log.info(f"[oov:clarify] vid={vid} keyword={oov['original_keyword']!r} candidates={oov['options']}")

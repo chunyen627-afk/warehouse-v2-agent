@@ -72,7 +72,9 @@ WAREHOUSE_LABEL = {
 
 PERIOD_LABEL = {
     "today":      "今天",
+    "yesterday":  "昨天",
     "this_week":  "本週",
+    "last_week":  "上週",
     "this_month": "本月",
 }
 
@@ -291,8 +293,14 @@ def _period_range(period: str) -> tuple[_date, _date]:
     today = _snapshot_date()
     if period == "today":
         return today, today
+    if period == "yesterday":
+        y = today - _td(days=1)
+        return y, y
     if period == "this_week":
         return today - _td(days=today.weekday()), today
+    if period == "last_week":
+        this_mon = today - _td(days=today.weekday())
+        return this_mon - _td(days=7), this_mon - _td(days=1)
     if period == "this_month":
         return today.replace(day=1), today
     return today, today
@@ -589,7 +597,7 @@ def query_movement(
     warehouse: str = "all",
 ) -> dict:
     """2. 進出貨記錄"""
-    if period not in ("today", "this_week", "this_month"):
+    if period not in ("today", "yesterday", "this_week", "last_week", "this_month"):
         period = "today"
     if direction not in ("in", "out", "both"):
         direction = "both"

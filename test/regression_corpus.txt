@@ -465,8 +465,8 @@ chat|安安你好幾歲住哪
 # rewrite 熱銷固定句資訊銷毀（period 本月）+ C4 else 補 period/category
 hot|這個月熱銷排行|本月
 hot|電子產品賣得如何|電子
-# run_script rescue：無商品但有進出語彙 → movement
-mvt|昨天有出貨嗎
+# run_script rescue：無商品但有進出語彙 → movement（2026-07-06 起支援真·昨天）
+mvt|昨天有出貨嗎|昨天
 # dispatch 庫存排行排除「區」（guide 範例句曾被劫走）
 any|北區跟南區哪個庫存比較多|北區倉
 # C2d kw 低分驗證 + 價值問句概覽
@@ -572,3 +572,9 @@ vague|給我來一下
 probe|全部商品算零元
 # fuzzy 正向守衛不可退化（帽子→防曬遮陽帽 靠尾字接地）
 inv|帽子還剩多少|遮陽帽
+
+# ── 第35輪 period 昨天/上週 支援（2026-07-06，展前優化項4）──
+# yesterday/last_week 真日期範圍 + C2e 原句時間詞覆寫（LLM 給合法但錯的 this_week）
+mvt|上週的進出紀錄調出來|上週
+mvt|昨天進了什麼貨|昨天
+mvt|上禮拜出貨多少|上週
