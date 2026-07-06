@@ -855,6 +855,14 @@ _S2T = str.maketrans({
 })
 
 
+# 功能描述 → 商品名（RPI5 實測：「那個煮咖啡的庫存多少」fuzzy 配到咖啡豆）。
+# 「手沖咖啡壺組」含「沖咖啡」→ lookbehind 排除「手沖」、且要求「的」收尾，
+# 避免誤改真商品名。之後有同型抱怨（描述功能不講品名）就往這張表加。
+_DESCRIPTOR_ALIASES = (
+    (_re.compile(r"(?<!手)[煮泡沖]咖啡(?:用)?的(?:機器|那台|那個|東西)?"), "咖啡機"),
+)
+
+
 def _rewrite_query(user_text: str) -> str:
     """將口語/模糊輸入改寫成 LLM 訓練時的標準句型。"""
     t = user_text.strip().translate(_S2T)
@@ -863,6 +871,13 @@ def _rewrite_query(user_text: str) -> str:
     if _rep_m:
         t = _rep_m.group(1)
         log.info(f"[Rewrite] 重複詞收斂 → 「{t}」")
+    # 功能描述改寫（表定義在函式上方）
+    for _da_pat, _da_name in _DESCRIPTOR_ALIASES:
+        _da_new = _da_pat.sub(_da_name, t)
+        if _da_new != t:
+            log.info(f"[Rewrite] 功能描述 →「{_da_name}」: 「{t}」→「{_da_new}」")
+            t = _da_new
+            break
     # 排程句一律不 rewrite——「每天晚上七點自動出缺貨警示」曾被缺貨規則改寫成
     # 「哪些商品缺貨警示」，時間/頻率資訊全毀（conv100-r5，教訓同 585 行註解）。
     # Pre-C-Sched 會用原句攔截 set_schedule。
@@ -1274,6 +1289,8 @@ _ALL_KEYWORD_NOISE = (
     # 數量/動作詞
     "還有多少件", "還有多少", "剩多少", "有多少", "有幾個", "剩幾個", "多少個", "多少件",
     "多少", "幾個", "幾件", "還有", "庫存量", "庫存查詢", "庫存", "數量", "剩餘",
+    # 量詞尾巴（「咖啡機還有幾台」剝掉「還有」後殘留「幾台」害 fuzzy 歪掉）
+    "幾台", "幾支", "幾瓶", "幾包", "幾盒", "幾罐", "幾組", "幾雙", "幾條", "幾箱",
     # 動作/查詢詞
     "查一下", "看一下", "幫我查", "告訴我", "查詢", "查", "看", "詢",
     # 填充/語氣詞
@@ -4232,6 +4249,37 @@ async def ws_handler(ws: WebSocket):
                     await asyncio.sleep(0.012)
                 await send({"type": "done", "result": result})
                 continue
+
+            # ── 複合句攔截：「賣最好的還剩多少」= 熱銷 Top1 + 它的庫存 ──
+            # C4 會把「賣最好」強轉 list_hot_items 回排行榜，但這句訪客要的是
+            # 那個商品的庫存數字（RPI5 實測 2026-07-06），進 LLM 前先攔。
+            _bs_words = ("賣最好", "賣得最好", "最好賣", "賣最快", "賣得最快",
+                         "最熱銷", "最暢銷", "熱銷第一", "銷量第一", "賣第一")
+            _bs_stock_words = ("剩多少", "還剩", "剩幾", "庫存", "還有多少", "還有幾", "存量")
+            if (any(w in user_text for w in _bs_words)
+                    and any(w in user_text for w in _bs_stock_words)):
+                _bs_period = "this_month" if "月" in user_text else "this_week"
+                _bs_hot = finance.execute("list_hot_items",
+                                          {"rank_type": "hot", "period": _bs_period})
+                _bs_rank = (_bs_hot.get("data") or {}).get("rankings") or []
+                _bs_done = False
+                if _bs_rank:
+                    _bs_name = _bs_rank[0]["name"]
+                    log.info(f"[dispatch-ws] 複合句攔截: {user_text!r} → 熱銷Top1「{_bs_name}」庫存")
+                    result = finance.execute("query_inventory", {"keyword": _bs_name})
+                    if result.get("ok") and result.get("summary"):
+                        _bs_plabel = "本月" if _bs_period == "this_month" else "本週"
+                        result["summary"] = (f"{_bs_plabel}賣最好的是「{_bs_name}」"
+                                             f"（出 {_bs_rank[0]['out_qty']:,} 件）。"
+                                             + result["summary"])
+                        for ch in result["summary"]:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(0.008)
+                        await send({"type": "done", "result": result})
+                        _bs_done = True
+                if _bs_done:
+                    continue
+                # 沒出貨記錄/查詢失敗 → 不攔，交給既有流程
 
             # ── intent_clf 主要路由（跟 HTTP 版 api_query 同一套邏輯，2026-07-02
             #   補齊：WS 端原本完全沒有這層，導致 query_movement 這類「LLM 容易
