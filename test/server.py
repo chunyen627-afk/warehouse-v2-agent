@@ -128,6 +128,8 @@ GATEKEEPER_KEYWORDS = {
     # conv100-r7：賺錢/沒動靜/速配/見紅/撐不到/危險/賣況/縮水/落差/追查/怪異/上調/安全量
     "賺錢", "沒動靜", "速配", "見紅", "撐不到", "危險", "賣況",
     "縮水", "落差", "追查", "怪異", "上調", "下調", "安全量",
+    # conv100-r12：遮陽帽/搭什麼（「買防曬遮陽帽的都搭什麼買」曾被守門員拒）
+    "遮陽帽", "防曬", "搭什麼", "都搭",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
     "冠軍", "最熱門", "最冷門", "銷量", "搶手", "熱賣", "賣得最兇", "最夯",
     "比較", "比", "跟", "和", "vs", "對比",
@@ -460,6 +462,8 @@ _RELATED_INTENT_WORDS = (
     "速配", "最速配",
     # conv100-r11：通常還拿什麼
     "還拿什麼", "通常還拿",
+    # conv100-r12：都搭什麼買
+    "搭什麼買", "都搭",
     # 「順便帶啥/順便買啥」的「順便」（RPI5 壓測抓到：只有「順便買」時
     # 「順便帶啥」落到 LLM 自由判斷，WIN11 判 related、RPI5 判 hot_items
     # ——硬體敏感的分歧。加規則 hard-return 消除不確定性）
@@ -496,6 +500,8 @@ _MOVEMENT_PROTECT_WORDS = (
     "有人買",
     # conv100-r11：「這個月出貨幾台」
     "出貨幾", "進貨幾",
+    # conv100-r12：「野炊鍋具組有進過貨嗎」
+    "進過貨", "出過貨",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -2184,8 +2190,21 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             if cat_en and func_args.get("category", "") not in VALID_CATEGORIES and not _kw_matches_product:
                 log.info(f"[校正 C13] 類別庫存查詢 kw={kw!r} → category={cat_en}")
                 return "query_inventory", {**{k:v for k,v in func_args.items() if k!='keyword'}, "category": cat_en}, True
+            # hard-return 會跳過 C17a 的 warehouse 補全 → 單倉句在這裡補
+            # （「耳機在南倉有幾個」曾少了南倉 filter，conv100-r12）
+            _c13_args = {**func_args, "keyword": kw}
+            _c13_whs = {z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text}
+            if len(_c13_whs) >= 2:
+                # 「智慧手環中倉北倉哪邊存量多」「北中南倉的滑鼠各有幾個」是
+                # 多倉比較語意 → 丟單倉 filter 回三倉分佈（conv100-r12）
+                _c13_args.pop("warehouse", None)
+            elif not _c13_args.get("warehouse") and len(_c13_whs) == 1:
+                for zh, en in _WH_ZH_MAP.items():
+                    if zh in user_text:
+                        _c13_args["warehouse"] = en
+                        break
             log.info(f"[校正 C13] 明確庫存查詢 → query_inventory({kw!r})")
-            return "query_inventory", {**func_args, "keyword": kw}, True
+            return "query_inventory", _c13_args, True
 
     # ══════════════ v2 Agent 進階工具校正（C8-C11）══════════════
 
@@ -2503,12 +2522,22 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _wh_zh_names = {"north": ("北倉", "北區", "北邊", "北部"),
                         "central": ("中倉", "中區"),
                         "south": ("南倉", "南區", "南邊", "南部")}
+        _c17ap_whs = {z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text}
         if not any(z in user_text for z in _wh_zh_names[func_args["warehouse"]]):
             func_args = {k: v for k, v in func_args.items() if k != "warehouse"}
             log.info("[校正 C17a-pre] query_inventory 丟棄幻覺 warehouse")
+        elif len(_c17ap_whs) >= 2:
+            # 「智慧手環中倉北倉哪邊存量多」提兩倉是比較語意 → 丟單倉 filter
+            # 回三倉分佈（conv100-r12）
+            func_args = {k: v for k, v in func_args.items() if k != "warehouse"}
+            log.info("[校正 C17a-pre] 句提多倉 → 丟 warehouse 回三倉分佈")
 
     # C17a：query_inventory / query_movement 從 user_text 補 warehouse（「南倉洗衣精」→ warehouse=south）
-    if func_name in ("query_inventory", "query_movement") and not func_args.get("warehouse"):
+    # 句中提到 ≥2 個不同倉（「智慧手環中倉北倉哪邊存量多」）→ 不補，讓三倉
+    # 分佈回答比較問題（conv100-r12：曾硬補第一個倉只回單倉）
+    _c17a_whs = {z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text}
+    if (func_name in ("query_inventory", "query_movement") and not func_args.get("warehouse")
+            and len(_c17a_whs) < 2):
         for zh, en in _WH_ZH_MAP.items():
             if zh in user_text:
                 func_args = {**func_args, "warehouse": en}

@@ -77,11 +77,16 @@ _RCA_GENERIC = ["有哪些", "哪些", "有沒有", "有那些", "那些", "採�
 
 
 def _kw_to_skus(keyword: str) -> list[dict]:
-    """keyword → 命中的 SKU item 清單（沿用 v1 match_items）。"""
+    """keyword → 命中的 SKU item 清單（沿用 v1 match_items）。
+    只取最高分群：「慢跑鞋 男款」的「男款」token 曾把素T/牛仔褲 男款一起抓進
+    config 影響範圍（9 項而非 3 項，conv100-r12）。"""
     if not keyword:
         return []
     hits = W.match_items(keyword)
-    return [h["item"] for h in hits]
+    if not hits:
+        return []
+    top = hits[0].get("score", 0)
+    return [h["item"] for h in hits if h.get("score", 0) >= top]
 
 
 # ════════════════════════════════════════════════════════════
