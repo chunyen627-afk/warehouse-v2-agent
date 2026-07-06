@@ -17,12 +17,21 @@ dispatch / rewrite / 關鍵字清單，跑這支全量驗證。
 summary 含「瑜珈墊」才擋得住回退。
 類別 → 判定規則見 ACCEPT。
 """
-import asyncio, json, sys, io
+import asyncio, json, ssl, sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import websockets
 from pathlib import Path
 
-WS_URI = 'ws://localhost:8000/ws'
+# --rpi5：在 RPI5 本機跑全量回歸（wss 8001，跟訪客同一條路）
+if "--rpi5" in sys.argv:
+    sys.argv.remove("--rpi5")
+    WS_URI = 'wss://localhost:8001/ws'
+    SSL_CTX = ssl.create_default_context()
+    SSL_CTX.check_hostname = False
+    SSL_CTX.verify_mode = ssl.CERT_NONE
+else:
+    WS_URI = 'ws://localhost:8000/ws'
+    SSL_CTX = None
 CORPUS = Path(__file__).parent / "regression_corpus.txt"
 
 ACCEPT = {
@@ -56,7 +65,7 @@ ACCEPT = {
 
 
 async def _q(text):
-    async with websockets.connect(WS_URI, max_size=None) as ws:
+    async with websockets.connect(WS_URI, ssl=SSL_CTX, max_size=None) as ws:
         await ws.send(json.dumps({'type': 'chat', 'text': text}, ensure_ascii=False))
         while True:
             raw = await asyncio.wait_for(ws.recv(), timeout=45)
