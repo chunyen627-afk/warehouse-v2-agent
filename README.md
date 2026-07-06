@@ -9,6 +9,8 @@
 [![OOV v1](https://img.shields.io/badge/OOV_v1-98%25-brightgreen)]()
 [![OOV v2](https://img.shields.io/badge/OOV_v2-97.5%25-brightgreen)]()
 [![intent_clf](https://img.shields.io/badge/intent_clf-489MB_主路由-blue)]()
+[![守衛庫](https://img.shields.io/badge/守衛庫_352句-雙平台100%25-brightgreen)]()
+[![conv100](https://img.shields.io/badge/15輪收斂-危險級連續8批0-brightgreen)]()
 
 ---
 
@@ -51,7 +53,7 @@
 | 功能 | 說明 | 範例 |
 |------|------|------|
 | `query_inventory` | 庫存查詢（商品 / 倉庫 / 類別） | 「北區倉洗衣精還有多少？」 |
-| `query_movement` | 進出記錄（時間範圍 / 方向） | 「上個月出貨記錄」 |
+| `query_movement` | 進出記錄（今天/昨天/本週/上週/本月） | 「昨天有出貨嗎？」 |
 | `list_low_stock` | 缺貨警示（低於安全庫存 + 撐天/建議補） | 「哪些商品快沒貨了？」 |
 | `compare_warehouses` | 倉庫比較（任意兩倉對比） | 「北倉跟中倉差多少？」 |
 | `list_hot_items` | 熱銷排行（期間 / 類別） | 「最近賣最好的是什麼？」 |
@@ -142,6 +144,26 @@ LLM 輸出不穩定是 270M 小模型的先天限制，解法是 **Server 端後
 - v6 模型: 5,849 筆訓練, eval_loss=0.026
 - intent_clf: 489MB, per-label 96-100%
 - OOV 引擎: fuzzy threshold 40, 雜詞清單 80+ 詞
+
+### conv100 收斂戰役（2026-07-03 ～ 07-06，15 輪）
+每輪在 **RPI5 實機**跑 100 句全新句（擬真訪客分布：常見句型 + 新奇同義詞 + 亂打字/搗蛋），
+用 `ws_inspect.py` 逐句人工審**訪客實際看到的回答全文**，有 bug 就修、修完累積進守衛庫防回退。
+
+| 指標 | 結果 |
+|------|------|
+| 真 bug 軌跡（擬真批） | 10 → 5 → 3 → 7 → 3 → 6 → 2 → 2（穩定收斂） |
+| 危險級（開錯卡/幻覺商品/注入/crash） | **連續 8 批 0** |
+| 亂打字/搗蛋組（注音殘字/英文亂敲/白拿/注入變體） | **每批全數優雅擋下** |
+| 守衛庫 | 138 → **352 句**（view + 回答內容雙驗），雙平台 100% 零回退 |
+| RPI5 耐久 | 1,600+ 次推理 / 33hr，44°C、零崩潰、~30 t/s 零衰減 |
+
+**戰役中修掉的代表性架構級 bug**：rewrite 固定句資訊銷毀（排程/compare/熱銷 的時間與倉名被吞）、
+C18 高信心蓋寫繞過守衛、fuzzy 幻覺（「把南倉炸掉」曾回拖把 → score 門檻 + `_kw_grounded` 接地檢查）、
+category 幻覺（真商品被錯類別濾成找不到 → `_drop_ungrounded_category` 四路通殺）、
+跨訪客刪除狀態污染（per-vid 化）、config 影響範圍錯（「瑜珈墊安全庫存加20」曾波及全店 183 項 → item 四路補全）。
+
+**測試方法論（定案）**：本地快篩迭代、**RPI5 實戰驗收**（單向：RPI5 過=過）。
+`regression_ws.py --rpi5` 在 RPI5 跑全量守衛庫——首跑即抓到本機測不出的平台精度分歧句。
 
 ---
 
@@ -333,7 +355,13 @@ python finetune_local.py
 - [x] 中文數字支援（進出貨/調貨/退貨/改設定，「三箱」「一百二十」）
 - [x] 展示資料一鍵重置
 - [x] 能力地圖重排（進出貨/調貨/退貨提為主打，冷門功能收次選單）
+- [x] conv100 15 輪收斂（真bug 收斂至 ≤2、危險級連續 8 批 0）
+- [x] 守衛庫升級 view+內容雙驗（第三欄「回答必含關鍵字」）
+- [x] regression_ws --rpi5（RPI5 全量回歸、雙平台驗收）
+- [x] movement 支援昨天/上週真日期查詢
 - [ ] 訓練 270M 認得 create_movement / create_transfer（目前靠規則式攔截，實測覆蓋率 99%；累積真實使用者講法達一定量後再重訓）
+- [ ] intent_clf 重訓：把 15 輪收斂學到的同義詞群餵回分類器（減少關鍵字表依賴）
+- [ ] 展前三件事：一鍵重置 SOP / demo 資料基準日對齊展期 / 開機自啟+QR 網段檢查
 - [ ] 退供應商方向的退貨（庫存減、涉金額）
 - [ ] 腳本白名單擴充（到期報告 / 補貨清單）
 - [ ] win11_installer 部署目錄同步
@@ -355,5 +383,5 @@ python finetune_local.py
 
 ---
 
-*最後更新：2026-07-03 | v6 模型 5,849 筆訓練（部署中）| intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | 進出貨/調貨/退貨規則式覆蓋率: 99% | 203 句 WS 綜合大測試零真 bug*
+*最後更新：2026-07-06 | v6 模型 5,849 筆訓練 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | **conv100 15 輪收斂完成：守衛庫 352 句雙平台（WIN11+RPI5）100%、危險級連續 8 批 0、RPI5 耐久 1,600+ 次推理零崩潰***
 *註：training_data.jsonl 生成腳本已修復（讀 warehouse_data/ 而非已淘汰的 seed_data.json），目前重新生成得 5,415 筆（60 SKU 乾淨版，未含灌水的 create_movement 樣本），尚未重新訓練，部署模型仍是 v6 舊版權重。*
