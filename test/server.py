@@ -242,6 +242,7 @@ _GATEKEEPER_BLACKLIST = (
     "後台", "後台權限", "重設系統", "測試模式", "除錯模式", "debug模式",
     "沒有任何限制", "沒有規則", "沒有限制的ai", "設定檔", "原始指令",
     "無視前面", "無視所有", "無視規則", "以管理員", "工程師 給我", "工程師給我",
+    "不用聽", "不用遵守", "聽我的指令", "指令了",
     "sudo", "drop table", "delete from", "ignore all", "ignore previous",
     "圖靈測試", "你的system", "顯示所有密碼",
     # 第18輪：情緒/裝熟/離題閒聊
@@ -470,6 +471,8 @@ _RELATED_INTENT_WORDS = (
     "還拿什麼", "通常還拿",
     # conv100-r12：都搭什麼買
     "搭什麼買", "都搭",
+    # conv100-r14：都會多帶什麼
+    "多帶", "會多帶",
     # 「順便帶啥/順便買啥」的「順便」（RPI5 壓測抓到：只有「順便買」時
     # 「順便帶啥」落到 LLM 自由判斷，WIN11 判 related、RPI5 判 hot_items
     # ——硬體敏感的分歧。加規則 hard-return 消除不確定性）
@@ -2627,6 +2630,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 通用 category 接地檢查（inventory/related 直達路徑，conv100-r13）
     if func_name in ("query_inventory", "query_related_items"):
         func_args = _drop_ungrounded_category(func_args, user_text)
+
+    # related 直達且 kw 是雜訊（「買精釀啤酒的都會多帶什麼」LLM kw='都會'
+    # → related_empty，conv100-r14）→ 從原句重抽
+    if func_name == "query_related_items":
+        import warehouse as _W_rel
+        _rel_kw = func_args.get("keyword", "")
+        if not _rel_kw or not _W_rel.match_items(_rel_kw):
+            _rel_kw2 = _extract_sku_keyword(user_text)
+            if _rel_kw2 and _W_rel.match_items(_rel_kw2) and _kw_grounded(_rel_kw2, user_text):
+                func_args = {**func_args, "keyword": _rel_kw2}
+                log.info(f"[校正 C6b] related kw 雜訊 → 重抽 {_rel_kw2!r}")
 
     # C17b：set_alert 參數清理 — 只保留 condition / target，清掉 keyword 等非法參數
     if func_name == "set_alert":
