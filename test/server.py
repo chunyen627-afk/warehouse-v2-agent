@@ -264,6 +264,8 @@ _GATEKEEPER_BLACKLIST = (
     "炸掉", "炸了", "燒掉", "數字調成", "庫存數字調",
     # conv100-r9：抱怨系統（「壞掉」會撞到期詞）
     "系統壞",
+    # conv100-r13：抱怨語變體/嗆聲
+    "壞掉了吧", "壞了吧", "看什麼看",
     # conv100-r10：資料外傳
     "傳到我", "資料傳",
     # conv100-r11：白拿/問展示機價格
@@ -279,7 +281,7 @@ GUIDE_KEYWORDS = {
     "有什麼", "有什么", "可以查", "能查",
     "菜單", "菜单", "功能", "選項", "选项", "幫助", "帮助",
     "列表", "清單", "清单", "全部", "所有", "都有",
-    "能做什麼", "能做什么", "可以做什麼", "會做什麼", "看看", "導航", "導覽",
+    "能做什麼", "能做什么", "可以做什麼", "會做什麼", "幫我做什麼", "看看", "導航", "導覽",
     "怎麼用", "怎麼操作", "教我", "使用說明", "怎麼玩",
     "menu", "help", "list", "options", "what can", "guide",
 }
@@ -416,6 +418,8 @@ _LOW_STOCK_INTENT_WORDS = (
     "斷炊", "吃緊", "掛急診", "急診", "快空", "缺的",
     # conv100-r7：見紅/撐不到/安全線以下/危險名單
     "見紅", "撐不到", "安全線以下", "危險名單", "庫存危險",
+    # conv100-r13：庫存快不夠的（裸「不夠」會誤傷「夠不夠賣」查詢句，只收精確詞）
+    "快不夠",
     "low stock", "restock", "running low", "alert",
 )
 
@@ -440,6 +444,8 @@ _HOT_INTENT_WORDS_SLOW = (
     "賣況最差", "沒動靜",
     # conv100-r10：賣不好
     "賣不好",
+    # conv100-r13：賣最不好
+    "賣最不好", "最不好賣",
     "worst selling", "slow", "slow mover",
 )
 
@@ -502,6 +508,8 @@ _MOVEMENT_PROTECT_WORDS = (
     "出貨幾", "進貨幾",
     # conv100-r12：「野炊鍋具組有進過貨嗎」
     "進過貨", "出過貨",
+    # conv100-r13：「玻璃保鮮盒最近有補貨嗎」（問進貨紀錄不是缺貨清單）
+    "有補貨", "補過貨",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -1434,6 +1442,24 @@ def _config_item_kw(user_text: str) -> str:
     return ""
 
 
+_CAT_GROUND_WORDS = {
+    "electronics": ("電子", "3c"), "appliance_kitchen": ("家電", "廚具", "廚房"),
+    "food_beverage": ("食品", "飲料"), "daily_goods": ("日用", "生活用品"),
+    "apparel": ("服飾", "衣服", "服裝"), "sports": ("運動", "露營", "戶外", "健身"),
+}
+
+
+def _drop_ungrounded_category(func_args: dict, user_text: str) -> dict:
+    """LLM 常幻覺 category（「彈力健身環庫存」給 apparel 把 sports 商品濾光
+    變成找不到，conv100-r13）→ 句中沒對應類別詞就丟棄。"""
+    _cat = func_args.get("category")
+    if _cat in VALID_CATEGORIES and not any(
+            w in user_text for w in _CAT_GROUND_WORDS.get(_cat, ())):
+        func_args = {k: v for k, v in func_args.items() if k != "category"}
+        log.info(f"[校正 C-cat] 丟棄幻覺 category={_cat}")
+    return func_args
+
+
 def _kw_grounded(kw: str, user_text: str) -> bool:
     """extractor 的 fuzzy 結果要跟原句「接地」才可信：全名的任一連續兩字、
     或商品核心尾字（非把/的等虛字）出現在原句。「把北倉的傘」被 fuzzy 成
@@ -1799,10 +1825,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 「叫貨」從 PO 排除詞移除：叫貨=缺貨要補的查詢語意，讓 C3 轉 low_stock
     # （開採購單是「採購單/下單/產採購/補貨單」等明確 PO 詞，RPI5 conv100-r2）
     _po_in_text = any(w in user_text for w in ("採購單", "下單", "產採購", "補貨單"))
+    # 「XX最近有補貨嗎」是問進貨紀錄不是缺貨清單 → 讓給 C7b movement（conv100-r13）
+    _mv_q_in_text = any(w in user_text for w in ("有補貨", "有進貨", "補過貨", "進過貨"))
     if (any(kw in user_text for kw in _LOW_STOCK_INTENT_WORDS) or
         any(kw in text_low for kw in _LOW_STOCK_INTENT_WORDS)) \
        and not _cfg_key_in_text and not _report_in_text \
-       and not _alert_in_text and not _po_in_text:
+       and not _alert_in_text and not _po_in_text and not _mv_q_in_text:
         # category 幻覺防呆：LLM 常憑空抽 category（「哪些品項低於警戒線」給
         # food_beverage 只回 4 項，conv100-r5）→ 句中沒類別詞就丟棄
         _c3_cat_words = {"electronics": ("電子", "3c"), "appliance_kitchen": ("家電", "廚具", "廚房"),
@@ -1836,6 +1864,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 連帶意圖詞在場時熱銷不搶——「帳篷跟什麼一起賣最多」的「賣最多」是
     # 連帶語境，不是排行榜（第14輪抓到）
     _c4_related_block = any(w in user_text for w in _RELATED_INTENT_WORDS)
+    # 帶具體商品名的熱銷問句（「輕量羽絨外套最近賣得如何」）是問該商品銷況，
+    # 回全類別排行答非所問 → 轉該商品 movement（conv100-r13）
+    if (is_hot or is_slow) and not _c4_related_block \
+            and not any(w in user_text for w in ("類", "用品")):
+        # （「露營用品類賣最好」是類別排行，fuzzy 會誤中帳篷 → 類/用品 句不轉）
+        import warehouse as _W_c4p
+        _c4_prod = _extract_sku_keyword(user_text)
+        _c4_pm = _W_c4p.match_items(_c4_prod) if _c4_prod else []
+        if _c4_pm and _c4_pm[0].get("score", 0) >= 3:
+            _c4_period = ("this_month" if any(w in user_text for w in ("本月", "這個月", "月")) else "this_month")
+            log.info(f"[校正 C4-prod] 帶商品名的銷況問句 → query_movement kw={_c4_prod!r}")
+            return "query_movement", {"keyword": _c4_prod, "period": _c4_period,
+                                      "direction": "both"}, True
     if (is_hot or is_slow) and not _c4_related_block and func_name != "list_hot_items":
         log.info(f"[校正 C4] {func_name} → list_hot_items ({'hot' if is_hot else 'slow'})")
         # 從 user_text 抽 period / category
@@ -2022,14 +2063,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     kw = _kw6
         if func_name != "query_related_items":
             log.info(f"[校正 C6] {func_name} → query_related_items (連帶意圖)")
-            new_args = {"keyword": kw}
-            if func_args.get("category") in VALID_CATEGORIES:
-                new_args["category"] = func_args["category"]
-            return "query_related_items", new_args, True
+            return "query_related_items", {"keyword": kw}, True
         else:
-            # LLM 已正確輸出 query_related_items，但可能漏 keyword → 補上並 hard-return
-            if not func_args.get("keyword") and kw:
+            # LLM 已正確輸出 query_related_items，但 keyword 可能漏/髒、category
+            # 可能幻覺（「智慧手環的連帶商品」曾被塞 apparel 濾成找不到，conv100-r13）
+            if kw and (not func_args.get("keyword")
+                       or not _WC6.match_items(func_args.get("keyword", ""))):
                 func_args = {**func_args, "keyword": kw}
+            func_args = _drop_ungrounded_category(func_args, user_text)
             return func_name, func_args, True
 
     # ── C2: 模糊時間詞 → period rewrite ──
@@ -2192,7 +2233,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 return "query_inventory", {**{k:v for k,v in func_args.items() if k!='keyword'}, "category": cat_en}, True
             # hard-return 會跳過 C17a 的 warehouse 補全 → 單倉句在這裡補
             # （「耳機在南倉有幾個」曾少了南倉 filter，conv100-r12）
-            _c13_args = {**func_args, "keyword": kw}
+            _c13_args = _drop_ungrounded_category({**func_args, "keyword": kw}, user_text)
             _c13_whs = {z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text}
             if len(_c13_whs) >= 2:
                 # 「智慧手環中倉北倉哪邊存量多」「北中南倉的滑鼠各有幾個」是
@@ -2582,6 +2623,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 if _kw17d and _kw17d != _kw_wh:
                     func_args = {**func_args, "keyword": _kw17d}
                     log.info(f"[校正 C17a2d] kw 低分雜訊「{_kw_wh}」→「{_kw17d}」")
+
+    # 通用 category 接地檢查（inventory/related 直達路徑，conv100-r13）
+    if func_name in ("query_inventory", "query_related_items"):
+        func_args = _drop_ungrounded_category(func_args, user_text)
 
     # C17b：set_alert 參數清理 — 只保留 condition / target，清掉 keyword 等非法參數
     if func_name == "set_alert":
