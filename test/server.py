@@ -858,8 +858,40 @@ _S2T = str.maketrans({
 # 功能描述 → 商品名（RPI5 實測：「那個煮咖啡的庫存多少」fuzzy 配到咖啡豆）。
 # 「手沖咖啡壺組」含「沖咖啡」→ lookbehind 排除「手沖」、且要求「的」收尾，
 # 避免誤改真商品名。之後有同型抱怨（描述功能不講品名）就往這張表加。
+# 原則：只收無歧義映射（「充電的」=行動電源/快充線兩可、「聽音樂的」=
+# 耳機/喇叭兩可 → 不收，留給 fuzzy/clarify）；替換字串取全名的子字串，
+# 保證下游 substring/fuzzy 一定配得到正確全名。
+_DA_TAIL = r"(?:用)?的(?:機器|那台|那個|東西)?"
 _DESCRIPTOR_ALIASES = (
-    (_re.compile(r"(?<!手)[煮泡沖]咖啡(?:用)?的(?:機器|那台|那個|東西)?"), "咖啡機"),
+    (_re.compile(r"(?<!手)[煮泡沖]咖啡" + _DA_TAIL), "咖啡機"),
+    (_re.compile(r"刷牙" + _DA_TAIL), "電動牙刷"),
+    (_re.compile(r"[燙熨]衣(?:服)?" + _DA_TAIL), "電熨斗"),
+    (_re.compile(r"(?:[打榨](?:果)?汁|打果昔)" + _DA_TAIL), "果汁機"),
+    (_re.compile(r"(?:拖地|除塵)" + _DA_TAIL), "拖把"),
+    (_re.compile(r"(?:炒菜|煎[東蛋]西?|煎煮)" + _DA_TAIL), "不沾鍋"),
+    (_re.compile(r"(?:[悶燜][湯粥]|保溫湯)" + _DA_TAIL), "悶燒罐"),
+    (_re.compile(r"(?:裝剩菜|保鮮)" + _DA_TAIL), "保鮮盒"),
+    (_re.compile(r"(?:野炊|露營煮飯?)" + _DA_TAIL), "野炊鍋具"),
+    (_re.compile(r"洗衣(?:服)?" + _DA_TAIL), "洗衣精"),
+    (_re.compile(r"洗澡" + _DA_TAIL), "沐浴乳"),
+    (_re.compile(r"(?:防蚊|驅蚊|防蚊蟲)" + _DA_TAIL), "防蚊液"),
+    (_re.compile(r"擦屁股" + _DA_TAIL), "衛生紙"),
+    (_re.compile(r"裝垃圾" + _DA_TAIL), "垃圾袋"),
+    (_re.compile(r"(?:洗碗|做家事)戴?" + _DA_TAIL), "清潔手套"),
+    (_re.compile(r"(?:遮太陽|遮陽|防曬)" + _DA_TAIL), "遮陽帽"),
+    (_re.compile(r"(?:跑步|慢跑)[穿用]" + _DA_TAIL), "慢跑鞋"),
+    (_re.compile(r"[做練]瑜[珈伽]" + _DA_TAIL), "瑜珈墊"),
+    (_re.compile(r"(?:裝水|喝水)" + _DA_TAIL), "水壺"),
+    (_re.compile(r"(?:舉重|重訓|練肌肉|練二頭肌?)" + _DA_TAIL), "啞鈴"),
+    (_re.compile(r"擦汗" + _DA_TAIL), "運動毛巾"),
+    (_re.compile(r"露營[睡搭]" + _DA_TAIL), "帳篷"),
+    (_re.compile(r"露營坐" + _DA_TAIL), "露營椅"),
+    (_re.compile(r"照明" + _DA_TAIL), "露營燈"),
+    (_re.compile(r"打字" + _DA_TAIL), "鍵盤"),
+    (_re.compile(r"(?:計步|量心跳|測心率|戴手[上腕]量)" + _DA_TAIL), "智慧手環"),
+    (_re.compile(r"裝筆電" + _DA_TAIL), "筆電包"),
+    (_re.compile(r"保護手機" + _DA_TAIL), "防摔殼"),
+    (_re.compile(r"(?:吹風|吹涼|消暑)" + _DA_TAIL), "風扇"),
 )
 
 
@@ -1291,6 +1323,7 @@ _ALL_KEYWORD_NOISE = (
     "多少", "幾個", "幾件", "還有", "庫存量", "庫存查詢", "庫存", "數量", "剩餘",
     # 量詞尾巴（「咖啡機還有幾台」剝掉「還有」後殘留「幾台」害 fuzzy 歪掉）
     "幾台", "幾支", "幾瓶", "幾包", "幾盒", "幾罐", "幾組", "幾雙", "幾條", "幾箱",
+    "幾張", "幾頂", "幾對", "幾套", "幾把", "幾袋", "幾捲", "幾杯", "幾顆", "幾粒",
     # 動作/查詢詞
     "查一下", "看一下", "幫我查", "告訴我", "查詢", "查", "看", "詢",
     # 填充/語氣詞
@@ -4250,27 +4283,34 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": result})
                 continue
 
-            # ── 複合句攔截：「賣最好的還剩多少」= 熱銷 Top1 + 它的庫存 ──
-            # C4 會把「賣最好」強轉 list_hot_items 回排行榜，但這句訪客要的是
-            # 那個商品的庫存數字（RPI5 實測 2026-07-06），進 LLM 前先攔。
-            _bs_words = ("賣最好", "賣得最好", "最好賣", "賣最快", "賣得最快",
-                         "最熱銷", "最暢銷", "熱銷第一", "銷量第一", "賣第一")
+            # ── 複合句攔截：「賣最好/賣最差的還剩多少」= 排行 Top1 + 它的庫存 ──
+            # C4 會把「賣最好/滯銷」強轉 list_hot_items 回排行榜，但這句訪客
+            # 要的是那個商品的庫存數字（RPI5 實測 2026-07-06），進 LLM 前先攔。
+            _bs_hot_words = ("賣最好", "賣得最好", "最好賣", "賣最快", "賣得最快",
+                             "最熱銷", "最暢銷", "熱銷第一", "銷量第一", "賣第一")
+            _bs_slow_words = ("賣最差", "賣得最差", "賣最爛", "賣最慢", "最難賣",
+                              "最不好賣", "最滯銷", "滯銷", "賣不動", "賣不掉")
             _bs_stock_words = ("剩多少", "還剩", "剩幾", "庫存", "還有多少", "還有幾", "存量")
-            if (any(w in user_text for w in _bs_words)
-                    and any(w in user_text for w in _bs_stock_words)):
+            _bs_rank_type = ("slow" if any(w in user_text for w in _bs_slow_words)
+                             else "hot" if any(w in user_text for w in _bs_hot_words)
+                             else None)
+            if _bs_rank_type and any(w in user_text for w in _bs_stock_words):
                 _bs_period = "this_month" if "月" in user_text else "this_week"
                 _bs_hot = finance.execute("list_hot_items",
-                                          {"rank_type": "hot", "period": _bs_period})
+                                          {"rank_type": _bs_rank_type, "period": _bs_period})
                 _bs_rank = (_bs_hot.get("data") or {}).get("rankings") or []
                 _bs_done = False
                 if _bs_rank:
                     _bs_name = _bs_rank[0]["name"]
-                    log.info(f"[dispatch-ws] 複合句攔截: {user_text!r} → 熱銷Top1「{_bs_name}」庫存")
+                    _bs_rlabel = "賣最好" if _bs_rank_type == "hot" else "賣最差"
+                    log.info(f"[dispatch-ws] 複合句攔截: {user_text!r} → "
+                             f"{_bs_rlabel}Top1「{_bs_name}」庫存")
                     result = finance.execute("query_inventory", {"keyword": _bs_name})
                     if result.get("ok") and result.get("summary"):
                         _bs_plabel = "本月" if _bs_period == "this_month" else "本週"
-                        result["summary"] = (f"{_bs_plabel}賣最好的是「{_bs_name}」"
-                                             f"（出 {_bs_rank[0]['out_qty']:,} 件）。"
+                        _bs_qty_label = ("出" if _bs_rank_type == "hot" else "只出")
+                        result["summary"] = (f"{_bs_plabel}{_bs_rlabel}的是「{_bs_name}」"
+                                             f"（{_bs_qty_label} {_bs_rank[0]['out_qty']:,} 件）。"
                                              + result["summary"])
                         for ch in result["summary"]:
                             await send({"type": "token", "text": ch})
