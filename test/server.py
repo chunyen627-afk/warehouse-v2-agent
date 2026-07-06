@@ -4067,7 +4067,11 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",
                                     "reason": f"blacklist:{_bl_hit_ws}"})
-                await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                for ch in GATEKEEPER_REJECT_MSG:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.008)
+                await send({"type": "done", "result": {"ok": False, "view": "rejected",
+                                                        "summary": GATEKEEPER_REJECT_MSG}})
                 continue
 
             # ── 刪除/下架（優先於 clarify）──
@@ -4078,7 +4082,11 @@ async def ws_handler(ws: WebSocket):
                 if any(w in user_text for w in ("訂單", "資料", "紀錄", "記錄", "帳號",
                                                  "別人", "全部", "所有", "資料庫", "系統")):
                     log.info(f"[gate] 刪除句含敏感對象 → rejected: {user_text!r}")
-                    await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                    for ch in GATEKEEPER_REJECT_MSG:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {"ok": False, "view": "rejected",
+                                                        "summary": GATEKEEPER_REJECT_MSG}})
                     continue
                 import tools_v2 as _tv2_del_ws
                 kw = _extract_sku_keyword(user_text)
@@ -4164,7 +4172,8 @@ async def ws_handler(ws: WebSocket):
                 for ch in GATEKEEPER_REJECT_MSG:
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.008)
-                await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                await send({"type": "done", "result": {"ok": False, "view": "rejected",
+                                                        "summary": GATEKEEPER_REJECT_MSG}})
                 continue
 
             # ── item_create 流程中 → 攔截處理，不進 LLM ──
@@ -4778,7 +4787,11 @@ async def ws_handler(ws: WebSocket):
                         log.info(f"[gate] {func_name} 缺意圖詞 → rejected: {user_text!r}")
                         await push_display({"type": "trace", "stage": "rejected",
                                             "reason": f"no_intent:{func_name}"})
-                        await send({"type": "done", "result": {"ok": False, "view": "rejected"}})
+                        for ch in GATEKEEPER_REJECT_MSG:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(0.008)
+                        await send({"type": "done", "result": {"ok": False, "view": "rejected",
+                                                        "summary": GATEKEEPER_REJECT_MSG}})
                         continue
 
                 # ── 執行（先通知前端 tool call）──
