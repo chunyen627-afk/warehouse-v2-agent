@@ -863,36 +863,69 @@ _S2T = str.maketrans({
 # 保證下游 substring/fuzzy 一定配得到正確全名。
 _DA_TAIL = r"(?:用)?的(?:機器|那台|那個|東西)?"
 _DESCRIPTOR_ALIASES = (
-    (_re.compile(r"(?<!手)[煮泡沖]咖啡" + _DA_TAIL), "咖啡機"),
-    (_re.compile(r"刷牙" + _DA_TAIL), "電動牙刷"),
-    (_re.compile(r"[燙熨]衣(?:服)?" + _DA_TAIL), "電熨斗"),
-    (_re.compile(r"(?:[打榨](?:果)?汁|打果昔)" + _DA_TAIL), "果汁機"),
-    (_re.compile(r"(?:拖地|除塵)" + _DA_TAIL), "拖把"),
+    # ── 家電廚具 ──
+    (_re.compile(r"(?<!手)(?:[煮泡沖磨]咖啡)" + _DA_TAIL), "咖啡機"),
+    (_re.compile(r"(?:刷牙|潔牙)" + _DA_TAIL), "電動牙刷"),
+    (_re.compile(r"(?:[燙熨]衣(?:服)?|除皺)" + _DA_TAIL), "電熨斗"),
+    (_re.compile(r"(?:[打榨](?:果)?汁|打果昔|打冰沙)" + _DA_TAIL), "果汁機"),
+    (_re.compile(r"(?:拖地|除塵|擦地)" + _DA_TAIL), "拖把"),
     (_re.compile(r"(?:炒菜|煎[東蛋]西?|煎煮)" + _DA_TAIL), "不沾鍋"),
-    (_re.compile(r"(?:[悶燜][湯粥]|保溫湯)" + _DA_TAIL), "悶燒罐"),
-    (_re.compile(r"(?:裝剩菜|保鮮)" + _DA_TAIL), "保鮮盒"),
+    (_re.compile(r"(?:[悶燜][湯粥]|保溫湯|[裝帶]湯)" + _DA_TAIL), "悶燒罐"),
+    (_re.compile(r"(?:裝剩菜|保鮮|裝便當)" + _DA_TAIL), "保鮮盒"),
     (_re.compile(r"(?:野炊|露營煮飯?)" + _DA_TAIL), "野炊鍋具"),
+    # ── 電子產品 ──
+    (_re.compile(r"[塞掛戴]耳朵" + _DA_TAIL), "無線藍牙耳機"),
+    (_re.compile(r"(?:出門|隨身|行動)充電" + _DA_TAIL), "行動電源"),
+    (_re.compile(r"(?:充電|傳輸)(?:用)?的線"), "快充線"),
+    (_re.compile(r"(?:放音樂|外放)" + _DA_TAIL), "藍牙喇叭"),
+    (_re.compile(r"(?:計步|量心跳|測心率|戴手[上腕]量?)" + _DA_TAIL), "智慧手環"),
+    (_re.compile(r"包手機" + _DA_TAIL), "防摔殼"),
+    (_re.compile(r"保護手機" + _DA_TAIL), "防摔殼"),
+    (_re.compile(r"裝(?:筆電|電腦)" + _DA_TAIL), "筆電包"),
+    (_re.compile(r"打字" + _DA_TAIL), "鍵盤"),
+    (_re.compile(r"(?:吹風|吹涼|消暑)" + _DA_TAIL), "風扇"),
+    # ── 食品飲料 ──
+    (_re.compile(r"有氣的水"), "氣泡水"),
+    (_re.compile(r"(?:會醉的|有酒精的)"), "精釀啤酒"),
+    (_re.compile(r"(?:健身喝|練完喝)" + _DA_TAIL), "乳清"),
+    (_re.compile(r"(?:運動喝|流汗喝)" + _DA_TAIL), "運動飲"),
+    (_re.compile(r"巧克力(?:粉|飲|牛奶)?"), "熱可可粉"),
+    (_re.compile(r"掛耳(?:咖啡|包)"), "濾掛咖啡"),
+    (_re.compile(r"(?:蘇打)?餅乾"), "蘇打餅"),
+    # ── 日用品 ──
     (_re.compile(r"洗衣(?:服)?" + _DA_TAIL), "洗衣精"),
-    (_re.compile(r"洗澡" + _DA_TAIL), "沐浴乳"),
+    (_re.compile(r"(?:洗澡|洗身體)" + _DA_TAIL), "沐浴乳"),
     (_re.compile(r"(?:防蚊|驅蚊|防蚊蟲)" + _DA_TAIL), "防蚊液"),
+    (_re.compile(r"(?:插電的?蚊香|電蚊香)(?:液)?"), "蚊香液"),
     (_re.compile(r"擦屁股" + _DA_TAIL), "衛生紙"),
+    (_re.compile(r"包屁股" + _DA_TAIL), "紙尿布"),
     (_re.compile(r"裝垃圾" + _DA_TAIL), "垃圾袋"),
-    (_re.compile(r"(?:洗碗|做家事)戴?" + _DA_TAIL), "清潔手套"),
+    # 「清潔手套」的「清潔」會被 RPI5 LLM 當類別詞跑去 clarify → 用全名
+    (_re.compile(r"(?:洗碗|做家事)戴?" + _DA_TAIL), "橡膠清潔手套"),
+    # ── 服飾 ──
     (_re.compile(r"(?:遮太陽|遮陽|防曬)" + _DA_TAIL), "遮陽帽"),
+    (_re.compile(r"冬天戴" + _DA_TAIL), "毛帽"),
+    (_re.compile(r"冬天穿" + _DA_TAIL), "羽絨外套"),
     (_re.compile(r"(?:跑步|慢跑)[穿用]" + _DA_TAIL), "慢跑鞋"),
-    (_re.compile(r"[做練]瑜[珈伽]" + _DA_TAIL), "瑜珈墊"),
+    # ── 運動用品 ──
+    (_re.compile(r"(?:[做練]瑜[珈伽]|拉筋)" + _DA_TAIL), "瑜珈墊"),
     (_re.compile(r"(?:裝水|喝水)" + _DA_TAIL), "水壺"),
     (_re.compile(r"(?:舉重|重訓|練肌肉|練二頭肌?)" + _DA_TAIL), "啞鈴"),
+    (_re.compile(r"拉力環"), "健身環"),
     (_re.compile(r"擦汗" + _DA_TAIL), "運動毛巾"),
     (_re.compile(r"露營[睡搭]" + _DA_TAIL), "帳篷"),
     (_re.compile(r"露營坐" + _DA_TAIL), "露營椅"),
     (_re.compile(r"照明" + _DA_TAIL), "露營燈"),
-    (_re.compile(r"打字" + _DA_TAIL), "鍵盤"),
-    (_re.compile(r"(?:計步|量心跳|測心率|戴手[上腕]量)" + _DA_TAIL), "智慧手環"),
-    (_re.compile(r"裝筆電" + _DA_TAIL), "筆電包"),
-    (_re.compile(r"保護手機" + _DA_TAIL), "防摔殼"),
-    (_re.compile(r"(?:吹風|吹涼|消暑)" + _DA_TAIL), "風扇"),
 )
+
+
+def _descriptor_hit(user_text: str) -> str | None:
+    """描述句偵測（rewrite 之前呼叫——rewrite 會把描述換掉）。命中回傳商品關鍵字。"""
+    t = user_text.strip().translate(_S2T)
+    for _dh_pat, _dh_name in _DESCRIPTOR_ALIASES:
+        if _dh_pat.search(t):
+            return _dh_name
+    return None
 
 
 def _rewrite_query(user_text: str) -> str:
@@ -4094,6 +4127,7 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
                 continue
 
+            _desc_kw_ws = _descriptor_hit(user_text)   # rewrite 前偵測（rewrite 會換掉描述）
             user_text = _rewrite_query(user_text)
             if LLM is None:
                 msg = HEALTH.get("message") or "系統還在啟動中"
@@ -4282,6 +4316,36 @@ async def ws_handler(ws: WebSocket):
                     await asyncio.sleep(0.012)
                 await send({"type": "done", "result": result})
                 continue
+
+            # ── 功能描述直達：描述句 + 查詢語氣 → 不進 LLM 直接查庫存 ──
+            # 描述改寫後交給 LLM 在 RPI5 有平台分歧（「橡膠清潔手套還有嗎」
+            # 被抽成 category=清潔 跑去 clarify）。這是展示主打功能，不能賭
+            # LLM 抽取——確定性直達。寫入/排程/報表/銷售語境不攔，走既有流程。
+            _DESC_Q_CUES = ("還有", "還剩", "剩", "庫存", "多少", "幾",
+                            "有沒有", "有嗎", "夠", "存量", "現貨")
+            _DESC_BLOCK = ("進貨", "出貨", "進了", "出了", "調", "補", "退",
+                           "改", "設", "刪", "新增", "賣", "銷", "熱", "滯",
+                           "比較", "警示", "排程", "報表", "採購", "對帳",
+                           "到期", "過期", "缺貨", "買", "多少錢", "價格")
+            if (_desc_kw_ws
+                    and any(w in user_text for w in _DESC_Q_CUES)
+                    and not any(w in user_text for w in _DESC_BLOCK)):
+                _desc_wh = ("north" if any(w in user_text for w in ("北倉", "北區")) else
+                            "central" if any(w in user_text for w in ("中倉", "中區")) else
+                            "south" if any(w in user_text for w in ("南倉", "南區")) else "all")
+                log.info(f"[dispatch-ws] 功能描述直達: {user_text!r} → "
+                         f"query_inventory({_desc_kw_ws!r}, wh={_desc_wh})")
+                result = finance.execute("query_inventory",
+                                         {"keyword": _desc_kw_ws, "warehouse": _desc_wh})
+                if result.get("ok") and result.get("summary"):
+                    await push_display({"type": "trace", "stage": "llm_output",
+                                         "raw": f"[descriptor] query_inventory({_desc_kw_ws!r})"})
+                    for ch in result["summary"]:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": result})
+                    continue
+                # 查詢失敗 → 不攔，交給 LLM 流程
 
             # ── 複合句攔截：「賣最好/賣最差的還剩多少」= 排行 Top1 + 它的庫存 ──
             # C4 會把「賣最好/滯銷」強轉 list_hot_items 回排行榜，但這句訪客
