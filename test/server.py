@@ -890,32 +890,41 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(_DA_HEAD + r"(?:[悶燜](?:熱)?[湯粥]|保溫湯|[裝帶煮](?:熱)?湯)" + _DA_TAIL), "悶燒罐"),
     (_re.compile(_DA_HEAD + r"(?:裝剩菜|保鮮|裝便當)" + _DA_TAIL), "保鮮盒"),
     (_re.compile(_DA_HEAD + r"(?:野炊|露營煮飯?)" + _DA_TAIL), "野炊鍋具"),
+    (_re.compile(_DA_HEAD + r"(?:手沖咖啡|手沖壺|沖泡咖啡|濾泡咖啡)" + _DA_TAIL), "手沖咖啡壺組"),
     # ── 電子產品 ──
     (_re.compile(_DA_HEAD + r"[塞掛戴]耳朵" + _DA_TAIL), "無線藍牙耳機"),
-    (_re.compile(_DA_HEAD + r"(?:出門|隨身|行動)充電" + _DA_TAIL), "行動電源"),
+    (_re.compile(_DA_HEAD + r"(?:聽音樂戴|運動戴|通勤戴|無線)耳機" + _DA_TAIL), "無線藍牙耳機"),
+    (_re.compile(_DA_HEAD + r"(?:出門|隨身|行動|外出|旅行)充電" + _DA_TAIL), "行動電源"),
     (_re.compile(_DA_HEAD + r"(?:充電|傳輸)(?:用)?的線"), "快充線"),
-    (_re.compile(_DA_HEAD + r"(?:放音樂|外放)" + _DA_TAIL), "藍牙喇叭"),
-    (_re.compile(_DA_HEAD + r"(?:計步|量心跳|測心率|戴手[上腕]量?)" + _DA_TAIL), "智慧手環"),
-    (_re.compile(_DA_HEAD + r"包手機" + _DA_TAIL), "防摔殼"),
-    (_re.compile(_DA_HEAD + r"保護手機" + _DA_TAIL), "防摔殼"),
-    (_re.compile(_DA_HEAD + r"裝(?:筆電|電腦)" + _DA_TAIL), "筆電包"),
-    (_re.compile(_DA_HEAD + r"打字" + _DA_TAIL), "鍵盤"),
-    (_re.compile(_DA_HEAD + r"(?:吹風|吹涼|消暑)" + _DA_TAIL), "風扇"),
+    (_re.compile(_DA_HEAD + r"(?:放音樂|外放|喇叭)" + _DA_TAIL), "藍牙喇叭"),
+    (_re.compile(_DA_HEAD + r"(?:計步|量心跳|測心率|戴手[上腕]量?|運動手錶|智慧手錶)" + _DA_TAIL), "智慧手環"),
+    (_re.compile(_DA_HEAD + r"(?:包手機|保護手機|手機殼|手機套)" + _DA_TAIL), "防摔殼"),
+    (_re.compile(_DA_HEAD + r"裝(?:筆電|電腦|平板)" + _DA_TAIL), "筆電包"),
+    (_re.compile(_DA_HEAD + r"(?:打字|打電腦|敲鍵盤)" + _DA_TAIL), "鍵盤"),
+    (_re.compile(_DA_HEAD + r"(?:滑鼠|點滑鼠|移游標)" + _DA_TAIL), "無線滑鼠"),
+    (_re.compile(_DA_HEAD + r"(?:吹風|吹涼|消暑|散熱|電風扇)" + _DA_TAIL), "風扇"),
     # ── 食品飲料 ──
-    (_re.compile(r"有氣的水"), "氣泡水"),
-    (_re.compile(r"(?:會醉的|有酒精的)"), "精釀啤酒"),
-    (_re.compile(_DA_HEAD + r"(?:健身喝|練完喝)" + _DA_TAIL), "乳清"),
-    (_re.compile(_DA_HEAD + r"(?:運動喝|流汗喝)" + _DA_TAIL), "運動飲"),
+    (_re.compile(r"(?:有氣的水|氣泡的水|帶氣的水|碳酸水|汽水)"), "氣泡水"),
+    (_re.compile(r"(?:會醉的|有酒精的|喝的酒|啤酒)"), "精釀啤酒"),
+    (_re.compile(_DA_HEAD + r"(?:健身喝|練完喝|補蛋白|高蛋白)" + _DA_TAIL), "乳清"),
+    (_re.compile(_DA_HEAD + r"(?:運動喝|流汗喝|補電解質|運動飲料)" + _DA_TAIL), "運動飲"),
     (_re.compile(r"巧克力(?:粉|飲|牛奶)?"), "熱可可粉"),
     (_re.compile(r"掛耳(?:咖啡|包)"), "濾掛咖啡"),
     (_re.compile(r"(?:蘇打)?餅乾"), "蘇打餅"),
+    # 咖啡豆：與咖啡機分流——「豆」「磨豆」明確指豆子，不撞煮咖啡的機器
+    (_re.compile(r"(?:咖啡豆|磨豆|黑咖啡豆|烘豆)"), "經典黑咖啡豆"),
+    (_re.compile(r"(?:堅果|核果|綜合果仁|下酒果)"), "綜合堅果罐"),
+    (_re.compile(r"(?:檸檬茶|蜂蜜茶|蜂蜜檸檬)"), "蜂蜜檸檬茶"),
+    (_re.compile(r"(?:咖啡濾紙|濾紙|濾杯紙)"), "咖啡濾紙"),
     # ── 日用品 ──
     (_re.compile(_DA_HEAD + r"洗衣(?:服)?" + _DA_TAIL), "洗衣精"),
     (_re.compile(_DA_HEAD + r"(?:洗澡|洗身體)" + _DA_TAIL), "沐浴乳"),
     (_re.compile(_DA_HEAD + r"(?:防蚊|驅蚊|防蚊蟲)" + _DA_TAIL), "防蚊液"),
     (_re.compile(r"(?:插電的?蚊香|電蚊香)(?:液)?"), "蚊香液"),
     (_re.compile(_DA_HEAD + r"擦屁股" + _DA_TAIL), "衛生紙"),
-    (_re.compile(_DA_HEAD + r"(?:包屁股|包寶寶|寶寶包|給寶寶包)" + _DA_TAIL), "紙尿布"),
+    (_re.compile(_DA_HEAD + r"(?:包屁股|包寶寶|寶寶包|給寶寶包|尿布)" + _DA_TAIL), "紙尿布"),
+    # 濕紙巾：與紙尿布分流（都是嬰兒用品，但「濕紙巾/擦手擦嘴」明確）
+    (_re.compile(_DA_HEAD + r"(?:濕紙巾|擦手擦嘴|擦寶寶|擦屁屁)" + _DA_TAIL), "嬰兒濕紙巾"),
     (_re.compile(_DA_HEAD + r"裝垃圾" + _DA_TAIL), "垃圾袋"),
     # 「清潔手套」的「清潔」會被 RPI5 LLM 當類別詞跑去 clarify → 用全名
     (_re.compile(_DA_HEAD + r"(?:洗碗|做家事)戴?" + _DA_TAIL), "橡膠清潔手套"),
@@ -926,6 +935,13 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(r"(?:冬天|保暖).{0,4}外套|外套"), "羽絨外套"),
     (_re.compile(_DA_HEAD + r"冬天穿" + _DA_TAIL), "羽絨外套"),
     (_re.compile(_DA_HEAD + r"(?:跑步|慢跑)[穿用]" + _DA_TAIL), "慢跑鞋"),
+    # 服飾補齊（明確講法，各品項不衝突）
+    (_re.compile(r"(?:素T|棉T|短袖|T恤)"), "純棉素T"),
+    (_re.compile(r"(?:牛仔褲|長褲|牛仔長褲)"), "牛仔長褲"),
+    (_re.compile(r"(?:排汗衣|排汗衫|機能衣)"), "機能排汗衣"),
+    (_re.compile(r"(?:運動內衣|運動胸衣|bra)"), "彈性運動內衣"),
+    (_re.compile(r"(?:壓縮臂套|臂套|袖套)"), "運動壓縮臂套"),
+    (_re.compile(r"(?:嬰兒連身衣|寶寶衣|包屁衣|連身衣)"), "嬰兒連身衣"),
     # ── 運動用品 ──
     (_re.compile(_DA_HEAD + r"(?:[做練]瑜[珈伽]|拉筋)" + _DA_TAIL), "瑜珈墊"),
     (_re.compile(_DA_HEAD + r"(?:裝水|喝水)" + _DA_TAIL), "水壺"),
@@ -934,7 +950,10 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(_DA_HEAD + r"擦汗" + _DA_TAIL), "運動毛巾"),
     (_re.compile(_DA_HEAD + r"露營[睡搭]" + _DA_TAIL), "帳篷"),
     (_re.compile(_DA_HEAD + r"露營坐" + _DA_TAIL), "露營椅"),
+    # 露營馬克杯：與悶燒罐/水壺分流（「馬克杯/露營杯/喝咖啡的杯」明確）
+    (_re.compile(_DA_HEAD + r"(?:馬克杯|露營杯|鋁杯|喝咖啡的?杯)" + _DA_TAIL), "露營馬克杯"),
     (_re.compile(_DA_HEAD + r"照明" + _DA_TAIL), "露營燈"),
+    (_re.compile(_DA_HEAD + r"(?:保暖襪|羊毛襪|厚襪)" + _DA_TAIL), "羊毛保暖襪"),
 )
 
 
@@ -4356,9 +4375,15 @@ async def ws_handler(ws: WebSocket):
                            "安全庫存", "安全水位", "水位", "前置", "補貨天數",
                            "下修", "上修", "調高", "調低", "調成", "設成", "訂在",
                            "警戒", "提高", "降低", "拉高")
+            # RCA/movement 意圖詞複用系統既有集合（比手列穩健、自動跟著演進）：
+            # 「藍牙喇叭庫存少得莫名其妙」是 RCA、「濕紙巾這個月動了幾次」是
+            # movement——描述命中+查詢語氣會誤劫，這裡尊重更明確的意圖（回歸抓到）。
+            _desc_intent_block = (any(w in user_text for w in _RCA_INTENT_WORDS)
+                                  or any(w in user_text for w in _MOVEMENT_PROTECT_WORDS))
             if (_desc_kw_ws
                     and any(w in user_text for w in _DESC_Q_CUES)
-                    and not any(w in user_text for w in _DESC_BLOCK)):
+                    and not any(w in user_text for w in _DESC_BLOCK)
+                    and not _desc_intent_block):
                 _desc_wh = ("north" if any(w in user_text for w in ("北倉", "北區")) else
                             "central" if any(w in user_text for w in ("中倉", "中區")) else
                             "south" if any(w in user_text for w in ("南倉", "南區")) else "all")
