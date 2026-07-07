@@ -188,6 +188,12 @@ GATEKEEPER_KEYWORDS = {
 }
 
 
+# 守門員的描述放行需同時帶查詢語氣（與 WS 直達的 _DESC_Q_CUES 一致），
+# 避免「放音樂給我聽」這種描述命中但無查詢意圖的閒聊句被誤放。
+_DESC_GATE_CUES = ("還有", "還剩", "剩", "庫存", "多少", "幾",
+                   "有沒有", "有嗎", "夠", "存量", "現貨")
+
+
 def is_meaningful_input(text: str) -> bool:
     """守門員：判斷輸入是否值得送 LLM。"""
     s = text.strip().lower()
@@ -195,6 +201,13 @@ def is_meaningful_input(text: str) -> bool:
         return False
     if re.fullmatch(r"\d+", s):
         return False
+    # 功能描述句（「裝便當的還有嗎」「放音樂的還剩幾台」）不含傳統倉管詞、
+    # 甚至含黑名單詞（便當/音樂 是防閒聊用的），但描述 regex 命中 + 帶查詢
+    # 語氣 = 明確查商品意圖，放行讓後續功能描述直達接手。必須在黑名單之前
+    # 判——否則「便當」「音樂」會先被黑名單擋掉。加查詢語氣條件避免誤放
+    # 閒聊（「放音樂給我聽」描述命中但無查詢語氣 → 不放行、續走黑名單擋下）。
+    if _descriptor_hit(text) and any(c in s for c in _DESC_GATE_CUES):
+        return True
     # 黑名單：明顯非倉管領域 → 直接擋
     for kw in _GATEKEEPER_BLACKLIST:
         if kw in s:
@@ -861,61 +874,67 @@ _S2T = str.maketrans({
 # 原則：只收無歧義映射（「充電的」=行動電源/快充線兩可、「聽音樂的」=
 # 耳機/喇叭兩可 → 不收，留給 fuzzy/clarify）；替換字串取全名的子字串，
 # 保證下游 substring/fuzzy 一定配得到正確全名。
-_DA_TAIL = r"(?:用)?的(?:機器|那台|那個|東西)?"
+# _DA_TAIL 放寬（RPI5 實測「煮個咖啡的機器」「用來拖地板的」漏出直達）：
+# 動詞和「的」之間允許 0-3 個受詞字（地→地板、湯→熱湯、衣→衣物），
+# 動詞前允許「用來/拿來/幫忙」等前綴（_DA_HEAD）。「的」可省（「煮咖啡機」）。
+_DA_HEAD = r"(?:用來|拿來|幫忙)?"
+_DA_TAIL = r"[一-鿿]{0,3}(?:的)?(?:機器|那台|那個|東西|用品|器具)?"
 _DESCRIPTOR_ALIASES = (
     # ── 家電廚具 ──
-    (_re.compile(r"(?<!手)(?:[煮泡沖磨]咖啡)" + _DA_TAIL), "咖啡機"),
-    (_re.compile(r"(?:刷牙|潔牙)" + _DA_TAIL), "電動牙刷"),
-    (_re.compile(r"(?:[燙熨]衣(?:服)?|除皺)" + _DA_TAIL), "電熨斗"),
-    (_re.compile(r"(?:[打榨](?:果)?汁|打果昔|打冰沙)" + _DA_TAIL), "果汁機"),
-    (_re.compile(r"(?:拖地|除塵|擦地)" + _DA_TAIL), "拖把"),
-    (_re.compile(r"(?:炒菜|煎[東蛋]西?|煎煮)" + _DA_TAIL), "不沾鍋"),
-    (_re.compile(r"(?:[悶燜][湯粥]|保溫湯|[裝帶]湯)" + _DA_TAIL), "悶燒罐"),
-    (_re.compile(r"(?:裝剩菜|保鮮|裝便當)" + _DA_TAIL), "保鮮盒"),
-    (_re.compile(r"(?:野炊|露營煮飯?)" + _DA_TAIL), "野炊鍋具"),
+    (_re.compile(_DA_HEAD + r"(?<!手)(?:[煮泡沖磨](?:個|杯|壺)?咖啡)" + _DA_TAIL), "咖啡機"),
+    (_re.compile(_DA_HEAD + r"(?:刷牙|潔牙)" + _DA_TAIL), "電動牙刷"),
+    (_re.compile(_DA_HEAD + r"(?:[燙熨]衣|除皺)" + _DA_TAIL), "電熨斗"),
+    (_re.compile(_DA_HEAD + r"(?:[打榨](?:果|蔬果)?汁|打果昔|打冰沙)" + _DA_TAIL), "果汁機"),
+    (_re.compile(_DA_HEAD + r"(?:拖地|除塵|擦地)" + _DA_TAIL), "拖把"),
+    (_re.compile(_DA_HEAD + r"(?:炒菜|煎[東蛋]西?|煎煮)" + _DA_TAIL), "不沾鍋"),
+    (_re.compile(_DA_HEAD + r"(?:[悶燜](?:熱)?[湯粥]|保溫湯|[裝帶煮](?:熱)?湯)" + _DA_TAIL), "悶燒罐"),
+    (_re.compile(_DA_HEAD + r"(?:裝剩菜|保鮮|裝便當)" + _DA_TAIL), "保鮮盒"),
+    (_re.compile(_DA_HEAD + r"(?:野炊|露營煮飯?)" + _DA_TAIL), "野炊鍋具"),
     # ── 電子產品 ──
-    (_re.compile(r"[塞掛戴]耳朵" + _DA_TAIL), "無線藍牙耳機"),
-    (_re.compile(r"(?:出門|隨身|行動)充電" + _DA_TAIL), "行動電源"),
-    (_re.compile(r"(?:充電|傳輸)(?:用)?的線"), "快充線"),
-    (_re.compile(r"(?:放音樂|外放)" + _DA_TAIL), "藍牙喇叭"),
-    (_re.compile(r"(?:計步|量心跳|測心率|戴手[上腕]量?)" + _DA_TAIL), "智慧手環"),
-    (_re.compile(r"包手機" + _DA_TAIL), "防摔殼"),
-    (_re.compile(r"保護手機" + _DA_TAIL), "防摔殼"),
-    (_re.compile(r"裝(?:筆電|電腦)" + _DA_TAIL), "筆電包"),
-    (_re.compile(r"打字" + _DA_TAIL), "鍵盤"),
-    (_re.compile(r"(?:吹風|吹涼|消暑)" + _DA_TAIL), "風扇"),
+    (_re.compile(_DA_HEAD + r"[塞掛戴]耳朵" + _DA_TAIL), "無線藍牙耳機"),
+    (_re.compile(_DA_HEAD + r"(?:出門|隨身|行動)充電" + _DA_TAIL), "行動電源"),
+    (_re.compile(_DA_HEAD + r"(?:充電|傳輸)(?:用)?的線"), "快充線"),
+    (_re.compile(_DA_HEAD + r"(?:放音樂|外放)" + _DA_TAIL), "藍牙喇叭"),
+    (_re.compile(_DA_HEAD + r"(?:計步|量心跳|測心率|戴手[上腕]量?)" + _DA_TAIL), "智慧手環"),
+    (_re.compile(_DA_HEAD + r"包手機" + _DA_TAIL), "防摔殼"),
+    (_re.compile(_DA_HEAD + r"保護手機" + _DA_TAIL), "防摔殼"),
+    (_re.compile(_DA_HEAD + r"裝(?:筆電|電腦)" + _DA_TAIL), "筆電包"),
+    (_re.compile(_DA_HEAD + r"打字" + _DA_TAIL), "鍵盤"),
+    (_re.compile(_DA_HEAD + r"(?:吹風|吹涼|消暑)" + _DA_TAIL), "風扇"),
     # ── 食品飲料 ──
     (_re.compile(r"有氣的水"), "氣泡水"),
     (_re.compile(r"(?:會醉的|有酒精的)"), "精釀啤酒"),
-    (_re.compile(r"(?:健身喝|練完喝)" + _DA_TAIL), "乳清"),
-    (_re.compile(r"(?:運動喝|流汗喝)" + _DA_TAIL), "運動飲"),
+    (_re.compile(_DA_HEAD + r"(?:健身喝|練完喝)" + _DA_TAIL), "乳清"),
+    (_re.compile(_DA_HEAD + r"(?:運動喝|流汗喝)" + _DA_TAIL), "運動飲"),
     (_re.compile(r"巧克力(?:粉|飲|牛奶)?"), "熱可可粉"),
     (_re.compile(r"掛耳(?:咖啡|包)"), "濾掛咖啡"),
     (_re.compile(r"(?:蘇打)?餅乾"), "蘇打餅"),
     # ── 日用品 ──
-    (_re.compile(r"洗衣(?:服)?" + _DA_TAIL), "洗衣精"),
-    (_re.compile(r"(?:洗澡|洗身體)" + _DA_TAIL), "沐浴乳"),
-    (_re.compile(r"(?:防蚊|驅蚊|防蚊蟲)" + _DA_TAIL), "防蚊液"),
+    (_re.compile(_DA_HEAD + r"洗衣(?:服)?" + _DA_TAIL), "洗衣精"),
+    (_re.compile(_DA_HEAD + r"(?:洗澡|洗身體)" + _DA_TAIL), "沐浴乳"),
+    (_re.compile(_DA_HEAD + r"(?:防蚊|驅蚊|防蚊蟲)" + _DA_TAIL), "防蚊液"),
     (_re.compile(r"(?:插電的?蚊香|電蚊香)(?:液)?"), "蚊香液"),
-    (_re.compile(r"擦屁股" + _DA_TAIL), "衛生紙"),
-    (_re.compile(r"包屁股" + _DA_TAIL), "紙尿布"),
-    (_re.compile(r"裝垃圾" + _DA_TAIL), "垃圾袋"),
+    (_re.compile(_DA_HEAD + r"擦屁股" + _DA_TAIL), "衛生紙"),
+    (_re.compile(_DA_HEAD + r"(?:包屁股|包寶寶|寶寶包|給寶寶包)" + _DA_TAIL), "紙尿布"),
+    (_re.compile(_DA_HEAD + r"裝垃圾" + _DA_TAIL), "垃圾袋"),
     # 「清潔手套」的「清潔」會被 RPI5 LLM 當類別詞跑去 clarify → 用全名
-    (_re.compile(r"(?:洗碗|做家事)戴?" + _DA_TAIL), "橡膠清潔手套"),
+    (_re.compile(_DA_HEAD + r"(?:洗碗|做家事)戴?" + _DA_TAIL), "橡膠清潔手套"),
     # ── 服飾 ──
-    (_re.compile(r"(?:遮太陽|遮陽|防曬)" + _DA_TAIL), "遮陽帽"),
-    (_re.compile(r"冬天戴" + _DA_TAIL), "毛帽"),
-    (_re.compile(r"冬天穿" + _DA_TAIL), "羽絨外套"),
-    (_re.compile(r"(?:跑步|慢跑)[穿用]" + _DA_TAIL), "慢跑鞋"),
+    (_re.compile(_DA_HEAD + r"(?:遮太陽|遮陽|防曬)" + _DA_TAIL), "遮陽帽"),
+    (_re.compile(_DA_HEAD + r"冬天戴" + _DA_TAIL), "毛帽"),
+    # 「外套」明講時優先羽絨外套（防「冬天保暖穿的外套」被 fuzzy 配到毛帽）
+    (_re.compile(r"(?:冬天|保暖).{0,4}外套|外套"), "羽絨外套"),
+    (_re.compile(_DA_HEAD + r"冬天穿" + _DA_TAIL), "羽絨外套"),
+    (_re.compile(_DA_HEAD + r"(?:跑步|慢跑)[穿用]" + _DA_TAIL), "慢跑鞋"),
     # ── 運動用品 ──
-    (_re.compile(r"(?:[做練]瑜[珈伽]|拉筋)" + _DA_TAIL), "瑜珈墊"),
-    (_re.compile(r"(?:裝水|喝水)" + _DA_TAIL), "水壺"),
-    (_re.compile(r"(?:舉重|重訓|練肌肉|練二頭肌?)" + _DA_TAIL), "啞鈴"),
+    (_re.compile(_DA_HEAD + r"(?:[做練]瑜[珈伽]|拉筋)" + _DA_TAIL), "瑜珈墊"),
+    (_re.compile(_DA_HEAD + r"(?:裝水|喝水)" + _DA_TAIL), "水壺"),
+    (_re.compile(_DA_HEAD + r"(?:舉重|重訓|練肌肉|練二頭肌?)" + _DA_TAIL), "啞鈴"),
     (_re.compile(r"拉力環"), "健身環"),
-    (_re.compile(r"擦汗" + _DA_TAIL), "運動毛巾"),
-    (_re.compile(r"露營[睡搭]" + _DA_TAIL), "帳篷"),
-    (_re.compile(r"露營坐" + _DA_TAIL), "露營椅"),
-    (_re.compile(r"照明" + _DA_TAIL), "露營燈"),
+    (_re.compile(_DA_HEAD + r"擦汗" + _DA_TAIL), "運動毛巾"),
+    (_re.compile(_DA_HEAD + r"露營[睡搭]" + _DA_TAIL), "帳篷"),
+    (_re.compile(_DA_HEAD + r"露營坐" + _DA_TAIL), "露營椅"),
+    (_re.compile(_DA_HEAD + r"照明" + _DA_TAIL), "露營燈"),
 )
 
 
@@ -936,13 +955,10 @@ def _rewrite_query(user_text: str) -> str:
     if _rep_m:
         t = _rep_m.group(1)
         log.info(f"[Rewrite] 重複詞收斂 → 「{t}」")
-    # 功能描述改寫（表定義在函式上方）
-    for _da_pat, _da_name in _DESCRIPTOR_ALIASES:
-        _da_new = _da_pat.sub(_da_name, t)
-        if _da_new != t:
-            log.info(f"[Rewrite] 功能描述 →「{_da_name}」: 「{t}」→「{_da_new}」")
-            t = _da_new
-            break
+    # 功能描述句：不在此改寫（用 sub 會把「還有嗎」殘留成「嗎」、語氣詞被吞，
+    # 害 WS 直達的 _DESC_Q_CUES 守衛判斷失敗掉進 LLM → clarify）。描述判斷
+    # 全權交給 WS 端的 _descriptor_hit + 功能描述直達 fast-path（在 rewrite
+    # 之前跑、且不改動原句）。2026-07-07 放寬 _DA_TAIL 後暴露此雙軌衝突。
     # 排程句一律不 rewrite——「每天晚上七點自動出缺貨警示」曾被缺貨規則改寫成
     # 「哪些商品缺貨警示」，時間/頻率資訊全毀（conv100-r5，教訓同 585 行註解）。
     # Pre-C-Sched 會用原句攔截 set_schedule。
@@ -4146,7 +4162,13 @@ async def ws_handler(ws: WebSocket):
             # ── 黑名單閘門（最高優先，在刪除/商品清單等任何功能攔截之前）──
             # HTTP 端守門員本來就在功能攔截之前，WS 端順序相反導致「把庫存
             # 全部刪掉」等搗蛋句先被刪除攔截接走，黑名單沒機會擋（第17輪）。
-            _bl_hit_ws = next((b for b in _GATEKEEPER_BLACKLIST if b in user_text.lower()), None)
+            # 描述命中+查詢語氣的句子豁免黑名單（「裝便當的還有嗎」的「便當」、
+            # 「放音樂的還剩幾台」的「音樂」是防閒聊黑名單詞，但這裡語境明確
+            # 是查商品 → 讓功能描述直達接手，2026-07-07）。
+            _desc_exempt_ws = bool(_descriptor_hit(user_text)
+                                   and any(c in user_text.lower() for c in _DESC_GATE_CUES))
+            _bl_hit_ws = None if _desc_exempt_ws else next(
+                (b for b in _GATEKEEPER_BLACKLIST if b in user_text.lower()), None)
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",
@@ -4324,9 +4346,16 @@ async def ws_handler(ws: WebSocket):
             _DESC_Q_CUES = ("還有", "還剩", "剩", "庫存", "多少", "幾",
                             "有沒有", "有嗎", "夠", "存量", "現貨")
             _DESC_BLOCK = ("進貨", "出貨", "進了", "出了", "調", "補", "退",
-                           "改", "設", "刪", "新增", "賣", "銷", "熱", "滯",
+                           "改", "設", "刪", "新增", "賣", "銷",
+                           # 「熱」不可單字擋（「裝熱湯」誤傷）→ 用熱銷語境詞
+                           "熱銷", "熱賣", "最熱", "滯銷", "賣不動",
                            "比較", "警示", "排程", "報表", "採購", "對帳",
-                           "到期", "過期", "缺貨", "買", "多少錢", "價格")
+                           "到期", "過期", "缺貨", "買", "多少錢", "價格",
+                           # config/設定語境（「防蚊液安全庫存下修15」曾被劫走）——
+                           # 安全庫存/水位一出現就絕非查存量，是設定操作或設定查詢
+                           "安全庫存", "安全水位", "水位", "前置", "補貨天數",
+                           "下修", "上修", "調高", "調低", "調成", "設成", "訂在",
+                           "警戒", "提高", "降低", "拉高")
             if (_desc_kw_ws
                     and any(w in user_text for w in _DESC_Q_CUES)
                     and not any(w in user_text for w in _DESC_BLOCK)):
