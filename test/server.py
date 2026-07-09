@@ -4488,10 +4488,17 @@ async def ws_handler(ws: WebSocket):
             # 一律不放寬——比枚舉調貨動詞（調/送/撥/過去…單字危險）穩健（2026-07-09）。
             _desc_two_wh = len({z for z in ("北", "中", "南")
                                 if any(z + s in user_text for s in ("倉", "區"))}) >= 2
+            # 「進/出/退 + 數量 + 量詞」= 進出貨句（結構判準，複用 C13b 模式，比枚舉
+            # 單字動詞穩健）：「中倉進三箱衛生紙」的「進三箱」= 進+三+箱（2026-07-09）。
+            _desc_mv_qty = _re.search(
+                r"[進出退補][一-鿿]{0,4}(?:[0-9]+|[零一二兩三四五六七八九十百千]+)\s*"
+                r"(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞)",
+                user_text)
             _desc_q_ok = (any(w in user_text for w in _DESC_Q_CUES)
                           or (not any(w in user_text for w in _DESC_CHITCHAT)
                               and not any(w in user_text for w in _DESC_NONQUERY_INTENT)
-                              and not _desc_two_wh))
+                              and not _desc_two_wh
+                              and not _desc_mv_qty))
             if (_desc_kw_ws
                     and _desc_q_ok
                     and not any(w in user_text for w in _DESC_BLOCK)
