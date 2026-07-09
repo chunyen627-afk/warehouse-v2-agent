@@ -191,7 +191,9 @@ GATEKEEPER_KEYWORDS = {
 # 守門員的描述放行需同時帶查詢語氣（與 WS 直達的 _DESC_Q_CUES 一致），
 # 避免「放音樂給我聽」這種描述命中但無查詢意圖的閒聊句被誤放。
 _DESC_GATE_CUES = ("還有", "還剩", "剩", "庫存", "多少", "幾",
-                   "有沒有", "有嗎", "夠", "存量", "現貨")
+                   "有沒有", "有嗎", "夠", "存量", "現貨",
+                   # 與直達 _DESC_Q_CUES 同步（「有賣煮咖啡的嗎」，2026-07-09）
+                   "有賣", "賣不賣", "有沒有賣", "賣嗎", "有沒有這", "有這個")
 
 
 def is_meaningful_input(text: str) -> bool:
@@ -502,6 +504,34 @@ _EXPIRING_INTENT_WORDS = (
     # conv100-r6：「快要不能賣的」
     "不能賣",
     "expire", "expiring", "expired", "shelf life", "best before",
+)
+
+# 功能描述直達的「非查庫存意圖」守衛詞（2026-07-09）：進貨/出貨/調貨/連帶/
+# 銷況句常「描述命中+無查詢語氣」，錯字放寬會誤劫成查庫存。這些意圖詞出現時
+# 即使描述命中也不走直達，交回原本的 movement/transfer/related/銷況路徑。
+# 涵蓋 15 輪收斂累積的進出貨動詞（含 RPI5 回歸抓到的 新到/走了/掃走/訂了/抓/支援）。
+_DESC_NONQUERY_INTENT = (
+    # 進貨
+    "進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨", "來貨", "收了",
+    "送來", "送到", "卸了", "卸貨", "入了", "囤了", "囤貨", "補上", "補進",
+    "補齊", "收到", "收一批", "入倉", "上架", "新到", "收進", "剛進", "叫",
+    # 出貨
+    "出貨", "出庫", "賣掉", "賣了", "銷貨", "售出", "出了", "買走", "拿走",
+    "提走", "取走", "載走", "銷了", "賣出", "發貨", "發出", "送走", "訂走",
+    "帶走", "出清", "出給", "領走", "領出", "走了", "掃走", "訂了", "取貨",
+    "客退", "退回", "退貨", "退了",
+    # 調貨（複合詞：動詞+方向/量詞，比單字「調/送/撥」安全，涵蓋 _transfer_verbs）
+    "調撥", "調貨", "調到", "調去", "調過去", "調給", "調一", "調了",
+    "移到", "移去", "移過去", "撥到", "撥去", "撥一", "勻給", "勻",
+    "轉到", "轉去", "轉過去", "撤", "抓", "支援", "搬去", "搬到", "搬過去",
+    "送到", "送去", "運到", "運去", "分到", "分給", "分過去", "過去南",
+    "過去北", "過去中", "往南倉", "往北倉", "往中倉", "往南區", "往北區", "往中區",
+    "到南倉", "到北倉", "到中倉", "到南區", "到北區", "到中區", "去南倉", "去北倉", "去中倉",
+    # 連帶
+    "黃金組合", "速配", "連帶", "搭配", "好夥伴", "一起買", "一起賣", "也買",
+    "還買", "帶動", "組合", "會一起",
+    # 銷況
+    "賣得如何", "賣得怎樣", "賣況", "賣得動", "最近賣", "銷量", "賣最",
 )
 
 # ── v2 Agent 進階工具校正詞（C8-C11）──────────────────────────────────
@@ -895,7 +925,7 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(_DA_HEAD + r"[塞掛戴]耳朵" + _DA_TAIL), "無線藍牙耳機"),
     (_re.compile(_DA_HEAD + r"(?:聽音樂戴|運動戴|通勤戴|無線|藍牙|入耳|聽歌)耳機" + _DA_TAIL), "無線藍牙耳機"),
     (_re.compile(_DA_HEAD + r"(?:出門|隨身|行動|外出|旅行|沒電|緊急)充電" + _DA_TAIL), "行動電源"),
-    (_re.compile(_DA_HEAD + r"(?:行動電源|尿袋|補電|充電寶)" + _DA_TAIL), "行動電源"),
+    (_re.compile(_DA_HEAD + r"(?:行動電源|尿袋|補電|充電寶|行動電|電源)" + _DA_TAIL), "行動電源"),
     (_re.compile(_DA_HEAD + r"(?:充電|傳輸|接手機|接電腦)(?:用)?的線"), "快充線"),
     (_re.compile(_DA_HEAD + r"(?:充電線|傳輸線|快充線|typec線|type-c線|c\s?to\s?c)" + _DA_TAIL), "快充線"),
     (_re.compile(_DA_HEAD + r"(?:放音樂|外放|喇叭|音響|播歌|放歌|音箱)" + _DA_TAIL), "藍牙喇叭"),
@@ -1466,11 +1496,50 @@ def _extract_sku_keyword(text: str) -> str:
             return max(part_hits)[1]
 
     # ── Layer 4: _fuzzy_score（剝規格 + 雙向滑窗 + 字元重疊）──
+    # 弱配對防呆（2026-07-08，user「隨便一句就中 BUG」系統掃描：90 假商品 36
+    # 被硬配）：核心判準＝「最長連續共同子串（LCS）」。真配對的 keyword 一定
+    # 含商品的核心名詞連續 ≥2 字（藍牙耳機/帳篷/悶燒罐）；假配對只靠單一共通
+    # 字（牙線↔耳機的「線」→耳、盤子↔鍵盤的「盤」）LCS=1。門檻維持 40（保留
+    # 雜訊容錯，守衛庫「藍牙耳機月進出貨」這類帶雜訊 keyword 仍命中），但要求
+    # LCS≥2 且該連續子串不是純開頭材質修飾詞（玻璃/不鏽鋼…擋「玻璃清潔劑↔
+    # 玻璃保鮮盒」）。配不到→回原詞→_detect_oov clarify 誠實引導。
+    _MOD_HEADS = ("玻璃", "不鏽鋼", "陶瓷", "電動", "無線", "全自動", "蒸氣",
+                  "抗菌", "天然", "強力", "彈力", "彈性", "輕量", "折疊", "機能",
+                  "純棉", "羊毛", "牛仔", "防曬", "高蛋白", "電解質", "迷你",
+                  "桌上型", "嬰兒", "經典", "綜合", "蜂蜜", "精釀", "三層抽取",
+                  "露營", "登山", "野炊")
+
+    def _lcs_len(a: str, b: str) -> tuple[int, str]:
+        m = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+        best, end = 0, 0
+        for i in range(len(a)):
+            for j in range(len(b)):
+                if a[i] == b[j]:
+                    m[i + 1][j + 1] = m[i][j] + 1
+                    if m[i + 1][j + 1] > best:
+                        best, end = m[i + 1][j + 1], j + 1
+        return best, (b[end - best:end] if best else "")
+
+    def _fuzzy_grounded(src_t: str, name: str) -> bool:
+        """fuzzy 命中是否接地：連續共同子串 ≥2 且非純開頭修飾詞。
+        （user 2026-07-08 定案「嚴格優先，寧錯殺少數真詞絕不亂答」：只靠單一
+        共通字的弱配對一律擋，回原詞讓 _detect_oov 走 clarify 誠實引導。
+        代價＝「帽子」這種單字通稱會 clarify「你是指遮陽帽還是毛帽」，可接受。）"""
+        n_len, sub = _lcs_len(src_t, name)
+        if n_len < 2:
+            return False
+        core = name.split()[0]
+        # 連續子串恰好是「開頭材質修飾詞」→ 只靠修飾詞沾邊，不接地
+        if any(core.startswith(m) and sub == m for m in _MOD_HEADS):
+            return False
+        return True
+
     for src in (cleaned, text):
         if not src or len(src) < 2:
             continue
         scored = sorted(
-            [(s, n) for n in all_names if (s := _fuzzy_score(src, n)) >= 40],
+            [(s, n) for n in all_names
+             if (s := _fuzzy_score(src, n)) >= 40 and _fuzzy_grounded(src, n)],
             reverse=True,
         )
         if scored:
@@ -2867,8 +2936,12 @@ def _record_perf(r, t0):
 display_sockets: set[WebSocket] = set()
 all_sockets:     set[WebSocket] = set()
 _visitor_closed = False
-_item_create_state: dict = {}
+_item_create_state: dict = {}          # HTTP 端用（單請求無並發）
+# WS 端改 per-vid（2026-07-08 抓到全域污染重大 bug：一個訪客觸發新增商品流程
+# 後，所有後續訪客/句子被吸進流程當步驟，展場多人玩必爆；同 pending 的 per-vid 修法）
+_item_create_state_ws: dict = {}       # {vid: {active, step, name, ...}}
 _item_delete_state: dict = {}  # 刪除模式的 session state
+_vid_counter: int = 0          # WS 連線唯一序號（遞增，絕不碰撞/重用）
 # Context carry-over：記住上一輪的 sku/warehouse/func。
 # ⚠️ 一定要按訪客(vid)隔離——曾經是單一全域 dict，展場多裝置時 A 訪客問的
 # 商品會污染 B 訪客的「那個呢」追問（2026-07-03 第9輪測試抓到：不同 WS 連線
@@ -4018,6 +4091,7 @@ async def reset_demo_data_api(req: Request):
     res = tools_v2.commit_reset_demo_data(password=password, actor="user_confirmed")
     if res.get("ok"):
         _item_create_state.clear()
+        _item_create_state_ws.clear()
         _item_delete_state.clear()
         await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
         log.info("[reset_demo] 展示資料已重置")
@@ -4056,7 +4130,11 @@ async def ws_handler(ws: WebSocket):
     async def send(o: dict):
         await ws.send_text(json.dumps(o, ensure_ascii=False))
 
-    vid = id(ws) % 10000
+    # vid 用全域遞增序號，絕不碰撞（2026-07-09：原 id(ws)%10000 兩個連線會算出
+    # 同 vid、且 id 斷線後會被回收重用 → 不同訪客共用 session state 污染）
+    global _vid_counter
+    _vid_counter += 1
+    vid = _vid_counter
 
     try:
         while True:
@@ -4164,8 +4242,8 @@ async def ws_handler(ws: WebSocket):
 
             # ── 取消（rewrite 之前先攔截）──
             if user_text == "取消":
-                _item_create_state.clear()
-                _item_delete_state.clear()
+                _item_create_state_ws.pop(vid, None)   # 只清自己這位訪客的流程
+                _item_delete_state.pop(vid, None)
                 await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
                 continue
 
@@ -4296,8 +4374,9 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": result})
                 continue
 
-            # ── 守門員 ──
-            if not _item_create_state.get("active") and not is_meaningful_input(user_text):
+            # ── 守門員（per-vid：只有『自己這位訪客』在新增流程中才豁免）──
+            _ic_st = _item_create_state_ws.get(vid, {})
+            if not _ic_st.get("active") and not is_meaningful_input(user_text):
                 log.info(f"[守門員] 拒絕無意義輸入: {user_text!r}")
                 await push_display({"type": "trace", "stage": "rejected",
                                     "reason": "輸入未命中倉管關鍵字"})
@@ -4308,10 +4387,10 @@ async def ws_handler(ws: WebSocket):
                                                         "summary": GATEKEEPER_REJECT_MSG}})
                 continue
 
-            # ── item_create 流程中 → 攔截處理，不進 LLM ──
-            if _item_create_state.get("active"):
+            # ── item_create 流程中 → 攔截處理，不進 LLM（per-vid）──
+            if _ic_st.get("active"):
                 import tools_v2 as _tv2_item_ws
-                st2 = _item_create_state
+                st2 = _ic_st
                 kwargs2 = {**{k: v for k, v in st2.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}, "raw_text": ""}
                 if st2["step"] == 1: kwargs2["name"] = user_text
                 elif st2["step"] == 2: kwargs2["category"] = user_text
@@ -4337,18 +4416,19 @@ async def ws_handler(ws: WebSocket):
                             elif "南" in p: kwargs2["stock_south"] = p.replace("南", "").strip()
                 result = _tv2_item_ws.create_item_collect(**kwargs2)
                 if result.get("view") == "item_confirm":
-                    _item_create_state.clear()
+                    _item_create_state_ws.pop(vid, None)
                 else:
                     d = result.get("data", {})
-                    _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
-                    _item_create_state["active"] = True
+                    _new_st = {k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}
+                    _new_st["active"] = True
+                    _item_create_state_ws[vid] = _new_st
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.012)
                 await send({"type": "done", "result": result})
                 continue
 
-            # ── 新增商品 keyword 攔截（首次進入流程）──
+            # ── 新增商品 keyword 攔截（首次進入流程，per-vid）──
             _create_item_kws_ws2 = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
             if any(w in user_text for w in _create_item_kws_ws2):
                 import tools_v2 as _tv2_ci2
@@ -4357,8 +4437,9 @@ async def ws_handler(ws: WebSocket):
                 result = _tv2_ci2.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci2.create_item_start()
                 if result.get("view") != "item_confirm":
                     d = result.get("data", {})
-                    _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
-                    _item_create_state["active"] = True
+                    _new_st = {k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}
+                    _new_st["active"] = True
+                    _item_create_state_ws[vid] = _new_st
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.012)
@@ -4370,7 +4451,11 @@ async def ws_handler(ws: WebSocket):
             # 被抽成 category=清潔 跑去 clarify）。這是展示主打功能，不能賭
             # LLM 抽取——確定性直達。寫入/排程/報表/銷售語境不攔，走既有流程。
             _DESC_Q_CUES = ("還有", "還剩", "剩", "庫存", "多少", "幾",
-                            "有沒有", "有嗎", "夠", "存量", "現貨")
+                            "有沒有", "有嗎", "夠", "存量", "現貨",
+                            # 「有賣…嗎」詢問是否有此商品（2026-07-09：「有賣煮咖啡
+                            # 的嗎」缺 cue 掉進 LLM→咖啡豆）。用精準「賣」相關詞，不用
+                            # 裸「嗎/呢」（會誤放「放音樂給我聽嗎」「今天喝咖啡嗎」閒聊）。
+                            "有賣", "賣不賣", "有沒有賣", "賣嗎", "有沒有這", "有這個")
             _DESC_BLOCK = ("進貨", "出貨", "進了", "出了", "調撥", "調貨", "調到",
                            # 「補」不可單字擋（「補水的」=運動飲誤傷）→ 補貨語境詞
                            "補貨", "該補", "要補", "得補", "去補", "快補", "補一補",
@@ -4389,8 +4474,26 @@ async def ws_handler(ws: WebSocket):
             # movement——描述命中+查詢語氣會誤劫，這裡尊重更明確的意圖（回歸抓到）。
             _desc_intent_block = (any(w in user_text for w in _RCA_INTENT_WORDS)
                                   or any(w in user_text for w in _MOVEMENT_PROTECT_WORDS))
+            # 查詢語氣放寬（2026-07-09，user 打錯字「查煮咖啡的庫純」查詢語氣詞被
+            # 打壞掉出直達→亂配）：描述命中已是強意圖，只要句子不含「非查詢語境」
+            # 的動作/閒聊詞（給我/聽/吃/唱/陪…），即使語氣詞有錯字也放行。這樣
+            # 「煮咖啡的庫純」「洗衣服的有ㄇ」走直達，但「放音樂給我聽」仍被擋。
+            _DESC_CHITCHAT = ("給我", "幫我聽", "聽歌", "來聽", "唱", "吃", "喝一杯",
+                              "陪", "聊", "玩", "睡覺", "洗澡好", "覺得", "喜歡", "討厭",
+                              "好不好", "要不要", "可不可以", "謝謝", "掰掰", "你好嗎")
+            # 放寬的副作用守衛（RPI5 回歸抓到）：進貨/調貨/連帶/銷況句也「描述命中+
+            # 無閒聊詞」，放寬會誤劫成查庫存。複用 module 級 _DESC_NONQUERY_INTENT
+            # （涵蓋 15 輪收斂的進出貨動詞），放寬時一併排除，走原本正確路徑。
+            # 另：句子含「兩個倉名」= 強調貨信號（查庫存句頂多一倉、調貨句必兩倉），
+            # 一律不放寬——比枚舉調貨動詞（調/送/撥/過去…單字危險）穩健（2026-07-09）。
+            _desc_two_wh = len({z for z in ("北", "中", "南")
+                                if any(z + s in user_text for s in ("倉", "區"))}) >= 2
+            _desc_q_ok = (any(w in user_text for w in _DESC_Q_CUES)
+                          or (not any(w in user_text for w in _DESC_CHITCHAT)
+                              and not any(w in user_text for w in _DESC_NONQUERY_INTENT)
+                              and not _desc_two_wh))
             if (_desc_kw_ws
-                    and any(w in user_text for w in _DESC_Q_CUES)
+                    and _desc_q_ok
                     and not any(w in user_text for w in _DESC_BLOCK)
                     and not _desc_intent_block):
                 _desc_wh = ("north" if any(w in user_text for w in ("北倉", "北區")) else
@@ -4900,15 +5003,15 @@ async def ws_handler(ws: WebSocket):
                                 func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                                 break
 
-                # ── dispatch-ws：item_create 分步流程 ──
-                if _item_create_state.get("active"):
+                # ── dispatch-ws：item_create 分步流程（per-vid）──
+                if _item_create_state_ws.get(vid, {}).get("active"):
                     if user_text.strip() == "取消":
-                        _item_create_state.clear()
+                        _item_create_state_ws.pop(vid, None)
                         await send({"type": "token", "text": "已取消新增商品。"})
                         await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
                         continue
                     import tools_v2 as _tv2_item_ws
-                    st2 = _item_create_state
+                    st2 = _item_create_state_ws.get(vid, {})
                     kwargs2 = {**{k: v for k, v in st2.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}, "raw_text": ""}
                     if st2["step"] == 1: kwargs2["name"] = user_text
                     elif st2["step"] == 2: kwargs2["category"] = user_text
@@ -4926,18 +5029,19 @@ async def ws_handler(ws: WebSocket):
                                 elif "南" in p: kwargs2["stock_south"] = p.replace("南", "").strip()
                     result = _tv2_item_ws.create_item_collect(**kwargs2)
                     if result.get("view") == "item_confirm":
-                        _item_create_state.clear()
+                        _item_create_state_ws.pop(vid, None)
                     else:
                         d = result.get("data", {})
-                        _item_create_state.update({k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
-                        _item_create_state["active"] = True
+                        _new_st = {k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}
+                        _new_st["active"] = True
+                        _item_create_state_ws[vid] = _new_st
                     for ch in result.get("summary", ""):
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(0.012)
                     await send({"type": "done", "result": result})
                     continue
 
-                # ── dispatch-ws：新增商品 keyword 攔截 ──
+                # ── dispatch-ws：新增商品 keyword 攔截（per-vid）──
                 _create_item_kws_ws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
                 if any(w in user_text for w in _create_item_kws_ws):
                     import tools_v2 as _tv2_ci
@@ -4949,9 +5053,13 @@ async def ws_handler(ws: WebSocket):
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(0.012)
                     await send({"type": "done", "result": result})
-                    _item_create_state.update({k: v for k, v in result.get("data", {}).items()
-                                               if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")})
-                    _item_create_state["active"] = result.get("view") != "item_confirm"
+                    _new_st = {k: v for k, v in result.get("data", {}).items()
+                               if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}
+                    if result.get("view") != "item_confirm":
+                        _new_st["active"] = True
+                        _item_create_state_ws[vid] = _new_st
+                    else:
+                        _item_create_state_ws.pop(vid, None)
                     continue
 
                 # ── dispatch-ws：庫存排行 / 口語 pattern 攔截 ──
@@ -5132,7 +5240,11 @@ async def ws_handler(ws: WebSocket):
         log.error(f"WS error: {e}", exc_info=True)
     finally:
         all_sockets.discard(ws)
-        _ctx_by_vid.pop(vid, None)   # 斷線清掉該訪客 context，避免殘留
+        # 斷線清掉該訪客所有 session state，避免殘留（2026-07-09：新增商品流程
+        # 開到一半斷線，狀態殘留 + vid 碰撞 → 下一位訪客的查詢被吸進殘留流程）
+        _ctx_by_vid.pop(vid, None)
+        _item_create_state_ws.pop(vid, None)
+        _item_delete_state.pop(vid, None)
         log.info(f"訪客斷線（剩 {len(all_sockets)}）")
 
 
