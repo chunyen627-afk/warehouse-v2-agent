@@ -253,6 +253,8 @@ _GATEKEEPER_BLACKLIST = (
     # 清空/歸零變體（RPI5 v21：「把庫存全部清掉」被當商品查詢問你要查啥）
     "全部清掉", "清掉庫存", "庫存清掉", "清掉所有", "清光", "全部清光",
     "庫存歸零", "全部歸零", "歸零", "全部清空", "清除全部", "清除所有",
+    # r16：「幫我把刷牙的庫存清空」漏擋（只有「全部清空」沒有「庫存清空」）
+    "庫存清空", "清空庫存", "清空",
     # 第18輪：假授權/反串/注入變體
     "後台", "後台權限", "重設系統", "測試模式", "除錯模式", "debug模式",
     "沒有任何限制", "沒有規則", "沒有限制的ai", "設定檔", "原始指令",
@@ -527,9 +529,13 @@ _DESC_NONQUERY_INTENT = (
     "送到", "送去", "運到", "運去", "分到", "分給", "分過去", "過去南",
     "過去北", "過去中", "往南倉", "往北倉", "往中倉", "往南區", "往北區", "往中區",
     "到南倉", "到北倉", "到中倉", "到南區", "到北區", "到中區", "去南倉", "去北倉", "去中倉",
-    # 連帶
+    # 連帶（r16 補：「買」從 _DESC_BLOCK 移除後，related 句靠這裡的精準詞擋——
+    # 「買X的人/的都」「還會拿」是連帶分析語境，不是查該商品庫存）
+    # 「還買」拆成「還買了/還會買」——「瑜珈墊還買得到嗎」的「還買」是可得性
+    # 詢問不是連帶（r16）
     "黃金組合", "速配", "連帶", "搭配", "好夥伴", "一起買", "一起賣", "也買",
-    "還買", "帶動", "組合", "會一起",
+    "還買了", "還會買", "帶動", "組合", "會一起", "的人", "的都", "還會拿",
+    "還會帶", "通常還",
     # 銷況
     "賣得如何", "賣得怎樣", "賣況", "賣得動", "最近賣", "銷量", "賣最",
 )
@@ -916,7 +922,8 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(_DA_HEAD + r"(?:[燙熨]衣|除皺|燙平|熨平|燙襯衫|去皺)" + _DA_TAIL), "電熨斗"),
     (_re.compile(_DA_HEAD + r"(?:[打榨](?:果|蔬果)?汁|打果昔|打冰沙|榨柳丁|打奶昔|攪拌)" + _DA_TAIL), "果汁機"),
     (_re.compile(_DA_HEAD + r"(?:拖地|除塵|擦地|掃地|清地板|拖把)" + _DA_TAIL), "拖把"),
-    (_re.compile(_DA_HEAD + r"(?:炒菜|煎[東蛋]西?|煎煮|煮飯|下廚|炒飯|不沾鍋|平底鍋|做菜)" + _DA_TAIL), "不沾鍋"),
+    # 「煮飯」移除（r16：「煮飯的電鍋」曾配到不沾鍋——煮飯聯想是電鍋不是煎鍋）
+    (_re.compile(_DA_HEAD + r"(?:炒菜|煎[東蛋]西?|煎煮|下廚|炒飯|不沾鍋|平底鍋|做菜)" + _DA_TAIL), "不沾鍋"),
     (_re.compile(_DA_HEAD + r"(?:[悶燜](?:熱)?[湯粥]|保溫湯|[裝帶煮](?:熱)?湯|保溫罐|燜燒杯|保溫便當|悶燒罐)" + _DA_TAIL), "悶燒罐"),
     (_re.compile(_DA_HEAD + r"(?:裝剩菜|保鮮|裝便當|收納食物|裝菜|冰箱收納|保鮮盒|密封盒)" + _DA_TAIL), "保鮮盒"),
     (_re.compile(_DA_HEAD + r"(?:野炊|露營煮飯?|戶外煮|露營炊具|野餐鍋|露營鍋)" + _DA_TAIL), "野炊鍋具"),
@@ -962,7 +969,8 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(_DA_HEAD + r"(?:濕紙巾|擦手擦嘴|擦寶寶|擦屁屁|嬰兒濕巾|濕巾)" + _DA_TAIL), "嬰兒濕紙巾"),
     (_re.compile(_DA_HEAD + r"(?:裝垃圾|垃圾袋|丟垃圾|裝垃圾的袋)" + _DA_TAIL), "垃圾袋"),
     # 「清潔手套」的「清潔」會被 RPI5 LLM 當類別詞跑去 clarify → 用全名
-    (_re.compile(_DA_HEAD + r"(?:洗碗|做家事|家事|清潔手套|橡膠手套|洗碗手套)戴?" + _DA_TAIL), "橡膠清潔手套"),
+    # 「洗碗精/洗碗機」不是手套（r16：「有賣洗碗精嗎」曾回手套庫存）
+    (_re.compile(_DA_HEAD + r"(?:洗碗(?!精|機)|做家事|家事|清潔手套|橡膠手套|洗碗手套)戴?" + _DA_TAIL), "橡膠清潔手套"),
     # ── 服飾 ──
     # 「防曬」後不接袖套/臂套（那是壓縮臂套）；遮陽/帽類明確
     (_re.compile(_DA_HEAD + r"(?:遮太陽|遮陽|防曬(?!袖套|臂套)|遮陽帽|太陽帽|漁夫帽|防曬帽|擋太陽)" + _DA_TAIL), "遮陽帽"),
@@ -1027,7 +1035,12 @@ def _rewrite_query(user_text: str) -> str:
     _cmp_keep = _cmp_wh_cnt >= 2 or any(w in t for w in ("週轉", "價值", "總值", "缺貨"))
     # 熱銷 rewrite 同病：「這個月熱銷排行」被改成固定句「熱銷商品排行」→ 時間詞
     # 銷毀，C4b 拿改寫後句子校 period 校不回 this_month（conv100-r8）
-    _hot_keep = any(w in t for w in ("本月", "這個月", "上個月", "月", "今天", "本週", "這週"))
+    # r16 補：倉名/庫存語氣也要保留原句——「熱銷第一名在南倉有幾個」曾被改寫成
+    # 「熱銷商品排行」，南倉+有幾個 全銷毀，複合攔截（排行Top1+庫存）就接不到
+    # （rewrite 固定句資訊銷毀第四例）
+    _hot_keep = any(w in t for w in ("本月", "這個月", "上個月", "月", "今天", "本週", "這週",
+                                     "北倉", "中倉", "南倉", "北區", "中區", "南區",
+                                     "有幾", "還剩", "剩多少", "庫存", "還有多少"))
     _GENERIC_RCA_HEADS = ("庫存", "數量", "進貨", "帳", "對不上", "差異")
     for pattern, replacement in _REWRITE_RULES:
         if _cmp_keep and replacement == "比較各倉庫庫存":
@@ -4269,8 +4282,15 @@ async def ws_handler(ws: WebSocket):
             # 描述命中+查詢語氣的句子豁免黑名單（「裝便當的還有嗎」的「便當」、
             # 「放音樂的還剩幾台」的「音樂」是防閒聊黑名單詞，但這裡語境明確
             # 是查商品 → 讓功能描述直達接手，2026-07-07）。
+            # ⚠️ 安全修補（r16）：豁免不可涵蓋「破壞類」黑名單詞——「刷牙的庫存
+            # 清空」曾靠 描述命中+「庫存」cue 繞過黑名單。豁免只給閒聊類誤傷
+            # （便當/音樂），破壞/注入類（刪/清空/歸零/0元/密碼/權限…）永不豁免。
+            _BL_NEVER_EXEMPT = ("刪", "清空", "清掉", "清光", "歸零", "格式化",
+                                "0元", "1元", "零元", "密碼", "權限", "重開", "關機",
+                                "rm -rf", "drop table", "無視", "忽略", "system prompt")
             _desc_exempt_ws = bool(_descriptor_hit(user_text)
-                                   and any(c in user_text.lower() for c in _DESC_GATE_CUES))
+                                   and any(c in user_text.lower() for c in _DESC_GATE_CUES)
+                                   and not any(w in user_text.lower() for w in _BL_NEVER_EXEMPT))
             _bl_hit_ws = None if _desc_exempt_ws else next(
                 (b for b in _GATEKEEPER_BLACKLIST if b in user_text.lower()), None)
             if _bl_hit_ws:
@@ -4463,7 +4483,11 @@ async def ws_handler(ws: WebSocket):
                            # 「熱」不可單字擋（「裝熱湯」誤傷）→ 用熱銷語境詞
                            "熱銷", "熱賣", "最熱", "滯銷", "賣不動",
                            "比較", "警示", "排程", "報表", "採購", "對帳",
-                           "到期", "過期", "缺貨", "買", "多少錢", "價格",
+                           # 「買」「缺貨」移除（r16：擋掉正當查詢——「啤酒還有得買嗎」
+                           # 「氣泡水缺貨了嗎」「上次買的那個防蚊的」都是問該商品庫存，
+                           # 直達回庫存正是好答案；related 句改靠 _DESC_NONQUERY_INTENT
+                           # 的「的人/的都/還會拿」等精準詞擋）
+                           "到期", "過期", "多少錢", "價格",
                            # config/設定語境（「防蚊液安全庫存下修15」曾被劫走）——
                            # 安全庫存/水位一出現就絕非查存量，是設定操作或設定查詢
                            "安全庫存", "安全水位", "水位", "前置", "補貨天數",
@@ -4491,14 +4515,18 @@ async def ws_handler(ws: WebSocket):
             # 「進/出/退 + 數量 + 量詞」= 進出貨句（結構判準，複用 C13b 模式，比枚舉
             # 單字動詞穩健）：「中倉進三箱衛生紙」的「進三箱」= 進+三+箱（2026-07-09）。
             _desc_mv_qty = _re.search(
-                r"[進出退補][一-鿿]{0,4}(?:[0-9]+|[零一二兩三四五六七八九十百千]+)\s*"
-                r"(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞)",
+                r"[進出退補來][一-鿿]{0,4}(?:[0-9]+|[零一二兩三四五六七八九十百千半幾]+)\s*"
+                r"(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞|打|手)",
                 user_text)
-            _desc_q_ok = (any(w in user_text for w in _DESC_Q_CUES)
-                          or (not any(w in user_text for w in _DESC_CHITCHAT)
-                              and not any(w in user_text for w in _DESC_NONQUERY_INTENT)
-                              and not _desc_two_wh
-                              and not _desc_mv_qty))
+            # NONQUERY 提升為「無條件排除」（r16 回歸抓到：「買露營燈的人購物車
+            # 還有什麼」的「還有」命中 QCUE 直接走直達、繞過放寬分支的 NONQUERY
+            # 檢查——related/進出貨/調貨意圖不管有沒有查詢語氣都不該直達）
+            _desc_nonquery = any(w in user_text for w in _DESC_NONQUERY_INTENT)
+            _desc_q_ok = (not _desc_nonquery
+                          and (any(w in user_text for w in _DESC_Q_CUES)
+                               or (not any(w in user_text for w in _DESC_CHITCHAT)
+                                   and not _desc_two_wh
+                                   and not _desc_mv_qty)))
             if (_desc_kw_ws
                     and _desc_q_ok
                     and not any(w in user_text for w in _DESC_BLOCK)
@@ -4520,6 +4548,19 @@ async def ws_handler(ws: WebSocket):
                     continue
                 # 查詢失敗 → 不攔，交給 LLM 流程
 
+            # ── 否定排行（r16：「我不要排行榜我要庫存」曾偏偏回排行榜——最挑釁
+            # 的答案）：否定詞+排行 → 尊重否定，回庫存概覽 ──
+            if (any(w in user_text for w in ("不要排行", "不是排行", "不要熱銷", "不要榜"))
+                    and any(w in user_text for w in ("庫存", "存量", "要庫存"))):
+                log.info(f"[dispatch-ws] 否定排行 → 庫存概覽: {user_text!r}")
+                result = finance.execute("query_inventory", {})
+                if result.get("ok") and result.get("summary"):
+                    for ch in result["summary"]:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": result})
+                    continue
+
             # ── 複合句攔截：「賣最好/賣最差的還剩多少」= 排行 Top1 + 它的庫存 ──
             # C4 會把「賣最好/滯銷」強轉 list_hot_items 回排行榜，但這句訪客
             # 要的是那個商品的庫存數字（RPI5 實測 2026-07-06），進 LLM 前先攔。
@@ -4527,7 +4568,9 @@ async def ws_handler(ws: WebSocket):
                              "最熱銷", "最暢銷", "熱銷第一", "銷量第一", "賣第一")
             _bs_slow_words = ("賣最差", "賣得最差", "賣最爛", "賣最慢", "最難賣",
                               "最不好賣", "最滯銷", "滯銷", "賣不動", "賣不掉")
-            _bs_stock_words = ("剩多少", "還剩", "剩幾", "庫存", "還有多少", "還有幾", "存量")
+            # r16 補「有幾個/有多少」（「熱銷第一名在南倉有幾個」曾漏攔回排行榜）
+            _bs_stock_words = ("剩多少", "還剩", "剩幾", "庫存", "還有多少", "還有幾",
+                               "存量", "有幾個", "有多少", "有幾件")
             _bs_rank_type = ("slow" if any(w in user_text for w in _bs_slow_words)
                              else "hot" if any(w in user_text for w in _bs_hot_words)
                              else None)
@@ -4540,9 +4583,14 @@ async def ws_handler(ws: WebSocket):
                 if _bs_rank:
                     _bs_name = _bs_rank[0]["name"]
                     _bs_rlabel = "賣最好" if _bs_rank_type == "hot" else "賣最差"
+                    # 帶倉別（「在南倉有幾個」要回南倉的數字，r16）
+                    _bs_wh = ("north" if any(w in user_text for w in ("北倉", "北區")) else
+                              "central" if any(w in user_text for w in ("中倉", "中區")) else
+                              "south" if any(w in user_text for w in ("南倉", "南區")) else "all")
                     log.info(f"[dispatch-ws] 複合句攔截: {user_text!r} → "
-                             f"{_bs_rlabel}Top1「{_bs_name}」庫存")
-                    result = finance.execute("query_inventory", {"keyword": _bs_name})
+                             f"{_bs_rlabel}Top1「{_bs_name}」庫存 wh={_bs_wh}")
+                    result = finance.execute("query_inventory",
+                                             {"keyword": _bs_name, "warehouse": _bs_wh})
                     if result.get("ok") and result.get("summary"):
                         _bs_plabel = "本月" if _bs_period == "this_month" else "本週"
                         _bs_qty_label = ("出" if _bs_rank_type == "hot" else "只出")
@@ -5075,7 +5123,11 @@ async def ws_handler(ws: WebSocket):
                 _stock_rank_kws_ws = ("哪個", "哪個東西", "庫存最多", "數量最多", "哪個最多", "存貨最多", "東西最多")
                 if (any(w in user_text for w in _stock_rank_kws_ws)
                         and not any(w in user_text for w in ("熱銷", "賣", "排行", "hot", "滯銷",
-                                                              "業績", "冠軍", "銷", "墊底"))
+                                                              "業績", "冠軍", "銷", "墊底",
+                                                              # r16：「哪個商品最快斷貨」是缺貨
+                                                              # 警示不是庫存排行（曾回庫存最多
+                                                              # TOP=完全相反的誤導）
+                                                              "斷貨", "缺貨", "快斷", "沒貨"))
                         # 「北區跟南區哪個庫存比較多」沒有「倉」字也是倉庫比較（conv100-r8）
                         and not any(w in user_text for w in ("倉", "北區", "中區", "南區"))):
                     log.info(f"[dispatch-ws] 庫存排行攔截: {user_text!r} → list_hot_items(stock)")
