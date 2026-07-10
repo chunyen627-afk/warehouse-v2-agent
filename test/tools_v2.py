@@ -389,6 +389,15 @@ def manage_config(action: str = "read", key: str = "", value=None,
     # 加20」的影響範圍變成全部商品 183 項，RPI5 conv100-r5 抓到）
     steps: list[dict] = []
     cfg = W.state().v2_config
+    # 指名了商品但庫裡沒有（server 校正層 r17 sentinel）：「吹風機安全庫存
+    # 設成30」曾 fallback 成【全部商品】183 項確認卡 → 誠實說找不到
+    if isinstance(item, str) and item.startswith("__unknown__:"):
+        _uk = item.split(":", 1)[1]
+        return {"ok": True, "view": "clarify", "summary": (
+            f"找不到商品「{_uk}」，設定沒有改動。請確認商品名稱，"
+            "例如「瑜珈墊安全庫存加20」。"),
+            "data": {"question": f"找不到商品「{_uk}」，請確認商品名稱",
+                     "options": [], "hint": ""}}
     canon = _resolve_key(key)
     if not canon:
         # key 不是合法設定項（LLM 把「空間/容量」這種非設定問題誤投 manage_config）
@@ -438,6 +447,16 @@ def manage_config(action: str = "read", key: str = "", value=None,
             return {"ok": True, "view": "clarify", "summary": (
                 f"要把「{_lbl}」設成多少呢？例如「{_lbl}改成50」或「加30」。"
             ), "data": {"canon": canon, "label": _lbl, "pending_config": True}}
+        # 極端值防呆（r17：「設成十萬」中文數字修好後能正確解析 100000，
+        # 但這數量級對 demo 資料絕非本意，會開出影響 183 項的確認卡）→ 追問
+        if abs(num) > 9999:
+            _lbl2 = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
+                     "safety_stock": "安全庫存"}.get(canon, "安全庫存")
+            return {"ok": True, "view": "clarify", "summary": (
+                f"「{_lbl2}」設成 {num:,} 不太尋常（一般在 0～9999 之間），"
+                "請確認數值後再說一次。"),
+                "data": {"question": f"「{_lbl2}」要設成 {num:,}？請確認數值",
+                         "options": [], "hint": ""}}
 
         # 算受影響範圍 + 預覽 diff（不寫入！）
         whs = ["north", "central", "south"] if warehouse == "all" else [warehouse]
@@ -1611,7 +1630,11 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
 
     scored = W.match_items(keyword)
     if not scored:
-        return W._err(f"找不到商品「{keyword}」，請確認商品名稱")
+        # r17：找不到商品是輸入問題不是系統錯誤 → clarify 藍卡而非 error 紅卡
+        return {"ok": True, "view": "clarify",
+                "summary": f"找不到商品「{keyword}」，請確認商品名稱後再說一次。",
+                "data": {"question": f"找不到商品「{keyword}」，請確認商品名稱",
+                         "options": [], "hint": "例如「北倉進50個藍牙耳機」"}}
     # 分數斷層過濾（同 warehouse.query_inventory 的邏輯）：避免共用規格 token
     # （如「1L」「男款」）讓不相干商品低分命中、誤觸發多筆 clarify。
     if len(scored) > 1:
@@ -1660,8 +1683,27 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
         qty_val = int(str(qty).strip() or 0)
     except ValueError:
         qty_val = 0
-    if qty_val <= 0:
-        return W._err("請說明數量，例如「進了50件」")
+    _dir_zh = "退貨" if is_return else ("進貨" if dir_key == "in" else "出貨")
+    if qty_val < 0:
+        # r17：「北倉進貨-20個耳機」負號曾被吞、開出 +20 卡（語意反轉）
+        return {"ok": True, "view": "clarify",
+                "summary": (f"數量不能是負數喔。要減少庫存請用「出貨」，"
+                            f"例如「{WH_LABEL_MAP.get(wh_key, wh_key)}出{abs(qty_val)}件{item['name']}」。"),
+                "data": {"question": "數量不能是負數，請重新描述", "options": [], "hint": ""}}
+    if qty_val == 0:
+        # 缺數量 → clarify 追問（曾是 error 紅字卡，r17 統一成 clarify）
+        return {"ok": True, "view": "clarify",
+                "summary": f"「{item['name']}」要{_dir_zh}幾件呢？例如「{_dir_zh}50件」。",
+                "data": {"question": f"「{item['name']}」要{_dir_zh}幾件？",
+                         "options": [f"{_dir_zh}10件", f"{_dir_zh}30件", f"{_dir_zh}50件"],
+                         "hint": "請說明數量，例如「進了50件」"}}
+    if qty_val > 9999:
+        # r17：999999 件這種展場搗蛋數字不開卡，追問確認
+        return {"ok": True, "view": "clarify",
+                "summary": (f"一次{_dir_zh} {qty_val:,} 件不太尋常"
+                            "（單次上限 9,999 件），請確認數量後再說一次。"),
+                "data": {"question": f"要{_dir_zh} {qty_val:,} 件？請確認數量",
+                         "options": [], "hint": ""}}
 
     s = W.state()
     current_qty = s.stock.get(wh_key, {}).get(sku, 0)
@@ -1793,7 +1835,11 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
 
     scored = W.match_items(keyword)
     if not scored:
-        return W._err(f"找不到商品「{keyword}」，請確認商品名稱")
+        # r17：找不到商品是輸入問題不是系統錯誤 → clarify 藍卡而非 error 紅卡
+        return {"ok": True, "view": "clarify",
+                "summary": f"找不到商品「{keyword}」，請確認商品名稱後再說一次。",
+                "data": {"question": f"找不到商品「{keyword}」，請確認商品名稱",
+                         "options": [], "hint": "例如「北倉進50個藍牙耳機」"}}
     if len(scored) > 1:
         top_score = scored[0]["score"]
         scored = [m for m in scored if m["score"] * 2 >= top_score]

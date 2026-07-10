@@ -630,6 +630,10 @@ def query_movement(
     )
 
     scope = matched_item_label or "全部商品"
+    # 倉別 filter 有生效但 summary 沒標（r17：「昨天南倉的出貨」回「昨天全部
+    # 商品出貨 48 件」讓人以為是三倉總量）→ 標明倉別
+    if warehouse != "all":
+        scope = f"{WAREHOUSE_LABEL.get(warehouse, warehouse)}{scope}"
     in_qty, out_qty = agg["in_qty"], agg["out_qty"]
     delta = in_qty - out_qty
 
