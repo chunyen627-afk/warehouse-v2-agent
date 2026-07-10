@@ -380,7 +380,7 @@ def _is_guide_request(text: str) -> bool:
         "北倉", "中倉", "南倉", "北區", "中區", "南區",
         "耳機", "悶燒", "氣泡", "咖啡", "洗衣", "衛生", "瑜珈", "水壺",
         "藍牙", "充電", "蚊香", "牛仔", "筆電",
-        "庫存", "缺貨", "斷貨", "補貨", "警示", "熱銷", "滯銷", "進貨", "出貨",
+        "庫存", "缺貨", "斷貨", "補貨", "警示", "熱銷", "熱賣", "滯銷", "進貨", "出貨",
         "週轉", "進出",
         # 補貨口語（RPI5 v21：「幫我看看哪些要補」被 guide 攔，沒進 C3 low_stock）
         "要補", "該補", "得補", "快補", "趕快補", "需要補", "缺的",
@@ -458,6 +458,8 @@ _LOW_STOCK_INTENT_WORDS = (
     "快歸零", "歸零的",
     # r22：「再一週就沒貨的有哪些」曾回熱銷榜（相反誤導）
     "就沒貨", "快不行",
+    # r23：要進貨的/彈盡糧絕（曾回無關單品/進出統計）
+    "要進貨", "彈盡糧絕", "撐不了",
     "low stock", "restock", "running low", "alert",
 )
 
@@ -524,6 +526,8 @@ _RELATED_INTENT_WORDS = (
     "還需要買", "還要買什麼",
     # r20：「跟瑜珈墊類似的商品有哪些」
     "類似", "同類",
+    # r23：最佳拍檔/對味
+    "拍檔", "對味", "最麻吉", "麻吉",
     # conv100-r14：都會多帶什麼
     "多帶", "會多帶",
     # 「順便帶啥/順便買啥」的「順便」（RPI5 壓測抓到：只有「順便買」時
@@ -581,6 +585,8 @@ _DESC_NONQUERY_INTENT = (
     "類似", "同類", "相關商品", "的相關", "各剩", "各多少", "各有多少", "各還",
     # r21：「露營馬克杯跟露營燈哪個庫存多」兩商品比較
     "哪個庫存", "誰的庫存", "哪個比較多",
+    # r23：「濕紙巾的最佳拍檔」「跟啞鈴最對味的」連帶句
+    "拍檔", "對味", "麻吉",
     # 銷況
     "賣得如何", "賣得怎樣", "賣況", "賣得動", "最近賣", "銷量", "賣最",
 )
@@ -658,7 +664,8 @@ _TOOL_INTENT_GUARD = {
                             "還配", "還扛", "順手帶", "順手拿", "順手抓", "購物車", "黃金組合",
                             "速配",
                             # r20：「跟瑜珈墊類似的商品」閘門缺詞 → rescue 轉回庫存
-                            "類似", "同類", "相關"),
+                            # r23：「最佳拍檔/對味/麻吉」同款（詞表/NONQUERY/gate 三處要同步）
+                            "類似", "同類", "相關", "拍檔", "對味", "麻吉"),
     "search_log":       _RCA_INTENT_WORDS,
     "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料"),
     # run_script：需含腳本動作詞，否則閒聊句「一起吃飯」被 LLM 幻覺成
@@ -706,7 +713,9 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
 
     # Bug1: search_log 缺 RCA 意圖詞、但帶到有效商品名 → 其實是查庫存，降級 query_inventory
     if func_name == "search_log":
-        cand = kw if _match_solid(kw) else _extract_sku_keyword(user_text)
+        # 幻覺 kw 要接地（r23：「哪些貨在苟延殘喘」LLM 幻覺 藍牙耳機 被
+        # rescue 救成無關單品）——kw 與原句無重疊就改用 extractor 重抽
+        cand = kw if (_match_solid(kw) and _kw_grounded(kw, user_text)) else _extract_sku_keyword(user_text)
         if _match_solid(cand):
             log.info(f"[gate-rescue] search_log 缺RCA詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
@@ -732,15 +741,17 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
     # query_related_items 缺連帶詞、但有商品名 → 其實是查庫存（RPI5 conv100-r3：
     # 「北中南倉的滑鼠各有幾個」LLM 誤投 related → 閘門擋 rejected，該查庫存）
     if func_name == "query_related_items":
-        cand = kw if _match_solid(kw) else _extract_sku_keyword(user_text)
+        cand = kw if (_match_solid(kw) and _kw_grounded(kw, user_text)) else _extract_sku_keyword(user_text)
         if _match_solid(cand):
             log.info(f"[gate-rescue] query_related 缺連帶詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
         # 沒商品名但有進出貨語彙 → 進出統計（r17：「上週北倉進了哪些貨」
         # rewrite 保留原句後 intent_clf 誤判 related(0.95) 被閘門拒）。
         # 期間/倉別從原句抽，跟 run_script 同款 rescue。
+        # 「哪些貨」移除（r23：「哪些貨在苟延殘喘」誤入進出統計；
+        # 「上週北倉進了哪些貨」由「進了」罩住不受影響）
         if any(w in user_text for w in ("出貨", "進貨", "進出", "入庫", "出庫",
-                                         "進了", "出了", "進什麼", "哪些貨")):
+                                         "進了", "出了", "進什麼")):
             _qr_period = ("this_month" if any(w in user_text for w in ("這個月", "本月", "月")) else
                           "yesterday" if any(w in user_text for w in ("昨天", "昨晚")) else
                           "last_week" if any(w in user_text for w in ("上週", "上周", "上禮拜")) else
@@ -759,7 +770,7 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
     # query_movement 缺進出詞、但有商品名 → 查該商品分倉庫存
     # （「藍牙喇叭中倉南倉哪邊多」LLM 誤投 movement 被閘門拒，conv100-r9）
     if func_name == "query_movement":
-        cand = kw if _match_solid(kw) else _extract_sku_keyword(user_text)
+        cand = kw if (_match_solid(kw) and _kw_grounded(kw, user_text)) else _extract_sku_keyword(user_text)
         if _match_solid(cand):
             log.info(f"[gate-rescue] query_movement 缺進出詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
@@ -1168,7 +1179,7 @@ def _rewrite_query(user_text: str) -> str:
     # expiring rewrite 同病（r18，固定句資訊銷毀第六例）：「香皂快過期了嗎」被
     # 改寫成「哪些商品即將到期」→ 商品名銷毀，C7 的「指名未知商品誠實回找不到」
     # 接不到。剝掉到期語後仍有具體名詞殘餘 → 保留原句。
-    _exp_resid_rw = _re.sub(r"(?:快要|快|已經|要)?(?:過期|到期|壞掉|不能賣)(?:了)?(?:嗎|沒)?"
+    _exp_resid_rw = _re.sub(r"(?:快要|快|已經|要)?(?:過期|到期|壞掉|不能賣|即期品|即期)(?:了)?(?:嗎|沒)?"
                             r"|[的有呢啊喔嗎？?]", "", t).strip()
     _exp_keep = (len(_exp_resid_rw) >= 2 and bool(_re.fullmatch(r"[一-鿿]+", _exp_resid_rw))
                  and not any(g in _exp_resid_rw for g in ("什麼", "哪些", "東西", "商品",
@@ -2351,10 +2362,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 讓人以為有賣香皂）→ 轉庫存查詢讓它誠實回「找不到香皂」。
         # kw 常黏著到期語（「香皂快過期」）→ 先剝掉再判斷殘餘名詞。
         import re as _re_c7
-        _c7_resid = _re_c7.sub(r"(?:快要|快|已經|要)?(?:過期|到期|壞掉|不能賣)(?:了)?(?:嗎|沒)?"
+        _c7_resid = _re_c7.sub(r"(?:快要|快|已經|要)?(?:過期|到期|壞掉|不能賣|即期品|即期)(?:了)?(?:嗎|沒)?"
                                # 時間殘字（r20：「南倉這個月會過期的」kw 殘「月會」誤當商品）
                                r"|這個月|上個月|下個月|本月|月底|月初|近期|會"
-                               r"|這週|本週|下週|上週|這禮拜|週", "",
+                               r"|這週|本週|下週|上週|這禮拜|週"
+                               r"|[0-9零一二兩三四五六七八九十百千]+天內?|幾天內?|天內", "",
                                (_c7_kw or "")).strip()
         if (_c7_resid and not _c7_kw_name and " " not in _c7_resid
                 and 2 <= len(_c7_resid) <= 6 and _re_c7.fullmatch(r"[一-鿿]+", _c7_resid)
@@ -2782,6 +2794,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 log.info(f"[校正 C2] period {old_period} → this_week (模糊時間詞)")
                 func_args = dict(func_args)
                 func_args["period"] = "this_week"
+
+    # ── C1g（r23）：LLM 自帶 kw 全域接地——「中倉有什麼要進貨的」「哪些貨在
+    # 苟延殘喘」LLM 曾幻覺 keyword=耳機 回無關單品。kw 與原句無 bigram/尾字/
+    # SKU 代號重疊 → 清除退概覽（寧錯殺不亂答）──
+    if func_name == "query_inventory" and func_args.get("keyword"):
+        _kwg = str(func_args["keyword"])
+        if not _kw_grounded(_kwg, user_text):
+            import warehouse as _Wkg
+            _kwg_m = _Wkg.match_items(_kwg)
+            _kwg_sku = _kwg_m[0]["item"]["sku_id"] if _kwg_m else ""
+            if not _kwg_sku or _kwg_sku.lower() not in user_text.lower():
+                log.info(f"[校正 C1g] LLM kw 未接地 → 清除 {_kwg!r}")
+                func_args = {k: v for k, v in func_args.items() if k != "keyword"}
 
     # ── C1: query_inventory 沒抽到 keyword 但 user_text 含商品意圖詞 → 補 keyword ──
     if func_name == "query_inventory":
@@ -5367,6 +5392,13 @@ async def ws_handler(ws: WebSocket):
                     func_name = "list_schedules"
                     func_args = {}
                     log.info("[Pre-C-Sched] 查排程攔截 → list_schedules")
+                elif (any(w in user_text for w in ("警示", "提醒規則")) and
+                        any(w in user_text for w in ("取消", "刪除", "刪掉", "停掉",
+                                                      "關閉", "移除", "停用", "解除"))):
+                    # r23：「取消瑜珈墊的警示」「停用所有警示」曾回缺貨清單
+                    func_name = "list_alerts"
+                    func_args = {}
+                    log.info("[Pre-C-Sched] 取消警示意圖 → list_alerts（列出讓訪客選）")
                 elif ("排程" in user_text and any(w in user_text for w in ("取消", "刪除", "刪掉", "停掉", "關閉", "移除", "砍掉"))):
                     # 「取消所有排程」→ 先列排程讓訪客指名（不做批量刪除，conv100-r7）
                     func_name = "list_schedules"
