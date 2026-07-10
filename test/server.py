@@ -186,6 +186,8 @@ GATEKEEPER_KEYWORDS = {
     "提醒", "通知", "低於", "最貴", "最便宜", "單價",
     # r20：滯銷/動態口語（乏人問津/動靜/嚇嚇叫 曾被守門員拒）
     "問津", "動靜", "嚇嚇叫", "歸零",
+    # r21：開單/後設取消（曾被守門員拒）
+    "開單", "開一張", "不算",
     # 簡體常見倉管詞（陸港訪客，第18輪）
     "库存", "耳机", "进货", "出货", "调货", "缺货", "补货", "报表", "报告",
     "仓库", "查询", "热销", "滞销",
@@ -474,6 +476,8 @@ _HOT_INTENT_WORDS_HOT = (
     "賣得多", "賣得少", "哪週賣",
     # r20：賣得嚇嚇叫
     "嚇嚇叫",
+    # r21：「打果汁的賣得好嗎」descriptor 曾直達回庫存
+    "賣得好嗎", "賣得好不好",
     "top selling", "best seller", "hot",
 )
 _HOT_INTENT_WORDS_SLOW = (
@@ -571,6 +575,8 @@ _DESC_NONQUERY_INTENT = (
     # r20：「跟瑜珈墊類似的商品」是連帶/相關查詢、「X跟Y各剩多少」是多品查詢，
     # 都不可被單品描述直達搶走
     "類似", "同類", "相關商品", "的相關", "各剩", "各多少", "各有多少", "各還",
+    # r21：「露營馬克杯跟露營燈哪個庫存多」兩商品比較
+    "哪個庫存", "誰的庫存", "哪個比較多",
     # 銷況
     "賣得如何", "賣得怎樣", "賣況", "賣得動", "最近賣", "銷量", "賣最",
 )
@@ -1635,6 +1641,8 @@ _ALL_KEYWORD_NOISE = (
     "水位", "還健康", "健康",
     # r18：「嬰兒用品有哪些」的「用品/有哪些」、「給我看看s01的庫存」的「給我」
     "用品", "有哪些", "給我",
+    # r21：「不是南倉 我要看北倉的耳機」kw 曾殘「不是我要耳機」找不到
+    "不是", "我要看", "我要",
     # r18：「給我全部庫存的總表」「有多少種商品」——概覽詞不可殘留當商品名
     # （C13 曾重建出「全部 總表」kw → clarify 找不到；殘「全部」同病）
     "總表", "種商品", "全部庫存", "總庫存", "全店", "全部",
@@ -1800,6 +1808,10 @@ def _extract_config_value(user_text: str):
     同時支援阿拉伯與中文數字（2026-07-02：「改成五天」「調到一百」原本中文
     數字整段漏抽）。相對值（加/提高/降低）帶正負號，絕對值（改成/調到）純數字。"""
     import re as _re
+    # 「一天半/7天半」帶半的口語（r21：「前置天數加一天半」曾抽成 +1=數值不精確）
+    # → 回 None 讓上層 clarify 追問
+    if _re.search(_NUM_PART + r"(?:天|件|個)?半", user_text):
+        return None
     # 「到」結尾的動詞是絕對值語氣（調升到40=設成40，不是+40），要在相對值之前檢查
     # （第11輪抓到：「調升到40」的 rel/abs 都比對不到，value 整個漏抽）
     # 「動詞+到」是絕對值語氣（調高到100=設成100，不是+100）。RPI5 v21 抓到
@@ -2134,6 +2146,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _qty13b_m = _re13b_pre.search(r'數量\s*([0-9]+)', user_text)
     # 中文數字要能真的轉成整數才算數（避免「幾個」的「幾」等非數字被誤收）
     _qty13b_int = _cn_to_int(_qty13b_m.group(1)) if _qty13b_m else None
+    # 「一箱半」量詞後綴「半」（r21：曾抽成 1 開出 -1 件卡=數值錯）→ 當模糊量追問
+    if _qty13b_m and _qty13b_int is not None and user_text[_qty13b_m.end():_qty13b_m.end() + 1] == "半":
+        _qty13b_int = None
     # 負數進貨（r17：「北倉進貨-20個耳機」負號在 regex 之外被吞、開出 +20 卡
     # 語意整個反轉）→ 保留負號讓 tools_v2.create_movement 擋下追問
     if _qty13b_m and _qty13b_int is not None:
@@ -2323,7 +2338,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         import re as _re_c7
         _c7_resid = _re_c7.sub(r"(?:快要|快|已經|要)?(?:過期|到期|壞掉|不能賣)(?:了)?(?:嗎|沒)?"
                                # 時間殘字（r20：「南倉這個月會過期的」kw 殘「月會」誤當商品）
-                               r"|這個月|上個月|下個月|本月|月底|月初|近期|會", "",
+                               r"|這個月|上個月|下個月|本月|月底|月初|近期|會"
+                               r"|這週|本週|下週|上週|這禮拜|週", "",
                                (_c7_kw or "")).strip()
         if (_c7_resid and not _c7_kw_name and " " not in _c7_resid
                 and 2 <= len(_c7_resid) <= 6 and _re_c7.fullmatch(r"[一-鿿]+", _c7_resid)
@@ -2414,6 +2430,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                             break
             if _c3_cat_ok:
                 new_args["category"] = _c3_cat
+            elif not new_args.get("category"):
+                # 類別從原句補（r21：「電子產品類缺貨的」曾回全部類別清單）
+                for _zh3c, _cat3c in {"電子": "electronics", "3c": "electronics",
+                                       "家電": "appliance_kitchen", "廚具": "appliance_kitchen",
+                                       "食品": "food_beverage", "飲料": "food_beverage",
+                                       "日用": "daily_goods", "服飾": "apparel", "衣服": "apparel",
+                                       "運動": "sports", "露營": "sports"}.items():
+                    if _zh3c in user_text:
+                        new_args["category"] = _cat3c
+                        break
             return "list_low_stock", new_args, True
         else:
             # LLM 已正確輸出 list_low_stock，但後續 C14 看到「警示」會誤覆蓋成 set_alert
@@ -2426,6 +2452,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         if _zh3b in user_text and _en3b != "all":
                             func_args = {**func_args, "warehouse": _en3b}
                             break
+            if func_args.get("category") not in VALID_CATEGORIES:
+                # 類別從原句補（r21：「電子產品類缺貨的」曾回全部類別，else 分支同款漏）
+                for _zh3d, _cat3d in {"電子": "electronics", "3c": "electronics",
+                                       "家電": "appliance_kitchen", "廚具": "appliance_kitchen",
+                                       "食品": "food_beverage", "飲料": "food_beverage",
+                                       "日用": "daily_goods", "服飾": "apparel", "衣服": "apparel",
+                                       "運動": "sports", "露營": "sports"}.items():
+                    if _zh3d in user_text:
+                        func_args = {**func_args, "category": _cat3d}
+                        break
             if _c3_cat and not _c3_cat_ok:
                 func_args = {k: v for k, v in func_args.items() if k != "category"}
                 log.info(f"[校正 C3] 丟棄幻覺 category={_c3_cat}")
@@ -4983,6 +5019,8 @@ async def ws_handler(ws: WebSocket):
                            # 是動態（銷量/進出）問句不是存量，不可直達回庫存
                            "上週", "上周", "這週", "本週", "哪週", "上個月", "昨天",
                            "這禮拜", "上禮拜",
+                           # r21：「打果汁的賣得好嗎」銷況問句
+                           "賣得好",
                            "比較", "警示", "排程", "報表", "採購", "對帳",
                            # 「買」「缺貨」移除（r16：擋掉正當查詢——「啤酒還有得買嗎」
                            # 「氣泡水缺貨了嗎」「上次買的那個防蚊的」都是問該商品庫存，
@@ -5102,7 +5140,9 @@ async def ws_handler(ws: WebSocket):
             # ── 兩商品庫存比較（r20）：「運動毛巾跟登山水壺各剩多少」曾只回
             #   單品。倉名開頭句（北倉跟中倉…）比不到商品自然跳過。──
             _pvi = _re.search(r'^(.{1,12}?)[跟和與](.{1,12}?)(?:各剩多少|各多少|各有多少'
-                              r'|各還[有剩]|庫存各|各庫存|各剩幾)', user_text)
+                              r'|各還[有剩]|庫存各|各庫存|各剩幾'
+                              # r21：「露營馬克杯跟露營燈哪個庫存多」曾只回單品
+                              r'|哪個庫存多|哪個庫存比較多|誰的?庫存多|哪個比較多|哪個多)', user_text)
             if _pvi:
                 import warehouse as _W_pvi
                 _pia_kw = _extract_sku_keyword(_pvi.group(1)) or _pvi.group(1).strip()
