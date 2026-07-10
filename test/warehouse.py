@@ -341,6 +341,13 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
     if not keyword:
         return [{"item": it, "score": 1} for it in items]
 
+    # SKU 代號直查（r18：「給我看看s01的庫存」「e01跟e02哪個賣得好」——
+    # 前端畫面上看得到代號，訪客會直接打）
+    _kw_id = keyword.strip().lower()
+    _id_hit = next((it for it in items if it["sku_id"].lower() == _kw_id), None)
+    if _id_hit:
+        return [{"item": _id_hit, "score": 99}]
+
     tokens = _tokenize(keyword)
     if not tokens:
         return [{"item": it, "score": 1} for it in items]
