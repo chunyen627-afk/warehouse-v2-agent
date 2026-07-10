@@ -6,7 +6,11 @@
 dispatch / rewrite / 關鍵字清單，跑這支全量驗證。
 
 用法：
-    python regression_ws.py            # 跑全部
+    python regression_ws.py            # 跑全部（commit 前必跑）
+    python regression_ws.py --smoke    # 快篩：每個註解區塊只取首句（~186 句、
+                                       #   ~5 分鐘），開發迭代用；區塊=corpus 裡
+                                       #   一段 # 註解後的連續句子=一個 bug/機制，
+                                       #   首句即該規則路徑的代表守衛
     python regression_ws.py mv tf      # 只跑指定類別
 
 題庫格式（regression_corpus.txt）：
@@ -75,11 +79,16 @@ async def _q(text):
 
 
 def main():
+    smoke = "--smoke" in sys.argv
+    if smoke:
+        sys.argv.remove("--smoke")
     only = set(sys.argv[1:])
     qa = []
+    in_block = False   # smoke 模式：每個註解區塊只收首句
     for line in CORPUS.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
+            in_block = False
             continue
         parts = [p.strip() for p in line.split("|")]
         if len(parts) < 2:
@@ -90,7 +99,12 @@ def main():
             continue
         if only and cat not in only:
             continue
+        if smoke and in_block:
+            continue          # 同區塊第 2 句起跳過
+        in_block = True
         qa.append((cat, text, must))
+    if smoke:
+        print(f"[smoke] 快篩模式：{len(qa)} 句（每區塊首句；commit 前仍須跑全量）")
 
     total = ok = 0
     fails = []
