@@ -456,6 +456,8 @@ _LOW_STOCK_INTENT_WORDS = (
     "缺最兇", "缺得最兇", "最缺", "缺最多",
     # r20：「存貨快歸零的有哪些」（裸歸零已從黑名單窄化）
     "快歸零", "歸零的",
+    # r22：「再一週就沒貨的有哪些」曾回熱銷榜（相反誤導）
+    "就沒貨", "快不行",
     "low stock", "restock", "running low", "alert",
 )
 
@@ -572,6 +574,8 @@ _DESC_NONQUERY_INTENT = (
     "還需要買", "還要買什麼", "需要搭",
     # r19 smoke：「北倉報廢5個保鮮盒」報廢不以 進/出 開頭，mv_qty 結構抓不到
     "報廢", "耗損", "丟棄", "損毀",
+    # r22：「中倉今天到了一批牛仔褲 35件」批次進貨句（查詢句不會講一批/一票）
+    "一批", "一票", "到了",
     # r20：「跟瑜珈墊類似的商品」是連帶/相關查詢、「X跟Y各剩多少」是多品查詢，
     # 都不可被單品描述直達搶走
     "類似", "同類", "相關商品", "的相關", "各剩", "各多少", "各有多少", "各還",
@@ -2114,11 +2118,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
     import re as _re13b_single
-    _single_dir_m = _re13b_single.search(r'[進出](?=[一-鿿\s0-9]{0,10}(?:[0-9]+|[零一二兩三四五六七八九十百千萬億半幾來]+)\s*(?:件|個(?!月|星期|禮拜|小時|鐘頭|倉)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞|打))', user_text)
+    _single_dir_m = _re13b_single.search(r'[進出送](?=[一-鿿\s0-9]{0,10}(?:[0-9]+|[零一二兩三四五六七八九十百千萬億半幾來]+)\s*(?:件|個(?!月|星期|禮拜|小時|鐘頭|倉)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞|打))', user_text)
     if _single_dir_m and not _has_movement_word:
         _has_movement_word = True
-        if _single_dir_m.group(0) == "進":
-            _movement_in_words = _movement_in_words + ("進",)
+        if _single_dir_m.group(0) in ("進", "送"):
+            # 「送40個防摔殼來南倉」的裸「送」+數量=進貨（送我/送給無數量不會中）
+            _movement_in_words = _movement_in_words + (_single_dir_m.group(0),)
         else:
             _movement_out_words = _movement_out_words + ("出",)
     # 數字開頭的反向詞序（r18：「30個耳機進北倉」——方向詞在商品後、倉名前，
@@ -2180,6 +2185,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     "大概", "這樣", "差不多", "就是", "然後", "話說", "對了",
                     "差點忘了", "順便", "喔對", "唉", "嗯", "就")):
             _pre_clean = _pre_clean.replace(_w, "")
+        # 批次量詞（r22：「到了一批牛仔褲 35件」kw 曾抽成「一批牛仔褲」找不到）
+        for _vq13b in ("一批", "一票", "一些", "一組貨", "一堆"):
+            _pre_clean = _pre_clean.replace(_vq13b, " ")
         # 範圍句殘留數字（r20：「進10到20個耳機」剝掉 qty「20個」後殘「10到」
         # 黏進 kw 變「10到耳機」→ 找不到）
         _pre_clean = _re13b_pre.sub(r'[0-9]+[到~－-]?', ' ', _pre_clean)
@@ -2332,6 +2340,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _c7_kw = _extract_sku_keyword(user_text)
         _c7_km = _W_c7.match_items(_c7_kw) if _c7_kw else []
         _c7_kw_name = _c7_km[0]["item"]["name"] if (_c7_km and _c7_km[0].get("score", 0) >= 3) else ""
+        # kw 要接地於「剝掉到期語」後的原句（r22：「保鮮期倒數的有哪些」的
+        # 「保鮮」錨到玻璃保鮮盒 → 回單品到期=答非所問，應回全倉總覽）
+        if _c7_kw_name:
+            import re as _re_c7g
+            _c7_gtxt = _re_c7g.sub(r"保鮮期|效期|到期|過期|保存期限|賞味", "", user_text)
+            if not _kw_grounded(_c7_kw_name, _c7_gtxt):
+                _c7_kw_name = ""
         # 指名了商品但庫裡沒有（r18：「香皂快過期了嗎」曾回全倉到期總覽，
         # 讓人以為有賣香皂）→ 轉庫存查詢讓它誠實回「找不到香皂」。
         # kw 常黏著到期語（「香皂快過期」）→ 先剝掉再判斷殘餘名詞。
@@ -2490,6 +2505,30 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info("[校正 C9d] 安全庫存排名問句 → manage_config read")
         return "manage_config", {"action": "read", "key": "安全庫存"}, True
 
+    # ── C3e（r22）：LLM 幻覺 list_low_stock 防閘——句中完全沒有缺貨語彙
+    # （「幫我看那個...忘記叫什麼」「上次那個藍牙的東西還有嗎」曾回缺貨清單）
+    # → 有扎實商品線索轉查庫存，否則回概覽。真缺貨句必含 C3 詞表詞不受影響。
+    if func_name == "list_low_stock":
+        _c3e_low = (any(w in user_text for w in _LOW_STOCK_INTENT_WORDS)
+                    or any(w in text_low for w in _LOW_STOCK_INTENT_WORDS)
+                    or any(w in user_text for w in ("警示", "缺", "補", "低於", "安全",
+                                                     "斷", "沒了", "沒貨", "不夠", "不行",
+                                                     "告急", "危", "急")))
+        # 熱銷/滯銷詞在場讓給 C4 轉排行（r22 smoke：「賣不好的有哪些」曾被
+        # 這裡搶成概覽，該滯銷榜）
+        _c3e_hotslow = (any(w in user_text for w in _HOT_INTENT_WORDS_HOT)
+                        or any(w in user_text for w in _HOT_INTENT_WORDS_SLOW))
+        # RCA 詞也放行讓 C8 轉 search_log（r22 RPI5：「庫存少得莫名其妙」
+        # 曾被這裡搶成單品庫存）
+        if not _c3e_low and not _c3e_hotslow and not _has_rca_word(user_text):
+            import warehouse as _W3e
+            _c3e_kw = _extract_sku_keyword(user_text)
+            _c3e_m = _W3e.match_items(_c3e_kw) if _c3e_kw else []
+            if _c3e_m and _c3e_m[0].get("score", 0) >= 2:
+                log.info(f"[校正 C3e] low_stock 幻覺+商品線索 → query_inventory kw={_c3e_kw!r}")
+                return "query_inventory", {"keyword": _c3e_kw}, True
+            log.info("[校正 C3e] low_stock 幻覺無缺貨語 → 概覽")
+            return "query_inventory", {}, True
     # ── C4: 熱銷 / 滯銷意圖詞 → list_hot_items ──
     is_hot = any(kw in user_text for kw in _HOT_INTENT_WORDS_HOT) or \
              any(kw in text_low for kw in _HOT_INTENT_WORDS_HOT)
@@ -5026,7 +5065,7 @@ async def ws_handler(ws: WebSocket):
                            # 「氣泡水缺貨了嗎」「上次買的那個防蚊的」都是問該商品庫存，
                            # 直達回庫存正是好答案；related 句改靠 _DESC_NONQUERY_INTENT
                            # 的「的人/的都/還會拿」等精準詞擋）
-                           "到期", "過期", "多少錢", "價格",
+                           "到期", "過期", "保鮮期", "效期", "倒數", "多少錢", "價格",
                            # config/設定語境（「防蚊液安全庫存下修15」曾被劫走）——
                            # 安全庫存/水位一出現就絕非查存量，是設定操作或設定查詢
                            "安全庫存", "安全水位", "水位", "前置", "補貨天數",
@@ -5054,9 +5093,14 @@ async def ws_handler(ws: WebSocket):
             # 「進/出/退 + 數量 + 量詞」= 進出貨句（結構判準，複用 C13b 模式，比枚舉
             # 單字動詞穩健）：「中倉進三箱衛生紙」的「進三箱」= 進+三+箱（2026-07-09）。
             _desc_mv_qty = _re.search(
-                r"[進出退補來調撥挪移轉][一-鿿]{0,4}(?:[0-9]+|[零一二兩三四五六七八九十百千萬億半幾]+)\s*"
+                r"[進出退補來調撥挪移轉送到][一-鿿\s]{0,8}(?:[0-9]+|[零一二兩三四五六七八九十百千萬億半]+)\s*"
                 r"(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞|打|手)",
-                user_text)
+                user_text) or _re.search(
+                r"[進出退補來調撥挪移轉送到]\s*(?:個)?\s*(?:十幾|十來|幾)\s*"
+                r"(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|打)", user_text)
+            # ↑ r22b：「幾」從主結構移出後（「出門充電的還有幾個」曾被誤殺），
+            #   「出十幾個滑鼠」「進幾箱」這類動詞緊鄰模糊量的寫入句用第二條抓——
+            #   查詢句的「還有幾個」動詞不緊鄰不會中
             # NONQUERY 提升為「無條件排除」（r16 回歸抓到：「買露營燈的人購物車
             # 還有什麼」的「還有」命中 QCUE 直接走直達、繞過放寬分支的 NONQUERY
             # 檢查——related/進出貨/調貨意圖不管有沒有查詢語氣都不該直達）
