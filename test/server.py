@@ -1030,7 +1030,7 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(r"裝?咖啡渣的?紙?"), "濾紙"),
     # ── 家電廚具 ──
     (_re.compile(_DA_HEAD + r"(?<!手)(?:[煮泡沖磨](?:個|杯|壺)?咖啡|咖啡機|拿鐵|美式咖啡)" + _DA_TAIL), "咖啡機"),
-    (_re.compile(_DA_HEAD + r"(?:刷牙|潔牙|清牙|牙齒|電動牙刷|音波牙刷)" + _DA_TAIL), "電動牙刷"),
+    (_re.compile(_DA_HEAD + r"(?:刷牙|潔牙|清牙|牙齒|電動的?牙刷|音波牙刷)" + _DA_TAIL), "電動牙刷"),
     (_re.compile(_DA_HEAD + r"(?:[燙熨]衣|除皺|燙平|熨平|燙襯衫|去皺)" + _DA_TAIL), "電熨斗"),
     (_re.compile(_DA_HEAD + r"(?:[打榨](?:果|蔬果)?汁|打果昔|打冰沙|榨柳丁|打奶昔|攪拌)" + _DA_TAIL), "果汁機"),
     (_re.compile(_DA_HEAD + r"(?:拖地|除塵|擦地|掃地|清地板|拖把)" + _DA_TAIL), "拖把"),
@@ -1059,7 +1059,7 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(r"(?:有氣的水|氣泡的水|帶氣的水|碳酸水|汽水|蘇打水|氣泡水|開特力那種)"), "氣泡水"),
     (_re.compile(r"(?:會醉的|有酒精的|喝的酒|啤酒|精釀|生啤|麥酒|喝的beer)"), "精釀啤酒"),
     (_re.compile(_DA_HEAD + r"(?:健身喝|練完喝|補蛋白|高蛋白|乳清|蛋白飲|增肌喝|練肌肉喝)" + _DA_TAIL), "乳清"),
-    (_re.compile(_DA_HEAD + r"(?:運動喝|流汗喝|補電解質|運動飲料|運動飲|補水|寶礦力那種|舒跑那種)" + _DA_TAIL), "運動飲"),
+    (_re.compile(_DA_HEAD + r"(?:運動完?喝|流汗喝|練完喝|補電解質|運動飲料|運動飲|補水|寶礦力那種|舒跑那種)" + _DA_TAIL), "運動飲"),
     (_re.compile(r"(?:巧克力(?:粉|飲|牛奶)?|可可|熱可可|沖泡可可|巧克力沖泡)"), "熱可可粉"),
     (_re.compile(r"(?:掛耳(?:咖啡|包)|濾掛|即溶咖啡|沖泡咖啡包|隨身咖啡)"), "濾掛咖啡"),
     (_re.compile(r"(?:蘇打餅乾|全麥餅|蘇打餅|餅乾|鹹餅乾|全麥蘇打)"), "蘇打餅"),
@@ -1157,6 +1157,12 @@ _FW2HW = str.maketrans("０１２３４５６７８９ＡＢＣＤＥＦＧａ�
 
 def _normalize_typos(user_text: str) -> str:
     t = user_text.translate(_FW2HW)
+    # 自我修正句取後半（OOV-100：「奶瓶刷…不對 電動的牙刷還有嗎」曾抓前半
+    # 的奶瓶刷 clarify）——「X…不對/不是 Y」訪客要的是 Y
+    import re as _re_fix
+    _m_fix = _re_fix.match(r"^[^，,。]{1,10}?[…\.]*\s*(?:不對|不是啦|不是) +(.{3,})$", t)
+    if _m_fix:
+        t = _m_fix.group(1)
     for _bad, _good in _TYPO_NORM:
         if _bad in t:
             t = t.replace(_bad, _good)
