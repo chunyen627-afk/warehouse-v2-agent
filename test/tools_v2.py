@@ -358,12 +358,14 @@ def _resolve_key(key: str) -> str | None:
     if not key:
         return None
     k = key.replace(" ", "").lower()
+    # r25：最長別名優先——「安全水位倍數」曾被 safety_stock 的「安全水位」搶先
+    # 命中，回錯設定項。全部 (別名, canon) 攤平後按長度降冪比對。
+    pairs = [(canon, canon) for canon in _KEY_ALIASES]
     for canon, aliases in _KEY_ALIASES.items():
-        if canon in k:
+        pairs.extend((a, canon) for a in aliases)
+    for alias, canon in sorted(pairs, key=lambda p: -len(p[0])):
+        if alias.replace(" ", "").lower() in k:
             return canon
-        for a in aliases:
-            if a.replace(" ", "").lower() in k:
-                return canon
     return None
 
 
