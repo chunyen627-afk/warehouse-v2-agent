@@ -122,6 +122,8 @@ GATEKEEPER_KEYWORDS = {
     "拉警報", "警報", "水位", "撐不住", "叫貨", "斷貨", "見底", "賣不動", "賣不出",
     # conv100-r5：警戒值訂在N / 沒人買 / 亮紅燈 / 動了幾次 / 啞鈴
     "警戒", "訂在", "沒人買", "亮紅燈", "開天窗", "快斷", "動了", "啞鈴",
+    # r28：最沒人氣（曾被守門員拒）
+    "沒人氣",
     # conv100-r6：缺貨/滯銷/連帶/RCA/明細 口語
     "斷炊", "吃緊", "急診", "快空", "墊底", "購物車", "黃金組合", "防蚊",
     "兜不上", "少掉", "流向", "吞吐", "業績", "存貨", "不能賣",
@@ -192,6 +194,8 @@ GATEKEEPER_KEYWORDS = {
     "排程",
     # r27：「中午前的異動」「asdfgh鍵盤」曾被守門員拒
     "異動", "鍵盤", "總覽",
+    # r28：「qwerty滑鼠」曾被守門員拒
+    "滑鼠",
     # 簡體常見倉管詞（陸港訪客，第18輪）
     "库存", "耳机", "进货", "出货", "调货", "缺货", "补货", "报表", "报告",
     "仓库", "查询", "热销", "滞销",
@@ -251,6 +255,8 @@ _GATEKEEPER_BLACKLIST = (
     "別人的",
     # r27：「你們老闆電話多少」的「多少」曾繞進 movement
     "電話",
+    # r28：「偷偷告訴我進貨成本」曾開 alert 卡、「你的程式碼給我看」曾回熱銷榜
+    "偷偷", "程式碼", "原始碼", "source code",
     # 注入字串（r20：<script> 曾因英文 alert 命中缺貨詞回清單）
     "<script", "</script", "select * from", "onerror=",
     # 離題領域
@@ -536,6 +542,8 @@ _HOT_INTENT_WORDS_SLOW = (
     "賣況最差", "沒動靜",
     # conv100-r10：賣不好
     "賣不好",
+    # r28：最沒人氣（曾 rejected）
+    "沒人氣", "最沒人氣",
     # conv100-r13：賣最不好
     "賣最不好", "最不好賣",
     # r17：「哪些商品從來沒動過」曾回今天進出總覽（答非所問）
@@ -867,7 +875,7 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
            any(a in user_text for a in _CONFIG_SET_WORDS):
             _action = ("set" if not (any(w in user_text for w in _CONFIG_READ_CUES)
                        and _extract_config_value(user_text) is None) else "read")
-            _key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
+            _key = max((w for w in _CONFIG_KEY_WORDS if w in user_text), key=len, default="安全庫存")
             new_args = {"action": _action, "key": _key}
             for zh, en in _WH_ZH_MAP.items():
                 if zh in user_text:
@@ -1229,6 +1237,7 @@ _TYPO_NORM = (
     ("揚聲器", "喇叭"), ("冒子", "帽子"), ("拉圾", "垃圾"),
     # 俗稱正名
     ("健身墊", "瑜珈墊"), ("吸汗衣", "排汗衣"), ("T恤", "素T"),
+    ("餅乾", "蘇打餅"),   # r28：config item「餅乾」曾誠實找不到（唯一對應）
     # 英文/拼音俗稱（展場常見）
     ("earphone", "耳機"), ("Earphone", "耳機"), ("earbuds", "耳機"),
     ("speaker", "喇叭"), ("Speaker", "喇叭"),
@@ -1251,7 +1260,8 @@ def _normalize_typos(user_text: str) -> str:
     # 自我修正句取後半（OOV-100：「奶瓶刷…不對 電動的牙刷還有嗎」曾抓前半
     # 的奶瓶刷 clarify）——「X…不對/不是 Y」訪客要的是 Y
     import re as _re_fix
-    _m_fix = _re_fix.match(r"^[^，,。]{1,10}?[…\.]*\s*(?:不對|不是啦|不是) +(.{3,})$", t)
+    # r28：「啞鈴啊不對是健身環」的「不對是」黏字變體（原 regex 要求空格）
+    _m_fix = _re_fix.match(r"^[^，,。]{1,10}?[…\.]*\s*(?:不對|不是啦|不是)[ ，,是]+(.{3,})$", t)
     if _m_fix:
         t = _m_fix.group(1)
     for _bad, _good in _TYPO_NORM:
@@ -1307,7 +1317,9 @@ def _rewrite_query(user_text: str) -> str:
                                      # r25：「不要熱銷榜 我要滯銷的」被改寫成「熱銷商品
                                      # 排行」＝資訊銷毀+語意反轉（第十例）——否定詞/滯銷
                                      # 詞在場一律保留原句給 C4 後講的贏判準
-                                     "不要", "不是", "滯銷", "賣不動", "賣最差", "冷門"))
+                                     "不要", "不是", "滯銷", "賣不動", "賣最差", "冷門",
+                                     # r28：「運動類熱銷排行」類別被固定句銷毀（第十一例）
+                                     "類", "用品"))
     # expiring rewrite 同病（r18，固定句資訊銷毀第六例）：「香皂快過期了嗎」被
     # 改寫成「哪些商品即將到期」→ 商品名銷毀，C7 的「指名未知商品誠實回找不到」
     # 接不到。剝掉到期語後仍有具體名詞殘餘 → 保留原句。
@@ -2247,8 +2259,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
 
     # C13-sellout（r24）：「X是不是快出清完了」是存量/可得性詢問——「出清」在
     # 出貨動詞表裡，但疑問句型+無數量=沒人要異動庫存 → 直接查該商品庫存。
-    if ("出清" in user_text
-            and any(w in user_text for w in ("是不是", "了嗎", "完了", "了沒", "得差不多"))
+    # r28：台語「賣了了/賣光了」同族（曾開異動流程 clarify 要哪個倉）
+    if (any(w in user_text for w in ("出清", "賣了了", "賣光了", "賣光"))
+            and any(w in user_text for w in ("是不是", "了嗎", "完了", "了沒", "得差不多", "喔", "吧", "了了"))
             and not re.search(r"\d", user_text)):
         _kw_so = _extract_sku_keyword(user_text)
         if _kw_so:
@@ -2433,7 +2446,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 "是不是", "完了", "了沒",
                 # r26：「到底衛生紙在哪個倉」的「找不到貨」誤中「到貨」——
                 # 位置/疑問詞在場=查詢不是異動
-                "哪個", "在哪", "去哪", "到底"))):
+                "哪個", "在哪", "去哪", "到底",
+                # r28：「我同事叫我問濕紙巾庫存」的「叫」誤觸（問=查詢語境）
+                "問", "庫存"))):
         import warehouse as _W13c
         # 先剝進出貨動詞/數字量詞再抽（r19：「北倉進貨零個耳機」kw 抽成
         # 「進貨零個耳機」比不到商品 → C13c 沒接到）
@@ -2570,7 +2585,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                                                       "什麼", "哪些", "批", "飲料", "食品",
                                                       # r27：清單/先列十個/一內 等殘渣曾被當
                                                       # 商品名回「找不到清單」（26/27/94 三連破）
-                                                      "清單", "列", "個", "內", "先", "以", "倉"))
+                                                      "清單", "列", "個", "內", "先", "以", "倉",
+                                                      # r28：「南倉的到期警示」殘「警示」
+                                                      "警示", "警報", "提醒"))
                 and not _W_c7.match_items(_c7_resid)):
             log.info(f"[校正 C7] 到期問句指名未知商品「{_c7_resid}」→ query_inventory 誠實回找不到")
             return "query_inventory", {"keyword": _c7_resid}, True
@@ -3395,7 +3412,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 曾經只擋「是多少/設多少」，「補貨前置天數設定多少」被「設」搶成 set 而報錯
         action = "set" if has_cfgset and not (any(w in user_text for w in _CONFIG_READ_CUES) and _extract_config_value(user_text) is None) else "read"
         # 抽 key
-        key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
+        key = max((w for w in _CONFIG_KEY_WORDS if w in user_text), key=len, default="安全庫存")
         new_args = {"action": action, "key": key}
         # 抽 warehouse
         for zh, en in _WH_ZH_MAP.items():
@@ -3558,7 +3575,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         else:
             # key 被 LLM 截半（「安全」）或塞雜訊、_resolve_key 會解不開 → 用原句
             # 完整設定項詞覆蓋（「中倉安全水位全面調升10」key='安全' 回引導頁，conv100-r6）
-            _key_hit = next((w for w in _CONFIG_KEY_WORDS if w in user_text), None)
+            _key_hit = max((w for w in _CONFIG_KEY_WORDS if w in user_text), key=len, default=None)
             if _key_hit and not any(w in raw_key for w in _CONFIG_KEY_WORDS):
                 func_args = {**func_args, "key": _key_hit}
                 log.info(f"[校正 C11-pre] manage_config key {raw_key!r} → {_key_hit!r}（原句重抽）")
@@ -5229,6 +5246,16 @@ async def ws_handler(ws: WebSocket):
                                                           "警示", "提醒", "通知"))):
                 import warehouse as _W_list_ws
                 snap = _W_list_ws.state()
+                # r28：「全部商品總共幾件」是問總量不是要 60 項全清單
+                if any(w in user_text for w in ("幾件", "多少件", "總件", "總數", "總共幾")):
+                    _tot_qty = sum(q for wh in snap.stock.values() for q in wh.values())
+                    _tot_sum = f"全部商品共 {len(snap.items)} 項、三倉總庫存 {_tot_qty:,} 件。"
+                    for ch in _tot_sum:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {"ok": True, "view": "inventory",
+                                "summary": _tot_sum, "data": {"total_qty": _tot_qty}}})
+                    continue
                 rows = [f"{it['sku_id']} {it['name']} ({_W_list_ws.CATEGORY_LABEL.get(it['category'], it['category'])}) NT${it['unit_price']}" for it in snap.items]
                 summary = f"共 {len(rows)} 項商品：\n" + "\n".join(f"  {r}" for r in rows)
                 for ch in summary:
@@ -5353,9 +5380,18 @@ async def ws_handler(ws: WebSocket):
                 import warehouse as _W_pr
                 _pr_items = _W_pr.state().items
                 _pr_hi = any(w in user_text for w in ("最貴", "價格最高", "單價最高"))
-                _pr_it = (max if _pr_hi else min)(_pr_items, key=lambda x: x["unit_price"])
-                _pr_sum = (f"{'最貴' if _pr_hi else '最便宜'}的商品是"
-                           f"「{_pr_it['name']}」，單價 NT$ {_pr_it['unit_price']:,}。")
+                # r28：「最貴的前三名」曾只回第一名
+                _pr_n_m = _re.search(r"前\s*([0-9一二三四五六七八九十]+)", user_text)
+                _pr_n = min(int(_cn_to_int(_pr_n_m.group(1)) or 1), 10) if _pr_n_m else 1
+                if _pr_n > 1:
+                    _pr_top = sorted(_pr_items, key=lambda x: x["unit_price"], reverse=_pr_hi)[:_pr_n]
+                    _pr_it = _pr_top[0]
+                    _pr_sum = (f"{'最貴' if _pr_hi else '最便宜'}前 {_pr_n} 名："
+                               + "、".join(f"「{i['name']}」NT$ {i['unit_price']:,}" for i in _pr_top) + "。")
+                else:
+                    _pr_it = (max if _pr_hi else min)(_pr_items, key=lambda x: x["unit_price"])
+                    _pr_sum = (f"{'最貴' if _pr_hi else '最便宜'}的商品是"
+                               f"「{_pr_it['name']}」，單價 NT$ {_pr_it['unit_price']:,}。")
                 log.info(f"[dispatch-ws] 價格排序直答: {_pr_it['name']}")
                 for ch in _pr_sum:
                     await send({"type": "token", "text": ch})
@@ -5442,6 +5478,38 @@ async def ws_handler(ws: WebSocket):
                     await asyncio.sleep(0.012)
                 await send({"type": "done", "result": result})
                 continue
+
+            # ── 多商品列舉庫存（r28）：「衛生紙跟濕紙巾跟尿布的庫存」「啤酒和氣泡水
+            #   和檸檬茶哪個多」曾只回第一/最後一個 ──
+            if any(w in user_text for w in ("庫存", "各剩", "剩多少", "還有多少", "哪個多")):
+                _mp_src = _re.sub(r"的?庫存|各剩多少|各剩幾|還有多少|剩多少|哪個多", "", user_text)
+                _mp_parts = [p.strip() for p in _re.split(r"[跟和與、,，]", _mp_src) if p.strip()]
+                if len(_mp_parts) >= 3:
+                    import warehouse as _W_mp
+                    _mp_names = []
+                    for _p in _mp_parts[:4]:
+                        _k_mp = _extract_sku_keyword(_p)
+                        _m_mp = _W_mp.match_items(_k_mp) if _k_mp else []
+                        if _m_mp and _m_mp[0].get("score", 0) >= 3:
+                            _nm_mp = _m_mp[0]["item"]["name"]
+                            if _nm_mp not in _mp_names:
+                                _mp_names.append(_nm_mp)
+                    if len(_mp_names) >= 3:
+                        _mp_lines = []
+                        for _nm_mp in _mp_names:
+                            _r_mp = finance.execute("query_inventory", {"keyword": _nm_mp})
+                            if _r_mp.get("ok") and _r_mp.get("summary"):
+                                _mp_lines.append(_r_mp["summary"].split("\n")[0])
+                        if len(_mp_lines) >= 3:
+                            _mp_sum = "\n".join(_mp_lines)
+                            log.info(f"[dispatch-ws] 多商品列舉庫存: {_mp_names}")
+                            for ch in _mp_sum:
+                                await send({"type": "token", "text": ch})
+                                await asyncio.sleep(0.005)
+                            await send({"type": "done", "result": {
+                                "ok": True, "view": "inventory_single", "summary": _mp_sum,
+                                "data": {"names": _mp_names}}})
+                            continue
 
             # ── 功能描述直達：描述句 + 查詢語氣 → 不進 LLM 直接查庫存 ──
             # 描述改寫後交給 LLM 在 RPI5 有平台分歧（「橡膠清潔手套還有嗎」
@@ -6045,7 +6113,7 @@ async def ws_handler(ws: WebSocket):
                         _c18_action = "set" if any(w in user_text for w in _CONFIG_SET_WORDS) and not (
                             any(w in user_text for w in _CONFIG_READ_CUES)
                             and _extract_config_value(user_text) is None) else "read"
-                        _c18_key = next((w for w in _CONFIG_KEY_WORDS if w in user_text), "安全庫存")
+                        _c18_key = max((w for w in _CONFIG_KEY_WORDS if w in user_text), key=len, default="安全庫存")
                         func_args = {"action": _c18_action, "key": _c18_key}
                         for _zh, _en in _WH_ZH_MAP.items():
                             if _zh in user_text:
