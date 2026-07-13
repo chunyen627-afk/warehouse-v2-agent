@@ -434,6 +434,8 @@ def _is_guide_request(text: str) -> bool:
         "剩", "多少", "幾個", "還有", "夠不夠", "夠賣", "堅果",
         # r27：「本月全部異動總覽」的「全部」曾搶成 guide
         "異動", "總覽",
+        # r29：「全部倉一共幾項商品」曾搶成 guide
+        "幾項", "幾種",
         "連帶", "也買", "一起買", "搭配", "帶動", "好夥伴",
         "到期", "過期", "保存期限", "效期", "保鮮", "賞味", "即期",
         "壞掉", "快壞", "快爛", "快過期",
@@ -690,6 +692,8 @@ _MOVEMENT_PROTECT_WORDS = (
     "流水", "的流水",
     # r26：出貨統計/有動嗎/進出如何（曾掉 OOV clarify、inventory、直達劫）
     "出貨統計", "進貨統計", "有動嗎", "有動靜", "進出如何", "最近進出",
+    # r29：上一筆/最新一筆/這個月的紀錄（曾回熱銷榜/inventory）
+    "上一筆", "最新的一筆", "最後一筆", "最近一筆", "的紀錄", "的記錄",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -2953,6 +2957,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         return "compare_warehouses", {"warehouse_a": _d_ab[0], "warehouse_b": _d_ab[1],
                                       "metric": "item_count"}, True
 
+    # C5-rank3c（r29）：點名三倉+誰最大 → compare(all)。跟 C5-diff 同理由：
+    # C5-rank3 只接 compare 分支，RPI5 的 LLM 投 hot 就繞過（func 無關規則要放前面）
+    if (sum(1 for z in ("北倉", "中倉", "南倉") if z in user_text) >= 3
+            and any(w in user_text for w in ("誰最大", "誰最多", "哪個最大", "誰最滿", "誰大", "最大", "最多", "最滿"))
+            and not any(w in user_text for w in ("賣", "銷", "熱", "滯"))):
+        log.info("[校正 C5-rank3c] 點名三倉排名 → compare(all)")
+        return "compare_warehouses", {"warehouse_a": "all", "warehouse_b": "all",
+                                      "metric": "item_count"}, True
+
     # ── C2d: 純庫存問句被 LLM 誤投 movement → 攔回 inventory ──
     # 「羽絨外套冬天快到了 倉庫有多少件」的「到了」讓 LLM 幻覺 movement，
     # 回「本週進貨 0 件」答非所問（conv100-r5）。句中有存量語氣、且完全沒有
@@ -3189,7 +3202,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _named_whs = sum(1 for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text)
         _rank3_cue = any(w in user_text for w in (
             "哪個倉", "哪倉", "各倉", "三倉", "三個倉", "每個倉", "最多", "最空",
-            "最滿", "分布", "佔比", "哪個最", "誰最"))
+            "最滿", "分布", "佔比", "哪個最", "誰最",
+            # r29：「北倉南倉中倉誰最大」曾回熱銷榜
+            "誰最大", "哪個最大", "誰大"))
         if _rank3_cue and _named_whs < 2:
             _mt = func_args.get("metric") if func_args.get("metric") in ("stock_value", "item_count", "turnover") else "item_count"
             log.info(f"[校正 C5-rank3] 三倉排名意圖 → compare(all) metric={_mt}")
@@ -3456,7 +3471,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # r27：查詢語境豁免——「剛剛盤點的時候發現…庫存數字是多少」是查庫存不是要
     # 跑盤點腳本（曾開出 script_confirm 卡）
     _c10_query_ctx = any(w in user_text for w in ("是多少", "多少", "還剩", "剩幾",
-                                                   "數字", "對不對", "的時候", "發現"))
+                                                   "數字", "對不對", "的時候", "發現",
+                                                   # r29：「盤點表在哪」是找檔案不是要跑腳本
+                                                   "在哪", "哪裡", "哪邊"))
     if not _is_sched_intent and not _c10_query_ctx and \
             (func_name not in ("run_script", "set_schedule") or not func_args.get("script_name")) \
             and not has_cfgkey and any(w in user_text for w in _script_strong):
@@ -5236,7 +5253,9 @@ async def ws_handler(ws: WebSocket):
 
             # ── 列出所有商品（優先於引導）──
             # 含設定關鍵字時不攔（「中倉全部商品安全庫存改成六十」是 config 句）
-            if (any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱"))
+            if (any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱",
+                                              # r29：「全部倉一共幾項商品」
+                                              "幾項商品", "幾種商品"))
                     and not any(w in user_text for w in _CONFIG_KEY_WORDS)
                     # 搗蛋語境不觸發列表（「所有商品免費送我」「全部商品算零元」曾吐 61 項全清單）
                     and not any(w in user_text for w in ("免費", "送我", "送給", "白拿", "改成", "刪",
@@ -5247,7 +5266,8 @@ async def ws_handler(ws: WebSocket):
                 import warehouse as _W_list_ws
                 snap = _W_list_ws.state()
                 # r28：「全部商品總共幾件」是問總量不是要 60 項全清單
-                if any(w in user_text for w in ("幾件", "多少件", "總件", "總數", "總共幾")):
+                if any(w in user_text for w in ("幾件", "多少件", "總件", "總數", "總共幾",
+                                                 "幾項", "幾種", "一共幾")):
                     _tot_qty = sum(q for wh in snap.stock.values() for q in wh.values())
                     _tot_sum = f"全部商品共 {len(snap.items)} 項、三倉總庫存 {_tot_qty:,} 件。"
                     for ch in _tot_sum:
@@ -5898,7 +5918,8 @@ async def ws_handler(ws: WebSocket):
                     "每天", "每日", "天天", "每週", "每周", "每月", "每個月", "每星期", "每禮拜", "排程"))
                 # r27：查詢語境豁免（「剛剛盤點的時候發現…數字是多少」是查庫存）
                 _prec10_query = any(w in user_text for w in ("是多少", "多少", "還剩", "剩幾",
-                                                              "數字", "對不對", "的時候", "發現"))
+                                                              "數字", "對不對", "的時候", "發現",
+                                                              "在哪", "哪裡", "哪邊"))
                 if _pre_script_hit and func_name not in _prec10_skip and not _prec10_sched and not _prec10_query:
                     smap = {"盤點": "盤點", "月底盤點": "月底盤點",
                             "匯出進出": "匯出", "匯出記錄": "匯出", "進出記錄": "匯出",
