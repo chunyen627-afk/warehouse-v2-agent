@@ -350,6 +350,28 @@ GUIDE_MSG = (
 )
 
 
+def _text_has_item_name(text: str) -> bool:
+    """句中含任一真商品名的 3 字滑窗片段 → 視為具體查詢，不進 guide 導覽。
+    r24：「查一下橡膠清潔手套全部加起來有幾雙」「幫我看看看看濕紙巾」的商品
+    不在 SPECIFIC 手列名單，被「全部/看看」搶成 guide——手工枚舉必有盲區，
+    改用商品主檔滑窗做結構性判準（60 商品 × ~5 窗，成本可忽略）。"""
+    try:
+        import warehouse as _W_gd
+        s = text.lower().replace(" ", "")
+        for _it_gd in _W_gd.state().items:
+            nm = _it_gd["name"].lower().replace(" ", "")
+            if len(nm) <= 3:
+                if nm in s:
+                    return True
+                continue
+            for i in range(len(nm) - 2):
+                if nm[i:i + 3] in s:
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 def _is_guide_request(text: str) -> bool:
     """判斷訪客是否想看倉管工具總覽。
     優先排除：句中已含具體商品 / 類別 / 倉庫關鍵字 → 當查詢、交給 LLM
@@ -369,7 +391,8 @@ def _is_guide_request(text: str) -> bool:
                           "比較", "通知", "提醒", "月報", "報表", "體檢",
                           "對帳", "少了", "怪", "coffee", "stock", "buy")
         if (not any(w in s for w in _long_specific)
-                and not re.search(r"\d", s)):
+                and not re.search(r"\d", s)
+                and not _text_has_item_name(s)):
             return True
         return False
     if re.fullmatch(r"\d+", s):
@@ -400,6 +423,9 @@ def _is_guide_request(text: str) -> bool:
     for h in SPECIFIC:
         if h in s:
             return False
+    # 句含真商品名（3 字滑窗）→ 是具體查詢不是要導覽（r24）
+    if _text_has_item_name(s):
+        return False
     for kw in GUIDE_KEYWORDS:
         if kw in s:
             return True
@@ -530,6 +556,8 @@ _RELATED_INTENT_WORDS = (
     "拍檔", "對味", "最麻吉", "麻吉",
     # conv100-r14：都會多帶什麼
     "多帶", "會多帶",
+    # r24：「運動壓縮臂套跟啥最搭」（gate 三表同步：NONQUERY/_TOOL_INTENT_GUARD 同補）
+    "最搭", "跟啥搭", "跟什麼搭",
     # 「順便帶啥/順便買啥」的「順便」（RPI5 壓測抓到：只有「順便買」時
     # 「順便帶啥」落到 LLM 自由判斷，WIN11 判 related、RPI5 判 hot_items
     # ——硬體敏感的分歧。加規則 hard-return 消除不確定性）
@@ -587,6 +615,8 @@ _DESC_NONQUERY_INTENT = (
     "哪個庫存", "誰的庫存", "哪個比較多",
     # r23：「濕紙巾的最佳拍檔」「跟啞鈴最對味的」連帶句
     "拍檔", "對味", "麻吉",
+    # r24：「跟啥最搭」（與 _RELATED_INTENT_WORDS / gate 三表同步）
+    "最搭", "跟啥搭", "跟什麼搭",
     # 銷況
     "賣得如何", "賣得怎樣", "賣況", "賣得動", "最近賣", "銷量", "賣最",
 )
@@ -618,6 +648,8 @@ _MOVEMENT_PROTECT_WORDS = (
     "進過貨", "出過貨",
     # conv100-r13：「玻璃保鮮盒最近有補貨嗎」（問進貨紀錄不是缺貨清單）
     "有補貨", "補過貨",
+    # r24：「登山水壺這禮拜出了幾支」（RPI5 平台分歧退成庫存 → 確定性層接手）
+    "出了幾", "進了幾",
 )
 
 # C8 search_log（RCA）：追原因/對不上/異常 —— 跟 query_movement（純進出統計）區隔
@@ -638,6 +670,8 @@ _RCA_INTENT_WORDS = (
     "對不太起來", "縮水", "怪異", "落差", "追查",
     # conv100-r11：帳對嗎
     "帳對嗎", "的帳對",
+    # r24：「帳目對不對得上」「庫存數字有點怪」都曾退成純庫存查詢
+    "對不對得上", "帳目對不對", "對得上嗎", "有點怪", "數字有點", "數字怪",
     "discrepancy", "why", "who changed", "trace",
 )
 
@@ -665,7 +699,8 @@ _TOOL_INTENT_GUARD = {
                             "速配",
                             # r20：「跟瑜珈墊類似的商品」閘門缺詞 → rescue 轉回庫存
                             # r23：「最佳拍檔/對味/麻吉」同款（詞表/NONQUERY/gate 三處要同步）
-                            "類似", "同類", "相關", "拍檔", "對味", "麻吉"),
+                            # r24：「跟啥最搭」同款
+                            "類似", "同類", "相關", "拍檔", "對味", "麻吉", "最搭", "跟啥搭", "跟什麼搭"),
     "search_log":       _RCA_INTENT_WORDS,
     "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料"),
     # run_script：需含腳本動作詞，否則閒聊句「一起吃飯」被 LLM 幻覺成
@@ -812,13 +847,17 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
 # C9 manage_config：改設定（設定項詞 + 動作詞）
 _CONFIG_KEY_WORDS = ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置",
                      "安全水位倍數", "補貨目標天數", "警戒值", "補貨天數", "安全量",
+                     # r24：「把三層抽取衛生紙的庫存底線拉高到400」曾退成純庫存查詢
+                     "庫存底線", "存量底線",
                      "lead", "safety stock")
 _CONFIG_SET_WORDS = ("改成", "設成", "設為", "調成", "調到", "改為", "設定為",
                      "調高", "調低", "提高", "提升", "降低", "降", "加", "減", "+", "改", "設",
                      "調升", "調降", "上修", "下修", "升到", "降到",
                      "訂在", "訂為", "定在", "定為", "縮短成", "縮短到", "縮成",
                      "歸", "拉長", "拉長到", "延長到", "加長到",
-                     "上調", "下調", "壓到", "改回")
+                     "上調", "下調", "壓到", "改回",
+                     # r24：庫存底線「拉高到400」
+                     "拉高", "拉高到", "拉到")
 _CONFIG_READ_WORDS = ("是多少", "設多少", "多少", "現在設", "目前", "查一下", "看一下", "設定值")
 # 問句/讀取語氣詞：出現這些且句中抽不到數值 → manage_config 一律當 read。
 # C9 / C9b / C18 三處共用（曾經三處各自維護，「設定給我看」只修了 C9b 又被
@@ -844,6 +883,7 @@ _ALL_INTENT_WORDS = (
     "查", "看", "庫存", "查庫存", "還有多少", "有多少", "數量", "剩多少", "剩幾個",
     "存貨", "狀態",   # conv100-r6：「橡膠清潔手套存貨狀態」被類別 clarify 攔
     "賣得", "熱銷",   # conv100-r8：「電子產品賣得如何」被類別 clarify 攔
+    "冠軍", "人氣王", "銷售冠軍",   # r24：「電子產品的銷售冠軍是誰」被類別 clarify 攔
 
     "多少", "幾個", "幾件", "多少個", "多少件",   # ← 補「多少」系列
     "進出", "進貨", "出貨", "異動", "移動", "移轉", "紀錄", "流向",
@@ -1075,6 +1115,8 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(_DA_HEAD + r"(?:防蚊|驅蚊|防蚊蟲|防蚊液|擦的防蚊|噴的防蚊)" + _DA_TAIL), "防蚊液"),
     # 「防蚊插座」移除——「防蚊」會被防蚊液 pattern 先吃；蚊香/電蚊香已明確
     (_re.compile(r"(?:插電的?蚊香|電蚊香|蚊香液|液體蚊香|補充瓶蚊香)(?:液)?"), "蚊香液"),
+    # r24：「給寶寶擦屁股的」是濕紙巾，長描述在前防被下一條「擦屁股→衛生紙」劫走
+    (_re.compile(r"(?:給)?(?:寶寶|嬰兒|小孩|小朋友|北鼻)[一-鿿]{0,3}擦(?:屁股|屁屁)?"), "嬰兒濕紙巾"),
     (_re.compile(_DA_HEAD + r"(?:擦屁股|衛生紙|抽取衛生紙|廁所紙|捲筒紙|面紙)" + _DA_TAIL), "衛生紙"),
     (_re.compile(_DA_HEAD + r"(?:包屁股|包寶寶|寶寶包|給寶寶包|尿布|紙尿褲|尿褲|嬰兒尿布)" + _DA_TAIL), "紙尿布"),
     # 濕紙巾：與紙尿布分流（都是嬰兒用品，但「濕紙巾/擦手擦嘴」明確）
@@ -1133,6 +1175,8 @@ _TYPO_NORM = (
     ("yoga", "瑜珈"), ("Yoga", "瑜珈"), ("YOGA", "瑜珈"),
     # OOV-100 招牌大補帖（2026-07-11）：同音/形近錯字（RPI5 實測 clarify 的全補）
     ("籃芽", "藍牙"), ("滑鼡", "滑鼠"), ("瑜咖", "瑜珈"), ("慢泡鞋", "慢跑鞋"),
+    # r24：律紙/化鼠（同音錯字，RPI5 clarify 而本機直達=平台分歧 → 確定性層接手）
+    ("律紙", "濾紙"), ("化鼠", "滑鼠"),
     ("水湖", "水壺"), ("寧檬", "檸檬"), ("悶稍", "悶燒"), ("咖啡綠紙", "咖啡濾紙"),
     ("筆店包", "筆電包"), ("電動壓刷", "電動牙刷"), ("垃圾帶", "垃圾袋"),
     ("揚聲器", "喇叭"), ("冒子", "帽子"), ("拉圾", "垃圾"),
@@ -2122,6 +2166,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                                     # 問數量（str(None)='None' 曾進 int() 靠例外兜住，r18 整潔化）
                                     "qty": str(_qty13a_int) if _qty13a_int is not None else ""}, True
 
+    # C13-sellout（r24）：「X是不是快出清完了」是存量/可得性詢問——「出清」在
+    # 出貨動詞表裡，但疑問句型+無數量=沒人要異動庫存 → 直接查該商品庫存。
+    if ("出清" in user_text
+            and any(w in user_text for w in ("是不是", "了嗎", "完了", "了沒", "得差不多"))
+            and not re.search(r"\d", user_text)):
+        _kw_so = _extract_sku_keyword(user_text)
+        if _kw_so:
+            log.info(f"[校正 C13-sellout] 出清疑問句 → query_inventory({_kw_so!r})")
+            return "query_inventory", {"keyword": _kw_so}, True
+
     # C13b：即時進出貨意圖 → create_movement（輕量版，不依賴模型認得這個新 function，
     #   270M 沒訓練過 create_movement，靠關鍵字 + 正則抽參數，跟 list_files/set_alert 同模式）
     #   放在所有規則最前面（優先權最高）：「藍牙喇叭庫存加50組」這種句子含「庫存」+
@@ -2144,6 +2198,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                           "到了", "收到", "收一批", "入倉", "上架",
                           # conv100-r6：「北倉新到一批LED露營燈」
                           "新到", "收進",
+                          # r24：「剛到一批機能排汗衣60件放中倉」的「剛到」漏收
+                          # → LLM 幻覺成 manage_config read 回設定導覽
+                          "剛到",
                           # conv100-r7：「北倉剛進一批玻璃保鮮盒」
                           "剛進",
                           # conv100-r9：「幫我叫30包嬰兒濕紙巾的貨」（qty 前提下單字安全）
@@ -2274,7 +2331,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 "嗎", "什麼", "哪些", "多少", "幾次", "紀錄", "記錄", "明細",
                 "清單", "統計", "流水", "歷史", "沒有", "有沒有", "最近",
                 "今天", "昨天", "上週", "本週", "這週", "本月", "這個月",
-                "上個月", "這禮拜", "怎", "如何", "狀況", "誰", "為何"))):
+                "上個月", "這禮拜", "怎", "如何", "狀況", "誰", "為何",
+                # r24：「智慧手環是不是快出清完了」是存量詢問不是出貨動作，
+                # 曾被「出清」開 create_movement 追問「要異動哪個倉」
+                "是不是", "完了", "了沒"))):
         import warehouse as _W13c
         # 先剝進出貨動詞/數字量詞再抽（r19：「北倉進貨零個耳機」kw 抽成
         # 「進貨零個耳機」比不到商品 → C13c 沒接到）
@@ -2452,7 +2512,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 「天數」入列：「中倉補貨天數縮短成3天」的「補貨」曾把 config 句搶成缺貨清單（conv100-r5）
     _cfg_key_in_text = any(w in user_text for w in
                            ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置", "前置時間",
-                            "天數", "警戒值"))
+                            "天數", "警戒值", "庫存底線", "存量底線"))
     _report_in_text = any(w in user_text for w in ("報表", "報告", "體檢", "健檢"))
     # 「告訴我」收斂成「就告訴我」：「見底的貨順便告訴我要補幾個」不是警示設定，
     # 曾被這裡排除掉落到 C6 亂轉 related（conv100-r5）
@@ -2973,6 +3033,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info("[校正 C3c] 低於安全庫存 → list_low_stock")
         return "list_low_stock", {}, True
 
+    # C5-rank3b（r24）：「三個倉的庫存量排一下名」LLM 誤投 query_inventory{三倉}
+    # → C5-rank3 只接 compare 分支接不到，C13 還會把幻覺 kw 硬轉單品庫存。
+    # 排名 cue + 倉 cue + 未點名 2 倉 + 非銷售/設定語境 → compare(all) 三倉排名。
+    if (any(w in user_text for w in ("排名", "排行", "排一下", "比一比", "排個名", "名次"))
+            and any(w in user_text for w in ("三個倉", "三倉", "各倉", "每個倉", "哪個倉", "倉的庫存"))
+            and sum(1 for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text) < 2
+            and not any(w in user_text for w in ("賣", "銷", "熱", "滯", "安全庫存", "警戒"))):
+        log.info("[校正 C5-rank3b] 倉庫排名意圖 → compare(all)")
+        return "compare_warehouses", {"warehouse_a": "all", "warehouse_b": "all", "metric": "item_count"}, True
+
     # C13：明確查庫存意圖 + SKU → hard-return query_inventory（防止 C18 誤覆蓋）
     # RCA 意圖詞（對帳/異常/少了）優先於 C13，不搶。
     # 含設定項詞（安全庫存/前置天數）時也不搶——「現在安全庫存是多少」的
@@ -3020,6 +3090,24 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             # hard-return 會跳過 C17a 的 warehouse 補全 → 單倉句在這裡補
             # （「耳機在南倉有幾個」曾少了南倉 filter，conv100-r12）
             _c13_args = _drop_ungrounded_category({**func_args, "keyword": kw}, user_text)
+            # r24：LLM 幻覺 warehouse（含中文值「中倉」）要在 hard-return 前接地——
+            # C17a-pre 排在 C13 之後跑不到（「防曬遮陽帽三個倉各剩多少」RPI5 只回中倉）
+            _whv13 = _c13_args.get("warehouse")
+            if _whv13 and _whv13 not in ("north", "central", "south"):
+                _whn13 = next((en for zh, en in _WH_ZH_MAP.items()
+                               if zh in str(_whv13) and en != "all"), None)
+                if _whn13:
+                    _c13_args["warehouse"] = _whn13
+                else:
+                    _c13_args.pop("warehouse", None)
+                _whv13 = _c13_args.get("warehouse")
+            if _whv13:
+                _zh13 = {"north": ("北倉", "北區", "北邊", "北部"),
+                         "central": ("中倉", "中區"),
+                         "south": ("南倉", "南區", "南邊", "南部")}[_whv13]
+                if not any(z in user_text for z in _zh13):
+                    _c13_args.pop("warehouse", None)
+                    log.info("[校正 C13] 丟棄幻覺 warehouse")
             _c13_whs = {z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text}
             if len(_c13_whs) >= 2:
                 # 「智慧手環中倉北倉哪邊存量多」「北中南倉的滑鼠各有幾個」是
@@ -3354,6 +3442,23 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         if _W_g.match_items(_kw_llm) and not _kw_grounded(_kw_llm, user_text):
             func_args = {k: v for k, v in func_args.items() if k != "keyword"}
             log.info(f"[校正 C1c] LLM kw「{_kw_llm}」與原句不接地 → 清 keyword")
+
+    # 倉別值正規化（r24）：LLM 偶爾輸出中文倉名（warehouse=中倉），C17a-pre 的
+    # 英文值前提比不到 → 幻覺單倉逃過丟棄（「防曬遮陽帽三個倉各剩多少」RPI5
+    # 只回中倉）。先轉英文值讓後面防呆吃得到。
+    _whv24 = func_args.get("warehouse")
+    if (func_name == "query_inventory" and isinstance(_whv24, str) and _whv24
+            and _whv24 not in ("north", "central", "south")):
+        _whn24 = next((en for zh, en in _WH_ZH_MAP.items() if zh in _whv24 and en != "all"), None)
+        func_args = {k: v for k, v in func_args.items() if k != "warehouse"}
+        if _whn24:
+            func_args["warehouse"] = _whn24
+    # 多倉分佈意圖（三個倉/各剩/每倉…）→ 單倉 filter 一律丟棄回三倉分佈（r24）
+    if (func_name == "query_inventory" and func_args.get("warehouse")
+            and any(w in user_text for w in ("三個倉", "三倉", "每個倉", "每倉",
+                                              "各剩", "各多少", "各有多少", "各還", "各倉"))):
+        func_args = {k: v for k, v in func_args.items() if k != "warehouse"}
+        log.info("[校正 C17a-pre] 多倉分佈意圖 → 丟 warehouse")
 
     if func_name == "query_inventory" and func_args.get("warehouse") in ("north", "central", "south"):
         _wh_zh_names = {"north": ("北倉", "北區", "北邊", "北部"),

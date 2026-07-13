@@ -345,7 +345,8 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
 #    模型只抽意圖；實際寫入由 server 二次確認後 commit（見 commit_config_set）。
 # ════════════════════════════════════════════════════════════
 _KEY_ALIASES = {
-    "safety_stock":      ["安全庫存", "安全存量", "安全水位", "警戒值", "警戒水位", "安全量", "safety stock", "safety_stock"],
+    "safety_stock":      ["安全庫存", "安全存量", "安全水位", "警戒值", "警戒水位", "安全量",
+                          "庫存底線", "存量底線", "safety stock", "safety_stock"],
     "reorder_lead_days": ["前置天數", "補貨前置", "前置時間", "補貨天數", "lead time", "lead_days", "前置"],
     "safety_buffer_ratio": ["安全水位倍數", "安全倍數", "buffer", "緩衝倍數"],
     "restock_target_days": ["補貨目標天數", "補到撐", "target days", "撐幾天"],
@@ -425,7 +426,21 @@ def manage_config(action: str = "read", key: str = "", value=None,
                 for wh in (["north", "central", "south"] if warehouse == "all" else [warehouse]):
                     eff[wh] = ov.get(wh, {}).get(sku, base.get(sku, 0))
                 rows.append({"sku_id": sku, "name": name, "by_warehouse": eff, "base": base.get(sku, 0)})
-            summary = f"目前安全庫存設定（{len(rows)} 項）：基準值寫在 config，可分倉覆寫。"
+            # 指名商品時把實際數值講出來（r24：「露營馬克杯的安全庫存設多少」
+            # 曾只回「基準值寫在 config」的空話）；沒指名才回整體說明。
+            if skus:
+                _wh_lbl = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
+                parts = []
+                for r in rows[:3]:
+                    vals = set(r["by_warehouse"].values())
+                    if len(vals) == 1:
+                        parts.append(f"「{r['name']}」目前設 {vals.pop()}（三倉同值）")
+                    else:
+                        seg = "、".join(f"{_wh_lbl[w]} {q}" for w, q in r["by_warehouse"].items())
+                        parts.append(f"「{r['name']}」{seg}（基準 {r['base']}）")
+                summary = "目前安全庫存：" + "；".join(parts) + "。"
+            else:
+                summary = f"目前安全庫存設定（{len(rows)} 項）：基準值寫在 config，可分倉覆寫。"
             return {"ok": True, "summary": summary, "view": "config_read",
                     "data": {"canon": canon, "rows": rows, "trace": steps}}
         else:
