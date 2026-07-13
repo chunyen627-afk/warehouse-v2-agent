@@ -376,14 +376,20 @@ def _parse_value(value):
     sv = str(value).strip()
     # +N/-N 但 N 不是數字（LLM 把範例佔位符「+N」當值 → int('N') crash，
     # RPI5 conv100-r4 抓到）→ 當沒給值，回 None 讓上層轉 read/clarify
+    def _numf(x):
+        try:
+            f = float(x)
+            return int(f) if f == int(f) else f   # r26：保留小數（倍數1.5 曾被截成1）
+        except ValueError:
+            return None
     if sv.startswith("+"):
-        return ("delta", int(sv[1:])) if sv[1:].isdigit() else (None, None)
+        n = _numf(sv[1:])
+        return ("delta", n) if n is not None else (None, None)
     if sv.startswith("-"):
-        return ("delta", -int(sv[1:])) if sv[1:].isdigit() else (None, None)
-    try:
-        return "abs", int(float(sv))
-    except ValueError:
-        return None, None
+        n = _numf(sv[1:])
+        return ("delta", -n) if n is not None else (None, None)
+    n = _numf(sv)
+    return ("abs", n) if n is not None else (None, None)
 
 
 def manage_config(action: str = "read", key: str = "", value=None,
@@ -474,6 +480,10 @@ def manage_config(action: str = "read", key: str = "", value=None,
                 "請確認數值後再說一次。"),
                 "data": {"question": f"「{_lbl2}」要設成 {num:,}？請確認數值",
                          "options": [], "hint": ""}}
+
+        # 只有安全水位倍數允許小數，其餘設定項取整（r26）
+        if canon != "safety_buffer_ratio":
+            num = int(num)
 
         # 算受影響範圍 + 預覽 diff（不寫入！）
         whs = ["north", "central", "south"] if warehouse == "all" else [warehouse]
