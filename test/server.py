@@ -4048,6 +4048,147 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
 
     return func_name, new_args
 
+
+# ─── r32 多輪：context 統一切面 + pending 卡片記憶 ─────────────
+# 【r32 根因】_update_ctx / _resolve_followup 只掛在 LLM 路徑，但 r24-r31 把大量
+# 查詢改成確定性 dispatch 直答（hard-return continue，5ms 那批）→ 直答完全不寫
+# context，carry-over 整個被架空：「無線滑鼠還剩幾個」→「那個進出紀錄呢」會回
+# 全部商品的進出統計。鐵律「hard-return 出口要自帶接地」的新變體：出口也要**寫回**
+# context。出口有數十處，逐一補必漏 → 改在 send(done) 這個唯一咽喉統一攔截。
+_pending_by_vid: dict = {}     # vid → {"view": …}：server 端記住畫面上那張確認卡
+
+# 需要訪客按按鈕才寫入的確認卡（對照 templates/index.html 的 doConfirm）
+_PENDING_VIEWS = {"movement_confirm", "transfer_confirm", "config_confirm",
+                  "item_confirm", "item_delete_confirm", "po_confirm",
+                  "alert_confirm", "schedule_confirm", "script_confirm"}
+_VIEW2FUNC = {"inventory": "query_inventory", "inventory_single": "query_inventory",
+              "movement": "query_movement", "movement_confirm": "query_inventory",
+              "low_stock": "list_low_stock", "expiring": "list_expiring_items",
+              "hot_items": "list_hot_items", "related": "query_related_items",
+              "config_read": "manage_config", "agent_rca": "search_log"}
+
+
+def _ctx_absorb(vid, result: dict):
+    """每個 done 出口的統一切面：把答案裡的商品/倉別寫回 context、記住確認卡。"""
+    if not isinstance(result, dict):
+        return
+    view = result.get("view", "")
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+
+    # 確認卡記憶：卡片一出現就記，訪客下一句對著卡片講話時才知道有卡在
+    if view in _PENDING_VIEWS:
+        _pending_by_vid[vid] = {"view": view}
+    elif view != "clarify":        # clarify=追問中，卡片還在畫面上，不清
+        _pending_by_vid.pop(vid, None)
+
+    # 商品/倉別接地（只認單一字串，多商品列表不寫，避免 context 指到錯的那個）
+    kw = data.get("name") or data.get("keyword") or data.get("item_name")
+    if isinstance(kw, str) and kw.strip():
+        _ctx_for(vid)["last_sku"] = kw.strip()
+    wh = data.get("warehouse")
+    if isinstance(wh, str) and wh.strip() and wh not in ("all", "全部倉"):
+        _ctx_for(vid)["last_wh"] = wh.strip()
+    if view in _VIEW2FUNC:
+        _ctx_for(vid)["last_func"] = _VIEW2FUNC[view]
+
+
+# 追問展開：代詞句/純功能句/純倉別句 → 在 rewrite 前補回上一輪的商品名，
+# 讓下游每一層（dispatch 直答 + LLM）都自然接地，不必各自去讀 context。
+_CTX_PRON = ("那個", "那支", "那件", "那款", "它", "牠", "這個", "這支", "這件",
+             "該商品", "剛才", "剛剛", "上面那", "同一個", "同樣")
+_CTX_BARE = ("進出紀錄", "進出", "異動", "流水", "安全庫存", "快到期", "到期",
+             "保存期限", "效期", "搭配", "推薦", "還剩", "剩幾", "剩多少",
+             "現在剩", "有多少", "庫存", "缺貨", "夠不夠", "多少錢", "單價")
+_CTX_WH_ONLY = _re.compile(r"^(那|這)?([北中南])[區]?倉(呢|的|嗎)?[?？。!！]*$")
+_CTX_WRITE = ("進", "出", "調", "補")
+# 自帶完整意圖的全域查詢句 → 絕不接地（「哪些商品快缺貨了」曾被展開成
+# 「無線滑鼠哪些商品快缺貨了」→ 回無線滑鼠庫存；泛用詞「庫存/缺貨」是誘因）
+_CTX_GLOBAL = ("哪些", "所有", "全部", "每個", "各倉", "各個", "排行", "熱銷", "賣最",
+               "警示", "清單", "列表", "比較", "前十", "前三", "前五", "總共", "整體",
+               "有什麼", "缺什麼", "都", "全")
+
+
+def _ctx_expand(vid, text: str) -> str:
+    """把追問句補成完整句。沒有上一輪商品、或句中已有可辨識商品 → 原樣不動。"""
+    ctx = _ctx_for(vid)
+    last = ctx.get("last_sku")
+    if not last or len(text) > 16:      # 長句訪客自己講清楚了，不介入
+        return text
+
+    # 鐵律：句中已有可辨識實體 → 絕不覆蓋（資訊銷毀已 11 例）
+    _kw = _extract_sku_keyword(text)
+    if _kw:
+        import warehouse as _W_ce
+        _m = _W_ce.match_items(_kw)
+        if _m and _m[0].get("score", 0) >= 3:
+            return text
+
+    if any(w in text for w in _CTX_GLOBAL):   # 自帶完整意圖 → 不接地
+        return text
+
+    wh_only = _CTX_WH_ONLY.match(text)
+    has_pron = any(p in text for p in _CTX_PRON)
+    # 光靠功能詞（「快到期嗎」「現在剩幾個」）認定追問 → 只認很短的句子，
+    # 長一點就可能是自帶意圖的獨立問句
+    has_bare = any(w in text for w in _CTX_BARE) and len(text) <= 10
+    if not (wh_only or has_pron or has_bare):
+        return text
+
+    stripped = text
+    for p in _CTX_PRON:
+        stripped = stripped.replace(p, "")
+    stripped = stripped.strip("的呢嗎吧?？。!！，, ")
+
+    # 寫入追問（「北倉進20個」）→ 商品名補在句尾，維持「動作+數量+商品」語序
+    if any(w in stripped for w in _CTX_WRITE) and _re.search(r"\d", stripped):
+        new = f"{stripped}{last}"
+    elif not stripped or wh_only:
+        # 純代詞句（「那個呢」）／純倉別句（「南倉呢」）→ 用上一輪的功能補完
+        fw = "進出紀錄" if ctx.get("last_func") == "query_movement" else "庫存"
+        new = f"{stripped}{last}{fw}"
+    else:
+        new = f"{last}{stripped}"
+
+    log.info(f"[ctx-expand] {text!r} → {new!r}（last_sku={last!r}）")
+    return new
+
+
+# pending 卡片在畫面上時，訪客對著卡片講的話（過去 server 毫無所悉 → 「好」被守門員
+# 拒、「不對是100個」把 100 match 成「運動毛巾 100x30cm」幻覺回庫存）。
+# 產品決策：一律引導按按鈕，寫入授權只認按鈕（打字不寫入）。
+_PEND_OK = ("好", "好的", "好啊", "可以", "確認", "確定", "對", "是", "沒錯", "嗯",
+            "嗯嗯", "行", "沒問題", "就這樣", "送出", "執行", "ok", "okay", "yes", "y")
+_PEND_FIX = ("不對", "不是", "改成", "改為", "錯了", "應該是", "換成", "改一下", "多一點",
+             "少一點", "太多", "太少")
+_PEND_LABEL = {"movement_confirm": "確認進貨/出貨", "transfer_confirm": "確認調貨",
+               "config_confirm": "確認設定", "item_confirm": "確認新增",
+               "item_delete_confirm": "確認刪除", "po_confirm": "授權建立採購單",
+               "alert_confirm": "授權啟用警示", "schedule_confirm": "確認建立排程",
+               "script_confirm": "授權執行"}
+# 修正引導的例句要貼合卡片類型（設定卡舉進貨的例子會讓訪客更迷惘）
+_PEND_EXAMPLE = {"movement_confirm": "北倉進100個無線滑鼠",
+                 "transfer_confirm": "從北倉調20個無線滑鼠到南倉",
+                 "config_confirm": "把智慧手環安全庫存設成50",
+                 "alert_confirm": "瑜珈墊低於30就提醒我",
+                 "schedule_confirm": "每天早上八點跑庫存報表"}
+
+
+def _pending_reply(vid, text: str) -> str:
+    """有 pending 卡且訪客在對卡片講話 → 回引導語；否則回空字串。"""
+    pend = _pending_by_vid.get(vid)
+    if not pend or len(text) > 12:
+        return ""
+    view = pend.get("view", "")
+    btn = _PEND_LABEL.get(view, "確認")
+    t = text.strip().strip("!！。.~ ").lower()
+    if t in _PEND_OK:
+        return f"請點上方卡片的「✅ {btn}」按鈕才會真的寫入，或說「取消」放棄。"
+    if any(w in text for w in _PEND_FIX):
+        eg = _PEND_EXAMPLE.get(view, "北倉進100個無線滑鼠")
+        return (f"要改內容的話，請重新說一次完整需求（例如「{eg}」），"
+                f"或直接點上方卡片的「✅ {btn}」按鈕確認原本的內容。")
+    return ""
+
 # ─── Util ─────────────────────────────────────────────────
 def get_local_ip() -> str:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -5132,6 +5273,8 @@ async def reset_demo_data_api(req: Request):
         _item_create_state.clear()
         _item_create_state_ws.clear()
         _item_delete_state.clear()
+        _pending_by_vid.clear()   # r32：舊卡片記憶（資料都換掉了，卡片內容已失效）
+        _ctx_by_vid.clear()       # r32：舊 context（last_sku 可能指向已刪除的商品）
         await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
         log.info("[reset_demo] 展示資料已重置")
     return JSONResponse(res, headers=NO_CACHE)
@@ -5167,6 +5310,13 @@ async def ws_handler(ws: WebSocket):
     log.info(f"訪客連線（共 {len(all_sockets)}）")
 
     async def send(o: dict):
+        # r32：done 是所有回答路徑的唯一咽喉（dispatch 直答有數十個 continue 出口，
+        # 逐一補 context 必漏）→ 在這裡統一吸收商品/倉別 + 記住確認卡。
+        if o.get("type") == "done":
+            try:
+                _ctx_absorb(vid, o.get("result") or {})
+            except Exception as e:
+                log.warning(f"[ctx-absorb] vid={vid} 失敗（不影響回答）: {e}")
         await ws.send_text(json.dumps(o, ensure_ascii=False))
 
     # vid 用全域遞增序號，絕不碰撞（2026-07-09：原 id(ws)%10000 兩個連線會算出
@@ -5286,6 +5436,25 @@ async def ws_handler(ws: WebSocket):
                 _item_delete_state.pop(vid, None)
                 await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
                 continue
+
+            # ── r32 pending 卡片口語層（rewrite 之前）──
+            #   卡片在畫面上時訪客打「好」→ 過去被守門員 rejected；打「不對是100個」
+            #   → 100 被 match 成「運動毛巾 100x30cm」幻覺回庫存。寫入授權只認按鈕，
+            #   這裡一律引導，不寫入、不猜商品。新增商品流程中不套用（那是 step 值）。
+            if not _item_create_state_ws.get(vid, {}).get("active"):
+                _pend_msg = _pending_reply(vid, user_text)
+                if _pend_msg:
+                    log.info(f"[pending-gate] 對卡片講話 → 引導: {user_text!r}")
+                    for ch in _pend_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _pend_msg,
+                        "data": {"question": _pend_msg, "options": [], "hint": ""}}})
+                    continue
+
+                # ── r32 追問展開：「那個進出紀錄呢」→「無線滑鼠進出紀錄」──
+                user_text = _ctx_expand(vid, user_text)
 
             _desc_kw_ws = _descriptor_hit(user_text)   # rewrite 前偵測（rewrite 會換掉描述）
             user_text = _rewrite_query(user_text)
@@ -5470,9 +5639,15 @@ async def ws_handler(ws: WebSocket):
                 import warehouse as _W_meta
                 _meta_kw = _extract_sku_keyword(user_text)
                 if not (_meta_kw and _W_meta.match_items(_meta_kw)):
+                    # r32：放棄句（「算了」「不用了」）必須跟「取消」一樣清掉流程狀態。
+                    #   過去只回 clarify 不清 state → 新增商品流程還活著，下一句
+                    #   「哪些商品快缺貨了」被 step 機吞成商品名，後面每一句都被流程
+                    #   吃掉（流程劫持，展場必爆）。
+                    _item_create_state_ws.pop(vid, None)
+                    _item_delete_state.pop(vid, None)
                     _meta_msg = ("沒問題，目前沒有進行中的操作。"
                                  "請直接說完整需求，例如「南倉藍牙耳機庫存」「北倉進50個滑鼠」。")
-                    log.info(f"[meta-gate] 後設/取消句 → clarify: {user_text!r}")
+                    log.info(f"[meta-gate] 後設/取消句 → clarify（已清流程狀態）: {user_text!r}")
                     for ch in _meta_msg:
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(0.008)
@@ -5579,6 +5754,24 @@ async def ws_handler(ws: WebSocket):
 
             # ── item_create 流程中 → 攔截處理，不進 LLM（per-vid）──
             if _ic_st.get("active"):
+                # r32：流程中訪客常常改問別的（「無線滑鼠還剩幾個」），過去整句被
+                #   吞成欄位值 → 商品類別變成「無線滑鼠還剩幾個」。明顯的查詢句不
+                #   寫進欄位，提示他先退出流程。
+                _CREATE_QUERY_WORDS = ("還剩", "剩多少", "剩幾", "有多少", "庫存多少",
+                                       "多少件", "哪些", "缺貨", "快缺", "熱銷", "賣最",
+                                       "快到期", "進出紀錄", "異動", "查一下", "比較", "警示")
+                if any(w in user_text for w in _CREATE_QUERY_WORDS):
+                    _cq_step = _ic_st.get("step", 1)
+                    _cq_msg = (f"你正在新增商品的流程中（第 {_cq_step} 步），"
+                               "這句不會被存成商品資料。要查別的請先說「取消」退出流程。")
+                    log.info(f"[create-gate] 流程中的查詢句 → 提示退出: {user_text!r}")
+                    for ch in _cq_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _cq_msg,
+                        "data": {"question": _cq_msg, "options": [], "hint": ""}}})
+                    continue
                 import tools_v2 as _tv2_item_ws
                 st2 = _ic_st
                 kwargs2 = {**{k: v for k, v in st2.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}, "raw_text": ""}
@@ -6668,6 +6861,7 @@ async def ws_handler(ws: WebSocket):
         _ctx_by_vid.pop(vid, None)
         _item_create_state_ws.pop(vid, None)
         _item_delete_state.pop(vid, None)
+        _pending_by_vid.pop(vid, None)   # r32：確認卡記憶（不清會隨展期無上限成長）
         log.info(f"訪客斷線（剩 {len(all_sockets)}）")
 
 

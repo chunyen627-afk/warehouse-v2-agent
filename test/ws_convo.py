@@ -1,0 +1,230 @@
+"""ws_convo.py — 多輪對話巡檢（r32）。
+
+regression_ws.py / ws_inspect.py 都是「一句一條 WS 連線」，而 server 的
+session state（_ctx_by_vid / _item_create_state_ws / _item_delete_state）
+是綁 vid、vid 綁連線 → 那兩支工具從來沒測過任何跨輪行為。
+
+本工具在「同一條連線」上連發整個劇本，覆蓋三個沒掃過的空間：
+  A. pending 卡片出現後不按確認、直接打字（展場訪客最常見）
+  B. carry-over 追問鏈（「那個呢」「B倉呢」連環追問，含跳題/污染）
+  C. 寫入流程（新增商品 step 機）中途插查詢／亂打／放棄
+
+用法：
+    python ws_convo.py --file convo_r32.txt          # 本機 ws://localhost:8000
+    python ws_convo.py --file convo_r32.txt --rpi5   # RPI5 wss://localhost:8001
+    python ws_convo.py --file convo_r32.txt --quiet  # 只印 FAIL/⚠️（回歸用）
+
+劇本格式（每個 ### 區塊 = 一個獨立連線 = 一位訪客）：
+    ### 情境名稱
+    > 使用者句子                      # 不斷言，只看回答
+    > 使用者句子 | inventory,clarify   # 斷言 view 必須落在其中之一
+    > 使用者句子 | inventory | 無線滑鼠 # 第三欄：summary 必須含此字串
+    [confirm]                         # 重播「按確認鍵」：用上一輪 result 自動推
+                                      #   action + pending 送出
+    ! 說明文字                        # 註解（會印出來，幫 review 看情境意圖）
+
+斷言欄支援 not: 前綴 → view 不可為這些（例：| not:movement_confirm,error）
+"""
+import asyncio, json, ssl, sys, io, time, argparse
+from pathlib import Path
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+import websockets
+
+# 確認卡 view → confirm action（對照 templates/index.html 的 doConfirm data-action）
+VIEW2ACTION = {
+    "item_confirm":      "item_create",
+    "movement_confirm":  "create_movement",
+    "transfer_confirm":  "create_transfer",
+    "item_delete_confirm": "item_delete",
+    "config_confirm":    "config_set",
+    "po_confirm":        "generate_po",
+    "alert_confirm":     "set_alert",
+    "schedule_confirm":  "set_schedule",
+    "script_confirm":    "run_script",
+}
+SUSPICIOUS_VIEWS = {"error"}
+SUSPICIOUS_TEXT = ("看不懂", "聽不懂", "我不太理解", "無法理解", "不知道你",
+                   "請再說一次", "哪個設定項", "我不確定")
+
+
+def looks_bad(view: str, text: str) -> str:
+    if view in SUSPICIOUS_VIEWS:
+        return f"view={view}"
+    for s in SUSPICIOUS_TEXT:
+        if s in text:
+            return f"含「{s}」"
+    if not text and view not in ("rejected", "guide", "clarify", "item_cancelled"):
+        return "空回答"
+    return ""
+
+
+def parse_script(path: Path):
+    """→ [(情境名, [step, …])]，step = ("say", text, expect, must) | ("confirm",) | ("note", text)"""
+    scenes, cur = [], None
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("###"):
+            cur = (line.lstrip("#").strip(), [])
+            scenes.append(cur)
+        elif line.startswith("#"):
+            continue
+        elif cur is None:
+            continue
+        elif line.startswith(">"):
+            parts = [p.strip() for p in line[1:].split("|")]
+            text = parts[0]
+            expect = parts[1] if len(parts) >= 2 else ""
+            must = parts[2] if len(parts) >= 3 else ""
+            cur[1].append(("say", text, expect, must))
+        elif line.startswith("[confirm]"):
+            cur[1].append(("confirm",))
+        elif line.startswith("!"):
+            cur[1].append(("note", line[1:].strip()))
+    return scenes
+
+
+def check_expect(view: str, expect: str) -> str:
+    """回傳失敗說明；通過回空字串。"""
+    if not expect:
+        return ""
+    if expect.startswith("not:"):
+        banned = {v.strip() for v in expect[4:].split(",") if v.strip()}
+        return f"view={view} 落在禁止集 {sorted(banned)}" if view in banned else ""
+    allowed = {v.strip() for v in expect.split(",") if v.strip()}
+    return "" if view in allowed else f"view={view}，期望 {sorted(allowed)}"
+
+
+async def recv_result(ws, timeout=60):
+    """收到 done 為止，回傳 (result, 串接的 tokens)。"""
+    toks = []
+    while True:
+        m = json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+        t = m.get("type")
+        if t == "token":
+            toks.append(m.get("text", ""))
+        elif t == "error":
+            return {"view": "error", "summary": m.get("text", "")}, "".join(toks)
+        elif t == "done":
+            return (m.get("result") or {}), "".join(toks)
+
+
+async def run_scene(uri, ctx, name, steps, quiet):
+    """一個情境 = 一條連線（= 一個 vid），連發所有 step。"""
+    fails, sus = [], []
+    if not quiet:
+        print(f"\n{'─'*74}\n### {name}\n{'─'*74}")
+    async with websockets.connect(uri, ssl=ctx, max_size=None) as ws:
+        last = {}
+        for st in steps:
+            if st[0] == "note":
+                if not quiet:
+                    print(f"   ! {st[1]}")
+                continue
+
+            if st[0] == "confirm":
+                view = last.get("view", "")
+                action = VIEW2ACTION.get(view)
+                if not action:
+                    fails.append((name, "[confirm]", f"上一輪 view={view or '?'} 不是確認卡，無法按確認"))
+                    if not quiet:
+                        print(f"   ✗ [confirm] 上一輪 view={view or '?'} 沒有確認卡")
+                    continue
+                payload = {"type": "confirm", "action": action, "pending": last.get("data", {})}
+                if action == "run_script":
+                    payload["script_id"] = (last.get("data") or {}).get("script_id", "")
+                label, t0 = f"[confirm→{action}]", time.perf_counter()
+                await ws.send(json.dumps(payload, ensure_ascii=False))
+                expect, must = "", ""
+            else:
+                _, text, expect, must = st
+                label, t0 = f"Q: {text}", time.perf_counter()
+                await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
+
+            try:
+                r, toks = await recv_result(ws)
+            except Exception as e:
+                fails.append((name, label, f"WS 錯誤/逾時: {e}"))
+                if not quiet:
+                    print(f"   ✗ {label}\n     WS 錯誤: {e}")
+                continue
+
+            last = r
+            view = r.get("view", "?")
+            ans = (r.get("summary") or toks).strip()
+            lat = (time.perf_counter() - t0) * 1000
+
+            why_fail = check_expect(view, expect)
+            if not why_fail and must and must not in ans:
+                why_fail = f"回答缺「{must}」"
+            why_sus = looks_bad(view, ans)
+
+            if why_fail:
+                fails.append((name, label, f"{why_fail} | {ans[:60]}"))
+            if why_sus:
+                sus.append((name, label, f"{why_sus} | {ans[:60]}"))
+
+            if quiet and not (why_fail or why_sus):
+                continue
+            mark = "✗" if why_fail else ("⚠️" if why_sus else " ")
+            print(f"\n   {mark} {label}   [view={view} · {lat:.0f}ms]")
+            for ln in (ans or "（無文字回答）").splitlines():
+                print(f"     │ {ln}")
+            if why_fail:
+                print(f"     └─✗ FAIL: {why_fail}")
+            elif why_sus:
+                print(f"     └─⚠️ 可疑: {why_sus}")
+    return fails, sus
+
+
+async def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--file", required=True, help="劇本檔")
+    ap.add_argument("--rpi5", action="store_true")
+    ap.add_argument("--quiet", action="store_true", help="只印 FAIL/可疑")
+    ap.add_argument("--only", help="只跑名稱含此字串的情境")
+    args = ap.parse_args()
+
+    if args.rpi5:
+        uri = "wss://localhost:8001/ws"
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    else:
+        uri, ctx = "ws://localhost:8000/ws", None
+
+    path = Path(args.file)
+    if not path.is_absolute():
+        path = Path(__file__).parent / args.file
+    scenes = parse_script(path)
+    if args.only:
+        scenes = [s for s in scenes if args.only in s[0]]
+
+    turns = sum(len(s[1]) for s in scenes)
+    print(f"\n{'='*74}\nws_convo → {uri}\n劇本 {path.name}：{len(scenes)} 情境 / {turns} 輪\n{'='*74}")
+
+    all_fails, all_sus = [], []
+    for name, steps in scenes:
+        f, s = await run_scene(uri, ctx, name, steps, args.quiet)
+        all_fails += f
+        all_sus += s
+
+    print(f"\n{'='*74}")
+    print(f"情境 {len(scenes)} · 斷言失敗 {len(all_fails)} · 可疑回答 {len(all_sus)}")
+    if all_fails:
+        print("\n✗ FAIL：")
+        for n, l, w in all_fails:
+            print(f"   [{n}] {l}\n      → {w}")
+    if all_sus:
+        print("\n⚠️ 可疑（回答醜/error，回頭看）：")
+        for n, l, w in all_sus:
+            print(f"   [{n}] {l}\n      → {w}")
+    if not all_fails and not all_sus:
+        print("✅ 全綠")
+    print(f"{'='*74}")
+    sys.exit(1 if all_fails else 0)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

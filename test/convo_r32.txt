@@ -1,0 +1,172 @@
+# r32 多輪流程掃蕩劇本 — 每個 ### 區塊 = 一條 WS 連線 = 一位訪客
+# 三大空間：A=pending 卡片後亂回 / B=carry-over 追問鏈 / C=寫入流程中途插隊
+# 斷言原則：展場底線=不可 error、不可未按確認就寫入、不可幻覺商品
+
+### A1 進貨卡出現後改問庫存
+! 訪客叫出進貨確認卡，沒按確認，改口問別的商品庫存 → 應正常回答
+> 北倉進50個無線滑鼠 | movement_confirm
+> 藍牙耳機還剩幾個 | not:error,movement_confirm | 藍牙耳機
+
+### A2 進貨卡出現後打「好」
+! 訪客以為打字就能確認 → 不可未按鈕就寫入（不可回 movement 已完成）
+> 北倉進50個無線滑鼠 | movement_confirm
+> 好 | not:error
+
+### A3 進貨卡出現後說取消
+> 北倉進50個無線滑鼠 | movement_confirm
+> 取消 | item_cancelled,clarify,rejected,guide
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### A4 進貨卡後直接改數量（改主意）
+! 訪客改口「不對是100個」→ 應出新卡或友善追問，不可 error/幻覺
+> 北倉進50個無線滑鼠 | movement_confirm
+> 不對是100個 | not:error
+
+### A5 進貨卡後亂打鍵盤
+> 北倉進50個無線滑鼠 | movement_confirm
+> ㄍㄥㄍㄥ | rejected,guide,clarify
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### A6 進貨確認後庫存要真的增加（端到端）
+! 最重要的一條：確認寫入 → 再查同商品，數字必須反映異動
+> 北倉無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 北倉進50個無線滑鼠 | movement_confirm
+[confirm]
+> 北倉無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### A7 連下兩張進貨卡只確認最後一張
+! 卡片堆疊：訪客改主意重下一句，按最新的卡 → 只能寫入最後一張的內容
+> 北倉進50個無線滑鼠 | movement_confirm
+> 北倉進10個藍牙耳機 | movement_confirm
+[confirm]
+> 北倉藍牙耳機還剩幾個 | not:error | 藍牙耳機
+
+### A7b 連續兩次寫入（確認完再確認一張）
+! 卡片記憶不可殘留：第一張確認後，第二張的「好」不能被誤解成舊卡
+> 北倉進30個瑜珈墊 | movement_confirm
+[confirm]
+> 南倉出10個瑜珈墊 | movement_confirm
+[confirm]
+> 瑜珈墊還剩幾個 | not:error | 瑜珈墊
+
+### A8 設定卡後改問別的
+> 把智慧手環安全庫存設成80 | config_confirm
+> 哪些商品快缺貨了 | low_stock
+
+### A9 設定卡後再下一個設定句
+> 把智慧手環安全庫存設成80 | config_confirm
+> 改成50好了 | not:error
+
+### A10 調貨卡後插查詢再確認
+> 從北倉調20個無線滑鼠到南倉 | transfer_confirm,clarify,error
+> 南倉無線滑鼠有多少 | not:error | 無線滑鼠
+
+### B1 標準追問鏈（商品 → 進出 → 換倉）
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 那個進出紀錄呢 | movement,not:error
+> 南倉呢 | not:error
+
+### B2 追問鏈換功能面向
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> 快到期嗎 | not:error
+> 搭配什麼賣 | not:error
+
+### B3 跳題污染（追問必須跟最新商品，不可回舊商品）
+! 第3輪的「那個」必須是電動牙刷，出現「無線滑鼠」= context 污染 bug
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 電動牙刷呢 | not:error | 電動牙刷
+> 那個進出紀錄呢 | not:error | 電動牙刷
+
+### B4 上一輪失敗後追問（不可幻覺）
+> ㄅㄆㄇㄈ | rejected,guide,clarify
+> 那個呢 | not:error
+> 那個進出紀錄 | not:error
+
+### B5 五輪長鏈同商品多面向
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 南倉呢 | not:error
+> 進出紀錄 | not:error
+> 安全庫存多少 | not:error
+> 快缺貨了嗎 | not:error
+
+### B6 倉庫 carry-over
+> 南倉缺什麼 | low_stock,not:error
+> 北倉呢 | not:error
+> 那中倉 | not:error
+
+### B7 亂打不可清掉 context
+! 中間亂打一句，之後「那個呢」應仍指無線滑鼠
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> asdfgh | rejected,guide,clarify
+> 那個進出紀錄呢 | not:error
+
+### B8 追問鏈中插入寫入
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 北倉進20個 | not:error
+> 那個進出紀錄呢 | not:error
+
+### C1 新增商品流程中插查詢
+! 流程中打查詢句 → 目前可能被 dispatch 搶走且流程沒推進；看實際行為
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 無線滑鼠還剩幾個 | not:error
+> 取消 | not:error
+
+### C2 新增商品流程中亂打
+> 新增商品 | not:error
+> ㄅㄅㄅ | not:error
+> 取消 | not:error
+
+### C3 新增商品說取消後回正常查詢
+> 新增商品 | not:error
+> 取消 | item_cancelled,clarify,rejected,guide
+> 哪些商品快缺貨了 | low_stock
+
+### C4 新增商品用「算了」放棄（非「取消」二字）
+! 訪客不會乖乖打「取消」；「算了」若沒被接住 → 流程卡死吞掉後續所有句子
+> 新增商品 | not:error
+> 算了 | not:error
+> 哪些商品快缺貨了 | low_stock
+
+### C5 新增商品完整走完並確認
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 戶外用品 | not:error
+> 590 10 | not:error
+> 5 5 5 | item_confirm,not:error
+
+### C6 刪除流程中插查詢
+> 刪除商品 | not:error
+> 無線滑鼠還剩幾個 | not:error
+> 取消 | not:error
+
+### C7 新增商品流程中途叫出另一個寫入
+! 流程沒走完就下進貨句 → 不可同時開兩個寫入流程
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 北倉進50個無線滑鼠 | not:error
+> 取消 | not:error
+
+### D1 進貨卡後嘗試危險指令
+> 北倉進50個無線滑鼠 | movement_confirm
+> 把全部庫存歸零 | rejected,guide,clarify,not:movement_confirm,transfer_confirm,config_confirm
+
+### D2 連續亂打五輪後恢復正常
+! 守門員不可把訪客鎖死
+> qqq | rejected,guide,clarify
+> ㄉㄉㄉ | rejected,guide,clarify
+> 哈囉 | rejected,guide,clarify
+> 123 | not:error
+> 你好嗎 | rejected,guide,clarify
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### D3 同連線混合十輪（擬真訪客）
+> 哈囉 | rejected,guide,clarify
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 那個進出紀錄呢 | not:error
+> 哪些商品快缺貨了 | low_stock
+> 北倉進50個無線滑鼠 | movement_confirm
+[confirm]
+> 現在剩幾個 | not:error
+> 本月熱銷前十 | hot_items,not:error
+> 謝謝 | rejected,guide,clarify

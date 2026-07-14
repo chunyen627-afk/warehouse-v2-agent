@@ -10,7 +10,7 @@
 [![OOV v2](https://img.shields.io/badge/OOV_v2-97.5%25-brightgreen)]()
 [![intent_clf](https://img.shields.io/badge/intent_clf-489MB_主路由-blue)]()
 [![守衛庫](https://img.shields.io/badge/守衛庫_855句-雙平台100%25-brightgreen)]()
-[![conv100](https://img.shields.io/badge/31輪收斂-危險級持續0-brightgreen)]()
+[![conv100](https://img.shields.io/badge/32輪收斂-危險級持續0-brightgreen)]()
 [![短句認證](https://img.shields.io/badge/短句全枚舉_953句-雙平台100%25-brightgreen)]()
 
 ---
@@ -185,6 +185,26 @@ category 幻覺（真商品被錯類別濾成找不到 → `_drop_ungrounded_cat
 參數接地與推導**（倉別/類別/期間/數值/kw 真商品驗證），不能指望後面的層——本戰役
 八次中招全是這一條。回歸自此雙套：`regression_ws.py`（守衛庫）＋
 `regression_ws.py --file _sweep_r31.txt`（短句掃蕩），兩套雙平台全綠才 commit。
+
+### 多輪流程掃蕩（2026-07-14，r32）
+
+前 31 輪的測試工具都是「一句一條 WS 連線」，而 session state（context / 新增商品
+流程 / 確認卡）綁在連線上——**跨輪行為從來沒被測過**。新工具
+`ws_convo.py` 在同一條連線上連發整個劇本（可重播「按確認」按鈕），
+`convo_r32.txt` 29 情境 111 輪：確認卡出現後亂回話、追問鏈、寫入流程中途插隊。
+
+首跑挖出 6 個真 bug，根因兩條：
+
+| 根因 | 症狀 | 修法 |
+|------|------|------|
+| 確定性直答不寫 context（`_update_ctx` 只掛 LLM 路徑，r24-r31 新增的數十個 dispatch hard-return 出口全繞過） | carry-over 被架空：「無線滑鼠還剩幾個」→「那個進出紀錄呢」回**全部商品**統計 | `send(done)` 單一咽喉統一 `_ctx_absorb`，未來新出口自動涵蓋 |
+| server 沒有確認卡記憶（pending 只活在前端 DOM） | 對卡片說「好」被守門員拒；說「不對是100個」→ 100 被 match 成「運動毛巾 100x30cm」幻覺回庫存 | `_pending_by_vid` + 引導層（寫入授權**只認按鈕**，打字一律引導） |
+
+另修危險級一枚：新增商品流程中說「算了」→ meta-gate 只回 clarify **沒清流程狀態**
+→ 後續每一句都被吞成商品欄位（流程劫持）。
+
+**鐵律新增一條對偶**：hard-return 出口不只要「自帶參數接地」，也要「**寫回 context**」。
+回歸自此三套（守衛 855 ＋ 掃蕩 953 ＋ 多輪 111），全部雙平台 100%。
 
 ---
 
@@ -382,6 +402,7 @@ python finetune_local.py
 - [x] 守衛庫升級 view+內容雙驗（第三欄「回答必含關鍵字」）
 - [x] regression_ws --rpi5（RPI5 全量回歸、雙平台驗收）
 - [x] movement 支援昨天/上週真日期查詢
+- [x] r32 多輪流程掃蕩（ws_convo.py 同連線劇本；carry-over 復活 + 確認卡口語層 + 流程劫持修復）
 - [ ] 訓練 270M 認得 create_movement / create_transfer（目前靠規則式攔截，實測覆蓋率 99%；累積真實使用者講法達一定量後再重訓）
 - [ ] intent_clf 重訓：把 15 輪收斂學到的同義詞群餵回分類器（減少關鍵字表依賴）
 - [ ] 展前三件事：一鍵重置 SOP / demo 資料基準日對齊展期 / 開機自啟+QR 網段檢查
@@ -406,4 +427,4 @@ python finetune_local.py
 
 ---
 
-*最後更新：2026-07-14 | v6 模型 5,849 筆訓練 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV: 98%/97.5%/100% | **31 輪收斂：守衛庫 855 句＋短句全枚舉 953 句 雙平台（WIN11+RPI5）100%、危險級持續 0***
+*最後更新：2026-07-14 | v6 模型 5,849 筆訓練 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV: 98%/97.5%/100% | **32 輪收斂：守衛庫 855＋短句全枚舉 953＋多輪劇本 111 輪 三套雙平台（WIN11+RPI5）100%、危險級持續 0***
