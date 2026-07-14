@@ -37,6 +37,11 @@ else:
     WS_URI = 'ws://localhost:8000/ws'
     SSL_CTX = None
 CORPUS = Path(__file__).parent / "regression_corpus.txt"
+# --file X：跑替代語料（r31 短句掃蕩 _sweep_r31.txt 等，格式同 corpus）
+if "--file" in sys.argv:
+    _fi = sys.argv.index("--file")
+    CORPUS = Path(__file__).parent / sys.argv[_fi + 1]
+    del sys.argv[_fi:_fi + 2]
 
 ACCEPT = {
     "mv":    lambda v: v == "movement_confirm",

@@ -1589,7 +1589,12 @@ def _detect_clarify(user_text: str) -> dict | None:
               "有人在嗎", "有人嗎", "在嗎", "哈囉", "你好", "喂喂"}
     # 剝完填充詞只剩 1-3 字且有動作意圖 → clarify（但含類別關鍵字則放行，如「查食品」）
     _has_cat = any(zh in t for zh in ("電子", "家電", "廚具", "食品", "飲料", "日用", "服飾", "運動"))
-    _too_short = len(t_clean) <= 3 and has_intent and not _has_cat
+    # r31：裸意圖詞（缺貨/到期…）放行讓 clf 直出對應清單——短輸入=產品本體，
+    # 反問「你想查什麼」是砸招牌（953 句掃蕩抓到）
+    if t_clean in ("缺貨", "到期", "低庫存", "補貨", "過期", "報表", "比較", "缺貨清單"):
+        return None
+    # r31：「查耳機」剝完 3 字但含真商品 → 放行（曾被 _too_short 吞掉反問）
+    _too_short = len(t_clean) <= 3 and has_intent and not _has_cat and not _has_product
     if t in _vague or t_clean in _vague or (not t_clean and not has_intent) or _too_short:
         return {
             "question": "你想查什麼？",
@@ -3015,6 +3020,58 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C5-diff] 兩倉差距問句 → compare({_d_ab[0]},{_d_ab[1]})")
         return "compare_warehouses", {"warehouse_a": _d_ab[0], "warehouse_b": _d_ab[1],
                                       "metric": "item_count"}, True
+
+    # C-cat-short（r31）：「X類有什麼/X用品有啥」明講類別 → 類別清單
+    # （「運動類有什麼」曾被 fuzzy 劫成運動毛巾單品；不能靠 C13 因其需 _inv_intent 詞）
+    _ccs_m = re.search(r'(電子|家電|廚具|食品|飲料|日用|清潔|服飾|衣服|運動)(?=類|用品|產品)', user_text)
+    if (_ccs_m and any(w in user_text for w in ("有什麼", "有啥", "有哪些東西", "總覽", "庫存"))
+            and not any(w in user_text for w in ("缺", "熱銷", "滯銷", "到期", "賣", "進", "出"))):
+        _ccs_cat = {"電子": "electronics", "家電": "appliance_kitchen", "廚具": "appliance_kitchen",
+                    "食品": "food_beverage", "飲料": "food_beverage", "日用": "daily_goods",
+                    "清潔": "daily_goods", "服飾": "apparel", "衣服": "apparel",
+                    "運動": "sports"}[_ccs_m.group(1)]
+        _ccs_args = {"category": _ccs_cat}
+        for _zh_cc, _en_cc in _WH_ZH_MAP.items():
+            if _zh_cc in user_text and _en_cc != "all":
+                _ccs_args["warehouse"] = _en_cc
+                break
+        log.info(f"[校正 C-cat-short] 類別短句 → query_inventory(category={_ccs_cat})")
+        return "query_inventory", _ccs_args, True
+
+    # C-shorty-v（r31）：「查/看+短稱」極短句（查耳機）——RPI5 clf 曾丟 keyword
+    # 回 60 項概覽（短輸入=產品本體，確定性直達）
+    if len(user_text.replace(" ", "")) <= 6 and user_text[:1] in ("查", "看", "找"):
+        _shv_txt = user_text[1:].replace("一下", "").replace("的", "").strip()
+        _kw_shv = _extract_sku_keyword(_shv_txt) if _shv_txt else ""
+        import warehouse as _W_shv
+        _m_shv = _W_shv.match_items(_kw_shv) if _kw_shv else []
+        if (_kw_shv and _m_shv and _m_shv[0].get("score", 0) >= 3
+                and _kw_grounded(_kw_shv, user_text)):
+            log.info(f"[校正 C-shorty-v] 查+短稱 → query_inventory({_kw_shv!r})")
+            return "query_inventory", {"keyword": _kw_shv}, True
+
+    # C-shorty（r31）：極短「倉名+商品」句（北倉耳機）——RPI5 LLM 曾回 60 項概覽
+    # （短輸入=產品本體，確定性直達）
+    _sh_whs = [z for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text]
+    if _sh_whs and len(user_text.replace(" ", "")) <= 8:
+        _sh_txt = user_text
+        for _z_sh in _sh_whs:
+            _sh_txt = _sh_txt.replace(_z_sh, "")
+        _sh_txt = _sh_txt.replace("的", "").strip()
+        _kw_sh = _extract_sku_keyword(_sh_txt) if _sh_txt else ""
+        import warehouse as _W_sh
+        _m_sh = _W_sh.match_items(_kw_sh) if _kw_sh else []
+        # kw 必須是真商品（score≥3）——「上週南倉出了多少」曾被抽成「上週出」
+        # 直接 OOV clarify（junk kw 老病，每個新規則出口都要驗）
+        if (_kw_sh and _m_sh and _m_sh[0].get("score", 0) >= 3
+                and _kw_grounded(_kw_sh, user_text)):
+            _args_sh = {"keyword": _kw_sh}
+            for _zh_sh, _en_sh in _WH_ZH_MAP.items():
+                if _zh_sh in user_text and _en_sh != "all":
+                    _args_sh["warehouse"] = _en_sh
+                    break
+            log.info(f"[校正 C-shorty] 倉+品極短句 → query_inventory({_kw_sh!r})")
+            return "query_inventory", _args_sh, True
 
     # C5-rank3c（r29）：點名三倉+誰最大 → compare(all)。跟 C5-diff 同理由：
     # C5-rank3 只接 compare 分支，RPI5 的 LLM 投 hot 就繞過（func 無關規則要放前面）

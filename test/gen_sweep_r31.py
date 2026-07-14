@@ -47,7 +47,7 @@ T_HOT = ["{n}賣得好嗎"]
 CATS = {"電子": "電子", "家電": "家電", "食品": "食品", "飲料": "飲料",
         "日用": "日用", "服飾": "服飾", "運動": "運動"}
 T_CAT = [("{c}類庫存", "inv", ""), ("{c}類缺貨", "low", ""),
-         ("{c}類熱銷", "hot", ""), ("{c}類有什麼", "any", "")]
+         ("{c}類熱銷", "hot", ""), ("{c}類有什麼", "vague", "")]
 
 BARE_FUNC = [("缺貨", "low", ""), ("熱銷", "hot", ""), ("到期", "exp", ""),
              ("進貨", "any", ""), ("出貨", "any", ""), ("報表", "any", ""),
@@ -69,7 +69,7 @@ for n, key in SHORT.items():
     for t in T_INV:
         add("inv", t.format(n=n), key)
     for t in T_BARE:
-        add("vague", t.format(n=n))          # 裸名：clarify/inventory 皆可
+        add("semi", t.format(n=n))           # 裸名：實測直達庫存=好行為（semi 只擋寫入卡）
     for t in T_EXP:
         add("any", t.format(n=n))            # 到期短句：不 error/rejected 即可
     for t in T_HOT:
