@@ -9,8 +9,9 @@
 [![OOV v1](https://img.shields.io/badge/OOV_v1-98%25-brightgreen)]()
 [![OOV v2](https://img.shields.io/badge/OOV_v2-97.5%25-brightgreen)]()
 [![intent_clf](https://img.shields.io/badge/intent_clf-489MB_主路由-blue)]()
-[![守衛庫](https://img.shields.io/badge/守衛庫_352句-雙平台100%25-brightgreen)]()
-[![conv100](https://img.shields.io/badge/15輪收斂-危險級連續8批0-brightgreen)]()
+[![守衛庫](https://img.shields.io/badge/守衛庫_855句-雙平台100%25-brightgreen)]()
+[![conv100](https://img.shields.io/badge/31輪收斂-危險級持續0-brightgreen)]()
+[![短句認證](https://img.shields.io/badge/短句全枚舉_953句-雙平台100%25-brightgreen)]()
 
 ---
 
@@ -164,6 +165,26 @@ category 幻覺（真商品被錯類別濾成找不到 → `_drop_ungrounded_cat
 
 **測試方法論（定案）**：本地快篩迭代、**RPI5 實戰驗收**（單向：RPI5 過=過）。
 `regression_ws.py --rpi5` 在 RPI5 跑全量守衛庫——首跑即抓到本機測不出的平台精度分歧句。
+
+### 第二次收斂戰役 + 短句空間認證（2026-07-11 ～ 07-14，r16-r31 共 16 輪）
+每輪換**全新攻擊面**出 100 句（詞彙邊緣同義、語氣反轉、多錯字疊加、台語、倒裝、
+極長句、社工搗蛋、時段長尾、功能衝突複合……單句角度累計掃過 35+ 種）。
+
+| 指標 | 結果 |
+|------|------|
+| 真 bug 軌跡（r24-r30，每輪新角度） | 12 → 16 → 16 → 16 → 10 → 6 → 6（修族化後穩定下降） |
+| 危險級 | 持續 0（搗蛋/注入/白拿/錯值卡全擋） |
+| **短句全枚舉認證（r31）** | **953 句（60 商品短稱 × 12 模板＋裸名＋類別＋功能短句）雙平台 100%** |
+| 守衛庫 | 352 → **855 句**，雙平台 100% 零回退 |
+
+**產品定位（定案）**：「**短短的自然語言（2~12 字、含錯字/注音/英文俗稱）→ 一秒拿到
+正確答案，全程 RPi5 CPU**」。短句空間有限可窮舉＝可證明的產品保證；長句（>30 有效
+字元）不進 LLM，確定性層接得住就答（56 字長句靠直達照答），接不住優雅引導。
+
+**核心工程鐵律（16 輪淬鍊）**：任何 hard-return / rescue / clf-skip 出口都要**自帶
+參數接地與推導**（倉別/類別/期間/數值/kw 真商品驗證），不能指望後面的層——本戰役
+八次中招全是這一條。回歸自此雙套：`regression_ws.py`（守衛庫）＋
+`regression_ws.py --file _sweep_r31.txt`（短句掃蕩），兩套雙平台全綠才 commit。
 
 ---
 
@@ -356,6 +377,8 @@ python finetune_local.py
 - [x] 展示資料一鍵重置
 - [x] 能力地圖重排（進出貨/調貨/退貨提為主打，冷門功能收次選單）
 - [x] conv100 15 輪收斂（真bug 收斂至 ≤2、危險級連續 8 批 0）
+- [x] 第二戰役 r16-r31：新攻擊面 16 輪 + 短句全枚舉 953 句雙平台 100% 認證
+- [x] 長度閘門（>30 字不進 LLM）+ RPI5 網路自癒（省電關閉+watchdog）
 - [x] 守衛庫升級 view+內容雙驗（第三欄「回答必含關鍵字」）
 - [x] regression_ws --rpi5（RPI5 全量回歸、雙平台驗收）
 - [x] movement 支援昨天/上週真日期查詢
@@ -383,5 +406,4 @@ python finetune_local.py
 
 ---
 
-*最後更新：2026-07-06 | v6 模型 5,849 筆訓練 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV v1: 98% | OOV v2: 97.5% | **conv100 15 輪收斂完成：守衛庫 352 句雙平台（WIN11+RPI5）100%、危險級連續 8 批 0、RPI5 耐久 1,600+ 次推理零崩潰***
-*註：training_data.jsonl 生成腳本已修復（讀 warehouse_data/ 而非已淘汰的 seed_data.json），目前重新生成得 5,415 筆（60 SKU 乾淨版，未含灌水的 create_movement 樣本），尚未重新訓練，部署模型仍是 v6 舊版權重。*
+*最後更新：2026-07-14 | v6 模型 5,849 筆訓練 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV: 98%/97.5%/100% | **31 輪收斂：守衛庫 855 句＋短句全枚舉 953 句 雙平台（WIN11+RPI5）100%、危險級持續 0***
