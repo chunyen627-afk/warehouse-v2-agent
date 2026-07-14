@@ -73,7 +73,7 @@ ACCEPT = {
 }
 
 
-async def _q(text):
+async def _q_once(text):
     async with websockets.connect(WS_URI, ssl=SSL_CTX, max_size=None) as ws:
         await ws.send(json.dumps({'type': 'chat', 'text': text}, ensure_ascii=False))
         while True:
@@ -81,6 +81,23 @@ async def _q(text):
             msg = json.loads(raw)
             if msg.get('type') == 'done':
                 return msg.get('result', {})
+
+
+async def _q(text, tries=3):
+    """握手逾時會自動重連。
+
+    server 同時被兩個測試（或劇本）打時，WebSocket opening handshake 偶爾逾時，
+    產生「WS error: timed out during opening handshake」的幽靈 FAIL——每次逾時
+    的句子還都不一樣，看起來活像真 bug。追過三次都不是。連線層的抖動不該算進
+    回歸結果，重連即可。
+    """
+    for i in range(tries):
+        try:
+            return await _q_once(text)
+        except Exception:
+            if i == tries - 1:
+                raise
+            await asyncio.sleep(1.5 * (i + 1))
 
 
 def main():

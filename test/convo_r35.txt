@@ -1,0 +1,144 @@
+# r35 多輪掃蕩 — 第四個攻擊面（訪客的不理性行為）
+# ①反悔鏈（改來改去） ②追問時打錯字/注音 ③省略到極限的追問
+# ④數量/倉別的追問（不是商品） ⑤中途換人講話的口氣 ⑥卡片與流程互相打架
+
+# ── ① 反悔鏈：改來改去 ──
+
+### F1 進貨改三次數量
+> 北倉進50個無線滑鼠 | movement_confirm
+> 不對是100個 | not:error
+> 北倉進100個無線滑鼠 | movement_confirm
+> 還是80好了 | not:error
+> 北倉進80個無線滑鼠 | movement_confirm
+[confirm]
+> 北倉無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### F2 進貨改倉別
+> 北倉進50個瑜珈墊 | movement_confirm
+> 我是說南倉 | not:error
+> 南倉進50個瑜珈墊 | movement_confirm
+[confirm]
+> 南倉瑜珈墊還剩幾個 | not:error | 瑜珈墊
+
+### F3 進貨改商品
+> 北倉進50個無線滑鼠 | movement_confirm
+> 不是滑鼠是耳機 | not:error
+> 北倉進50個藍牙耳機 | movement_confirm
+[confirm]
+> 北倉藍牙耳機還剩幾個 | not:error | 藍牙耳機
+
+### F4 設定改來改去最後放棄
+> 把瑜珈墊安全庫存設成80 | config_confirm
+> 改成100 | not:error
+> 不對改成50 | not:error
+> 算了 | not:error
+> 瑜珈墊安全庫存多少 | not:error | 瑜珈墊
+
+### F5 出貨改成進貨
+> 北倉出20個瑜珈墊 | movement_confirm
+> 我是要進貨不是出貨 | not:error
+> 北倉進20個瑜珈墊 | movement_confirm
+[confirm]
+> 北倉瑜珈墊還剩幾個 | not:error | 瑜珈墊
+
+# ── ② 追問時打錯字/注音（多輪 × 錯字，單句掃過但多輪沒有）──
+
+### T1 追問句有錯字
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 那個近出紀錄呢 | not:error
+> 南倉ㄋ | not:error,not:movement_confirm
+
+### T2 商品名打錯再追問
+> 無線滑鼡還剩幾個 | not:error
+> 那個進出紀錄呢 | not:error
+
+### T3 追問句注音殘字
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> 那ㄍ快到期嗎 | not:error
+> 安全ㄎ存多少 | not:error
+
+### T4 追問句英文
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> stock? | not:error
+> how many | not:error
+
+# ── ③ 省略到極限 ──
+
+### S1 只打一個字追問
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 南 | not:error
+> 北 | not:error
+
+### S2 只打功能詞
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 進出 | not:error
+> 到期 | not:error
+> 安全庫存 | not:error
+
+### S3 只打「呢」「咧」
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 呢 | not:error
+> 咧 | not:error
+
+### S4 疊字追問
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 進出進出 | not:error
+
+# ── ④ 追問數量/倉別（不是商品）──
+
+### N1 追問「有幾個」的倉別鏈
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> 北倉多少 | not:error
+> 中倉多少 | not:error
+> 三倉加起來 | not:error
+
+### N2 追問比較（同商品跨倉）
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 哪一倉最多 | not:error
+> 哪一倉最少 | not:error
+
+### N3 追問「還能撐幾天」
+> 哪些商品快缺貨了 | low_stock
+> 最急的那個還能撐幾天 | not:error
+
+# ── ⑤ 口氣變化 ──
+
+### G1 禮貌 → 命令 → 抱怨
+> 不好意思請問無線滑鼠還有嗎 | not:error | 無線滑鼠
+> 那個進出紀錄給我看 | not:error
+> 怎麼這麼慢 | rejected,guide,clarify
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+
+### G2 疑問句連發
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> 真的嗎 | not:error
+> 確定嗎 | not:error
+> 那個進出紀錄呢 | not:error
+
+# ── ⑥ 卡片與流程打架 ──
+
+### C1 卡片在時開新增商品流程
+> 北倉進50個無線滑鼠 | movement_confirm
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 取消 | not:error
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### C2 新增商品流程中叫出進貨卡再確認
+> 新增商品 | not:error
+> 取消 | not:error
+> 北倉進50個無線滑鼠 | movement_confirm
+[confirm]
+> 北倉無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### C3 刪除流程中說要進貨
+> 刪除商品 | not:error
+> 北倉進50個無線滑鼠 | not:error
+> 取消 | not:error
+
+### C4 連開三張不同的卡再確認最後一張
+> 北倉進50個無線滑鼠 | movement_confirm
+> 把瑜珈墊安全庫存設成80 | config_confirm
+> 從北倉調10個藍牙耳機到南倉 | transfer_confirm
+[confirm]
+> 南倉藍牙耳機還剩幾個 | not:error | 藍牙耳機

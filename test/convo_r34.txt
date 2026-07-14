@@ -1,0 +1,170 @@
+# r34 多輪掃蕩 — 第三個攻擊面
+# ①多人交錯（>@B = 第二條連線，驗 vid 隔離） ②卡片競態 ③長對話 context 漂移
+# ④跨功能 context 污染 ⑤寫入鏈資料一致性 ⑥展場實況（手機+桌機同時玩）
+
+# ── ① 多人交錯：兩台裝置同時對話 ──
+
+### M1 兩人各查各的商品，追問不可串味
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+>@B 電動牙刷還剩幾個 | not:error | 電動牙刷
+> 那個進出紀錄呢 | not:error | 無線滑鼠
+>@B 那個進出紀錄呢 | not:error | 電動牙刷
+
+### M2 A 開新增商品流程，B 的查詢不可被吸進流程
+> 新增商品 | not:error
+>@B 藍牙耳機庫存 | not:error | 藍牙耳機
+>@B 哪些商品快缺貨了 | low_stock
+> 露營燈 | not:error
+> 取消 | not:error
+
+### M3 A 開確認卡，B 打「好」不可觸發 A 的卡
+> 北倉進50個無線滑鼠 | movement_confirm
+>@B 好 | rejected,guide,clarify
+>@B 瑜珈墊庫存 | not:error | 瑜珈墊
+> 取消 | not:error
+
+### M4 兩人同時進貨同一商品，各自確認（庫存要累加）
+> 北倉進10個瑜珈墊 | movement_confirm
+>@B 北倉進20個瑜珈墊 | movement_confirm
+[confirm]
+[confirm@B]
+> 北倉瑜珈墊還剩幾個 | not:error | 瑜珈墊
+
+### M5 A 放棄流程不可影響 B 的流程
+> 新增商品 | not:error
+>@B 新增商品 | not:error
+> 算了 | not:error
+>@B 露營燈 | not:error
+>@B 取消 | not:error
+
+# ── ② 卡片競態 ──
+
+### K1 卡片放很久（中間插 5 輪查詢）再回頭按確認
+! pending 記憶被中間的查詢清掉 → [confirm] 會失敗；這是刻意的（卡片內容已過時）
+> 北倉進50個無線滑鼠 | movement_confirm
+> 藍牙耳機庫存 | not:error
+> 哪些商品快缺貨了 | low_stock
+> 本月熱銷前十 | hot_items
+> 瑜珈墊庫存 | not:error
+> 北倉進50個無線滑鼠 | movement_confirm
+[confirm]
+> 北倉無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### K2 確認後再說「好」（卡片已消失）
+> 北倉進10個瑜珈墊 | movement_confirm
+[confirm]
+> 好 | rejected,guide,clarify,not:error
+
+### K3 確認後立刻說「取消」（沒東西可取消）
+> 北倉進10個瑜珈墊 | movement_confirm
+[confirm]
+> 取消 | not:error
+> 瑜珈墊還剩幾個 | not:error | 瑜珈墊
+
+### K4 卡片在時查另一商品再回頭改主意
+> 北倉進50個無線滑鼠 | movement_confirm
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> 不對是100個 | not:error,not:inventory_single
+
+# ── ③ 長對話 context 漂移 ──
+
+### D1 十五輪同商品追問（context 不可漂走）
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 那個進出紀錄呢 | not:error
+> 南倉呢 | not:error
+> 北倉呢 | not:error
+> 安全庫存多少 | not:error
+> 快到期嗎 | not:error
+> 搭配什麼賣 | not:error
+> 還剩幾個 | not:error
+> 中倉呢 | not:error
+> 進出紀錄 | not:error
+> 快缺貨了嗎 | not:error
+> 多少錢 | not:error
+> 那個呢 | not:error
+> 還有多少 | not:error
+> 它快到期嗎 | not:error
+
+### D2 商品每三輪換一次（context 要跟上）
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 那個進出紀錄呢 | not:error
+> 藍牙耳機還剩幾個 | not:error | 藍牙耳機
+> 那個進出紀錄呢 | not:error
+> 瑜珈墊還剩幾個 | not:error | 瑜珈墊
+> 那個進出紀錄呢 | not:error
+> 電動牙刷還剩幾個 | not:error | 電動牙刷
+> 那個進出紀錄呢 | not:error
+
+# ── ④ 跨功能 context 污染 ──
+
+### X1 查 A → 設定 B → 追問「那個」該指誰
+! 最新提到的是智慧手環 → 追問應跟智慧手環（不可回無線滑鼠）
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 把智慧手環安全庫存設成80 | config_confirm
+> 取消 | not:error
+> 那個還剩幾個 | not:error
+
+### X2 缺貨清單後追問「那個」（清單沒有單一商品）
+> 哪些商品快缺貨了 | low_stock
+> 那個還剩幾個 | not:error
+
+### X3 熱銷排行後追問第一名
+> 本月熱銷前十 | hot_items
+> 那個還剩幾個 | not:error
+
+### X4 比較兩倉後追問
+> 北倉跟南倉比較 | not:error
+> 那個呢 | not:error
+
+### X5 RCA 後追問
+> 電動牙刷的帳怎麼兜不起來 | not:error
+> 那個還剩幾個 | not:error
+
+# ── ⑤ 寫入鏈資料一致性 ──
+
+### W1 進貨→出貨→調貨 三連寫入同商品
+> 北倉瑜珈墊還剩幾個 | not:error | 瑜珈墊
+> 北倉進100個瑜珈墊 | movement_confirm
+[confirm]
+> 北倉出30個瑜珈墊 | movement_confirm
+[confirm]
+> 從北倉調20個瑜珈墊到南倉 | transfer_confirm
+[confirm]
+> 北倉瑜珈墊還剩幾個 | not:error | 瑜珈墊
+> 南倉瑜珈墊還剩幾個 | not:error | 瑜珈墊
+
+### W2 設定安全庫存後缺貨清單要反映
+> 把瑜珈墊安全庫存設成9999 | config_confirm
+[confirm]
+> 瑜珈墊快缺貨了嗎 | not:error
+
+### W3 進貨後追問「現在剩幾個」再進一次
+> 北倉進50個藍牙耳機 | movement_confirm
+[confirm]
+> 現在剩幾個 | not:error | 藍牙耳機
+> 再進50個 | not:error
+
+# ── ⑥ 展場實況 ──
+
+### E1 手機掃 QR 後的典型十輪（含亂打、改主意、放棄）
+> 哈囉 | rejected,guide,clarify
+> 有賣滑鼠嗎 | not:error
+> 那個還剩幾個 | not:error
+> ㄅㄆㄇ | rejected,guide,clarify
+> 北倉進20個 | movement_confirm,clarify
+> 算了 | not:error
+> 哪些商品快缺貨了 | low_stock
+> 最急的那個還剩幾個 | not:error
+> 謝謝 | rejected,guide,clarify
+
+### E2 兩人搶著玩（交錯 12 輪）
+>@B 你好 | rejected,guide,clarify
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+>@B 哪些商品快缺貨了 | low_stock
+> 那個快到期嗎 | not:error
+>@B 本月熱銷前十 | hot_items
+> 北倉進30個藍牙耳機 | movement_confirm
+>@B 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+[confirm]
+>@B 那個進出紀錄呢 | not:error | 無線滑鼠
+> 現在剩幾個 | not:error | 藍牙耳機

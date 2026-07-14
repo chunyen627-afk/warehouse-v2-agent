@@ -1,0 +1,185 @@
+# r33 多輪掃蕩 — 全新攻擊面（r32 掃的是主幹，這輪掃長尾與邊緣）
+# 角度：①放棄/退出的各種講法 ②確認的曖昧回應 ③追問鏈邊緣（空 context / 跨功能 / 倉別鏈）
+#      ④寫入流程異常路徑 ⑤多輪亂打疲勞轟炸 ⑥展場擬真長對話
+
+# ── ① 放棄/退出的長尾講法（訪客不會乖乖打「取消」）──
+
+### R1 流程中「不用了」退出
+> 新增商品 | not:error
+> 不用了 | not:error
+> 哪些商品快缺貨了 | low_stock
+
+### R2 流程中「我不要了」
+> 新增商品 | not:error
+> 我不要了 | not:error
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### R3 流程中「跳過」（是流程內的合法值，不可被當放棄）
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 戶外用品 | not:error
+> 590 10 | not:error
+> 跳過 | item_confirm,not:error
+
+### R4 流程中「等一下」「先不要」
+> 新增商品 | not:error
+> 先不要 | not:error
+> 本月熱銷前十 | hot_items,not:error
+
+### R5 流程中「離開」「退出」
+> 新增商品 | not:error
+> 退出 | not:error
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+
+### R6 卡片在時「算了不用」
+> 北倉進50個無線滑鼠 | movement_confirm
+> 算了不用 | not:error,not:movement_confirm
+> 哪些商品快缺貨了 | low_stock
+
+### R7 卡片在時「不要了」再下新句
+> 把智慧手環安全庫存設成80 | config_confirm
+> 不要了 | not:error
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+
+# ── ② 確認的曖昧回應（卡片在畫面上）──
+
+### R8 卡片在時說「嗯嗯」
+> 北倉進50個無線滑鼠 | movement_confirm
+> 嗯嗯 | not:error,not:movement_done
+
+### R9 卡片在時說「按確認」（描述動作而非按鈕）
+> 北倉進50個無線滑鼠 | movement_confirm
+> 按確認 | not:error
+
+### R10 卡片在時說「幫我按」
+> 北倉進50個無線滑鼠 | movement_confirm
+> 幫我按 | not:error
+
+### R11 卡片在時說「這樣對嗎」（疑問，不是確認）
+> 北倉進50個無線滑鼠 | movement_confirm
+> 這樣對嗎 | not:error
+
+### R12 卡片在時說「數量錯了」
+> 北倉進50個無線滑鼠 | movement_confirm
+> 數量錯了 | not:error,not:inventory_single
+
+### R13 卡片在時重下一模一樣的句子
+> 北倉進50個無線滑鼠 | movement_confirm
+> 北倉進50個無線滑鼠 | movement_confirm
+[confirm]
+> 北倉無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+# ── ③ 追問鏈邊緣 ──
+
+### R14 開場就追問（空 context → 問他要查哪個，不可回全店統計）
+> 那個進出紀錄呢 | clarify
+> 它還剩幾個 | clarify
+
+### R15 追問鏈跨到寫入再跨回查詢
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> 北倉進30個 | movement_confirm,clarify
+> 那快到期嗎 | not:error
+
+### R16 倉別連鏈三跳
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 北倉呢 | not:error
+> 中倉呢 | not:error
+> 南倉呢 | not:error
+
+### R17 追問「哪一倉最多」（全域詞，不可被接地成單品）
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 哪一倉最多 | not:error
+
+### R18 追問後再開新商品再追問
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 它的進出紀錄 | not:error
+> 電動牙刷庫存 | not:error | 電動牙刷
+> 它的進出紀錄 | not:error | 電動牙刷
+
+### R19 追問代詞但商品已在句中（不可被覆蓋）
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> 那藍牙耳機呢 | not:error | 藍牙耳機
+
+### R20 rejected 之後追問（context 應保留上一個成功的商品）
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 哈囉你好 | rejected,guide,clarify
+> 快到期嗎 | not:error
+
+### R21 追問「安全庫存多少」不可變成設定卡
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 安全庫存多少 | not:config_confirm,not:error
+
+# ── ④ 寫入流程異常路徑 ──
+
+### R22 新增商品名稱給空白/符號
+> 新增商品 | not:error
+> ??? | not:error
+> 取消 | not:error
+
+### R23 新增商品單價給文字
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 戶外用品 | not:error
+> 很貴 | not:error
+> 取消 | not:error
+
+### R24 新增商品初始庫存給負數
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 戶外用品 | not:error
+> 590 10 | not:error
+> -5 -5 -5 | not:error
+
+### R25 調貨來源不足後改問庫存
+> 從南倉調9999個無線滑鼠到北倉 | not:movement_confirm
+> 南倉無線滑鼠有多少 | not:error | 無線滑鼠
+
+### R26 出貨超量被擋後改小
+> 北倉出9999個無線滑鼠 | error,clarify,not:movement_confirm
+> 北倉出10個無線滑鼠 | movement_confirm
+[confirm]
+> 北倉無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+# ── ⑤ 多輪亂打疲勞轟炸 ──
+
+### R27 亂打八輪後正常句
+> ㄅㄅ | rejected,guide,clarify
+> ㄍㄍ | rejected,guide,clarify
+> zzz | rejected,guide,clarify
+> 88888 | not:error
+> ㄉㄨㄞ | rejected,guide,clarify
+> ！！！ | rejected,guide,clarify,not:error
+> ㄏㄏ | rejected,guide,clarify
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+
+### R28 亂打夾在追問鏈中間三次
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+> ㄅㄆ | rejected,guide,clarify
+> qq | rejected,guide,clarify
+> ㄋㄋ | rejected,guide,clarify
+> 那個進出紀錄呢 | not:error
+
+# ── ⑥ 展場擬真長對話 ──
+
+### R29 擬真：查→比較→缺貨→進貨→確認→再查（12 輪）
+> 你們有賣耳機嗎 | not:error
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+> 那個快到期嗎 | not:error
+> 北倉跟南倉比較 | not:error
+> 哪些商品快缺貨了 | low_stock
+> 藍牙耳機要補多少 | not:error
+> 北倉進100個藍牙耳機 | movement_confirm
+[confirm]
+> 現在剩幾個 | not:error
+> 本月熱銷前十 | hot_items,not:error
+> 謝謝掰掰 | rejected,guide,clarify
+
+### R30 擬真：新增商品走完→確認→查新商品→刪掉
+> 新增商品 | not:error
+> 露營燈 | not:error
+> 戶外用品 | not:error
+> 590 10 | not:error
+> 5 5 5 | item_confirm
+[confirm]
+> 露營燈還剩幾個 | not:error | 露營燈
+> 那個安全庫存多少 | not:error

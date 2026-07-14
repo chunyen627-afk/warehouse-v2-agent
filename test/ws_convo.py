@@ -49,6 +49,9 @@ SUSPICIOUS_TEXT = ("看不懂", "聽不懂", "我不太理解", "無法理解", 
 
 def looks_bad(view: str, text: str) -> str:
     if view in SUSPICIOUS_VIEWS:
+        # 「庫存不足 → 擋下」是正確行為（error view 是刻意的），不算破口
+        if "庫存不足" in text or "不足" in text:
+            return ""
         return f"view={view}"
     for s in SUSPICIOUS_TEXT:
         if s in text:
@@ -73,13 +76,24 @@ def parse_script(path: Path):
         elif cur is None:
             continue
         elif line.startswith(">"):
-            parts = [p.strip() for p in line[1:].split("|")]
+            body = line[1:].strip()
+            # r34：「>@B 句子」= 這句由訪客 B 說（同情境內開第二條連線，模擬展場
+            #   兩台裝置交錯對話 → 驗 vid 隔離）。沒有 @ 前綴 = 預設訪客 A。
+            who = "A"
+            if body.startswith("@"):
+                who, _, body = body[1:].partition(" ")
+                who = who.strip() or "A"
+            parts = [p.strip() for p in body.split("|")]
             text = parts[0]
             expect = parts[1] if len(parts) >= 2 else ""
             must = parts[2] if len(parts) >= 3 else ""
-            cur[1].append(("say", text, expect, must))
-        elif line.startswith("[confirm]"):
-            cur[1].append(("confirm",))
+            cur[1].append(("say", text, expect, must, who))
+        elif line.startswith("[confirm"):
+            # [confirm] 或 [confirm@B]
+            who = "A"
+            if "@" in line:
+                who = line.split("@", 1)[1].rstrip("] ").strip() or "A"
+            cur[1].append(("confirm", who))
         elif line.startswith("!"):
             cur[1].append(("note", line[1:].strip()))
     return scenes
@@ -111,35 +125,52 @@ async def recv_result(ws, timeout=60):
 
 
 async def run_scene(uri, ctx, name, steps, quiet):
-    """一個情境 = 一條連線（= 一個 vid），連發所有 step。"""
+    """一個情境 = 一位（或多位）訪客，每位一條連線（= 一個 vid），連發所有 step。"""
     fails, sus = [], []
     if not quiet:
         print(f"\n{'─'*74}\n### {name}\n{'─'*74}")
-    async with websockets.connect(uri, ssl=ctx, max_size=None) as ws:
-        last = {}
+
+    conns: dict = {}   # who → (ws, last_result)
+    try:
         for st in steps:
             if st[0] == "note":
                 if not quiet:
                     print(f"   ! {st[1]}")
                 continue
 
+            who = st[-1]
+            if who not in conns:
+                # 握手逾時會自動重連——server 同時被別的測試打時 opening handshake
+                # 偶爾逾時，那是連線層抖動，不該算成劇本失敗
+                for _try in range(3):
+                    try:
+                        conns[who] = [await websockets.connect(uri, ssl=ctx, max_size=None), {}]
+                        break
+                    except Exception:
+                        if _try == 2:
+                            raise
+                        await asyncio.sleep(1.5 * (_try + 1))
+            ws, last = conns[who]
+            tag = "" if who == "A" and len(conns) == 1 else f"[{who}] "
+
             if st[0] == "confirm":
                 view = last.get("view", "")
                 action = VIEW2ACTION.get(view)
                 if not action:
-                    fails.append((name, "[confirm]", f"上一輪 view={view or '?'} 不是確認卡，無法按確認"))
+                    fails.append((name, f"{tag}[confirm]",
+                                  f"上一輪 view={view or '?'} 不是確認卡，無法按確認"))
                     if not quiet:
-                        print(f"   ✗ [confirm] 上一輪 view={view or '?'} 沒有確認卡")
+                        print(f"   ✗ {tag}[confirm] 上一輪 view={view or '?'} 沒有確認卡")
                     continue
                 payload = {"type": "confirm", "action": action, "pending": last.get("data", {})}
                 if action == "run_script":
                     payload["script_id"] = (last.get("data") or {}).get("script_id", "")
-                label, t0 = f"[confirm→{action}]", time.perf_counter()
+                label, t0 = f"{tag}[confirm→{action}]", time.perf_counter()
                 await ws.send(json.dumps(payload, ensure_ascii=False))
                 expect, must = "", ""
             else:
-                _, text, expect, must = st
-                label, t0 = f"Q: {text}", time.perf_counter()
+                _, text, expect, must, _ = st
+                label, t0 = f"{tag}Q: {text}", time.perf_counter()
                 await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
 
             try:
@@ -150,7 +181,7 @@ async def run_scene(uri, ctx, name, steps, quiet):
                     print(f"   ✗ {label}\n     WS 錯誤: {e}")
                 continue
 
-            last = r
+            conns[who][1] = r
             view = r.get("view", "?")
             ans = (r.get("summary") or toks).strip()
             lat = (time.perf_counter() - t0) * 1000
@@ -175,6 +206,9 @@ async def run_scene(uri, ctx, name, steps, quiet):
                 print(f"     └─✗ FAIL: {why_fail}")
             elif why_sus:
                 print(f"     └─⚠️ 可疑: {why_sus}")
+    finally:
+        for ws, _ in conns.values():
+            await ws.close()
     return fails, sus
 
 
@@ -184,7 +218,23 @@ async def main():
     ap.add_argument("--rpi5", action="store_true")
     ap.add_argument("--quiet", action="store_true", help="只印 FAIL/可疑")
     ap.add_argument("--only", help="只跑名稱含此字串的情境")
+    ap.add_argument("--reset", action="store_true",
+                    help="開跑前把展示資料重置回 baseline（劇本會真的寫入資料，"
+                         "連跑兩本劇本會互相污染：前一本新增的商品讓後一本的同名"
+                         "新增流程多問一步）")
     args = ap.parse_args()
+
+    if args.reset:
+        import ssl as _ssl, urllib.request as _rq
+        base = "https://localhost:8001" if args.rpi5 else "http://localhost:8000"
+        _ctx_no = _ssl.create_default_context()
+        _ctx_no.check_hostname = False
+        _ctx_no.verify_mode = _ssl.CERT_NONE
+        req = _rq.Request(f"{base}/api/reset_demo", method="POST",
+                          data=json.dumps({"password": "0000"}).encode(),
+                          headers={"Content-Type": "application/json"})
+        with _rq.urlopen(req, context=_ctx_no if args.rpi5 else None) as r:
+            print(f"[reset] {json.loads(r.read()).get('summary', '')}")
 
     if args.rpi5:
         uri = "wss://localhost:8001/ws"
