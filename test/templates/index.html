@@ -491,6 +491,10 @@
     font-size: 13px; font-weight: 700; flex-shrink: 0;
   }
   .clarify-text { font-size: 15px; color: var(--fg); }
+  .clarify-sub { font-size: 11px; color: var(--muted); margin-left: 8px; }
+  .clarify-cancel { opacity: .7; }
+  .clarify-cancel .clarify-num { background: var(--muted); }
+  .clarify-cancel .clarify-text { color: var(--muted); }
   .clarify-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .confirm-box { background: rgba(255,180,80,.10); border: 1px solid var(--warn,#ed8936);
     border-radius: 8px; padding: 12px; }
@@ -2031,12 +2035,17 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'clarify') {
     // 意圖澄清選項 — 可直接點選的大按鈕（手機/平板友善），也保留輸入數字的方式
     const opts = data.options || [];
+    // candidates（有的話）帶每個疑似商品的庫存概況，讓訪客一眼分辨
+    const _cands = data.candidates || [];
     card.innerHTML = `
       <div class="label" style="margin-bottom:8px">❓ ${esc(data.question)}</div>
       <div class="clarify-opts">
-        ${opts.map((opt, i) =>
-          `<button class="clarify-row" data-copt="${i}"><span class="clarify-num">${i+1}</span><span class="clarify-text">${esc(opt)}</span></button>`
-        ).join('')}
+        ${opts.map((opt, i) => {
+          const c = _cands[i];
+          const sub = c ? `<span class="clarify-sub">${esc(c.category||'')}｜共 ${c.qty} ${esc(c.unit||'件')}</span>` : '';
+          return `<button class="clarify-row" data-copt="${i}"><span class="clarify-num">${i+1}</span><span class="clarify-text">${esc(opt)}${sub}</span></button>`;
+        }).join('')}
+        <button class="clarify-row clarify-cancel" data-copt="cancel"><span class="clarify-num">✕</span><span class="clarify-text">取消，我不查了</span></button>
       </div>
       <div class="clarify-hint">點選項目，或輸入數字 1~${opts.length} / 直接輸入完整問題</div>
     `;
@@ -2047,6 +2056,15 @@ function renderViewCard(view, data, topSummary) {
     // 點選項 = 跟打數字走同一條路（解析成實際指令 → sendQuery）
     card.querySelectorAll('.clarify-row').forEach(btn => {
       btn.onclick = () => {
+        // 取消鈕：訪客隨口問問、不想選了 → 直接關掉卡片，不送任何查詢（展場友善）
+        if (btn.dataset.copt === 'cancel') {
+          window._clarifyOpts = null;
+          window._clarifyActions = null;
+          document.querySelectorAll('.view-card').forEach(el => {
+            if (el.querySelector('.clarify-opts')) el.remove();
+          });
+          return;
+        }
         const idx = parseInt(btn.dataset.copt);
         const actions = window._clarifyActions || window._clarifyOpts;
         if (!actions || idx < 0 || idx >= actions.length) return;

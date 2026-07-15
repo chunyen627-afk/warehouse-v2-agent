@@ -1562,6 +1562,14 @@ def _detect_clarify(user_text: str) -> dict | None:
         "戶外": "outdoor", "家居": "home",
     }
     matched_cat = next((zh for zh in _cat_kw if zh in t.lower()), None)
+    # r36：類別詞是別的商品名的前綴時不可搶（「清潔手套」含「清潔」、但它是完整
+    #   商品名，不是要問清潔『類』）。句中抽得到真商品 → 讓給商品名。
+    if matched_cat:
+        import warehouse as _W_cat
+        _cat_kw2 = _extract_sku_keyword(t)
+        _cat_m = _W_cat.match_items(_cat_kw2) if _cat_kw2 else []
+        if _cat_m and _cat_m[0].get("score", 0) >= 5:
+            matched_cat = None
     if matched_cat and not has_intent:
         return {
             "question": f"你想查「{matched_cat}」類的什麼？",
@@ -1665,6 +1673,15 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
     all_names = [it["name"] for it in snap.items]
 
     # 完全命中 → 若清理過就更新 keyword，否則不需 OOV 處理
+    # r37：substring 判定對「空格差異」太脆弱——「USB風扇」不是「桌上型 USB 風扇」的
+    #   substring（中間有空格），RPI5 LLM 抽「USB風扇」→ 誤判沒命中 → 進 fuzzy → 撈
+    #   不到 → 空選單 clarify（訪客看到「你是指？」卻沒選項＝死路）。改用 match_items
+    #   （score≥5 就算命中，不受空格影響，兩平台一致），命中就靜默修成真商品名。
+    _oov_m = W.match_items(keyword)
+    if _oov_m and _oov_m[0].get("score", 0) >= 5:
+        _oov_name = _oov_m[0]["item"]["name"]
+        return {"auto_fix": True, "original_keyword": func_args.get("keyword", ""),
+                "fixed_keyword": _oov_name, "score": 100}
     if any(keyword in name or name in keyword for name in all_names):
         if keyword != (func_args.get("keyword") or func_args.get("target") or "").strip():
             # 清理前後不同 → 靜默修復，讓 caller 更新 func_args
@@ -3264,12 +3281,24 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 func_args["keyword"] = kw
                 break
 
-    # ── C2c: query_movement 沒抽到 keyword → 從 user_text 補 ──
+    # 註：新增商品名撞既有商品前綴（露營燈罩 vs LED露營燈）→ 刻意不猜，
+    #   讓 query_inventory 回「疑似清單」請訪客選（2026-07-15 定調：太模糊不硬猜，
+    #   反問訪客也是互動；避免猜錯才是展場底線）。
+
+    # ── C2c: query_movement 沒抽到 keyword，或 keyword 黏了功能詞尾巴 → 補 ──
     if func_name == "query_movement":
-        if not func_args.get("keyword"):
-            cleaned = _extract_sku_keyword(user_text)
-            if cleaned and len(cleaned) >= 2:
-                log.info(f"[校正 C2c] query_movement 補 keyword: {cleaned!r}")
+        _c2c_kw = func_args.get("keyword") or ""
+        # r36：「牛仔褲進出紀錄」黏著（無「的」）時，低分商品的 keyword 會整串
+        #   殘留功能詞尾巴 → match 不到 → 回全部商品。先剝尾巴再抽。
+        #   （USB風扇這類高分商品剛好能穿透，牛仔褲 score=3 就掉——全枚舉抓到）
+        _c2c_src = _re.sub(r"(的)?(這個?月|本月|上個?月|這週|上週|今天|昨天)?"
+                           r"(的)?(進出貨?紀錄?|進出貨?狀況|進出貨?|異動紀錄?|流水紀錄?|異動|流水)$",
+                           "", user_text).strip() or user_text
+        _c2c_bad = bool(_re.search(r"進出|異動|流水|紀錄", _c2c_kw))
+        if not _c2c_kw or _c2c_bad:
+            cleaned = _extract_sku_keyword(_c2c_src)
+            if cleaned and len(cleaned) >= 2 and not _re.search(r"進出|異動|流水|紀錄", cleaned):
+                log.info(f"[校正 C2c] query_movement 補 keyword: {cleaned!r}（剝尾巴後）")
                 func_args = dict(func_args)
                 func_args["keyword"] = cleaned
 
@@ -3502,7 +3531,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         if kw:
             import warehouse as _WC7
             if not _WC7.match_items(kw):
-                kw = ""
+                # r36：kw 黏了功能詞尾巴（「牛仔褲進出紀錄」LLM 沒斷開）→ 剝尾巴再抽一次。
+                #   低分商品（牛仔褲 match「牛仔長褲」score=3）黏著就 match 不到，被清空
+                #   → 回全部商品（全枚舉 + 守衛抓到）。高分商品剛好能穿透才沒露出來。
+                _c7b_stripped = _re.sub(
+                    r"(的)?(這個?月|本月|上個?月|這週|上週|今天|昨天|前天)?(的)?"
+                    r"(進出貨?紀錄?|進出貨?狀況|進出貨?|異動紀錄?|流水紀錄?|異動|流水)$",
+                    "", kw).strip()
+                _c7b_re = _extract_sku_keyword(_c7b_stripped) if _c7b_stripped else ""
+                if _c7b_re and _WC7.match_items(_c7b_re):
+                    kw = _c7b_re
+                else:
+                    kw = ""
         # period 從原句推斷（hard-return 會跳過後面的 C2 時間詞規則，
         # 「最近一個月進貨多少」曾顯示成今天的數字，第14輪抓到）
         # r25：前天要排最前（曾被下面的「週」家族吃掉回本週）；大前天走 time-gate 誠實 clarify
@@ -3759,7 +3799,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C11] manage_config set 補 warehouse={func_args['warehouse']}")
 
     # C11b：manage_config value 補全（加減N → ±N；改成N → N；中文數字也支援）
-    import re as _re
+    # （用頂層 _re；此處不可再 import re as _re，否則整個函式的 _re 變區域變數，
+    #   C2c 等更前面用 _re 的地方會 UnboundLocalError——r36 踩過，卡死全枚舉近 100 分）
     if func_name == "manage_config" and func_args.get("action") == "set":
         raw_v = str(func_args.get("value", "")).strip()
         # 已是合法阿拉伯數字（含 ±）→ 不動；否則從 user_text 用統一函式重抽
@@ -3914,7 +3955,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
 
     # C17b：set_alert 參數清理 — 只保留 condition / target，清掉 keyword 等非法參數
     if func_name == "set_alert":
-        import re as _re
+        # 用頂層 _re，不可 import re as _re（見 C11b 註解：會遮蔽整個函式的 _re）
         cond = str(func_args.get("condition", func_args.get("keyword", ""))).strip()
         tgt  = str(func_args.get("target", func_args.get("item", ""))).strip()
         # 若 condition 不是合法 enum，從 user_text 推斷
@@ -4185,6 +4226,22 @@ def _ctx_expand(vid, text: str) -> str:
     # 光靠功能詞（「快到期嗎」「現在剩幾個」）認定追問 → 只認很短的句子，
     # 長一點就可能是自帶意圖的獨立問句
     has_bare = any(w in text for w in _CTX_BARE) and len(text) <= 10
+    # r37：「鋼琴烤漆保養油庫存」含「庫存」又 ≤10 字 → 曾被當追問、carry-over 到
+    #   前句商品（回 LED 露營燈 / 熱銷榜）。但它自帶商品名（只是不存在的商品）→
+    #   不是追問，該讓它往下走回「找不到鋼琴烤漆保養油」。判別：剝掉功能詞後還剩
+    #   ≥3 字實質描述（非純代詞/倉別/語助）→ 訪客自己講了商品名，不接地。
+    if has_bare:
+        _stem = text
+        for _fw in sorted(_CTX_BARE, key=len, reverse=True):
+            _stem = _stem.replace(_fw, "")
+        _stem = _stem.strip("的呢嗎吧了還剩現在有多少什麼賣怎麼哪個要幫我？?。!！， 　")
+        # 剩餘要「像商品名」：≥3 字、非代詞/倉別、不含疑問殘字（「什麼賣」→ 剝完剩空
+        #   或殘字，不算；「鋼琴烤漆保養油」→ 實質商品名，算）
+        _qwords = ("什麼", "怎麼", "哪", "如何", "為何", "多少", "幾")
+        if (len(_stem) >= 3 and not any(p in _stem for p in _CTX_PRON)
+                and not any(q in _stem for q in _qwords)
+                and not _CTX_WH_ONLY.match(_stem)):
+            has_bare = False   # 自帶商品名，交給下游回「找不到」
     # r34：寫入追問（「北倉進20個」——查完商品接著進貨，展場高頻）。r32 寫了
     #   組句邏輯卻沒把它列進觸發條件 → 這條路徑從來沒被走到，訪客拿到
     #   「找不到商品『進20個』」。（r32 的守衛斷言只寫 not:error，clarify 也算過 → 假綠）

@@ -1,0 +1,124 @@
+# r37 未知商品名抗性 — 四種情境
+# ①新增商品後用新名追問 ②問系統裡沒有的商品 ③新商品名撞名/含關鍵詞 ④新增流程給怪名字
+# 注意：新增類情境會真的寫入資料，跑前一定 --reset
+
+# ══ ① 新增商品後用新名追問（新商品在 seed 之外，match/carry-over 要接得住）══
+
+### U1 新增純新名商品 → 用新名查庫存
+> 新增商品 | not:error
+> 太陽能檯燈 | not:error
+> 戶外用品 | not:error
+> 890 10 | not:error
+> 20 20 20 | item_confirm
+[confirm]
+> 太陽能檯燈還剩幾個 | not:error | 太陽能檯燈
+> 太陽能檯燈進出紀錄 | not:error | 太陽能檯燈
+
+### U2 新增後用代詞追問（carry-over 指到新商品）
+> 新增商品 | not:error
+> 隨身空氣清淨機 | not:error
+> 家電 | not:error
+> 1290 5 | not:error
+> 10 10 10 | item_confirm
+[confirm]
+> 隨身空氣清淨機還剩幾個 | not:error | 空氣清淨機
+> 那個進出紀錄呢 | not:error | 空氣清淨機
+> 南倉呢 | not:error
+
+### U3 新增後查缺貨/搭配（新商品無銷售資料，不可 error）
+> 新增商品 | not:error
+> 折疊野餐墊 | not:error
+> 戶外用品 | not:error
+> 450 30 | not:error
+> 5 5 5 | item_confirm
+[confirm]
+> 折疊野餐墊快缺貨了嗎 | not:error | 野餐墊
+> 折疊野餐墊搭配什麼賣 | not:error
+
+# ══ ② 問系統裡沒有的商品（優雅說找不到，不可幻覺成相似真商品）══
+
+### N1 完全不存在的商品
+> 有賣講義卡機嗎 | clarify,rejected,related_empty,inventory
+> 鋼琴烤漆保養油庫存 | clarify,rejected,related_empty,error,inventory
+
+### N2 不存在商品 + 追問（不可幻覺）
+> 星際大戰模型還有嗎 | clarify,rejected,related_empty,inventory
+> 那個進出紀錄呢 | not:error
+
+### N3 半真半假（含真類別詞但非真商品）
+> 電子鞭炮還剩幾個 | clarify,rejected,related_empty,inventory,error
+> 食品級潤滑油有嗎 | clarify,rejected,related_empty,inventory,error
+
+### N4 不存在商品進貨（寫入類，不可對假商品開卡）
+> 北倉進50個外星探測器 | clarify,rejected,error,not:movement_confirm
+
+# ══ ③ 新商品名撞名 / 包含關鍵詞（考驗剛修的類別讓位 + score 門檻）══
+
+### C1 新商品含類別詞「清潔」
+> 新增商品 | not:error
+> 清潔保養組 | not:error
+> 清潔用品 | not:error
+> 350 20 | not:error
+> 10 10 10 | item_confirm
+[confirm]
+> 清潔保養組的相關商品 | not:error | 清潔保養組
+> 清潔保養組還剩幾個 | not:error | 清潔保養組
+
+### C2 新商品短稱跟既有商品共用 token
+> 新增商品 | not:error
+> USB暖手寶 | not:error
+> 家電 | not:error
+> 590 15 | not:error
+> 8 8 8 | item_confirm
+[confirm]
+> USB暖手寶進出紀錄 | not:error | 暖手寶
+> USB暖手寶還剩幾個 | not:error | 暖手寶
+
+### C3 新商品名前綴等於既有商品（露營燈 vs LED 露營燈）
+# 定調：不硬猜，模糊就回疑似清單請訪客選（clarify 也算正確、不算 error）。
+#   威脅模型＝訪客想玩到掛，不是求實用 → 重點是「清單出現後訪客不選、繼續亂打」
+#   系統要接得住、不卡在清單、不當掉。
+> 新增商品 | not:error
+> 露營燈罩 | not:error
+> 戶外用品 | not:error
+> 120 30 | not:error
+> 5 5 5 | item_confirm
+[confirm]
+# 反問清單內容驗證：必須含訪客要的「露營燈罩」（沒漏）、不含無關的「滑鼠」（沒亂列）、不爆版
+> 露營燈罩還剩幾個 | inventory_single,clarify,inventory | cand:has=露營燈罩;cand:hasnot=滑鼠;cand:count<=8
+> 隨便啦 | not:error
+> 哪些商品快缺貨了 | low_stock
+> ㄍㄋㄨㄟ | rejected,guide,clarify,not:error
+> 本月熱銷前十 | hot_items,not:error
+
+# ══ ④ 新增流程中給怪名字（寫入層防呆，不可 crash / 劫持後續）══
+
+### G1 商品名純符號
+> 新增商品 | not:error
+> ###@@@ | not:error
+> 取消 | not:error
+> 哪些商品快缺貨了 | low_stock
+
+### G2 商品名超長句
+> 新增商品 | not:error
+> 這是一個非常非常長的商品名稱看看系統會不會爆掉到底 | not:error
+> 取消 | not:error
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠
+
+### G3 商品名用功能詞（庫存/進出）
+> 新增商品 | not:error
+> 庫存進出查詢 | not:error
+> 取消 | not:error
+> 藍牙耳機庫存 | not:error | 藍牙耳機
+
+### G4 商品名給亂碼注音
+> 新增商品 | not:error
+> ㄅㄆㄇㄈㄉ | not:error
+> 取消 | not:error
+> 本月熱銷前十 | hot_items
+
+### G5 商品名跟既有商品完全同名（同名防呆）
+> 新增商品 | not:error
+> 無線滑鼠 | not:error
+> 取消 | not:error
+> 無線滑鼠還剩幾個 | not:error | 無線滑鼠

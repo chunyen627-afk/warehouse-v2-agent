@@ -1,0 +1,7923 @@
+# 多輪短句全枚舉（gen_convo_sweep.py 產出，勿手改）
+# 每個情境 = 一位訪客：首句建立 context（商品名）+ 一句追問（省略商品名）
+# 判準：追問的回答必須還在講同一個商品 —— 這就是「接地」的定義。
+
+### 藍牙耳機-00 那個呢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 那個呢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-01 它還剩幾個
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 它還剩幾個 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-02 那個進出紀錄呢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 那個進出紀錄呢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-03 這個快到期嗎
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 這個快到期嗎 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-04 那個多少錢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 那個多少錢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-05 它安全庫存多少
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 它安全庫存多少 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-06 進出
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 進出 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-07 進出紀錄
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 進出紀錄 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-08 到期
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 到期 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-09 快到期嗎
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 快到期嗎 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-10 安全庫存
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 安全庫存 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-11 安全庫存多少
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 安全庫存多少 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-12 搭配什麼賣
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 搭配什麼賣 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-13 多少錢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 多少錢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-14 還剩幾個
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 還剩幾個 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-15 現在剩幾個
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 現在剩幾個 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-16 快缺貨了嗎
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 快缺貨了嗎 | low_stock | 耳機
+
+### 藍牙耳機-17 夠不夠
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 夠不夠 | low_stock | 耳機
+
+### 藍牙耳機-18 南倉呢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 南倉呢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-19 北倉呢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 北倉呢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-20 中倉呢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 中倉呢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-21 北倉多少
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 北倉多少 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-22 南倉幾個
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 南倉幾個 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-23 南
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 南 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-24 北
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 北 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-25 哪一倉最多
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 哪一倉最多 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-26 呢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 呢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-27 咧
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 咧 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-28 北倉進20個
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 北倉進20個 | movement_confirm | 耳機
+
+### 藍牙耳機-29 南倉出5個
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 南倉出5個 | movement_confirm,error | 耳機
+
+### 藍牙耳機-30 那個近出紀錄呢
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 那個近出紀錄呢 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-31 安全ㄎ存多少
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 安全ㄎ存多少 | not:error,not:rejected | 耳機
+
+### 藍牙耳機-32 那ㄍ快到期嗎
+> 藍牙耳機還剩幾個 | not:error,not:rejected | 耳機
+> 那ㄍ快到期嗎 | not:error,not:rejected | 耳機
+
+### 行動電源-00 那個呢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 那個呢 | not:error,not:rejected | 行動電源
+
+### 行動電源-01 它還剩幾個
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 它還剩幾個 | not:error,not:rejected | 行動電源
+
+### 行動電源-02 那個進出紀錄呢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 那個進出紀錄呢 | not:error,not:rejected | 行動電源
+
+### 行動電源-03 這個快到期嗎
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 這個快到期嗎 | not:error,not:rejected | 行動電源
+
+### 行動電源-04 那個多少錢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 那個多少錢 | not:error,not:rejected | 行動電源
+
+### 行動電源-05 它安全庫存多少
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 它安全庫存多少 | not:error,not:rejected | 行動電源
+
+### 行動電源-06 進出
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 進出 | not:error,not:rejected | 行動電源
+
+### 行動電源-07 進出紀錄
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 進出紀錄 | not:error,not:rejected | 行動電源
+
+### 行動電源-08 到期
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 到期 | not:error,not:rejected | 行動電源
+
+### 行動電源-09 快到期嗎
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 快到期嗎 | not:error,not:rejected | 行動電源
+
+### 行動電源-10 安全庫存
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 安全庫存 | not:error,not:rejected | 行動電源
+
+### 行動電源-11 安全庫存多少
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 安全庫存多少 | not:error,not:rejected | 行動電源
+
+### 行動電源-12 搭配什麼賣
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 搭配什麼賣 | not:error,not:rejected | 行動電源
+
+### 行動電源-13 多少錢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 多少錢 | not:error,not:rejected | 行動電源
+
+### 行動電源-14 還剩幾個
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 還剩幾個 | not:error,not:rejected | 行動電源
+
+### 行動電源-15 現在剩幾個
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 現在剩幾個 | not:error,not:rejected | 行動電源
+
+### 行動電源-16 快缺貨了嗎
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 快缺貨了嗎 | low_stock | 行動電源
+
+### 行動電源-17 夠不夠
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 夠不夠 | low_stock | 行動電源
+
+### 行動電源-18 南倉呢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 南倉呢 | not:error,not:rejected | 行動電源
+
+### 行動電源-19 北倉呢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 北倉呢 | not:error,not:rejected | 行動電源
+
+### 行動電源-20 中倉呢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 中倉呢 | not:error,not:rejected | 行動電源
+
+### 行動電源-21 北倉多少
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 北倉多少 | not:error,not:rejected | 行動電源
+
+### 行動電源-22 南倉幾個
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 南倉幾個 | not:error,not:rejected | 行動電源
+
+### 行動電源-23 南
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 南 | not:error,not:rejected | 行動電源
+
+### 行動電源-24 北
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 北 | not:error,not:rejected | 行動電源
+
+### 行動電源-25 哪一倉最多
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 哪一倉最多 | not:error,not:rejected | 行動電源
+
+### 行動電源-26 呢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 呢 | not:error,not:rejected | 行動電源
+
+### 行動電源-27 咧
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 咧 | not:error,not:rejected | 行動電源
+
+### 行動電源-28 北倉進20個
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 北倉進20個 | movement_confirm | 行動電源
+
+### 行動電源-29 南倉出5個
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 南倉出5個 | movement_confirm,error | 行動電源
+
+### 行動電源-30 那個近出紀錄呢
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 那個近出紀錄呢 | not:error,not:rejected | 行動電源
+
+### 行動電源-31 安全ㄎ存多少
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 安全ㄎ存多少 | not:error,not:rejected | 行動電源
+
+### 行動電源-32 那ㄍ快到期嗎
+> 行動電源還剩幾個 | not:error,not:rejected | 行動電源
+> 那ㄍ快到期嗎 | not:error,not:rejected | 行動電源
+
+### 快充線-00 那個呢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 那個呢 | not:error,not:rejected | 快充線
+
+### 快充線-01 它還剩幾個
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 它還剩幾個 | not:error,not:rejected | 快充線
+
+### 快充線-02 那個進出紀錄呢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 那個進出紀錄呢 | not:error,not:rejected | 快充線
+
+### 快充線-03 這個快到期嗎
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 這個快到期嗎 | not:error,not:rejected | 快充線
+
+### 快充線-04 那個多少錢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 那個多少錢 | not:error,not:rejected | 快充線
+
+### 快充線-05 它安全庫存多少
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 它安全庫存多少 | not:error,not:rejected | 快充線
+
+### 快充線-06 進出
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 進出 | not:error,not:rejected | 快充線
+
+### 快充線-07 進出紀錄
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 進出紀錄 | not:error,not:rejected | 快充線
+
+### 快充線-08 到期
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 到期 | not:error,not:rejected | 快充線
+
+### 快充線-09 快到期嗎
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 快到期嗎 | not:error,not:rejected | 快充線
+
+### 快充線-10 安全庫存
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 安全庫存 | not:error,not:rejected | 快充線
+
+### 快充線-11 安全庫存多少
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 安全庫存多少 | not:error,not:rejected | 快充線
+
+### 快充線-12 搭配什麼賣
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 搭配什麼賣 | not:error,not:rejected | 快充線
+
+### 快充線-13 多少錢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 多少錢 | not:error,not:rejected | 快充線
+
+### 快充線-14 還剩幾個
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 還剩幾個 | not:error,not:rejected | 快充線
+
+### 快充線-15 現在剩幾個
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 現在剩幾個 | not:error,not:rejected | 快充線
+
+### 快充線-16 快缺貨了嗎
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 快缺貨了嗎 | low_stock | 快充線
+
+### 快充線-17 夠不夠
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 夠不夠 | low_stock | 快充線
+
+### 快充線-18 南倉呢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 南倉呢 | not:error,not:rejected | 快充線
+
+### 快充線-19 北倉呢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 北倉呢 | not:error,not:rejected | 快充線
+
+### 快充線-20 中倉呢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 中倉呢 | not:error,not:rejected | 快充線
+
+### 快充線-21 北倉多少
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 北倉多少 | not:error,not:rejected | 快充線
+
+### 快充線-22 南倉幾個
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 南倉幾個 | not:error,not:rejected | 快充線
+
+### 快充線-23 南
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 南 | not:error,not:rejected | 快充線
+
+### 快充線-24 北
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 北 | not:error,not:rejected | 快充線
+
+### 快充線-25 哪一倉最多
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 哪一倉最多 | not:error,not:rejected | 快充線
+
+### 快充線-26 呢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 呢 | not:error,not:rejected | 快充線
+
+### 快充線-27 咧
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 咧 | not:error,not:rejected | 快充線
+
+### 快充線-28 北倉進20個
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 北倉進20個 | movement_confirm | 快充線
+
+### 快充線-29 南倉出5個
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 南倉出5個 | movement_confirm,error | 快充線
+
+### 快充線-30 那個近出紀錄呢
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 那個近出紀錄呢 | not:error,not:rejected | 快充線
+
+### 快充線-31 安全ㄎ存多少
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 安全ㄎ存多少 | not:error,not:rejected | 快充線
+
+### 快充線-32 那ㄍ快到期嗎
+> 快充線還剩幾個 | not:error,not:rejected | 快充線
+> 那ㄍ快到期嗎 | not:error,not:rejected | 快充線
+
+### 藍牙喇叭-00 那個呢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 那個呢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-01 它還剩幾個
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 它還剩幾個 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-02 那個進出紀錄呢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 那個進出紀錄呢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-03 這個快到期嗎
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 這個快到期嗎 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-04 那個多少錢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 那個多少錢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-05 它安全庫存多少
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 它安全庫存多少 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-06 進出
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 進出 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-07 進出紀錄
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 進出紀錄 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-08 到期
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 到期 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-09 快到期嗎
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 快到期嗎 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-10 安全庫存
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 安全庫存 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-11 安全庫存多少
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 安全庫存多少 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-12 搭配什麼賣
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 搭配什麼賣 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-13 多少錢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 多少錢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-14 還剩幾個
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 還剩幾個 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-15 現在剩幾個
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 現在剩幾個 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-16 快缺貨了嗎
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 快缺貨了嗎 | low_stock | 喇叭
+
+### 藍牙喇叭-17 夠不夠
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 夠不夠 | low_stock | 喇叭
+
+### 藍牙喇叭-18 南倉呢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 南倉呢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-19 北倉呢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 北倉呢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-20 中倉呢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 中倉呢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-21 北倉多少
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 北倉多少 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-22 南倉幾個
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 南倉幾個 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-23 南
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 南 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-24 北
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 北 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-25 哪一倉最多
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 哪一倉最多 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-26 呢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 呢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-27 咧
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 咧 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-28 北倉進20個
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 北倉進20個 | movement_confirm | 喇叭
+
+### 藍牙喇叭-29 南倉出5個
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 南倉出5個 | movement_confirm,error | 喇叭
+
+### 藍牙喇叭-30 那個近出紀錄呢
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 那個近出紀錄呢 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-31 安全ㄎ存多少
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 安全ㄎ存多少 | not:error,not:rejected | 喇叭
+
+### 藍牙喇叭-32 那ㄍ快到期嗎
+> 藍牙喇叭還剩幾個 | not:error,not:rejected | 喇叭
+> 那ㄍ快到期嗎 | not:error,not:rejected | 喇叭
+
+### 智慧手環-00 那個呢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 那個呢 | not:error,not:rejected | 手環
+
+### 智慧手環-01 它還剩幾個
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 它還剩幾個 | not:error,not:rejected | 手環
+
+### 智慧手環-02 那個進出紀錄呢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 那個進出紀錄呢 | not:error,not:rejected | 手環
+
+### 智慧手環-03 這個快到期嗎
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 這個快到期嗎 | not:error,not:rejected | 手環
+
+### 智慧手環-04 那個多少錢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 那個多少錢 | not:error,not:rejected | 手環
+
+### 智慧手環-05 它安全庫存多少
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 它安全庫存多少 | not:error,not:rejected | 手環
+
+### 智慧手環-06 進出
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 進出 | not:error,not:rejected | 手環
+
+### 智慧手環-07 進出紀錄
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 進出紀錄 | not:error,not:rejected | 手環
+
+### 智慧手環-08 到期
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 到期 | not:error,not:rejected | 手環
+
+### 智慧手環-09 快到期嗎
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 快到期嗎 | not:error,not:rejected | 手環
+
+### 智慧手環-10 安全庫存
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 安全庫存 | not:error,not:rejected | 手環
+
+### 智慧手環-11 安全庫存多少
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 安全庫存多少 | not:error,not:rejected | 手環
+
+### 智慧手環-12 搭配什麼賣
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 搭配什麼賣 | not:error,not:rejected | 手環
+
+### 智慧手環-13 多少錢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 多少錢 | not:error,not:rejected | 手環
+
+### 智慧手環-14 還剩幾個
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 還剩幾個 | not:error,not:rejected | 手環
+
+### 智慧手環-15 現在剩幾個
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 現在剩幾個 | not:error,not:rejected | 手環
+
+### 智慧手環-16 快缺貨了嗎
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 快缺貨了嗎 | low_stock | 手環
+
+### 智慧手環-17 夠不夠
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 夠不夠 | low_stock | 手環
+
+### 智慧手環-18 南倉呢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 南倉呢 | not:error,not:rejected | 手環
+
+### 智慧手環-19 北倉呢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 北倉呢 | not:error,not:rejected | 手環
+
+### 智慧手環-20 中倉呢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 中倉呢 | not:error,not:rejected | 手環
+
+### 智慧手環-21 北倉多少
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 北倉多少 | not:error,not:rejected | 手環
+
+### 智慧手環-22 南倉幾個
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 南倉幾個 | not:error,not:rejected | 手環
+
+### 智慧手環-23 南
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 南 | not:error,not:rejected | 手環
+
+### 智慧手環-24 北
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 北 | not:error,not:rejected | 手環
+
+### 智慧手環-25 哪一倉最多
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 哪一倉最多 | not:error,not:rejected | 手環
+
+### 智慧手環-26 呢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 呢 | not:error,not:rejected | 手環
+
+### 智慧手環-27 咧
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 咧 | not:error,not:rejected | 手環
+
+### 智慧手環-28 北倉進20個
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 北倉進20個 | movement_confirm | 手環
+
+### 智慧手環-29 南倉出5個
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 南倉出5個 | movement_confirm,error | 手環
+
+### 智慧手環-30 那個近出紀錄呢
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 那個近出紀錄呢 | not:error,not:rejected | 手環
+
+### 智慧手環-31 安全ㄎ存多少
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 安全ㄎ存多少 | not:error,not:rejected | 手環
+
+### 智慧手環-32 那ㄍ快到期嗎
+> 智慧手環還剩幾個 | not:error,not:rejected | 手環
+> 那ㄍ快到期嗎 | not:error,not:rejected | 手環
+
+### 防摔殼-00 那個呢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 那個呢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-01 它還剩幾個
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 它還剩幾個 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-02 那個進出紀錄呢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 那個進出紀錄呢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-03 這個快到期嗎
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 這個快到期嗎 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-04 那個多少錢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 那個多少錢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-05 它安全庫存多少
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 它安全庫存多少 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-06 進出
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 進出 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-07 進出紀錄
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 進出紀錄 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-08 到期
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 到期 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-09 快到期嗎
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 快到期嗎 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-10 安全庫存
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 安全庫存 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-11 安全庫存多少
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 安全庫存多少 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-12 搭配什麼賣
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 搭配什麼賣 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-13 多少錢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 多少錢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-14 還剩幾個
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 還剩幾個 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-15 現在剩幾個
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 現在剩幾個 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-16 快缺貨了嗎
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 快缺貨了嗎 | low_stock | 防摔殼
+
+### 防摔殼-17 夠不夠
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 夠不夠 | low_stock | 防摔殼
+
+### 防摔殼-18 南倉呢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 南倉呢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-19 北倉呢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 北倉呢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-20 中倉呢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 中倉呢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-21 北倉多少
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 北倉多少 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-22 南倉幾個
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 南倉幾個 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-23 南
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 南 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-24 北
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 北 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-25 哪一倉最多
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 哪一倉最多 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-26 呢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 呢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-27 咧
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 咧 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-28 北倉進20個
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 北倉進20個 | movement_confirm | 防摔殼
+
+### 防摔殼-29 南倉出5個
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 南倉出5個 | movement_confirm,error | 防摔殼
+
+### 防摔殼-30 那個近出紀錄呢
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 那個近出紀錄呢 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-31 安全ㄎ存多少
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 安全ㄎ存多少 | not:error,not:rejected | 防摔殼
+
+### 防摔殼-32 那ㄍ快到期嗎
+> 防摔殼還剩幾個 | not:error,not:rejected | 防摔殼
+> 那ㄍ快到期嗎 | not:error,not:rejected | 防摔殼
+
+### 無線滑鼠-00 那個呢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 那個呢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-01 它還剩幾個
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 它還剩幾個 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-02 那個進出紀錄呢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 那個進出紀錄呢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-03 這個快到期嗎
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 這個快到期嗎 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-04 那個多少錢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 那個多少錢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-05 它安全庫存多少
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 它安全庫存多少 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-06 進出
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 進出 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-07 進出紀錄
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 進出紀錄 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-08 到期
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 到期 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-09 快到期嗎
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 快到期嗎 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-10 安全庫存
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 安全庫存 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-11 安全庫存多少
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 安全庫存多少 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-12 搭配什麼賣
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 搭配什麼賣 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-13 多少錢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 多少錢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-14 還剩幾個
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 還剩幾個 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-15 現在剩幾個
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 現在剩幾個 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-16 快缺貨了嗎
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 快缺貨了嗎 | low_stock | 滑鼠
+
+### 無線滑鼠-17 夠不夠
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 夠不夠 | low_stock | 滑鼠
+
+### 無線滑鼠-18 南倉呢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 南倉呢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-19 北倉呢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 北倉呢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-20 中倉呢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 中倉呢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-21 北倉多少
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 北倉多少 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-22 南倉幾個
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 南倉幾個 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-23 南
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 南 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-24 北
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 北 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-25 哪一倉最多
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 哪一倉最多 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-26 呢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 呢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-27 咧
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 咧 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-28 北倉進20個
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 北倉進20個 | movement_confirm | 滑鼠
+
+### 無線滑鼠-29 南倉出5個
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 南倉出5個 | movement_confirm,error | 滑鼠
+
+### 無線滑鼠-30 那個近出紀錄呢
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 那個近出紀錄呢 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-31 安全ㄎ存多少
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 安全ㄎ存多少 | not:error,not:rejected | 滑鼠
+
+### 無線滑鼠-32 那ㄍ快到期嗎
+> 無線滑鼠還剩幾個 | not:error,not:rejected | 滑鼠
+> 那ㄍ快到期嗎 | not:error,not:rejected | 滑鼠
+
+### 鍵盤-00 那個呢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 那個呢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-01 它還剩幾個
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 它還剩幾個 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-02 那個進出紀錄呢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 那個進出紀錄呢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-03 這個快到期嗎
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 這個快到期嗎 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-04 那個多少錢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 那個多少錢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-05 它安全庫存多少
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 它安全庫存多少 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-06 進出
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 進出 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-07 進出紀錄
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 進出紀錄 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-08 到期
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 到期 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-09 快到期嗎
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 快到期嗎 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-10 安全庫存
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 安全庫存 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-11 安全庫存多少
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 安全庫存多少 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-12 搭配什麼賣
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 搭配什麼賣 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-13 多少錢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 多少錢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-14 還剩幾個
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 還剩幾個 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-15 現在剩幾個
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 現在剩幾個 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-16 快缺貨了嗎
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 快缺貨了嗎 | low_stock | 鍵盤
+
+### 鍵盤-17 夠不夠
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 夠不夠 | low_stock | 鍵盤
+
+### 鍵盤-18 南倉呢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 南倉呢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-19 北倉呢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 北倉呢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-20 中倉呢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 中倉呢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-21 北倉多少
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 北倉多少 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-22 南倉幾個
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 南倉幾個 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-23 南
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 南 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-24 北
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 北 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-25 哪一倉最多
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 哪一倉最多 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-26 呢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 呢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-27 咧
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 咧 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-28 北倉進20個
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 北倉進20個 | movement_confirm | 鍵盤
+
+### 鍵盤-29 南倉出5個
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 南倉出5個 | movement_confirm,error | 鍵盤
+
+### 鍵盤-30 那個近出紀錄呢
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 那個近出紀錄呢 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-31 安全ㄎ存多少
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 安全ㄎ存多少 | not:error,not:rejected | 鍵盤
+
+### 鍵盤-32 那ㄍ快到期嗎
+> 鍵盤還剩幾個 | not:error,not:rejected | 鍵盤
+> 那ㄍ快到期嗎 | not:error,not:rejected | 鍵盤
+
+### 筆電包-00 那個呢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 那個呢 | not:error,not:rejected | 筆電包
+
+### 筆電包-01 它還剩幾個
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 它還剩幾個 | not:error,not:rejected | 筆電包
+
+### 筆電包-02 那個進出紀錄呢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 那個進出紀錄呢 | not:error,not:rejected | 筆電包
+
+### 筆電包-03 這個快到期嗎
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 這個快到期嗎 | not:error,not:rejected | 筆電包
+
+### 筆電包-04 那個多少錢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 那個多少錢 | not:error,not:rejected | 筆電包
+
+### 筆電包-05 它安全庫存多少
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 它安全庫存多少 | not:error,not:rejected | 筆電包
+
+### 筆電包-06 進出
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 進出 | not:error,not:rejected | 筆電包
+
+### 筆電包-07 進出紀錄
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 進出紀錄 | not:error,not:rejected | 筆電包
+
+### 筆電包-08 到期
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 到期 | not:error,not:rejected | 筆電包
+
+### 筆電包-09 快到期嗎
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 快到期嗎 | not:error,not:rejected | 筆電包
+
+### 筆電包-10 安全庫存
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 安全庫存 | not:error,not:rejected | 筆電包
+
+### 筆電包-11 安全庫存多少
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 安全庫存多少 | not:error,not:rejected | 筆電包
+
+### 筆電包-12 搭配什麼賣
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 搭配什麼賣 | not:error,not:rejected | 筆電包
+
+### 筆電包-13 多少錢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 多少錢 | not:error,not:rejected | 筆電包
+
+### 筆電包-14 還剩幾個
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 還剩幾個 | not:error,not:rejected | 筆電包
+
+### 筆電包-15 現在剩幾個
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 現在剩幾個 | not:error,not:rejected | 筆電包
+
+### 筆電包-16 快缺貨了嗎
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 快缺貨了嗎 | low_stock | 筆電包
+
+### 筆電包-17 夠不夠
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 夠不夠 | low_stock | 筆電包
+
+### 筆電包-18 南倉呢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 南倉呢 | not:error,not:rejected | 筆電包
+
+### 筆電包-19 北倉呢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 北倉呢 | not:error,not:rejected | 筆電包
+
+### 筆電包-20 中倉呢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 中倉呢 | not:error,not:rejected | 筆電包
+
+### 筆電包-21 北倉多少
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 北倉多少 | not:error,not:rejected | 筆電包
+
+### 筆電包-22 南倉幾個
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 南倉幾個 | not:error,not:rejected | 筆電包
+
+### 筆電包-23 南
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 南 | not:error,not:rejected | 筆電包
+
+### 筆電包-24 北
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 北 | not:error,not:rejected | 筆電包
+
+### 筆電包-25 哪一倉最多
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 哪一倉最多 | not:error,not:rejected | 筆電包
+
+### 筆電包-26 呢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 呢 | not:error,not:rejected | 筆電包
+
+### 筆電包-27 咧
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 咧 | not:error,not:rejected | 筆電包
+
+### 筆電包-28 北倉進20個
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 北倉進20個 | movement_confirm | 筆電包
+
+### 筆電包-29 南倉出5個
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 南倉出5個 | movement_confirm,error | 筆電包
+
+### 筆電包-30 那個近出紀錄呢
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 那個近出紀錄呢 | not:error,not:rejected | 筆電包
+
+### 筆電包-31 安全ㄎ存多少
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 安全ㄎ存多少 | not:error,not:rejected | 筆電包
+
+### 筆電包-32 那ㄍ快到期嗎
+> 筆電包還剩幾個 | not:error,not:rejected | 筆電包
+> 那ㄍ快到期嗎 | not:error,not:rejected | 筆電包
+
+### USB風扇-00 那個呢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 那個呢 | not:error,not:rejected | 風扇
+
+### USB風扇-01 它還剩幾個
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 它還剩幾個 | not:error,not:rejected | 風扇
+
+### USB風扇-02 那個進出紀錄呢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 那個進出紀錄呢 | not:error,not:rejected | 風扇
+
+### USB風扇-03 這個快到期嗎
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 這個快到期嗎 | not:error,not:rejected | 風扇
+
+### USB風扇-04 那個多少錢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 那個多少錢 | not:error,not:rejected | 風扇
+
+### USB風扇-05 它安全庫存多少
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 它安全庫存多少 | not:error,not:rejected | 風扇
+
+### USB風扇-06 進出
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 進出 | not:error,not:rejected | 風扇
+
+### USB風扇-07 進出紀錄
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 進出紀錄 | not:error,not:rejected | 風扇
+
+### USB風扇-08 到期
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 到期 | not:error,not:rejected | 風扇
+
+### USB風扇-09 快到期嗎
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 快到期嗎 | not:error,not:rejected | 風扇
+
+### USB風扇-10 安全庫存
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 安全庫存 | not:error,not:rejected | 風扇
+
+### USB風扇-11 安全庫存多少
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 安全庫存多少 | not:error,not:rejected | 風扇
+
+### USB風扇-12 搭配什麼賣
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 搭配什麼賣 | not:error,not:rejected | 風扇
+
+### USB風扇-13 多少錢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 多少錢 | not:error,not:rejected | 風扇
+
+### USB風扇-14 還剩幾個
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 還剩幾個 | not:error,not:rejected | 風扇
+
+### USB風扇-15 現在剩幾個
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 現在剩幾個 | not:error,not:rejected | 風扇
+
+### USB風扇-16 快缺貨了嗎
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 快缺貨了嗎 | low_stock | 風扇
+
+### USB風扇-17 夠不夠
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 夠不夠 | low_stock | 風扇
+
+### USB風扇-18 南倉呢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 南倉呢 | not:error,not:rejected | 風扇
+
+### USB風扇-19 北倉呢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 北倉呢 | not:error,not:rejected | 風扇
+
+### USB風扇-20 中倉呢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 中倉呢 | not:error,not:rejected | 風扇
+
+### USB風扇-21 北倉多少
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 北倉多少 | not:error,not:rejected | 風扇
+
+### USB風扇-22 南倉幾個
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 南倉幾個 | not:error,not:rejected | 風扇
+
+### USB風扇-23 南
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 南 | not:error,not:rejected | 風扇
+
+### USB風扇-24 北
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 北 | not:error,not:rejected | 風扇
+
+### USB風扇-25 哪一倉最多
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 哪一倉最多 | not:error,not:rejected | 風扇
+
+### USB風扇-26 呢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 呢 | not:error,not:rejected | 風扇
+
+### USB風扇-27 咧
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 咧 | not:error,not:rejected | 風扇
+
+### USB風扇-28 北倉進20個
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 北倉進20個 | movement_confirm | 風扇
+
+### USB風扇-29 南倉出5個
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 南倉出5個 | movement_confirm,error | 風扇
+
+### USB風扇-30 那個近出紀錄呢
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 那個近出紀錄呢 | not:error,not:rejected | 風扇
+
+### USB風扇-31 安全ㄎ存多少
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 安全ㄎ存多少 | not:error,not:rejected | 風扇
+
+### USB風扇-32 那ㄍ快到期嗎
+> USB風扇還剩幾個 | not:error,not:rejected | 風扇
+> 那ㄍ快到期嗎 | not:error,not:rejected | 風扇
+
+### 悶燒罐-00 那個呢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 那個呢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-01 它還剩幾個
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 它還剩幾個 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-02 那個進出紀錄呢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 那個進出紀錄呢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-03 這個快到期嗎
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 這個快到期嗎 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-04 那個多少錢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 那個多少錢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-05 它安全庫存多少
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 它安全庫存多少 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-06 進出
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 進出 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-07 進出紀錄
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 進出紀錄 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-08 到期
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 到期 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-09 快到期嗎
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 快到期嗎 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-10 安全庫存
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 安全庫存 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-11 安全庫存多少
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 安全庫存多少 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-12 搭配什麼賣
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 搭配什麼賣 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-13 多少錢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 多少錢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-14 還剩幾個
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 還剩幾個 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-15 現在剩幾個
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 現在剩幾個 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-16 快缺貨了嗎
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 快缺貨了嗎 | low_stock | 悶燒罐
+
+### 悶燒罐-17 夠不夠
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 夠不夠 | low_stock | 悶燒罐
+
+### 悶燒罐-18 南倉呢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 南倉呢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-19 北倉呢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 北倉呢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-20 中倉呢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 中倉呢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-21 北倉多少
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 北倉多少 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-22 南倉幾個
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 南倉幾個 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-23 南
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 南 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-24 北
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 北 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-25 哪一倉最多
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 哪一倉最多 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-26 呢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 呢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-27 咧
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 咧 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-28 北倉進20個
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 北倉進20個 | movement_confirm | 悶燒罐
+
+### 悶燒罐-29 南倉出5個
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 南倉出5個 | movement_confirm,error | 悶燒罐
+
+### 悶燒罐-30 那個近出紀錄呢
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 那個近出紀錄呢 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-31 安全ㄎ存多少
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 安全ㄎ存多少 | not:error,not:rejected | 悶燒罐
+
+### 悶燒罐-32 那ㄍ快到期嗎
+> 悶燒罐還剩幾個 | not:error,not:rejected | 悶燒罐
+> 那ㄍ快到期嗎 | not:error,not:rejected | 悶燒罐
+
+### 電熨斗-00 那個呢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 那個呢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-01 它還剩幾個
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 它還剩幾個 | not:error,not:rejected | 熨斗
+
+### 電熨斗-02 那個進出紀錄呢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 那個進出紀錄呢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-03 這個快到期嗎
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 這個快到期嗎 | not:error,not:rejected | 熨斗
+
+### 電熨斗-04 那個多少錢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 那個多少錢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-05 它安全庫存多少
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 它安全庫存多少 | not:error,not:rejected | 熨斗
+
+### 電熨斗-06 進出
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 進出 | not:error,not:rejected | 熨斗
+
+### 電熨斗-07 進出紀錄
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 進出紀錄 | not:error,not:rejected | 熨斗
+
+### 電熨斗-08 到期
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 到期 | not:error,not:rejected | 熨斗
+
+### 電熨斗-09 快到期嗎
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 快到期嗎 | not:error,not:rejected | 熨斗
+
+### 電熨斗-10 安全庫存
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 安全庫存 | not:error,not:rejected | 熨斗
+
+### 電熨斗-11 安全庫存多少
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 安全庫存多少 | not:error,not:rejected | 熨斗
+
+### 電熨斗-12 搭配什麼賣
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 搭配什麼賣 | not:error,not:rejected | 熨斗
+
+### 電熨斗-13 多少錢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 多少錢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-14 還剩幾個
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 還剩幾個 | not:error,not:rejected | 熨斗
+
+### 電熨斗-15 現在剩幾個
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 現在剩幾個 | not:error,not:rejected | 熨斗
+
+### 電熨斗-16 快缺貨了嗎
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 快缺貨了嗎 | low_stock | 熨斗
+
+### 電熨斗-17 夠不夠
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 夠不夠 | low_stock | 熨斗
+
+### 電熨斗-18 南倉呢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 南倉呢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-19 北倉呢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 北倉呢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-20 中倉呢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 中倉呢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-21 北倉多少
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 北倉多少 | not:error,not:rejected | 熨斗
+
+### 電熨斗-22 南倉幾個
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 南倉幾個 | not:error,not:rejected | 熨斗
+
+### 電熨斗-23 南
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 南 | not:error,not:rejected | 熨斗
+
+### 電熨斗-24 北
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 北 | not:error,not:rejected | 熨斗
+
+### 電熨斗-25 哪一倉最多
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 哪一倉最多 | not:error,not:rejected | 熨斗
+
+### 電熨斗-26 呢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 呢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-27 咧
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 咧 | not:error,not:rejected | 熨斗
+
+### 電熨斗-28 北倉進20個
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 北倉進20個 | movement_confirm | 熨斗
+
+### 電熨斗-29 南倉出5個
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 南倉出5個 | movement_confirm,error | 熨斗
+
+### 電熨斗-30 那個近出紀錄呢
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 那個近出紀錄呢 | not:error,not:rejected | 熨斗
+
+### 電熨斗-31 安全ㄎ存多少
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 安全ㄎ存多少 | not:error,not:rejected | 熨斗
+
+### 電熨斗-32 那ㄍ快到期嗎
+> 電熨斗還剩幾個 | not:error,not:rejected | 熨斗
+> 那ㄍ快到期嗎 | not:error,not:rejected | 熨斗
+
+### 不沾鍋-00 那個呢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 那個呢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-01 它還剩幾個
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 它還剩幾個 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-02 那個進出紀錄呢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 那個進出紀錄呢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-03 這個快到期嗎
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 這個快到期嗎 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-04 那個多少錢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 那個多少錢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-05 它安全庫存多少
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 它安全庫存多少 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-06 進出
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 進出 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-07 進出紀錄
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 進出紀錄 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-08 到期
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 到期 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-09 快到期嗎
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 快到期嗎 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-10 安全庫存
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 安全庫存 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-11 安全庫存多少
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 安全庫存多少 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-12 搭配什麼賣
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 搭配什麼賣 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-13 多少錢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 多少錢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-14 還剩幾個
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 還剩幾個 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-15 現在剩幾個
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 現在剩幾個 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-16 快缺貨了嗎
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 快缺貨了嗎 | low_stock | 不沾鍋
+
+### 不沾鍋-17 夠不夠
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 夠不夠 | low_stock | 不沾鍋
+
+### 不沾鍋-18 南倉呢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 南倉呢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-19 北倉呢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 北倉呢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-20 中倉呢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 中倉呢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-21 北倉多少
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 北倉多少 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-22 南倉幾個
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 南倉幾個 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-23 南
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 南 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-24 北
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 北 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-25 哪一倉最多
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 哪一倉最多 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-26 呢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 呢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-27 咧
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 咧 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-28 北倉進20個
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 北倉進20個 | movement_confirm | 不沾鍋
+
+### 不沾鍋-29 南倉出5個
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 南倉出5個 | movement_confirm,error | 不沾鍋
+
+### 不沾鍋-30 那個近出紀錄呢
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 那個近出紀錄呢 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-31 安全ㄎ存多少
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 安全ㄎ存多少 | not:error,not:rejected | 不沾鍋
+
+### 不沾鍋-32 那ㄍ快到期嗎
+> 不沾鍋還剩幾個 | not:error,not:rejected | 不沾鍋
+> 那ㄍ快到期嗎 | not:error,not:rejected | 不沾鍋
+
+### 電動牙刷-00 那個呢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 那個呢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-01 它還剩幾個
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 它還剩幾個 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-02 那個進出紀錄呢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 那個進出紀錄呢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-03 這個快到期嗎
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 這個快到期嗎 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-04 那個多少錢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 那個多少錢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-05 它安全庫存多少
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 它安全庫存多少 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-06 進出
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 進出 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-07 進出紀錄
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 進出紀錄 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-08 到期
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 到期 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-09 快到期嗎
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 快到期嗎 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-10 安全庫存
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 安全庫存 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-11 安全庫存多少
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 安全庫存多少 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-12 搭配什麼賣
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 搭配什麼賣 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-13 多少錢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 多少錢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-14 還剩幾個
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 還剩幾個 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-15 現在剩幾個
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 現在剩幾個 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-16 快缺貨了嗎
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 快缺貨了嗎 | low_stock | 牙刷
+
+### 電動牙刷-17 夠不夠
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 夠不夠 | low_stock | 牙刷
+
+### 電動牙刷-18 南倉呢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 南倉呢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-19 北倉呢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 北倉呢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-20 中倉呢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 中倉呢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-21 北倉多少
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 北倉多少 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-22 南倉幾個
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 南倉幾個 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-23 南
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 南 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-24 北
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 北 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-25 哪一倉最多
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 哪一倉最多 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-26 呢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 呢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-27 咧
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 咧 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-28 北倉進20個
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 北倉進20個 | movement_confirm | 牙刷
+
+### 電動牙刷-29 南倉出5個
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 南倉出5個 | movement_confirm,error | 牙刷
+
+### 電動牙刷-30 那個近出紀錄呢
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 那個近出紀錄呢 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-31 安全ㄎ存多少
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 安全ㄎ存多少 | not:error,not:rejected | 牙刷
+
+### 電動牙刷-32 那ㄍ快到期嗎
+> 電動牙刷還剩幾個 | not:error,not:rejected | 牙刷
+> 那ㄍ快到期嗎 | not:error,not:rejected | 牙刷
+
+### 果汁機-00 那個呢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 那個呢 | not:error,not:rejected | 果汁機
+
+### 果汁機-01 它還剩幾個
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 它還剩幾個 | not:error,not:rejected | 果汁機
+
+### 果汁機-02 那個進出紀錄呢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 那個進出紀錄呢 | not:error,not:rejected | 果汁機
+
+### 果汁機-03 這個快到期嗎
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 這個快到期嗎 | not:error,not:rejected | 果汁機
+
+### 果汁機-04 那個多少錢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 那個多少錢 | not:error,not:rejected | 果汁機
+
+### 果汁機-05 它安全庫存多少
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 它安全庫存多少 | not:error,not:rejected | 果汁機
+
+### 果汁機-06 進出
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 進出 | not:error,not:rejected | 果汁機
+
+### 果汁機-07 進出紀錄
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 進出紀錄 | not:error,not:rejected | 果汁機
+
+### 果汁機-08 到期
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 到期 | not:error,not:rejected | 果汁機
+
+### 果汁機-09 快到期嗎
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 快到期嗎 | not:error,not:rejected | 果汁機
+
+### 果汁機-10 安全庫存
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 安全庫存 | not:error,not:rejected | 果汁機
+
+### 果汁機-11 安全庫存多少
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 安全庫存多少 | not:error,not:rejected | 果汁機
+
+### 果汁機-12 搭配什麼賣
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 搭配什麼賣 | not:error,not:rejected | 果汁機
+
+### 果汁機-13 多少錢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 多少錢 | not:error,not:rejected | 果汁機
+
+### 果汁機-14 還剩幾個
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 還剩幾個 | not:error,not:rejected | 果汁機
+
+### 果汁機-15 現在剩幾個
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 現在剩幾個 | not:error,not:rejected | 果汁機
+
+### 果汁機-16 快缺貨了嗎
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 快缺貨了嗎 | low_stock | 果汁機
+
+### 果汁機-17 夠不夠
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 夠不夠 | low_stock | 果汁機
+
+### 果汁機-18 南倉呢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 南倉呢 | not:error,not:rejected | 果汁機
+
+### 果汁機-19 北倉呢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 北倉呢 | not:error,not:rejected | 果汁機
+
+### 果汁機-20 中倉呢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 中倉呢 | not:error,not:rejected | 果汁機
+
+### 果汁機-21 北倉多少
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 北倉多少 | not:error,not:rejected | 果汁機
+
+### 果汁機-22 南倉幾個
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 南倉幾個 | not:error,not:rejected | 果汁機
+
+### 果汁機-23 南
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 南 | not:error,not:rejected | 果汁機
+
+### 果汁機-24 北
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 北 | not:error,not:rejected | 果汁機
+
+### 果汁機-25 哪一倉最多
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 哪一倉最多 | not:error,not:rejected | 果汁機
+
+### 果汁機-26 呢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 呢 | not:error,not:rejected | 果汁機
+
+### 果汁機-27 咧
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 咧 | not:error,not:rejected | 果汁機
+
+### 果汁機-28 北倉進20個
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 北倉進20個 | movement_confirm | 果汁機
+
+### 果汁機-29 南倉出5個
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 南倉出5個 | movement_confirm,error | 果汁機
+
+### 果汁機-30 那個近出紀錄呢
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 那個近出紀錄呢 | not:error,not:rejected | 果汁機
+
+### 果汁機-31 安全ㄎ存多少
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 安全ㄎ存多少 | not:error,not:rejected | 果汁機
+
+### 果汁機-32 那ㄍ快到期嗎
+> 果汁機還剩幾個 | not:error,not:rejected | 果汁機
+> 那ㄍ快到期嗎 | not:error,not:rejected | 果汁機
+
+### 咖啡機-00 那個呢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 那個呢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-01 它還剩幾個
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 它還剩幾個 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-02 那個進出紀錄呢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 那個進出紀錄呢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-03 這個快到期嗎
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 這個快到期嗎 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-04 那個多少錢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 那個多少錢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-05 它安全庫存多少
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 它安全庫存多少 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-06 進出
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 進出 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-07 進出紀錄
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 進出紀錄 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-08 到期
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 到期 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-09 快到期嗎
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 快到期嗎 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-10 安全庫存
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 安全庫存 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-11 安全庫存多少
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 安全庫存多少 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-12 搭配什麼賣
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 搭配什麼賣 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-13 多少錢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 多少錢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-14 還剩幾個
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 還剩幾個 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-15 現在剩幾個
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 現在剩幾個 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-16 快缺貨了嗎
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 快缺貨了嗎 | low_stock | 咖啡機
+
+### 咖啡機-17 夠不夠
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 夠不夠 | low_stock | 咖啡機
+
+### 咖啡機-18 南倉呢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 南倉呢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-19 北倉呢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 北倉呢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-20 中倉呢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 中倉呢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-21 北倉多少
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 北倉多少 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-22 南倉幾個
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 南倉幾個 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-23 南
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 南 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-24 北
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 北 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-25 哪一倉最多
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 哪一倉最多 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-26 呢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 呢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-27 咧
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 咧 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-28 北倉進20個
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 北倉進20個 | movement_confirm | 咖啡機
+
+### 咖啡機-29 南倉出5個
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 南倉出5個 | movement_confirm,error | 咖啡機
+
+### 咖啡機-30 那個近出紀錄呢
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 那個近出紀錄呢 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-31 安全ㄎ存多少
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 安全ㄎ存多少 | not:error,not:rejected | 咖啡機
+
+### 咖啡機-32 那ㄍ快到期嗎
+> 咖啡機還剩幾個 | not:error,not:rejected | 咖啡機
+> 那ㄍ快到期嗎 | not:error,not:rejected | 咖啡機
+
+### 手沖咖啡壺-00 那個呢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 那個呢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-01 它還剩幾個
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 它還剩幾個 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-02 那個進出紀錄呢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 那個進出紀錄呢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-03 這個快到期嗎
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 這個快到期嗎 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-04 那個多少錢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 那個多少錢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-05 它安全庫存多少
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 它安全庫存多少 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-06 進出
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 進出 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-07 進出紀錄
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 進出紀錄 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-08 到期
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 到期 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-09 快到期嗎
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 快到期嗎 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-10 安全庫存
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 安全庫存 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-11 安全庫存多少
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 安全庫存多少 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-12 搭配什麼賣
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 搭配什麼賣 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-13 多少錢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 多少錢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-14 還剩幾個
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 還剩幾個 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-15 現在剩幾個
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 現在剩幾個 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-16 快缺貨了嗎
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 快缺貨了嗎 | low_stock | 手沖
+
+### 手沖咖啡壺-17 夠不夠
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 夠不夠 | low_stock | 手沖
+
+### 手沖咖啡壺-18 南倉呢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 南倉呢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-19 北倉呢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 北倉呢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-20 中倉呢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 中倉呢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-21 北倉多少
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 北倉多少 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-22 南倉幾個
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 南倉幾個 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-23 南
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 南 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-24 北
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 北 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-25 哪一倉最多
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 哪一倉最多 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-26 呢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 呢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-27 咧
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 咧 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-28 北倉進20個
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 北倉進20個 | movement_confirm | 手沖
+
+### 手沖咖啡壺-29 南倉出5個
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 南倉出5個 | movement_confirm,error | 手沖
+
+### 手沖咖啡壺-30 那個近出紀錄呢
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 那個近出紀錄呢 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-31 安全ㄎ存多少
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 安全ㄎ存多少 | not:error,not:rejected | 手沖
+
+### 手沖咖啡壺-32 那ㄍ快到期嗎
+> 手沖咖啡壺還剩幾個 | not:error,not:rejected | 手沖
+> 那ㄍ快到期嗎 | not:error,not:rejected | 手沖
+
+### 野炊鍋具-00 那個呢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 那個呢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-01 它還剩幾個
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 它還剩幾個 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-02 那個進出紀錄呢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 那個進出紀錄呢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-03 這個快到期嗎
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 這個快到期嗎 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-04 那個多少錢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 那個多少錢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-05 它安全庫存多少
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 它安全庫存多少 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-06 進出
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 進出 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-07 進出紀錄
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 進出紀錄 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-08 到期
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 到期 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-09 快到期嗎
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 快到期嗎 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-10 安全庫存
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 安全庫存 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-11 安全庫存多少
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 安全庫存多少 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-12 搭配什麼賣
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 搭配什麼賣 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-13 多少錢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 多少錢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-14 還剩幾個
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 還剩幾個 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-15 現在剩幾個
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 現在剩幾個 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-16 快缺貨了嗎
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 快缺貨了嗎 | low_stock | 野炊
+
+### 野炊鍋具-17 夠不夠
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 夠不夠 | low_stock | 野炊
+
+### 野炊鍋具-18 南倉呢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 南倉呢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-19 北倉呢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 北倉呢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-20 中倉呢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 中倉呢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-21 北倉多少
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 北倉多少 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-22 南倉幾個
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 南倉幾個 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-23 南
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 南 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-24 北
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 北 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-25 哪一倉最多
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 哪一倉最多 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-26 呢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 呢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-27 咧
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 咧 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-28 北倉進20個
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 北倉進20個 | movement_confirm | 野炊
+
+### 野炊鍋具-29 南倉出5個
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 南倉出5個 | movement_confirm,error | 野炊
+
+### 野炊鍋具-30 那個近出紀錄呢
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 那個近出紀錄呢 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-31 安全ㄎ存多少
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 安全ㄎ存多少 | not:error,not:rejected | 野炊
+
+### 野炊鍋具-32 那ㄍ快到期嗎
+> 野炊鍋具還剩幾個 | not:error,not:rejected | 野炊
+> 那ㄍ快到期嗎 | not:error,not:rejected | 野炊
+
+### 保鮮盒-00 那個呢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 那個呢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-01 它還剩幾個
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 它還剩幾個 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-02 那個進出紀錄呢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 那個進出紀錄呢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-03 這個快到期嗎
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 這個快到期嗎 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-04 那個多少錢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 那個多少錢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-05 它安全庫存多少
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 它安全庫存多少 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-06 進出
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 進出 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-07 進出紀錄
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 進出紀錄 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-08 到期
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 到期 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-09 快到期嗎
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 快到期嗎 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-10 安全庫存
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 安全庫存 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-11 安全庫存多少
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 安全庫存多少 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-12 搭配什麼賣
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 搭配什麼賣 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-13 多少錢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 多少錢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-14 還剩幾個
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 還剩幾個 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-15 現在剩幾個
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 現在剩幾個 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-16 快缺貨了嗎
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 快缺貨了嗎 | low_stock | 保鮮盒
+
+### 保鮮盒-17 夠不夠
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 夠不夠 | low_stock | 保鮮盒
+
+### 保鮮盒-18 南倉呢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 南倉呢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-19 北倉呢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 北倉呢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-20 中倉呢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 中倉呢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-21 北倉多少
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 北倉多少 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-22 南倉幾個
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 南倉幾個 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-23 南
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 南 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-24 北
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 北 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-25 哪一倉最多
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 哪一倉最多 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-26 呢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 呢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-27 咧
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 咧 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-28 北倉進20個
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 北倉進20個 | movement_confirm | 保鮮盒
+
+### 保鮮盒-29 南倉出5個
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 南倉出5個 | movement_confirm,error | 保鮮盒
+
+### 保鮮盒-30 那個近出紀錄呢
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 那個近出紀錄呢 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-31 安全ㄎ存多少
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 安全ㄎ存多少 | not:error,not:rejected | 保鮮盒
+
+### 保鮮盒-32 那ㄍ快到期嗎
+> 保鮮盒還剩幾個 | not:error,not:rejected | 保鮮盒
+> 那ㄍ快到期嗎 | not:error,not:rejected | 保鮮盒
+
+### 電動拖把-00 那個呢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 那個呢 | not:error,not:rejected | 拖把
+
+### 電動拖把-01 它還剩幾個
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 它還剩幾個 | not:error,not:rejected | 拖把
+
+### 電動拖把-02 那個進出紀錄呢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 那個進出紀錄呢 | not:error,not:rejected | 拖把
+
+### 電動拖把-03 這個快到期嗎
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 這個快到期嗎 | not:error,not:rejected | 拖把
+
+### 電動拖把-04 那個多少錢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 那個多少錢 | not:error,not:rejected | 拖把
+
+### 電動拖把-05 它安全庫存多少
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 它安全庫存多少 | not:error,not:rejected | 拖把
+
+### 電動拖把-06 進出
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 進出 | not:error,not:rejected | 拖把
+
+### 電動拖把-07 進出紀錄
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 進出紀錄 | not:error,not:rejected | 拖把
+
+### 電動拖把-08 到期
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 到期 | not:error,not:rejected | 拖把
+
+### 電動拖把-09 快到期嗎
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 快到期嗎 | not:error,not:rejected | 拖把
+
+### 電動拖把-10 安全庫存
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 安全庫存 | not:error,not:rejected | 拖把
+
+### 電動拖把-11 安全庫存多少
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 安全庫存多少 | not:error,not:rejected | 拖把
+
+### 電動拖把-12 搭配什麼賣
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 搭配什麼賣 | not:error,not:rejected | 拖把
+
+### 電動拖把-13 多少錢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 多少錢 | not:error,not:rejected | 拖把
+
+### 電動拖把-14 還剩幾個
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 還剩幾個 | not:error,not:rejected | 拖把
+
+### 電動拖把-15 現在剩幾個
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 現在剩幾個 | not:error,not:rejected | 拖把
+
+### 電動拖把-16 快缺貨了嗎
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 快缺貨了嗎 | low_stock | 拖把
+
+### 電動拖把-17 夠不夠
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 夠不夠 | low_stock | 拖把
+
+### 電動拖把-18 南倉呢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 南倉呢 | not:error,not:rejected | 拖把
+
+### 電動拖把-19 北倉呢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 北倉呢 | not:error,not:rejected | 拖把
+
+### 電動拖把-20 中倉呢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 中倉呢 | not:error,not:rejected | 拖把
+
+### 電動拖把-21 北倉多少
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 北倉多少 | not:error,not:rejected | 拖把
+
+### 電動拖把-22 南倉幾個
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 南倉幾個 | not:error,not:rejected | 拖把
+
+### 電動拖把-23 南
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 南 | not:error,not:rejected | 拖把
+
+### 電動拖把-24 北
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 北 | not:error,not:rejected | 拖把
+
+### 電動拖把-25 哪一倉最多
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 哪一倉最多 | not:error,not:rejected | 拖把
+
+### 電動拖把-26 呢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 呢 | not:error,not:rejected | 拖把
+
+### 電動拖把-27 咧
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 咧 | not:error,not:rejected | 拖把
+
+### 電動拖把-28 北倉進20個
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 北倉進20個 | movement_confirm | 拖把
+
+### 電動拖把-29 南倉出5個
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 南倉出5個 | movement_confirm,error | 拖把
+
+### 電動拖把-30 那個近出紀錄呢
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 那個近出紀錄呢 | not:error,not:rejected | 拖把
+
+### 電動拖把-31 安全ㄎ存多少
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 安全ㄎ存多少 | not:error,not:rejected | 拖把
+
+### 電動拖把-32 那ㄍ快到期嗎
+> 電動拖把還剩幾個 | not:error,not:rejected | 拖把
+> 那ㄍ快到期嗎 | not:error,not:rejected | 拖把
+
+### 氣泡水-00 那個呢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 那個呢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-01 它還剩幾個
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 它還剩幾個 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-02 那個進出紀錄呢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 那個進出紀錄呢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-03 這個快到期嗎
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 這個快到期嗎 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-04 那個多少錢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 那個多少錢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-05 它安全庫存多少
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 它安全庫存多少 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-06 進出
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 進出 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-07 進出紀錄
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 進出紀錄 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-08 到期
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 到期 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-09 快到期嗎
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 快到期嗎 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-10 安全庫存
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 安全庫存 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-11 安全庫存多少
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 安全庫存多少 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-12 搭配什麼賣
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 搭配什麼賣 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-13 多少錢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 多少錢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-14 還剩幾個
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 還剩幾個 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-15 現在剩幾個
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 現在剩幾個 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-16 快缺貨了嗎
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 快缺貨了嗎 | low_stock | 氣泡水
+
+### 氣泡水-17 夠不夠
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 夠不夠 | low_stock | 氣泡水
+
+### 氣泡水-18 南倉呢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 南倉呢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-19 北倉呢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 北倉呢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-20 中倉呢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 中倉呢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-21 北倉多少
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 北倉多少 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-22 南倉幾個
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 南倉幾個 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-23 南
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 南 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-24 北
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 北 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-25 哪一倉最多
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 哪一倉最多 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-26 呢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 呢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-27 咧
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 咧 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-28 北倉進20個
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 北倉進20個 | movement_confirm | 氣泡水
+
+### 氣泡水-29 南倉出5個
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 南倉出5個 | movement_confirm,error | 氣泡水
+
+### 氣泡水-30 那個近出紀錄呢
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 那個近出紀錄呢 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-31 安全ㄎ存多少
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 安全ㄎ存多少 | not:error,not:rejected | 氣泡水
+
+### 氣泡水-32 那ㄍ快到期嗎
+> 氣泡水還剩幾個 | not:error,not:rejected | 氣泡水
+> 那ㄍ快到期嗎 | not:error,not:rejected | 氣泡水
+
+### 咖啡豆-00 那個呢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 那個呢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-01 它還剩幾個
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 它還剩幾個 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-02 那個進出紀錄呢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 那個進出紀錄呢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-03 這個快到期嗎
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 這個快到期嗎 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-04 那個多少錢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 那個多少錢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-05 它安全庫存多少
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 它安全庫存多少 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-06 進出
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 進出 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-07 進出紀錄
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 進出紀錄 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-08 到期
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 到期 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-09 快到期嗎
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 快到期嗎 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-10 安全庫存
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 安全庫存 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-11 安全庫存多少
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 安全庫存多少 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-12 搭配什麼賣
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 搭配什麼賣 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-13 多少錢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 多少錢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-14 還剩幾個
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 還剩幾個 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-15 現在剩幾個
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 現在剩幾個 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-16 快缺貨了嗎
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 快缺貨了嗎 | low_stock | 咖啡豆
+
+### 咖啡豆-17 夠不夠
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 夠不夠 | low_stock | 咖啡豆
+
+### 咖啡豆-18 南倉呢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 南倉呢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-19 北倉呢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 北倉呢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-20 中倉呢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 中倉呢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-21 北倉多少
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 北倉多少 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-22 南倉幾個
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 南倉幾個 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-23 南
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 南 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-24 北
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 北 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-25 哪一倉最多
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 哪一倉最多 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-26 呢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 呢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-27 咧
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 咧 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-28 北倉進20個
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 北倉進20個 | movement_confirm | 咖啡豆
+
+### 咖啡豆-29 南倉出5個
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 南倉出5個 | movement_confirm,error | 咖啡豆
+
+### 咖啡豆-30 那個近出紀錄呢
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 那個近出紀錄呢 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-31 安全ㄎ存多少
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 安全ㄎ存多少 | not:error,not:rejected | 咖啡豆
+
+### 咖啡豆-32 那ㄍ快到期嗎
+> 咖啡豆還剩幾個 | not:error,not:rejected | 咖啡豆
+> 那ㄍ快到期嗎 | not:error,not:rejected | 咖啡豆
+
+### 檸檬茶-00 那個呢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 那個呢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-01 它還剩幾個
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 它還剩幾個 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-02 那個進出紀錄呢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 那個進出紀錄呢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-03 這個快到期嗎
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 這個快到期嗎 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-04 那個多少錢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 那個多少錢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-05 它安全庫存多少
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 它安全庫存多少 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-06 進出
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 進出 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-07 進出紀錄
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 進出紀錄 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-08 到期
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 到期 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-09 快到期嗎
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 快到期嗎 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-10 安全庫存
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 安全庫存 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-11 安全庫存多少
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 安全庫存多少 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-12 搭配什麼賣
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 搭配什麼賣 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-13 多少錢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 多少錢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-14 還剩幾個
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 還剩幾個 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-15 現在剩幾個
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 現在剩幾個 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-16 快缺貨了嗎
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 快缺貨了嗎 | low_stock | 檸檬茶
+
+### 檸檬茶-17 夠不夠
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 夠不夠 | low_stock | 檸檬茶
+
+### 檸檬茶-18 南倉呢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 南倉呢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-19 北倉呢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 北倉呢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-20 中倉呢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 中倉呢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-21 北倉多少
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 北倉多少 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-22 南倉幾個
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 南倉幾個 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-23 南
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 南 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-24 北
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 北 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-25 哪一倉最多
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 哪一倉最多 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-26 呢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 呢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-27 咧
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 咧 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-28 北倉進20個
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 北倉進20個 | movement_confirm | 檸檬茶
+
+### 檸檬茶-29 南倉出5個
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 南倉出5個 | movement_confirm,error | 檸檬茶
+
+### 檸檬茶-30 那個近出紀錄呢
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 那個近出紀錄呢 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-31 安全ㄎ存多少
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 安全ㄎ存多少 | not:error,not:rejected | 檸檬茶
+
+### 檸檬茶-32 那ㄍ快到期嗎
+> 檸檬茶還剩幾個 | not:error,not:rejected | 檸檬茶
+> 那ㄍ快到期嗎 | not:error,not:rejected | 檸檬茶
+
+### 堅果罐-00 那個呢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 那個呢 | not:error,not:rejected | 堅果
+
+### 堅果罐-01 它還剩幾個
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 它還剩幾個 | not:error,not:rejected | 堅果
+
+### 堅果罐-02 那個進出紀錄呢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 那個進出紀錄呢 | not:error,not:rejected | 堅果
+
+### 堅果罐-03 這個快到期嗎
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 這個快到期嗎 | not:error,not:rejected | 堅果
+
+### 堅果罐-04 那個多少錢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 那個多少錢 | not:error,not:rejected | 堅果
+
+### 堅果罐-05 它安全庫存多少
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 它安全庫存多少 | not:error,not:rejected | 堅果
+
+### 堅果罐-06 進出
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 進出 | not:error,not:rejected | 堅果
+
+### 堅果罐-07 進出紀錄
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 進出紀錄 | not:error,not:rejected | 堅果
+
+### 堅果罐-08 到期
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 到期 | not:error,not:rejected | 堅果
+
+### 堅果罐-09 快到期嗎
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 快到期嗎 | not:error,not:rejected | 堅果
+
+### 堅果罐-10 安全庫存
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 安全庫存 | not:error,not:rejected | 堅果
+
+### 堅果罐-11 安全庫存多少
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 安全庫存多少 | not:error,not:rejected | 堅果
+
+### 堅果罐-12 搭配什麼賣
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 搭配什麼賣 | not:error,not:rejected | 堅果
+
+### 堅果罐-13 多少錢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 多少錢 | not:error,not:rejected | 堅果
+
+### 堅果罐-14 還剩幾個
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 還剩幾個 | not:error,not:rejected | 堅果
+
+### 堅果罐-15 現在剩幾個
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 現在剩幾個 | not:error,not:rejected | 堅果
+
+### 堅果罐-16 快缺貨了嗎
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 快缺貨了嗎 | low_stock | 堅果
+
+### 堅果罐-17 夠不夠
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 夠不夠 | low_stock | 堅果
+
+### 堅果罐-18 南倉呢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 南倉呢 | not:error,not:rejected | 堅果
+
+### 堅果罐-19 北倉呢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 北倉呢 | not:error,not:rejected | 堅果
+
+### 堅果罐-20 中倉呢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 中倉呢 | not:error,not:rejected | 堅果
+
+### 堅果罐-21 北倉多少
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 北倉多少 | not:error,not:rejected | 堅果
+
+### 堅果罐-22 南倉幾個
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 南倉幾個 | not:error,not:rejected | 堅果
+
+### 堅果罐-23 南
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 南 | not:error,not:rejected | 堅果
+
+### 堅果罐-24 北
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 北 | not:error,not:rejected | 堅果
+
+### 堅果罐-25 哪一倉最多
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 哪一倉最多 | not:error,not:rejected | 堅果
+
+### 堅果罐-26 呢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 呢 | not:error,not:rejected | 堅果
+
+### 堅果罐-27 咧
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 咧 | not:error,not:rejected | 堅果
+
+### 堅果罐-28 北倉進20個
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 北倉進20個 | movement_confirm | 堅果
+
+### 堅果罐-29 南倉出5個
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 南倉出5個 | movement_confirm,error | 堅果
+
+### 堅果罐-30 那個近出紀錄呢
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 那個近出紀錄呢 | not:error,not:rejected | 堅果
+
+### 堅果罐-31 安全ㄎ存多少
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 安全ㄎ存多少 | not:error,not:rejected | 堅果
+
+### 堅果罐-32 那ㄍ快到期嗎
+> 堅果罐還剩幾個 | not:error,not:rejected | 堅果
+> 那ㄍ快到期嗎 | not:error,not:rejected | 堅果
+
+### 蘇打餅-00 那個呢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 那個呢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-01 它還剩幾個
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 它還剩幾個 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-02 那個進出紀錄呢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 那個進出紀錄呢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-03 這個快到期嗎
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 這個快到期嗎 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-04 那個多少錢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 那個多少錢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-05 它安全庫存多少
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 它安全庫存多少 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-06 進出
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 進出 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-07 進出紀錄
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 進出紀錄 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-08 到期
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 到期 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-09 快到期嗎
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 快到期嗎 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-10 安全庫存
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 安全庫存 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-11 安全庫存多少
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 安全庫存多少 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-12 搭配什麼賣
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 搭配什麼賣 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-13 多少錢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 多少錢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-14 還剩幾個
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 還剩幾個 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-15 現在剩幾個
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 現在剩幾個 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-16 快缺貨了嗎
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 快缺貨了嗎 | low_stock | 蘇打餅
+
+### 蘇打餅-17 夠不夠
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 夠不夠 | low_stock | 蘇打餅
+
+### 蘇打餅-18 南倉呢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 南倉呢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-19 北倉呢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 北倉呢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-20 中倉呢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 中倉呢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-21 北倉多少
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 北倉多少 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-22 南倉幾個
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 南倉幾個 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-23 南
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 南 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-24 北
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 北 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-25 哪一倉最多
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 哪一倉最多 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-26 呢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 呢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-27 咧
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 咧 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-28 北倉進20個
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 北倉進20個 | movement_confirm | 蘇打餅
+
+### 蘇打餅-29 南倉出5個
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 南倉出5個 | movement_confirm,error | 蘇打餅
+
+### 蘇打餅-30 那個近出紀錄呢
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 那個近出紀錄呢 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-31 安全ㄎ存多少
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 安全ㄎ存多少 | not:error,not:rejected | 蘇打餅
+
+### 蘇打餅-32 那ㄍ快到期嗎
+> 蘇打餅還剩幾個 | not:error,not:rejected | 蘇打餅
+> 那ㄍ快到期嗎 | not:error,not:rejected | 蘇打餅
+
+### 啤酒-00 那個呢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 那個呢 | not:error,not:rejected | 啤酒
+
+### 啤酒-01 它還剩幾個
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 它還剩幾個 | not:error,not:rejected | 啤酒
+
+### 啤酒-02 那個進出紀錄呢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 那個進出紀錄呢 | not:error,not:rejected | 啤酒
+
+### 啤酒-03 這個快到期嗎
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 這個快到期嗎 | not:error,not:rejected | 啤酒
+
+### 啤酒-04 那個多少錢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 那個多少錢 | not:error,not:rejected | 啤酒
+
+### 啤酒-05 它安全庫存多少
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 它安全庫存多少 | not:error,not:rejected | 啤酒
+
+### 啤酒-06 進出
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 進出 | not:error,not:rejected | 啤酒
+
+### 啤酒-07 進出紀錄
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 進出紀錄 | not:error,not:rejected | 啤酒
+
+### 啤酒-08 到期
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 到期 | not:error,not:rejected | 啤酒
+
+### 啤酒-09 快到期嗎
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 快到期嗎 | not:error,not:rejected | 啤酒
+
+### 啤酒-10 安全庫存
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 安全庫存 | not:error,not:rejected | 啤酒
+
+### 啤酒-11 安全庫存多少
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 安全庫存多少 | not:error,not:rejected | 啤酒
+
+### 啤酒-12 搭配什麼賣
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 搭配什麼賣 | not:error,not:rejected | 啤酒
+
+### 啤酒-13 多少錢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 多少錢 | not:error,not:rejected | 啤酒
+
+### 啤酒-14 還剩幾個
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 還剩幾個 | not:error,not:rejected | 啤酒
+
+### 啤酒-15 現在剩幾個
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 現在剩幾個 | not:error,not:rejected | 啤酒
+
+### 啤酒-16 快缺貨了嗎
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 快缺貨了嗎 | low_stock | 啤酒
+
+### 啤酒-17 夠不夠
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 夠不夠 | low_stock | 啤酒
+
+### 啤酒-18 南倉呢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 南倉呢 | not:error,not:rejected | 啤酒
+
+### 啤酒-19 北倉呢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 北倉呢 | not:error,not:rejected | 啤酒
+
+### 啤酒-20 中倉呢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 中倉呢 | not:error,not:rejected | 啤酒
+
+### 啤酒-21 北倉多少
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 北倉多少 | not:error,not:rejected | 啤酒
+
+### 啤酒-22 南倉幾個
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 南倉幾個 | not:error,not:rejected | 啤酒
+
+### 啤酒-23 南
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 南 | not:error,not:rejected | 啤酒
+
+### 啤酒-24 北
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 北 | not:error,not:rejected | 啤酒
+
+### 啤酒-25 哪一倉最多
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 哪一倉最多 | not:error,not:rejected | 啤酒
+
+### 啤酒-26 呢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 呢 | not:error,not:rejected | 啤酒
+
+### 啤酒-27 咧
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 咧 | not:error,not:rejected | 啤酒
+
+### 啤酒-28 北倉進20個
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 北倉進20個 | movement_confirm | 啤酒
+
+### 啤酒-29 南倉出5個
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 南倉出5個 | movement_confirm,error | 啤酒
+
+### 啤酒-30 那個近出紀錄呢
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 那個近出紀錄呢 | not:error,not:rejected | 啤酒
+
+### 啤酒-31 安全ㄎ存多少
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 安全ㄎ存多少 | not:error,not:rejected | 啤酒
+
+### 啤酒-32 那ㄍ快到期嗎
+> 啤酒還剩幾個 | not:error,not:rejected | 啤酒
+> 那ㄍ快到期嗎 | not:error,not:rejected | 啤酒
+
+### 運動飲-00 那個呢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 那個呢 | not:error,not:rejected | 運動飲
+
+### 運動飲-01 它還剩幾個
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 它還剩幾個 | not:error,not:rejected | 運動飲
+
+### 運動飲-02 那個進出紀錄呢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 那個進出紀錄呢 | not:error,not:rejected | 運動飲
+
+### 運動飲-03 這個快到期嗎
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 這個快到期嗎 | not:error,not:rejected | 運動飲
+
+### 運動飲-04 那個多少錢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 那個多少錢 | not:error,not:rejected | 運動飲
+
+### 運動飲-05 它安全庫存多少
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 它安全庫存多少 | not:error,not:rejected | 運動飲
+
+### 運動飲-06 進出
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 進出 | not:error,not:rejected | 運動飲
+
+### 運動飲-07 進出紀錄
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 進出紀錄 | not:error,not:rejected | 運動飲
+
+### 運動飲-08 到期
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 到期 | not:error,not:rejected | 運動飲
+
+### 運動飲-09 快到期嗎
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 快到期嗎 | not:error,not:rejected | 運動飲
+
+### 運動飲-10 安全庫存
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 安全庫存 | not:error,not:rejected | 運動飲
+
+### 運動飲-11 安全庫存多少
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 安全庫存多少 | not:error,not:rejected | 運動飲
+
+### 運動飲-12 搭配什麼賣
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 搭配什麼賣 | not:error,not:rejected | 運動飲
+
+### 運動飲-13 多少錢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 多少錢 | not:error,not:rejected | 運動飲
+
+### 運動飲-14 還剩幾個
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 還剩幾個 | not:error,not:rejected | 運動飲
+
+### 運動飲-15 現在剩幾個
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 現在剩幾個 | not:error,not:rejected | 運動飲
+
+### 運動飲-16 快缺貨了嗎
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 快缺貨了嗎 | low_stock | 運動飲
+
+### 運動飲-17 夠不夠
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 夠不夠 | low_stock | 運動飲
+
+### 運動飲-18 南倉呢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 南倉呢 | not:error,not:rejected | 運動飲
+
+### 運動飲-19 北倉呢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 北倉呢 | not:error,not:rejected | 運動飲
+
+### 運動飲-20 中倉呢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 中倉呢 | not:error,not:rejected | 運動飲
+
+### 運動飲-21 北倉多少
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 北倉多少 | not:error,not:rejected | 運動飲
+
+### 運動飲-22 南倉幾個
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 南倉幾個 | not:error,not:rejected | 運動飲
+
+### 運動飲-23 南
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 南 | not:error,not:rejected | 運動飲
+
+### 運動飲-24 北
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 北 | not:error,not:rejected | 運動飲
+
+### 運動飲-25 哪一倉最多
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 哪一倉最多 | not:error,not:rejected | 運動飲
+
+### 運動飲-26 呢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 呢 | not:error,not:rejected | 運動飲
+
+### 運動飲-27 咧
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 咧 | not:error,not:rejected | 運動飲
+
+### 運動飲-28 北倉進20個
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 北倉進20個 | movement_confirm | 運動飲
+
+### 運動飲-29 南倉出5個
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 南倉出5個 | movement_confirm,error | 運動飲
+
+### 運動飲-30 那個近出紀錄呢
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 那個近出紀錄呢 | not:error,not:rejected | 運動飲
+
+### 運動飲-31 安全ㄎ存多少
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 安全ㄎ存多少 | not:error,not:rejected | 運動飲
+
+### 運動飲-32 那ㄍ快到期嗎
+> 運動飲還剩幾個 | not:error,not:rejected | 運動飲
+> 那ㄍ快到期嗎 | not:error,not:rejected | 運動飲
+
+### 乳清飲-00 那個呢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 那個呢 | not:error,not:rejected | 乳清
+
+### 乳清飲-01 它還剩幾個
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 它還剩幾個 | not:error,not:rejected | 乳清
+
+### 乳清飲-02 那個進出紀錄呢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 那個進出紀錄呢 | not:error,not:rejected | 乳清
+
+### 乳清飲-03 這個快到期嗎
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 這個快到期嗎 | not:error,not:rejected | 乳清
+
+### 乳清飲-04 那個多少錢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 那個多少錢 | not:error,not:rejected | 乳清
+
+### 乳清飲-05 它安全庫存多少
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 它安全庫存多少 | not:error,not:rejected | 乳清
+
+### 乳清飲-06 進出
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 進出 | not:error,not:rejected | 乳清
+
+### 乳清飲-07 進出紀錄
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 進出紀錄 | not:error,not:rejected | 乳清
+
+### 乳清飲-08 到期
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 到期 | not:error,not:rejected | 乳清
+
+### 乳清飲-09 快到期嗎
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 快到期嗎 | not:error,not:rejected | 乳清
+
+### 乳清飲-10 安全庫存
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 安全庫存 | not:error,not:rejected | 乳清
+
+### 乳清飲-11 安全庫存多少
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 安全庫存多少 | not:error,not:rejected | 乳清
+
+### 乳清飲-12 搭配什麼賣
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 搭配什麼賣 | not:error,not:rejected | 乳清
+
+### 乳清飲-13 多少錢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 多少錢 | not:error,not:rejected | 乳清
+
+### 乳清飲-14 還剩幾個
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 還剩幾個 | not:error,not:rejected | 乳清
+
+### 乳清飲-15 現在剩幾個
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 現在剩幾個 | not:error,not:rejected | 乳清
+
+### 乳清飲-16 快缺貨了嗎
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 快缺貨了嗎 | low_stock | 乳清
+
+### 乳清飲-17 夠不夠
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 夠不夠 | low_stock | 乳清
+
+### 乳清飲-18 南倉呢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 南倉呢 | not:error,not:rejected | 乳清
+
+### 乳清飲-19 北倉呢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 北倉呢 | not:error,not:rejected | 乳清
+
+### 乳清飲-20 中倉呢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 中倉呢 | not:error,not:rejected | 乳清
+
+### 乳清飲-21 北倉多少
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 北倉多少 | not:error,not:rejected | 乳清
+
+### 乳清飲-22 南倉幾個
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 南倉幾個 | not:error,not:rejected | 乳清
+
+### 乳清飲-23 南
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 南 | not:error,not:rejected | 乳清
+
+### 乳清飲-24 北
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 北 | not:error,not:rejected | 乳清
+
+### 乳清飲-25 哪一倉最多
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 哪一倉最多 | not:error,not:rejected | 乳清
+
+### 乳清飲-26 呢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 呢 | not:error,not:rejected | 乳清
+
+### 乳清飲-27 咧
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 咧 | not:error,not:rejected | 乳清
+
+### 乳清飲-28 北倉進20個
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 北倉進20個 | movement_confirm | 乳清
+
+### 乳清飲-29 南倉出5個
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 南倉出5個 | movement_confirm,error | 乳清
+
+### 乳清飲-30 那個近出紀錄呢
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 那個近出紀錄呢 | not:error,not:rejected | 乳清
+
+### 乳清飲-31 安全ㄎ存多少
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 安全ㄎ存多少 | not:error,not:rejected | 乳清
+
+### 乳清飲-32 那ㄍ快到期嗎
+> 乳清飲還剩幾個 | not:error,not:rejected | 乳清
+> 那ㄍ快到期嗎 | not:error,not:rejected | 乳清
+
+### 熱可可-00 那個呢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 那個呢 | not:error,not:rejected | 可可
+
+### 熱可可-01 它還剩幾個
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 它還剩幾個 | not:error,not:rejected | 可可
+
+### 熱可可-02 那個進出紀錄呢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 那個進出紀錄呢 | not:error,not:rejected | 可可
+
+### 熱可可-03 這個快到期嗎
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 這個快到期嗎 | not:error,not:rejected | 可可
+
+### 熱可可-04 那個多少錢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 那個多少錢 | not:error,not:rejected | 可可
+
+### 熱可可-05 它安全庫存多少
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 它安全庫存多少 | not:error,not:rejected | 可可
+
+### 熱可可-06 進出
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 進出 | not:error,not:rejected | 可可
+
+### 熱可可-07 進出紀錄
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 進出紀錄 | not:error,not:rejected | 可可
+
+### 熱可可-08 到期
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 到期 | not:error,not:rejected | 可可
+
+### 熱可可-09 快到期嗎
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 快到期嗎 | not:error,not:rejected | 可可
+
+### 熱可可-10 安全庫存
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 安全庫存 | not:error,not:rejected | 可可
+
+### 熱可可-11 安全庫存多少
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 安全庫存多少 | not:error,not:rejected | 可可
+
+### 熱可可-12 搭配什麼賣
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 搭配什麼賣 | not:error,not:rejected | 可可
+
+### 熱可可-13 多少錢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 多少錢 | not:error,not:rejected | 可可
+
+### 熱可可-14 還剩幾個
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 還剩幾個 | not:error,not:rejected | 可可
+
+### 熱可可-15 現在剩幾個
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 現在剩幾個 | not:error,not:rejected | 可可
+
+### 熱可可-16 快缺貨了嗎
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 快缺貨了嗎 | low_stock | 可可
+
+### 熱可可-17 夠不夠
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 夠不夠 | low_stock | 可可
+
+### 熱可可-18 南倉呢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 南倉呢 | not:error,not:rejected | 可可
+
+### 熱可可-19 北倉呢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 北倉呢 | not:error,not:rejected | 可可
+
+### 熱可可-20 中倉呢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 中倉呢 | not:error,not:rejected | 可可
+
+### 熱可可-21 北倉多少
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 北倉多少 | not:error,not:rejected | 可可
+
+### 熱可可-22 南倉幾個
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 南倉幾個 | not:error,not:rejected | 可可
+
+### 熱可可-23 南
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 南 | not:error,not:rejected | 可可
+
+### 熱可可-24 北
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 北 | not:error,not:rejected | 可可
+
+### 熱可可-25 哪一倉最多
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 哪一倉最多 | not:error,not:rejected | 可可
+
+### 熱可可-26 呢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 呢 | not:error,not:rejected | 可可
+
+### 熱可可-27 咧
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 咧 | not:error,not:rejected | 可可
+
+### 熱可可-28 北倉進20個
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 北倉進20個 | movement_confirm | 可可
+
+### 熱可可-29 南倉出5個
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 南倉出5個 | movement_confirm,error | 可可
+
+### 熱可可-30 那個近出紀錄呢
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 那個近出紀錄呢 | not:error,not:rejected | 可可
+
+### 熱可可-31 安全ㄎ存多少
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 安全ㄎ存多少 | not:error,not:rejected | 可可
+
+### 熱可可-32 那ㄍ快到期嗎
+> 熱可可還剩幾個 | not:error,not:rejected | 可可
+> 那ㄍ快到期嗎 | not:error,not:rejected | 可可
+
+### 濾掛咖啡-00 那個呢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 那個呢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-01 它還剩幾個
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 它還剩幾個 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-02 那個進出紀錄呢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 那個進出紀錄呢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-03 這個快到期嗎
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 這個快到期嗎 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-04 那個多少錢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 那個多少錢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-05 它安全庫存多少
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 它安全庫存多少 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-06 進出
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 進出 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-07 進出紀錄
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 進出紀錄 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-08 到期
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 到期 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-09 快到期嗎
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 快到期嗎 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-10 安全庫存
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 安全庫存 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-11 安全庫存多少
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 安全庫存多少 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-12 搭配什麼賣
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 搭配什麼賣 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-13 多少錢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 多少錢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-14 還剩幾個
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 還剩幾個 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-15 現在剩幾個
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 現在剩幾個 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-16 快缺貨了嗎
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 快缺貨了嗎 | low_stock | 濾掛
+
+### 濾掛咖啡-17 夠不夠
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 夠不夠 | low_stock | 濾掛
+
+### 濾掛咖啡-18 南倉呢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 南倉呢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-19 北倉呢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 北倉呢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-20 中倉呢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 中倉呢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-21 北倉多少
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 北倉多少 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-22 南倉幾個
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 南倉幾個 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-23 南
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 南 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-24 北
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 北 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-25 哪一倉最多
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 哪一倉最多 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-26 呢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 呢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-27 咧
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 咧 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-28 北倉進20個
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 北倉進20個 | movement_confirm | 濾掛
+
+### 濾掛咖啡-29 南倉出5個
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 南倉出5個 | movement_confirm,error | 濾掛
+
+### 濾掛咖啡-30 那個近出紀錄呢
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 那個近出紀錄呢 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-31 安全ㄎ存多少
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 安全ㄎ存多少 | not:error,not:rejected | 濾掛
+
+### 濾掛咖啡-32 那ㄍ快到期嗎
+> 濾掛咖啡還剩幾個 | not:error,not:rejected | 濾掛
+> 那ㄍ快到期嗎 | not:error,not:rejected | 濾掛
+
+### 洗衣精-00 那個呢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 那個呢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-01 它還剩幾個
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 它還剩幾個 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-02 那個進出紀錄呢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 那個進出紀錄呢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-03 這個快到期嗎
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 這個快到期嗎 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-04 那個多少錢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 那個多少錢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-05 它安全庫存多少
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 它安全庫存多少 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-06 進出
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 進出 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-07 進出紀錄
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 進出紀錄 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-08 到期
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 到期 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-09 快到期嗎
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 快到期嗎 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-10 安全庫存
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 安全庫存 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-11 安全庫存多少
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 安全庫存多少 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-12 搭配什麼賣
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 搭配什麼賣 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-13 多少錢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 多少錢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-14 還剩幾個
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 還剩幾個 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-15 現在剩幾個
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 現在剩幾個 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-16 快缺貨了嗎
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 快缺貨了嗎 | low_stock | 洗衣精
+
+### 洗衣精-17 夠不夠
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 夠不夠 | low_stock | 洗衣精
+
+### 洗衣精-18 南倉呢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 南倉呢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-19 北倉呢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 北倉呢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-20 中倉呢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 中倉呢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-21 北倉多少
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 北倉多少 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-22 南倉幾個
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 南倉幾個 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-23 南
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 南 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-24 北
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 北 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-25 哪一倉最多
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 哪一倉最多 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-26 呢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 呢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-27 咧
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 咧 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-28 北倉進20個
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 北倉進20個 | movement_confirm | 洗衣精
+
+### 洗衣精-29 南倉出5個
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 南倉出5個 | movement_confirm,error | 洗衣精
+
+### 洗衣精-30 那個近出紀錄呢
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 那個近出紀錄呢 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-31 安全ㄎ存多少
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 安全ㄎ存多少 | not:error,not:rejected | 洗衣精
+
+### 洗衣精-32 那ㄍ快到期嗎
+> 洗衣精還剩幾個 | not:error,not:rejected | 洗衣精
+> 那ㄍ快到期嗎 | not:error,not:rejected | 洗衣精
+
+### 衛生紙-00 那個呢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 那個呢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-01 它還剩幾個
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 它還剩幾個 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-02 那個進出紀錄呢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 那個進出紀錄呢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-03 這個快到期嗎
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 這個快到期嗎 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-04 那個多少錢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 那個多少錢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-05 它安全庫存多少
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 它安全庫存多少 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-06 進出
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 進出 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-07 進出紀錄
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 進出紀錄 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-08 到期
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 到期 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-09 快到期嗎
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 快到期嗎 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-10 安全庫存
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 安全庫存 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-11 安全庫存多少
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 安全庫存多少 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-12 搭配什麼賣
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 搭配什麼賣 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-13 多少錢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 多少錢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-14 還剩幾個
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 還剩幾個 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-15 現在剩幾個
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 現在剩幾個 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-16 快缺貨了嗎
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 快缺貨了嗎 | low_stock | 衛生紙
+
+### 衛生紙-17 夠不夠
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 夠不夠 | low_stock | 衛生紙
+
+### 衛生紙-18 南倉呢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 南倉呢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-19 北倉呢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 北倉呢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-20 中倉呢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 中倉呢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-21 北倉多少
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 北倉多少 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-22 南倉幾個
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 南倉幾個 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-23 南
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 南 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-24 北
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 北 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-25 哪一倉最多
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 哪一倉最多 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-26 呢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 呢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-27 咧
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 咧 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-28 北倉進20個
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 北倉進20個 | movement_confirm | 衛生紙
+
+### 衛生紙-29 南倉出5個
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 南倉出5個 | movement_confirm,error | 衛生紙
+
+### 衛生紙-30 那個近出紀錄呢
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 那個近出紀錄呢 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-31 安全ㄎ存多少
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 安全ㄎ存多少 | not:error,not:rejected | 衛生紙
+
+### 衛生紙-32 那ㄍ快到期嗎
+> 衛生紙還剩幾個 | not:error,not:rejected | 衛生紙
+> 那ㄍ快到期嗎 | not:error,not:rejected | 衛生紙
+
+### 沐浴乳-00 那個呢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 那個呢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-01 它還剩幾個
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 它還剩幾個 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-02 那個進出紀錄呢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 那個進出紀錄呢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-03 這個快到期嗎
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 這個快到期嗎 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-04 那個多少錢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 那個多少錢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-05 它安全庫存多少
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 它安全庫存多少 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-06 進出
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 進出 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-07 進出紀錄
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 進出紀錄 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-08 到期
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 到期 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-09 快到期嗎
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 快到期嗎 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-10 安全庫存
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 安全庫存 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-11 安全庫存多少
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 安全庫存多少 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-12 搭配什麼賣
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 搭配什麼賣 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-13 多少錢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 多少錢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-14 還剩幾個
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 還剩幾個 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-15 現在剩幾個
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 現在剩幾個 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-16 快缺貨了嗎
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 快缺貨了嗎 | low_stock | 沐浴乳
+
+### 沐浴乳-17 夠不夠
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 夠不夠 | low_stock | 沐浴乳
+
+### 沐浴乳-18 南倉呢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 南倉呢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-19 北倉呢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 北倉呢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-20 中倉呢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 中倉呢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-21 北倉多少
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 北倉多少 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-22 南倉幾個
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 南倉幾個 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-23 南
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 南 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-24 北
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 北 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-25 哪一倉最多
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 哪一倉最多 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-26 呢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 呢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-27 咧
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 咧 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-28 北倉進20個
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 北倉進20個 | movement_confirm | 沐浴乳
+
+### 沐浴乳-29 南倉出5個
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 南倉出5個 | movement_confirm,error | 沐浴乳
+
+### 沐浴乳-30 那個近出紀錄呢
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 那個近出紀錄呢 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-31 安全ㄎ存多少
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 安全ㄎ存多少 | not:error,not:rejected | 沐浴乳
+
+### 沐浴乳-32 那ㄍ快到期嗎
+> 沐浴乳還剩幾個 | not:error,not:rejected | 沐浴乳
+> 那ㄍ快到期嗎 | not:error,not:rejected | 沐浴乳
+
+### 蚊香液-00 那個呢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 那個呢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-01 它還剩幾個
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 它還剩幾個 | not:error,not:rejected | 蚊香
+
+### 蚊香液-02 那個進出紀錄呢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 那個進出紀錄呢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-03 這個快到期嗎
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 這個快到期嗎 | not:error,not:rejected | 蚊香
+
+### 蚊香液-04 那個多少錢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 那個多少錢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-05 它安全庫存多少
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 它安全庫存多少 | not:error,not:rejected | 蚊香
+
+### 蚊香液-06 進出
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 進出 | not:error,not:rejected | 蚊香
+
+### 蚊香液-07 進出紀錄
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 進出紀錄 | not:error,not:rejected | 蚊香
+
+### 蚊香液-08 到期
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 到期 | not:error,not:rejected | 蚊香
+
+### 蚊香液-09 快到期嗎
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 快到期嗎 | not:error,not:rejected | 蚊香
+
+### 蚊香液-10 安全庫存
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 安全庫存 | not:error,not:rejected | 蚊香
+
+### 蚊香液-11 安全庫存多少
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 安全庫存多少 | not:error,not:rejected | 蚊香
+
+### 蚊香液-12 搭配什麼賣
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 搭配什麼賣 | not:error,not:rejected | 蚊香
+
+### 蚊香液-13 多少錢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 多少錢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-14 還剩幾個
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 還剩幾個 | not:error,not:rejected | 蚊香
+
+### 蚊香液-15 現在剩幾個
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 現在剩幾個 | not:error,not:rejected | 蚊香
+
+### 蚊香液-16 快缺貨了嗎
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 快缺貨了嗎 | low_stock | 蚊香
+
+### 蚊香液-17 夠不夠
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 夠不夠 | low_stock | 蚊香
+
+### 蚊香液-18 南倉呢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 南倉呢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-19 北倉呢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 北倉呢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-20 中倉呢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 中倉呢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-21 北倉多少
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 北倉多少 | not:error,not:rejected | 蚊香
+
+### 蚊香液-22 南倉幾個
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 南倉幾個 | not:error,not:rejected | 蚊香
+
+### 蚊香液-23 南
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 南 | not:error,not:rejected | 蚊香
+
+### 蚊香液-24 北
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 北 | not:error,not:rejected | 蚊香
+
+### 蚊香液-25 哪一倉最多
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 哪一倉最多 | not:error,not:rejected | 蚊香
+
+### 蚊香液-26 呢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 呢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-27 咧
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 咧 | not:error,not:rejected | 蚊香
+
+### 蚊香液-28 北倉進20個
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 北倉進20個 | movement_confirm | 蚊香
+
+### 蚊香液-29 南倉出5個
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 南倉出5個 | movement_confirm,error | 蚊香
+
+### 蚊香液-30 那個近出紀錄呢
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 那個近出紀錄呢 | not:error,not:rejected | 蚊香
+
+### 蚊香液-31 安全ㄎ存多少
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 安全ㄎ存多少 | not:error,not:rejected | 蚊香
+
+### 蚊香液-32 那ㄍ快到期嗎
+> 蚊香液還剩幾個 | not:error,not:rejected | 蚊香
+> 那ㄍ快到期嗎 | not:error,not:rejected | 蚊香
+
+### 垃圾袋-00 那個呢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 那個呢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-01 它還剩幾個
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 它還剩幾個 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-02 那個進出紀錄呢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 那個進出紀錄呢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-03 這個快到期嗎
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 這個快到期嗎 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-04 那個多少錢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 那個多少錢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-05 它安全庫存多少
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 它安全庫存多少 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-06 進出
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 進出 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-07 進出紀錄
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 進出紀錄 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-08 到期
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 到期 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-09 快到期嗎
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 快到期嗎 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-10 安全庫存
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 安全庫存 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-11 安全庫存多少
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 安全庫存多少 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-12 搭配什麼賣
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 搭配什麼賣 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-13 多少錢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 多少錢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-14 還剩幾個
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 還剩幾個 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-15 現在剩幾個
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 現在剩幾個 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-16 快缺貨了嗎
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 快缺貨了嗎 | low_stock | 垃圾袋
+
+### 垃圾袋-17 夠不夠
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 夠不夠 | low_stock | 垃圾袋
+
+### 垃圾袋-18 南倉呢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 南倉呢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-19 北倉呢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 北倉呢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-20 中倉呢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 中倉呢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-21 北倉多少
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 北倉多少 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-22 南倉幾個
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 南倉幾個 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-23 南
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 南 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-24 北
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 北 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-25 哪一倉最多
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 哪一倉最多 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-26 呢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 呢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-27 咧
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 咧 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-28 北倉進20個
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 北倉進20個 | movement_confirm | 垃圾袋
+
+### 垃圾袋-29 南倉出5個
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 南倉出5個 | movement_confirm,error | 垃圾袋
+
+### 垃圾袋-30 那個近出紀錄呢
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 那個近出紀錄呢 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-31 安全ㄎ存多少
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 安全ㄎ存多少 | not:error,not:rejected | 垃圾袋
+
+### 垃圾袋-32 那ㄍ快到期嗎
+> 垃圾袋還剩幾個 | not:error,not:rejected | 垃圾袋
+> 那ㄍ快到期嗎 | not:error,not:rejected | 垃圾袋
+
+### 紙尿布-00 那個呢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 那個呢 | not:error,not:rejected | 尿布
+
+### 紙尿布-01 它還剩幾個
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 它還剩幾個 | not:error,not:rejected | 尿布
+
+### 紙尿布-02 那個進出紀錄呢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 那個進出紀錄呢 | not:error,not:rejected | 尿布
+
+### 紙尿布-03 這個快到期嗎
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 這個快到期嗎 | not:error,not:rejected | 尿布
+
+### 紙尿布-04 那個多少錢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 那個多少錢 | not:error,not:rejected | 尿布
+
+### 紙尿布-05 它安全庫存多少
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 它安全庫存多少 | not:error,not:rejected | 尿布
+
+### 紙尿布-06 進出
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 進出 | not:error,not:rejected | 尿布
+
+### 紙尿布-07 進出紀錄
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 進出紀錄 | not:error,not:rejected | 尿布
+
+### 紙尿布-08 到期
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 到期 | not:error,not:rejected | 尿布
+
+### 紙尿布-09 快到期嗎
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 快到期嗎 | not:error,not:rejected | 尿布
+
+### 紙尿布-10 安全庫存
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 安全庫存 | not:error,not:rejected | 尿布
+
+### 紙尿布-11 安全庫存多少
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 安全庫存多少 | not:error,not:rejected | 尿布
+
+### 紙尿布-12 搭配什麼賣
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 搭配什麼賣 | not:error,not:rejected | 尿布
+
+### 紙尿布-13 多少錢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 多少錢 | not:error,not:rejected | 尿布
+
+### 紙尿布-14 還剩幾個
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 還剩幾個 | not:error,not:rejected | 尿布
+
+### 紙尿布-15 現在剩幾個
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 現在剩幾個 | not:error,not:rejected | 尿布
+
+### 紙尿布-16 快缺貨了嗎
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 快缺貨了嗎 | low_stock | 尿布
+
+### 紙尿布-17 夠不夠
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 夠不夠 | low_stock | 尿布
+
+### 紙尿布-18 南倉呢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 南倉呢 | not:error,not:rejected | 尿布
+
+### 紙尿布-19 北倉呢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 北倉呢 | not:error,not:rejected | 尿布
+
+### 紙尿布-20 中倉呢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 中倉呢 | not:error,not:rejected | 尿布
+
+### 紙尿布-21 北倉多少
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 北倉多少 | not:error,not:rejected | 尿布
+
+### 紙尿布-22 南倉幾個
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 南倉幾個 | not:error,not:rejected | 尿布
+
+### 紙尿布-23 南
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 南 | not:error,not:rejected | 尿布
+
+### 紙尿布-24 北
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 北 | not:error,not:rejected | 尿布
+
+### 紙尿布-25 哪一倉最多
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 哪一倉最多 | not:error,not:rejected | 尿布
+
+### 紙尿布-26 呢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 呢 | not:error,not:rejected | 尿布
+
+### 紙尿布-27 咧
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 咧 | not:error,not:rejected | 尿布
+
+### 紙尿布-28 北倉進20個
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 北倉進20個 | movement_confirm | 尿布
+
+### 紙尿布-29 南倉出5個
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 南倉出5個 | movement_confirm,error | 尿布
+
+### 紙尿布-30 那個近出紀錄呢
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 那個近出紀錄呢 | not:error,not:rejected | 尿布
+
+### 紙尿布-31 安全ㄎ存多少
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 安全ㄎ存多少 | not:error,not:rejected | 尿布
+
+### 紙尿布-32 那ㄍ快到期嗎
+> 紙尿布還剩幾個 | not:error,not:rejected | 尿布
+> 那ㄍ快到期嗎 | not:error,not:rejected | 尿布
+
+### 濕紙巾-00 那個呢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 那個呢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-01 它還剩幾個
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 它還剩幾個 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-02 那個進出紀錄呢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 那個進出紀錄呢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-03 這個快到期嗎
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 這個快到期嗎 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-04 那個多少錢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 那個多少錢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-05 它安全庫存多少
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 它安全庫存多少 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-06 進出
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 進出 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-07 進出紀錄
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 進出紀錄 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-08 到期
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 到期 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-09 快到期嗎
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 快到期嗎 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-10 安全庫存
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 安全庫存 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-11 安全庫存多少
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 安全庫存多少 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-12 搭配什麼賣
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 搭配什麼賣 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-13 多少錢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 多少錢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-14 還剩幾個
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 還剩幾個 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-15 現在剩幾個
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 現在剩幾個 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-16 快缺貨了嗎
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 快缺貨了嗎 | low_stock | 濕紙巾
+
+### 濕紙巾-17 夠不夠
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 夠不夠 | low_stock | 濕紙巾
+
+### 濕紙巾-18 南倉呢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 南倉呢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-19 北倉呢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 北倉呢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-20 中倉呢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 中倉呢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-21 北倉多少
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 北倉多少 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-22 南倉幾個
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 南倉幾個 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-23 南
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 南 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-24 北
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 北 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-25 哪一倉最多
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 哪一倉最多 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-26 呢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 呢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-27 咧
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 咧 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-28 北倉進20個
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 北倉進20個 | movement_confirm | 濕紙巾
+
+### 濕紙巾-29 南倉出5個
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 南倉出5個 | movement_confirm,error | 濕紙巾
+
+### 濕紙巾-30 那個近出紀錄呢
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 那個近出紀錄呢 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-31 安全ㄎ存多少
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 安全ㄎ存多少 | not:error,not:rejected | 濕紙巾
+
+### 濕紙巾-32 那ㄍ快到期嗎
+> 濕紙巾還剩幾個 | not:error,not:rejected | 濕紙巾
+> 那ㄍ快到期嗎 | not:error,not:rejected | 濕紙巾
+
+### 防蚊液-00 那個呢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 那個呢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-01 它還剩幾個
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 它還剩幾個 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-02 那個進出紀錄呢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 那個進出紀錄呢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-03 這個快到期嗎
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 這個快到期嗎 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-04 那個多少錢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 那個多少錢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-05 它安全庫存多少
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 它安全庫存多少 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-06 進出
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 進出 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-07 進出紀錄
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 進出紀錄 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-08 到期
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 到期 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-09 快到期嗎
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 快到期嗎 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-10 安全庫存
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 安全庫存 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-11 安全庫存多少
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 安全庫存多少 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-12 搭配什麼賣
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 搭配什麼賣 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-13 多少錢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 多少錢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-14 還剩幾個
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 還剩幾個 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-15 現在剩幾個
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 現在剩幾個 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-16 快缺貨了嗎
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 快缺貨了嗎 | low_stock | 防蚊液
+
+### 防蚊液-17 夠不夠
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 夠不夠 | low_stock | 防蚊液
+
+### 防蚊液-18 南倉呢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 南倉呢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-19 北倉呢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 北倉呢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-20 中倉呢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 中倉呢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-21 北倉多少
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 北倉多少 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-22 南倉幾個
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 南倉幾個 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-23 南
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 南 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-24 北
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 北 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-25 哪一倉最多
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 哪一倉最多 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-26 呢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 呢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-27 咧
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 咧 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-28 北倉進20個
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 北倉進20個 | movement_confirm | 防蚊液
+
+### 防蚊液-29 南倉出5個
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 南倉出5個 | movement_confirm,error | 防蚊液
+
+### 防蚊液-30 那個近出紀錄呢
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 那個近出紀錄呢 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-31 安全ㄎ存多少
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 安全ㄎ存多少 | not:error,not:rejected | 防蚊液
+
+### 防蚊液-32 那ㄍ快到期嗎
+> 防蚊液還剩幾個 | not:error,not:rejected | 防蚊液
+> 那ㄍ快到期嗎 | not:error,not:rejected | 防蚊液
+
+### 清潔手套-00 那個呢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 那個呢 | not:error,not:rejected | 手套
+
+### 清潔手套-01 它還剩幾個
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 它還剩幾個 | not:error,not:rejected | 手套
+
+### 清潔手套-02 那個進出紀錄呢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 那個進出紀錄呢 | not:error,not:rejected | 手套
+
+### 清潔手套-03 這個快到期嗎
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 這個快到期嗎 | not:error,not:rejected | 手套
+
+### 清潔手套-04 那個多少錢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 那個多少錢 | not:error,not:rejected | 手套
+
+### 清潔手套-05 它安全庫存多少
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 它安全庫存多少 | not:error,not:rejected | 手套
+
+### 清潔手套-06 進出
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 進出 | not:error,not:rejected | 手套
+
+### 清潔手套-07 進出紀錄
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 進出紀錄 | not:error,not:rejected | 手套
+
+### 清潔手套-08 到期
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 到期 | not:error,not:rejected | 手套
+
+### 清潔手套-09 快到期嗎
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 快到期嗎 | not:error,not:rejected | 手套
+
+### 清潔手套-10 安全庫存
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 安全庫存 | not:error,not:rejected | 手套
+
+### 清潔手套-11 安全庫存多少
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 安全庫存多少 | not:error,not:rejected | 手套
+
+### 清潔手套-12 搭配什麼賣
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 搭配什麼賣 | not:error,not:rejected | 手套
+
+### 清潔手套-13 多少錢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 多少錢 | not:error,not:rejected | 手套
+
+### 清潔手套-14 還剩幾個
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 還剩幾個 | not:error,not:rejected | 手套
+
+### 清潔手套-15 現在剩幾個
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 現在剩幾個 | not:error,not:rejected | 手套
+
+### 清潔手套-16 快缺貨了嗎
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 快缺貨了嗎 | low_stock | 手套
+
+### 清潔手套-17 夠不夠
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 夠不夠 | low_stock | 手套
+
+### 清潔手套-18 南倉呢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 南倉呢 | not:error,not:rejected | 手套
+
+### 清潔手套-19 北倉呢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 北倉呢 | not:error,not:rejected | 手套
+
+### 清潔手套-20 中倉呢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 中倉呢 | not:error,not:rejected | 手套
+
+### 清潔手套-21 北倉多少
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 北倉多少 | not:error,not:rejected | 手套
+
+### 清潔手套-22 南倉幾個
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 南倉幾個 | not:error,not:rejected | 手套
+
+### 清潔手套-23 南
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 南 | not:error,not:rejected | 手套
+
+### 清潔手套-24 北
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 北 | not:error,not:rejected | 手套
+
+### 清潔手套-25 哪一倉最多
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 哪一倉最多 | not:error,not:rejected | 手套
+
+### 清潔手套-26 呢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 呢 | not:error,not:rejected | 手套
+
+### 清潔手套-27 咧
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 咧 | not:error,not:rejected | 手套
+
+### 清潔手套-28 北倉進20個
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 北倉進20個 | movement_confirm | 手套
+
+### 清潔手套-29 南倉出5個
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 南倉出5個 | movement_confirm,error | 手套
+
+### 清潔手套-30 那個近出紀錄呢
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 那個近出紀錄呢 | not:error,not:rejected | 手套
+
+### 清潔手套-31 安全ㄎ存多少
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 安全ㄎ存多少 | not:error,not:rejected | 手套
+
+### 清潔手套-32 那ㄍ快到期嗎
+> 清潔手套還剩幾個 | not:error,not:rejected | 手套
+> 那ㄍ快到期嗎 | not:error,not:rejected | 手套
+
+### 咖啡濾紙-00 那個呢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 那個呢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-01 它還剩幾個
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 它還剩幾個 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-02 那個進出紀錄呢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 那個進出紀錄呢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-03 這個快到期嗎
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 這個快到期嗎 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-04 那個多少錢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 那個多少錢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-05 它安全庫存多少
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 它安全庫存多少 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-06 進出
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 進出 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-07 進出紀錄
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 進出紀錄 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-08 到期
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 到期 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-09 快到期嗎
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 快到期嗎 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-10 安全庫存
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 安全庫存 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-11 安全庫存多少
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 安全庫存多少 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-12 搭配什麼賣
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 搭配什麼賣 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-13 多少錢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 多少錢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-14 還剩幾個
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 還剩幾個 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-15 現在剩幾個
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 現在剩幾個 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-16 快缺貨了嗎
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 快缺貨了嗎 | low_stock | 濾紙
+
+### 咖啡濾紙-17 夠不夠
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 夠不夠 | low_stock | 濾紙
+
+### 咖啡濾紙-18 南倉呢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 南倉呢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-19 北倉呢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 北倉呢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-20 中倉呢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 中倉呢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-21 北倉多少
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 北倉多少 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-22 南倉幾個
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 南倉幾個 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-23 南
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 南 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-24 北
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 北 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-25 哪一倉最多
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 哪一倉最多 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-26 呢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 呢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-27 咧
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 咧 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-28 北倉進20個
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 北倉進20個 | movement_confirm | 濾紙
+
+### 咖啡濾紙-29 南倉出5個
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 南倉出5個 | movement_confirm,error | 濾紙
+
+### 咖啡濾紙-30 那個近出紀錄呢
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 那個近出紀錄呢 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-31 安全ㄎ存多少
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 安全ㄎ存多少 | not:error,not:rejected | 濾紙
+
+### 咖啡濾紙-32 那ㄍ快到期嗎
+> 咖啡濾紙還剩幾個 | not:error,not:rejected | 濾紙
+> 那ㄍ快到期嗎 | not:error,not:rejected | 濾紙
+
+### 素T-00 那個呢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 那個呢 | not:error,not:rejected | 素T
+
+### 素T-01 它還剩幾個
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 它還剩幾個 | not:error,not:rejected | 素T
+
+### 素T-02 那個進出紀錄呢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 那個進出紀錄呢 | not:error,not:rejected | 素T
+
+### 素T-03 這個快到期嗎
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 這個快到期嗎 | not:error,not:rejected | 素T
+
+### 素T-04 那個多少錢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 那個多少錢 | not:error,not:rejected | 素T
+
+### 素T-05 它安全庫存多少
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 它安全庫存多少 | not:error,not:rejected | 素T
+
+### 素T-06 進出
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 進出 | not:error,not:rejected | 素T
+
+### 素T-07 進出紀錄
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 進出紀錄 | not:error,not:rejected | 素T
+
+### 素T-08 到期
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 到期 | not:error,not:rejected | 素T
+
+### 素T-09 快到期嗎
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 快到期嗎 | not:error,not:rejected | 素T
+
+### 素T-10 安全庫存
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 安全庫存 | not:error,not:rejected | 素T
+
+### 素T-11 安全庫存多少
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 安全庫存多少 | not:error,not:rejected | 素T
+
+### 素T-12 搭配什麼賣
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 搭配什麼賣 | not:error,not:rejected | 素T
+
+### 素T-13 多少錢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 多少錢 | not:error,not:rejected | 素T
+
+### 素T-14 還剩幾個
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 還剩幾個 | not:error,not:rejected | 素T
+
+### 素T-15 現在剩幾個
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 現在剩幾個 | not:error,not:rejected | 素T
+
+### 素T-16 快缺貨了嗎
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 快缺貨了嗎 | low_stock | 素T
+
+### 素T-17 夠不夠
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 夠不夠 | low_stock | 素T
+
+### 素T-18 南倉呢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 南倉呢 | not:error,not:rejected | 素T
+
+### 素T-19 北倉呢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 北倉呢 | not:error,not:rejected | 素T
+
+### 素T-20 中倉呢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 中倉呢 | not:error,not:rejected | 素T
+
+### 素T-21 北倉多少
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 北倉多少 | not:error,not:rejected | 素T
+
+### 素T-22 南倉幾個
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 南倉幾個 | not:error,not:rejected | 素T
+
+### 素T-23 南
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 南 | not:error,not:rejected | 素T
+
+### 素T-24 北
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 北 | not:error,not:rejected | 素T
+
+### 素T-25 哪一倉最多
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 哪一倉最多 | not:error,not:rejected | 素T
+
+### 素T-26 呢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 呢 | not:error,not:rejected | 素T
+
+### 素T-27 咧
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 咧 | not:error,not:rejected | 素T
+
+### 素T-28 北倉進20個
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 北倉進20個 | movement_confirm | 素T
+
+### 素T-29 南倉出5個
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 南倉出5個 | movement_confirm,error | 素T
+
+### 素T-30 那個近出紀錄呢
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 那個近出紀錄呢 | not:error,not:rejected | 素T
+
+### 素T-31 安全ㄎ存多少
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 安全ㄎ存多少 | not:error,not:rejected | 素T
+
+### 素T-32 那ㄍ快到期嗎
+> 素T還剩幾個 | not:error,not:rejected | 素T
+> 那ㄍ快到期嗎 | not:error,not:rejected | 素T
+
+### 保暖襪-00 那個呢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 那個呢 | not:error,not:rejected | 襪
+
+### 保暖襪-01 它還剩幾個
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 它還剩幾個 | not:error,not:rejected | 襪
+
+### 保暖襪-02 那個進出紀錄呢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 那個進出紀錄呢 | not:error,not:rejected | 襪
+
+### 保暖襪-03 這個快到期嗎
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 這個快到期嗎 | not:error,not:rejected | 襪
+
+### 保暖襪-04 那個多少錢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 那個多少錢 | not:error,not:rejected | 襪
+
+### 保暖襪-05 它安全庫存多少
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 它安全庫存多少 | not:error,not:rejected | 襪
+
+### 保暖襪-06 進出
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 進出 | not:error,not:rejected | 襪
+
+### 保暖襪-07 進出紀錄
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 進出紀錄 | not:error,not:rejected | 襪
+
+### 保暖襪-08 到期
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 到期 | not:error,not:rejected | 襪
+
+### 保暖襪-09 快到期嗎
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 快到期嗎 | not:error,not:rejected | 襪
+
+### 保暖襪-10 安全庫存
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 安全庫存 | not:error,not:rejected | 襪
+
+### 保暖襪-11 安全庫存多少
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 安全庫存多少 | not:error,not:rejected | 襪
+
+### 保暖襪-12 搭配什麼賣
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 搭配什麼賣 | not:error,not:rejected | 襪
+
+### 保暖襪-13 多少錢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 多少錢 | not:error,not:rejected | 襪
+
+### 保暖襪-14 還剩幾個
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 還剩幾個 | not:error,not:rejected | 襪
+
+### 保暖襪-15 現在剩幾個
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 現在剩幾個 | not:error,not:rejected | 襪
+
+### 保暖襪-16 快缺貨了嗎
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 快缺貨了嗎 | low_stock | 襪
+
+### 保暖襪-17 夠不夠
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 夠不夠 | low_stock | 襪
+
+### 保暖襪-18 南倉呢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 南倉呢 | not:error,not:rejected | 襪
+
+### 保暖襪-19 北倉呢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 北倉呢 | not:error,not:rejected | 襪
+
+### 保暖襪-20 中倉呢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 中倉呢 | not:error,not:rejected | 襪
+
+### 保暖襪-21 北倉多少
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 北倉多少 | not:error,not:rejected | 襪
+
+### 保暖襪-22 南倉幾個
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 南倉幾個 | not:error,not:rejected | 襪
+
+### 保暖襪-23 南
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 南 | not:error,not:rejected | 襪
+
+### 保暖襪-24 北
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 北 | not:error,not:rejected | 襪
+
+### 保暖襪-25 哪一倉最多
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 哪一倉最多 | not:error,not:rejected | 襪
+
+### 保暖襪-26 呢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 呢 | not:error,not:rejected | 襪
+
+### 保暖襪-27 咧
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 咧 | not:error,not:rejected | 襪
+
+### 保暖襪-28 北倉進20個
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 北倉進20個 | movement_confirm | 襪
+
+### 保暖襪-29 南倉出5個
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 南倉出5個 | movement_confirm,error | 襪
+
+### 保暖襪-30 那個近出紀錄呢
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 那個近出紀錄呢 | not:error,not:rejected | 襪
+
+### 保暖襪-31 安全ㄎ存多少
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 安全ㄎ存多少 | not:error,not:rejected | 襪
+
+### 保暖襪-32 那ㄍ快到期嗎
+> 保暖襪還剩幾個 | not:error,not:rejected | 襪
+> 那ㄍ快到期嗎 | not:error,not:rejected | 襪
+
+### 羽絨外套-00 那個呢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 那個呢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-01 它還剩幾個
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 它還剩幾個 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-02 那個進出紀錄呢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 那個進出紀錄呢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-03 這個快到期嗎
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 這個快到期嗎 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-04 那個多少錢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 那個多少錢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-05 它安全庫存多少
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 它安全庫存多少 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-06 進出
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 進出 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-07 進出紀錄
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 進出紀錄 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-08 到期
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 到期 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-09 快到期嗎
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 快到期嗎 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-10 安全庫存
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 安全庫存 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-11 安全庫存多少
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 安全庫存多少 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-12 搭配什麼賣
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 搭配什麼賣 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-13 多少錢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 多少錢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-14 還剩幾個
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 還剩幾個 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-15 現在剩幾個
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 現在剩幾個 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-16 快缺貨了嗎
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 快缺貨了嗎 | low_stock | 羽絨
+
+### 羽絨外套-17 夠不夠
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 夠不夠 | low_stock | 羽絨
+
+### 羽絨外套-18 南倉呢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 南倉呢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-19 北倉呢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 北倉呢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-20 中倉呢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 中倉呢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-21 北倉多少
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 北倉多少 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-22 南倉幾個
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 南倉幾個 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-23 南
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 南 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-24 北
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 北 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-25 哪一倉最多
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 哪一倉最多 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-26 呢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 呢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-27 咧
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 咧 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-28 北倉進20個
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 北倉進20個 | movement_confirm | 羽絨
+
+### 羽絨外套-29 南倉出5個
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 南倉出5個 | movement_confirm,error | 羽絨
+
+### 羽絨外套-30 那個近出紀錄呢
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 那個近出紀錄呢 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-31 安全ㄎ存多少
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 安全ㄎ存多少 | not:error,not:rejected | 羽絨
+
+### 羽絨外套-32 那ㄍ快到期嗎
+> 羽絨外套還剩幾個 | not:error,not:rejected | 羽絨
+> 那ㄍ快到期嗎 | not:error,not:rejected | 羽絨
+
+### 牛仔褲-00 那個呢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 那個呢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-01 它還剩幾個
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 它還剩幾個 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-02 那個進出紀錄呢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 那個進出紀錄呢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-03 這個快到期嗎
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 這個快到期嗎 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-04 那個多少錢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 那個多少錢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-05 它安全庫存多少
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 它安全庫存多少 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-06 進出
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 進出 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-07 進出紀錄
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 進出紀錄 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-08 到期
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 到期 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-09 快到期嗎
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 快到期嗎 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-10 安全庫存
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 安全庫存 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-11 安全庫存多少
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 安全庫存多少 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-12 搭配什麼賣
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 搭配什麼賣 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-13 多少錢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 多少錢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-14 還剩幾個
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 還剩幾個 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-15 現在剩幾個
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 現在剩幾個 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-16 快缺貨了嗎
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 快缺貨了嗎 | low_stock | 牛仔
+
+### 牛仔褲-17 夠不夠
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 夠不夠 | low_stock | 牛仔
+
+### 牛仔褲-18 南倉呢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 南倉呢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-19 北倉呢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 北倉呢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-20 中倉呢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 中倉呢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-21 北倉多少
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 北倉多少 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-22 南倉幾個
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 南倉幾個 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-23 南
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 南 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-24 北
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 北 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-25 哪一倉最多
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 哪一倉最多 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-26 呢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 呢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-27 咧
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 咧 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-28 北倉進20個
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 北倉進20個 | movement_confirm | 牛仔
+
+### 牛仔褲-29 南倉出5個
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 南倉出5個 | movement_confirm,error | 牛仔
+
+### 牛仔褲-30 那個近出紀錄呢
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 那個近出紀錄呢 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-31 安全ㄎ存多少
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 安全ㄎ存多少 | not:error,not:rejected | 牛仔
+
+### 牛仔褲-32 那ㄍ快到期嗎
+> 牛仔褲還剩幾個 | not:error,not:rejected | 牛仔
+> 那ㄍ快到期嗎 | not:error,not:rejected | 牛仔
+
+### 運動內衣-00 那個呢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 那個呢 | not:error,not:rejected | 內衣
+
+### 運動內衣-01 它還剩幾個
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 它還剩幾個 | not:error,not:rejected | 內衣
+
+### 運動內衣-02 那個進出紀錄呢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 那個進出紀錄呢 | not:error,not:rejected | 內衣
+
+### 運動內衣-03 這個快到期嗎
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 這個快到期嗎 | not:error,not:rejected | 內衣
+
+### 運動內衣-04 那個多少錢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 那個多少錢 | not:error,not:rejected | 內衣
+
+### 運動內衣-05 它安全庫存多少
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 它安全庫存多少 | not:error,not:rejected | 內衣
+
+### 運動內衣-06 進出
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 進出 | not:error,not:rejected | 內衣
+
+### 運動內衣-07 進出紀錄
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 進出紀錄 | not:error,not:rejected | 內衣
+
+### 運動內衣-08 到期
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 到期 | not:error,not:rejected | 內衣
+
+### 運動內衣-09 快到期嗎
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 快到期嗎 | not:error,not:rejected | 內衣
+
+### 運動內衣-10 安全庫存
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 安全庫存 | not:error,not:rejected | 內衣
+
+### 運動內衣-11 安全庫存多少
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 安全庫存多少 | not:error,not:rejected | 內衣
+
+### 運動內衣-12 搭配什麼賣
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 搭配什麼賣 | not:error,not:rejected | 內衣
+
+### 運動內衣-13 多少錢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 多少錢 | not:error,not:rejected | 內衣
+
+### 運動內衣-14 還剩幾個
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 還剩幾個 | not:error,not:rejected | 內衣
+
+### 運動內衣-15 現在剩幾個
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 現在剩幾個 | not:error,not:rejected | 內衣
+
+### 運動內衣-16 快缺貨了嗎
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 快缺貨了嗎 | low_stock | 內衣
+
+### 運動內衣-17 夠不夠
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 夠不夠 | low_stock | 內衣
+
+### 運動內衣-18 南倉呢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 南倉呢 | not:error,not:rejected | 內衣
+
+### 運動內衣-19 北倉呢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 北倉呢 | not:error,not:rejected | 內衣
+
+### 運動內衣-20 中倉呢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 中倉呢 | not:error,not:rejected | 內衣
+
+### 運動內衣-21 北倉多少
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 北倉多少 | not:error,not:rejected | 內衣
+
+### 運動內衣-22 南倉幾個
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 南倉幾個 | not:error,not:rejected | 內衣
+
+### 運動內衣-23 南
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 南 | not:error,not:rejected | 內衣
+
+### 運動內衣-24 北
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 北 | not:error,not:rejected | 內衣
+
+### 運動內衣-25 哪一倉最多
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 哪一倉最多 | not:error,not:rejected | 內衣
+
+### 運動內衣-26 呢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 呢 | not:error,not:rejected | 內衣
+
+### 運動內衣-27 咧
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 咧 | not:error,not:rejected | 內衣
+
+### 運動內衣-28 北倉進20個
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 北倉進20個 | movement_confirm | 內衣
+
+### 運動內衣-29 南倉出5個
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 南倉出5個 | movement_confirm,error | 內衣
+
+### 運動內衣-30 那個近出紀錄呢
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 那個近出紀錄呢 | not:error,not:rejected | 內衣
+
+### 運動內衣-31 安全ㄎ存多少
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 安全ㄎ存多少 | not:error,not:rejected | 內衣
+
+### 運動內衣-32 那ㄍ快到期嗎
+> 運動內衣還剩幾個 | not:error,not:rejected | 內衣
+> 那ㄍ快到期嗎 | not:error,not:rejected | 內衣
+
+### 排汗衣-00 那個呢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 那個呢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-01 它還剩幾個
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 它還剩幾個 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-02 那個進出紀錄呢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 那個進出紀錄呢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-03 這個快到期嗎
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 這個快到期嗎 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-04 那個多少錢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 那個多少錢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-05 它安全庫存多少
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 它安全庫存多少 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-06 進出
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 進出 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-07 進出紀錄
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 進出紀錄 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-08 到期
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 到期 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-09 快到期嗎
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 快到期嗎 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-10 安全庫存
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 安全庫存 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-11 安全庫存多少
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 安全庫存多少 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-12 搭配什麼賣
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 搭配什麼賣 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-13 多少錢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 多少錢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-14 還剩幾個
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 還剩幾個 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-15 現在剩幾個
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 現在剩幾個 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-16 快缺貨了嗎
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 快缺貨了嗎 | low_stock | 排汗衣
+
+### 排汗衣-17 夠不夠
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 夠不夠 | low_stock | 排汗衣
+
+### 排汗衣-18 南倉呢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 南倉呢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-19 北倉呢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 北倉呢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-20 中倉呢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 中倉呢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-21 北倉多少
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 北倉多少 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-22 南倉幾個
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 南倉幾個 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-23 南
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 南 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-24 北
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 北 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-25 哪一倉最多
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 哪一倉最多 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-26 呢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 呢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-27 咧
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 咧 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-28 北倉進20個
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 北倉進20個 | movement_confirm | 排汗衣
+
+### 排汗衣-29 南倉出5個
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 南倉出5個 | movement_confirm,error | 排汗衣
+
+### 排汗衣-30 那個近出紀錄呢
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 那個近出紀錄呢 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-31 安全ㄎ存多少
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 安全ㄎ存多少 | not:error,not:rejected | 排汗衣
+
+### 排汗衣-32 那ㄍ快到期嗎
+> 排汗衣還剩幾個 | not:error,not:rejected | 排汗衣
+> 那ㄍ快到期嗎 | not:error,not:rejected | 排汗衣
+
+### 壓縮臂套-00 那個呢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 那個呢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-01 它還剩幾個
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 它還剩幾個 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-02 那個進出紀錄呢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 那個進出紀錄呢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-03 這個快到期嗎
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 這個快到期嗎 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-04 那個多少錢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 那個多少錢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-05 它安全庫存多少
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 它安全庫存多少 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-06 進出
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 進出 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-07 進出紀錄
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 進出紀錄 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-08 到期
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 到期 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-09 快到期嗎
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 快到期嗎 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-10 安全庫存
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 安全庫存 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-11 安全庫存多少
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 安全庫存多少 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-12 搭配什麼賣
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 搭配什麼賣 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-13 多少錢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 多少錢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-14 還剩幾個
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 還剩幾個 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-15 現在剩幾個
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 現在剩幾個 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-16 快缺貨了嗎
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 快缺貨了嗎 | low_stock | 臂套
+
+### 壓縮臂套-17 夠不夠
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 夠不夠 | low_stock | 臂套
+
+### 壓縮臂套-18 南倉呢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 南倉呢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-19 北倉呢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 北倉呢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-20 中倉呢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 中倉呢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-21 北倉多少
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 北倉多少 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-22 南倉幾個
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 南倉幾個 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-23 南
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 南 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-24 北
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 北 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-25 哪一倉最多
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 哪一倉最多 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-26 呢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 呢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-27 咧
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 咧 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-28 北倉進20個
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 北倉進20個 | movement_confirm | 臂套
+
+### 壓縮臂套-29 南倉出5個
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 南倉出5個 | movement_confirm,error | 臂套
+
+### 壓縮臂套-30 那個近出紀錄呢
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 那個近出紀錄呢 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-31 安全ㄎ存多少
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 安全ㄎ存多少 | not:error,not:rejected | 臂套
+
+### 壓縮臂套-32 那ㄍ快到期嗎
+> 壓縮臂套還剩幾個 | not:error,not:rejected | 臂套
+> 那ㄍ快到期嗎 | not:error,not:rejected | 臂套
+
+### 連身衣-00 那個呢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 那個呢 | not:error,not:rejected | 連身衣
+
+### 連身衣-01 它還剩幾個
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 它還剩幾個 | not:error,not:rejected | 連身衣
+
+### 連身衣-02 那個進出紀錄呢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 那個進出紀錄呢 | not:error,not:rejected | 連身衣
+
+### 連身衣-03 這個快到期嗎
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 這個快到期嗎 | not:error,not:rejected | 連身衣
+
+### 連身衣-04 那個多少錢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 那個多少錢 | not:error,not:rejected | 連身衣
+
+### 連身衣-05 它安全庫存多少
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 它安全庫存多少 | not:error,not:rejected | 連身衣
+
+### 連身衣-06 進出
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 進出 | not:error,not:rejected | 連身衣
+
+### 連身衣-07 進出紀錄
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 進出紀錄 | not:error,not:rejected | 連身衣
+
+### 連身衣-08 到期
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 到期 | not:error,not:rejected | 連身衣
+
+### 連身衣-09 快到期嗎
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 快到期嗎 | not:error,not:rejected | 連身衣
+
+### 連身衣-10 安全庫存
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 安全庫存 | not:error,not:rejected | 連身衣
+
+### 連身衣-11 安全庫存多少
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 安全庫存多少 | not:error,not:rejected | 連身衣
+
+### 連身衣-12 搭配什麼賣
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 搭配什麼賣 | not:error,not:rejected | 連身衣
+
+### 連身衣-13 多少錢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 多少錢 | not:error,not:rejected | 連身衣
+
+### 連身衣-14 還剩幾個
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 還剩幾個 | not:error,not:rejected | 連身衣
+
+### 連身衣-15 現在剩幾個
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 現在剩幾個 | not:error,not:rejected | 連身衣
+
+### 連身衣-16 快缺貨了嗎
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 快缺貨了嗎 | low_stock | 連身衣
+
+### 連身衣-17 夠不夠
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 夠不夠 | low_stock | 連身衣
+
+### 連身衣-18 南倉呢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 南倉呢 | not:error,not:rejected | 連身衣
+
+### 連身衣-19 北倉呢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 北倉呢 | not:error,not:rejected | 連身衣
+
+### 連身衣-20 中倉呢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 中倉呢 | not:error,not:rejected | 連身衣
+
+### 連身衣-21 北倉多少
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 北倉多少 | not:error,not:rejected | 連身衣
+
+### 連身衣-22 南倉幾個
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 南倉幾個 | not:error,not:rejected | 連身衣
+
+### 連身衣-23 南
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 南 | not:error,not:rejected | 連身衣
+
+### 連身衣-24 北
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 北 | not:error,not:rejected | 連身衣
+
+### 連身衣-25 哪一倉最多
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 哪一倉最多 | not:error,not:rejected | 連身衣
+
+### 連身衣-26 呢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 呢 | not:error,not:rejected | 連身衣
+
+### 連身衣-27 咧
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 咧 | not:error,not:rejected | 連身衣
+
+### 連身衣-28 北倉進20個
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 北倉進20個 | movement_confirm | 連身衣
+
+### 連身衣-29 南倉出5個
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 南倉出5個 | movement_confirm,error | 連身衣
+
+### 連身衣-30 那個近出紀錄呢
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 那個近出紀錄呢 | not:error,not:rejected | 連身衣
+
+### 連身衣-31 安全ㄎ存多少
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 安全ㄎ存多少 | not:error,not:rejected | 連身衣
+
+### 連身衣-32 那ㄍ快到期嗎
+> 連身衣還剩幾個 | not:error,not:rejected | 連身衣
+> 那ㄍ快到期嗎 | not:error,not:rejected | 連身衣
+
+### 毛帽-00 那個呢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 那個呢 | not:error,not:rejected | 毛帽
+
+### 毛帽-01 它還剩幾個
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 它還剩幾個 | not:error,not:rejected | 毛帽
+
+### 毛帽-02 那個進出紀錄呢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 那個進出紀錄呢 | not:error,not:rejected | 毛帽
+
+### 毛帽-03 這個快到期嗎
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 這個快到期嗎 | not:error,not:rejected | 毛帽
+
+### 毛帽-04 那個多少錢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 那個多少錢 | not:error,not:rejected | 毛帽
+
+### 毛帽-05 它安全庫存多少
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 它安全庫存多少 | not:error,not:rejected | 毛帽
+
+### 毛帽-06 進出
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 進出 | not:error,not:rejected | 毛帽
+
+### 毛帽-07 進出紀錄
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 進出紀錄 | not:error,not:rejected | 毛帽
+
+### 毛帽-08 到期
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 到期 | not:error,not:rejected | 毛帽
+
+### 毛帽-09 快到期嗎
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 快到期嗎 | not:error,not:rejected | 毛帽
+
+### 毛帽-10 安全庫存
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 安全庫存 | not:error,not:rejected | 毛帽
+
+### 毛帽-11 安全庫存多少
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 安全庫存多少 | not:error,not:rejected | 毛帽
+
+### 毛帽-12 搭配什麼賣
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 搭配什麼賣 | not:error,not:rejected | 毛帽
+
+### 毛帽-13 多少錢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 多少錢 | not:error,not:rejected | 毛帽
+
+### 毛帽-14 還剩幾個
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 還剩幾個 | not:error,not:rejected | 毛帽
+
+### 毛帽-15 現在剩幾個
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 現在剩幾個 | not:error,not:rejected | 毛帽
+
+### 毛帽-16 快缺貨了嗎
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 快缺貨了嗎 | low_stock | 毛帽
+
+### 毛帽-17 夠不夠
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 夠不夠 | low_stock | 毛帽
+
+### 毛帽-18 南倉呢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 南倉呢 | not:error,not:rejected | 毛帽
+
+### 毛帽-19 北倉呢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 北倉呢 | not:error,not:rejected | 毛帽
+
+### 毛帽-20 中倉呢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 中倉呢 | not:error,not:rejected | 毛帽
+
+### 毛帽-21 北倉多少
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 北倉多少 | not:error,not:rejected | 毛帽
+
+### 毛帽-22 南倉幾個
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 南倉幾個 | not:error,not:rejected | 毛帽
+
+### 毛帽-23 南
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 南 | not:error,not:rejected | 毛帽
+
+### 毛帽-24 北
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 北 | not:error,not:rejected | 毛帽
+
+### 毛帽-25 哪一倉最多
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 哪一倉最多 | not:error,not:rejected | 毛帽
+
+### 毛帽-26 呢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 呢 | not:error,not:rejected | 毛帽
+
+### 毛帽-27 咧
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 咧 | not:error,not:rejected | 毛帽
+
+### 毛帽-28 北倉進20個
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 北倉進20個 | movement_confirm | 毛帽
+
+### 毛帽-29 南倉出5個
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 南倉出5個 | movement_confirm,error | 毛帽
+
+### 毛帽-30 那個近出紀錄呢
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 那個近出紀錄呢 | not:error,not:rejected | 毛帽
+
+### 毛帽-31 安全ㄎ存多少
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 安全ㄎ存多少 | not:error,not:rejected | 毛帽
+
+### 毛帽-32 那ㄍ快到期嗎
+> 毛帽還剩幾個 | not:error,not:rejected | 毛帽
+> 那ㄍ快到期嗎 | not:error,not:rejected | 毛帽
+
+### 遮陽帽-00 那個呢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 那個呢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-01 它還剩幾個
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 它還剩幾個 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-02 那個進出紀錄呢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 那個進出紀錄呢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-03 這個快到期嗎
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 這個快到期嗎 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-04 那個多少錢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 那個多少錢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-05 它安全庫存多少
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 它安全庫存多少 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-06 進出
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 進出 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-07 進出紀錄
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 進出紀錄 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-08 到期
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 到期 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-09 快到期嗎
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 快到期嗎 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-10 安全庫存
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 安全庫存 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-11 安全庫存多少
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 安全庫存多少 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-12 搭配什麼賣
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 搭配什麼賣 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-13 多少錢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 多少錢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-14 還剩幾個
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 還剩幾個 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-15 現在剩幾個
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 現在剩幾個 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-16 快缺貨了嗎
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 快缺貨了嗎 | low_stock | 遮陽帽
+
+### 遮陽帽-17 夠不夠
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 夠不夠 | low_stock | 遮陽帽
+
+### 遮陽帽-18 南倉呢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 南倉呢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-19 北倉呢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 北倉呢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-20 中倉呢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 中倉呢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-21 北倉多少
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 北倉多少 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-22 南倉幾個
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 南倉幾個 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-23 南
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 南 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-24 北
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 北 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-25 哪一倉最多
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 哪一倉最多 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-26 呢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 呢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-27 咧
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 咧 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-28 北倉進20個
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 北倉進20個 | movement_confirm | 遮陽帽
+
+### 遮陽帽-29 南倉出5個
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 南倉出5個 | movement_confirm,error | 遮陽帽
+
+### 遮陽帽-30 那個近出紀錄呢
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 那個近出紀錄呢 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-31 安全ㄎ存多少
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 安全ㄎ存多少 | not:error,not:rejected | 遮陽帽
+
+### 遮陽帽-32 那ㄍ快到期嗎
+> 遮陽帽還剩幾個 | not:error,not:rejected | 遮陽帽
+> 那ㄍ快到期嗎 | not:error,not:rejected | 遮陽帽
+
+### 瑜珈墊-00 那個呢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 那個呢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-01 它還剩幾個
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 它還剩幾個 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-02 那個進出紀錄呢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 那個進出紀錄呢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-03 這個快到期嗎
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 這個快到期嗎 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-04 那個多少錢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 那個多少錢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-05 它安全庫存多少
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 它安全庫存多少 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-06 進出
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 進出 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-07 進出紀錄
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 進出紀錄 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-08 到期
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 到期 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-09 快到期嗎
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 快到期嗎 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-10 安全庫存
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 安全庫存 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-11 安全庫存多少
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 安全庫存多少 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-12 搭配什麼賣
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 搭配什麼賣 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-13 多少錢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 多少錢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-14 還剩幾個
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 還剩幾個 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-15 現在剩幾個
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 現在剩幾個 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-16 快缺貨了嗎
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 快缺貨了嗎 | low_stock | 瑜珈墊
+
+### 瑜珈墊-17 夠不夠
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 夠不夠 | low_stock | 瑜珈墊
+
+### 瑜珈墊-18 南倉呢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 南倉呢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-19 北倉呢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 北倉呢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-20 中倉呢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 中倉呢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-21 北倉多少
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 北倉多少 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-22 南倉幾個
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 南倉幾個 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-23 南
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 南 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-24 北
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 北 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-25 哪一倉最多
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 哪一倉最多 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-26 呢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 呢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-27 咧
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 咧 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-28 北倉進20個
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 北倉進20個 | movement_confirm | 瑜珈墊
+
+### 瑜珈墊-29 南倉出5個
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 南倉出5個 | movement_confirm,error | 瑜珈墊
+
+### 瑜珈墊-30 那個近出紀錄呢
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 那個近出紀錄呢 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-31 安全ㄎ存多少
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 安全ㄎ存多少 | not:error,not:rejected | 瑜珈墊
+
+### 瑜珈墊-32 那ㄍ快到期嗎
+> 瑜珈墊還剩幾個 | not:error,not:rejected | 瑜珈墊
+> 那ㄍ快到期嗎 | not:error,not:rejected | 瑜珈墊
+
+### 登山水壺-00 那個呢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 那個呢 | not:error,not:rejected | 水壺
+
+### 登山水壺-01 它還剩幾個
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 它還剩幾個 | not:error,not:rejected | 水壺
+
+### 登山水壺-02 那個進出紀錄呢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 那個進出紀錄呢 | not:error,not:rejected | 水壺
+
+### 登山水壺-03 這個快到期嗎
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 這個快到期嗎 | not:error,not:rejected | 水壺
+
+### 登山水壺-04 那個多少錢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 那個多少錢 | not:error,not:rejected | 水壺
+
+### 登山水壺-05 它安全庫存多少
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 它安全庫存多少 | not:error,not:rejected | 水壺
+
+### 登山水壺-06 進出
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 進出 | not:error,not:rejected | 水壺
+
+### 登山水壺-07 進出紀錄
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 進出紀錄 | not:error,not:rejected | 水壺
+
+### 登山水壺-08 到期
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 到期 | not:error,not:rejected | 水壺
+
+### 登山水壺-09 快到期嗎
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 快到期嗎 | not:error,not:rejected | 水壺
+
+### 登山水壺-10 安全庫存
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 安全庫存 | not:error,not:rejected | 水壺
+
+### 登山水壺-11 安全庫存多少
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 安全庫存多少 | not:error,not:rejected | 水壺
+
+### 登山水壺-12 搭配什麼賣
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 搭配什麼賣 | not:error,not:rejected | 水壺
+
+### 登山水壺-13 多少錢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 多少錢 | not:error,not:rejected | 水壺
+
+### 登山水壺-14 還剩幾個
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 還剩幾個 | not:error,not:rejected | 水壺
+
+### 登山水壺-15 現在剩幾個
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 現在剩幾個 | not:error,not:rejected | 水壺
+
+### 登山水壺-16 快缺貨了嗎
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 快缺貨了嗎 | low_stock | 水壺
+
+### 登山水壺-17 夠不夠
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 夠不夠 | low_stock | 水壺
+
+### 登山水壺-18 南倉呢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 南倉呢 | not:error,not:rejected | 水壺
+
+### 登山水壺-19 北倉呢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 北倉呢 | not:error,not:rejected | 水壺
+
+### 登山水壺-20 中倉呢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 中倉呢 | not:error,not:rejected | 水壺
+
+### 登山水壺-21 北倉多少
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 北倉多少 | not:error,not:rejected | 水壺
+
+### 登山水壺-22 南倉幾個
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 南倉幾個 | not:error,not:rejected | 水壺
+
+### 登山水壺-23 南
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 南 | not:error,not:rejected | 水壺
+
+### 登山水壺-24 北
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 北 | not:error,not:rejected | 水壺
+
+### 登山水壺-25 哪一倉最多
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 哪一倉最多 | not:error,not:rejected | 水壺
+
+### 登山水壺-26 呢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 呢 | not:error,not:rejected | 水壺
+
+### 登山水壺-27 咧
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 咧 | not:error,not:rejected | 水壺
+
+### 登山水壺-28 北倉進20個
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 北倉進20個 | movement_confirm | 水壺
+
+### 登山水壺-29 南倉出5個
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 南倉出5個 | movement_confirm,error | 水壺
+
+### 登山水壺-30 那個近出紀錄呢
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 那個近出紀錄呢 | not:error,not:rejected | 水壺
+
+### 登山水壺-31 安全ㄎ存多少
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 安全ㄎ存多少 | not:error,not:rejected | 水壺
+
+### 登山水壺-32 那ㄍ快到期嗎
+> 登山水壺還剩幾個 | not:error,not:rejected | 水壺
+> 那ㄍ快到期嗎 | not:error,not:rejected | 水壺
+
+### 健身環-00 那個呢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 那個呢 | not:error,not:rejected | 健身環
+
+### 健身環-01 它還剩幾個
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 它還剩幾個 | not:error,not:rejected | 健身環
+
+### 健身環-02 那個進出紀錄呢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 那個進出紀錄呢 | not:error,not:rejected | 健身環
+
+### 健身環-03 這個快到期嗎
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 這個快到期嗎 | not:error,not:rejected | 健身環
+
+### 健身環-04 那個多少錢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 那個多少錢 | not:error,not:rejected | 健身環
+
+### 健身環-05 它安全庫存多少
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 它安全庫存多少 | not:error,not:rejected | 健身環
+
+### 健身環-06 進出
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 進出 | not:error,not:rejected | 健身環
+
+### 健身環-07 進出紀錄
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 進出紀錄 | not:error,not:rejected | 健身環
+
+### 健身環-08 到期
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 到期 | not:error,not:rejected | 健身環
+
+### 健身環-09 快到期嗎
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 快到期嗎 | not:error,not:rejected | 健身環
+
+### 健身環-10 安全庫存
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 安全庫存 | not:error,not:rejected | 健身環
+
+### 健身環-11 安全庫存多少
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 安全庫存多少 | not:error,not:rejected | 健身環
+
+### 健身環-12 搭配什麼賣
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 搭配什麼賣 | not:error,not:rejected | 健身環
+
+### 健身環-13 多少錢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 多少錢 | not:error,not:rejected | 健身環
+
+### 健身環-14 還剩幾個
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 還剩幾個 | not:error,not:rejected | 健身環
+
+### 健身環-15 現在剩幾個
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 現在剩幾個 | not:error,not:rejected | 健身環
+
+### 健身環-16 快缺貨了嗎
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 快缺貨了嗎 | low_stock | 健身環
+
+### 健身環-17 夠不夠
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 夠不夠 | low_stock | 健身環
+
+### 健身環-18 南倉呢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 南倉呢 | not:error,not:rejected | 健身環
+
+### 健身環-19 北倉呢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 北倉呢 | not:error,not:rejected | 健身環
+
+### 健身環-20 中倉呢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 中倉呢 | not:error,not:rejected | 健身環
+
+### 健身環-21 北倉多少
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 北倉多少 | not:error,not:rejected | 健身環
+
+### 健身環-22 南倉幾個
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 南倉幾個 | not:error,not:rejected | 健身環
+
+### 健身環-23 南
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 南 | not:error,not:rejected | 健身環
+
+### 健身環-24 北
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 北 | not:error,not:rejected | 健身環
+
+### 健身環-25 哪一倉最多
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 哪一倉最多 | not:error,not:rejected | 健身環
+
+### 健身環-26 呢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 呢 | not:error,not:rejected | 健身環
+
+### 健身環-27 咧
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 咧 | not:error,not:rejected | 健身環
+
+### 健身環-28 北倉進20個
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 北倉進20個 | movement_confirm | 健身環
+
+### 健身環-29 南倉出5個
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 南倉出5個 | movement_confirm,error | 健身環
+
+### 健身環-30 那個近出紀錄呢
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 那個近出紀錄呢 | not:error,not:rejected | 健身環
+
+### 健身環-31 安全ㄎ存多少
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 安全ㄎ存多少 | not:error,not:rejected | 健身環
+
+### 健身環-32 那ㄍ快到期嗎
+> 健身環還剩幾個 | not:error,not:rejected | 健身環
+> 那ㄍ快到期嗎 | not:error,not:rejected | 健身環
+
+### 啞鈴-00 那個呢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 那個呢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-01 它還剩幾個
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 它還剩幾個 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-02 那個進出紀錄呢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 那個進出紀錄呢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-03 這個快到期嗎
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 這個快到期嗎 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-04 那個多少錢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 那個多少錢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-05 它安全庫存多少
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 它安全庫存多少 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-06 進出
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 進出 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-07 進出紀錄
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 進出紀錄 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-08 到期
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 到期 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-09 快到期嗎
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 快到期嗎 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-10 安全庫存
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 安全庫存 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-11 安全庫存多少
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 安全庫存多少 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-12 搭配什麼賣
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 搭配什麼賣 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-13 多少錢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 多少錢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-14 還剩幾個
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 還剩幾個 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-15 現在剩幾個
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 現在剩幾個 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-16 快缺貨了嗎
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 快缺貨了嗎 | low_stock | 啞鈴
+
+### 啞鈴-17 夠不夠
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 夠不夠 | low_stock | 啞鈴
+
+### 啞鈴-18 南倉呢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 南倉呢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-19 北倉呢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 北倉呢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-20 中倉呢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 中倉呢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-21 北倉多少
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 北倉多少 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-22 南倉幾個
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 南倉幾個 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-23 南
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 南 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-24 北
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 北 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-25 哪一倉最多
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 哪一倉最多 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-26 呢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 呢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-27 咧
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 咧 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-28 北倉進20個
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 北倉進20個 | movement_confirm | 啞鈴
+
+### 啞鈴-29 南倉出5個
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 南倉出5個 | movement_confirm,error | 啞鈴
+
+### 啞鈴-30 那個近出紀錄呢
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 那個近出紀錄呢 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-31 安全ㄎ存多少
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 安全ㄎ存多少 | not:error,not:rejected | 啞鈴
+
+### 啞鈴-32 那ㄍ快到期嗎
+> 啞鈴還剩幾個 | not:error,not:rejected | 啞鈴
+> 那ㄍ快到期嗎 | not:error,not:rejected | 啞鈴
+
+### 運動毛巾-00 那個呢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 那個呢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-01 它還剩幾個
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 它還剩幾個 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-02 那個進出紀錄呢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 那個進出紀錄呢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-03 這個快到期嗎
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 這個快到期嗎 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-04 那個多少錢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 那個多少錢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-05 它安全庫存多少
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 它安全庫存多少 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-06 進出
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 進出 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-07 進出紀錄
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 進出紀錄 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-08 到期
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 到期 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-09 快到期嗎
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 快到期嗎 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-10 安全庫存
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 安全庫存 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-11 安全庫存多少
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 安全庫存多少 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-12 搭配什麼賣
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 搭配什麼賣 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-13 多少錢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 多少錢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-14 還剩幾個
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 還剩幾個 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-15 現在剩幾個
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 現在剩幾個 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-16 快缺貨了嗎
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 快缺貨了嗎 | low_stock | 毛巾
+
+### 運動毛巾-17 夠不夠
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 夠不夠 | low_stock | 毛巾
+
+### 運動毛巾-18 南倉呢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 南倉呢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-19 北倉呢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 北倉呢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-20 中倉呢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 中倉呢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-21 北倉多少
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 北倉多少 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-22 南倉幾個
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 南倉幾個 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-23 南
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 南 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-24 北
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 北 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-25 哪一倉最多
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 哪一倉最多 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-26 呢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 呢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-27 咧
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 咧 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-28 北倉進20個
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 北倉進20個 | movement_confirm | 毛巾
+
+### 運動毛巾-29 南倉出5個
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 南倉出5個 | movement_confirm,error | 毛巾
+
+### 運動毛巾-30 那個近出紀錄呢
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 那個近出紀錄呢 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-31 安全ㄎ存多少
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 安全ㄎ存多少 | not:error,not:rejected | 毛巾
+
+### 運動毛巾-32 那ㄍ快到期嗎
+> 運動毛巾還剩幾個 | not:error,not:rejected | 毛巾
+> 那ㄍ快到期嗎 | not:error,not:rejected | 毛巾
+
+### 露營帳篷-00 那個呢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 那個呢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-01 它還剩幾個
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 它還剩幾個 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-02 那個進出紀錄呢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 那個進出紀錄呢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-03 這個快到期嗎
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 這個快到期嗎 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-04 那個多少錢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 那個多少錢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-05 它安全庫存多少
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 它安全庫存多少 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-06 進出
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 進出 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-07 進出紀錄
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 進出紀錄 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-08 到期
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 到期 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-09 快到期嗎
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 快到期嗎 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-10 安全庫存
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 安全庫存 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-11 安全庫存多少
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 安全庫存多少 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-12 搭配什麼賣
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 搭配什麼賣 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-13 多少錢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 多少錢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-14 還剩幾個
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 還剩幾個 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-15 現在剩幾個
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 現在剩幾個 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-16 快缺貨了嗎
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 快缺貨了嗎 | low_stock | 帳篷
+
+### 露營帳篷-17 夠不夠
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 夠不夠 | low_stock | 帳篷
+
+### 露營帳篷-18 南倉呢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 南倉呢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-19 北倉呢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 北倉呢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-20 中倉呢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 中倉呢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-21 北倉多少
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 北倉多少 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-22 南倉幾個
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 南倉幾個 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-23 南
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 南 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-24 北
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 北 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-25 哪一倉最多
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 哪一倉最多 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-26 呢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 呢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-27 咧
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 咧 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-28 北倉進20個
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 北倉進20個 | movement_confirm | 帳篷
+
+### 露營帳篷-29 南倉出5個
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 南倉出5個 | movement_confirm,error | 帳篷
+
+### 露營帳篷-30 那個近出紀錄呢
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 那個近出紀錄呢 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-31 安全ㄎ存多少
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 安全ㄎ存多少 | not:error,not:rejected | 帳篷
+
+### 露營帳篷-32 那ㄍ快到期嗎
+> 露營帳篷還剩幾個 | not:error,not:rejected | 帳篷
+> 那ㄍ快到期嗎 | not:error,not:rejected | 帳篷
+
+### 露營椅-00 那個呢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 那個呢 | not:error,not:rejected | 露營椅
+
+### 露營椅-01 它還剩幾個
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 它還剩幾個 | not:error,not:rejected | 露營椅
+
+### 露營椅-02 那個進出紀錄呢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 那個進出紀錄呢 | not:error,not:rejected | 露營椅
+
+### 露營椅-03 這個快到期嗎
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 這個快到期嗎 | not:error,not:rejected | 露營椅
+
+### 露營椅-04 那個多少錢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 那個多少錢 | not:error,not:rejected | 露營椅
+
+### 露營椅-05 它安全庫存多少
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 它安全庫存多少 | not:error,not:rejected | 露營椅
+
+### 露營椅-06 進出
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 進出 | not:error,not:rejected | 露營椅
+
+### 露營椅-07 進出紀錄
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 進出紀錄 | not:error,not:rejected | 露營椅
+
+### 露營椅-08 到期
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 到期 | not:error,not:rejected | 露營椅
+
+### 露營椅-09 快到期嗎
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 快到期嗎 | not:error,not:rejected | 露營椅
+
+### 露營椅-10 安全庫存
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 安全庫存 | not:error,not:rejected | 露營椅
+
+### 露營椅-11 安全庫存多少
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 安全庫存多少 | not:error,not:rejected | 露營椅
+
+### 露營椅-12 搭配什麼賣
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 搭配什麼賣 | not:error,not:rejected | 露營椅
+
+### 露營椅-13 多少錢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 多少錢 | not:error,not:rejected | 露營椅
+
+### 露營椅-14 還剩幾個
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 還剩幾個 | not:error,not:rejected | 露營椅
+
+### 露營椅-15 現在剩幾個
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 現在剩幾個 | not:error,not:rejected | 露營椅
+
+### 露營椅-16 快缺貨了嗎
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 快缺貨了嗎 | low_stock | 露營椅
+
+### 露營椅-17 夠不夠
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 夠不夠 | low_stock | 露營椅
+
+### 露營椅-18 南倉呢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 南倉呢 | not:error,not:rejected | 露營椅
+
+### 露營椅-19 北倉呢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 北倉呢 | not:error,not:rejected | 露營椅
+
+### 露營椅-20 中倉呢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 中倉呢 | not:error,not:rejected | 露營椅
+
+### 露營椅-21 北倉多少
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 北倉多少 | not:error,not:rejected | 露營椅
+
+### 露營椅-22 南倉幾個
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 南倉幾個 | not:error,not:rejected | 露營椅
+
+### 露營椅-23 南
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 南 | not:error,not:rejected | 露營椅
+
+### 露營椅-24 北
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 北 | not:error,not:rejected | 露營椅
+
+### 露營椅-25 哪一倉最多
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 哪一倉最多 | not:error,not:rejected | 露營椅
+
+### 露營椅-26 呢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 呢 | not:error,not:rejected | 露營椅
+
+### 露營椅-27 咧
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 咧 | not:error,not:rejected | 露營椅
+
+### 露營椅-28 北倉進20個
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 北倉進20個 | movement_confirm | 露營椅
+
+### 露營椅-29 南倉出5個
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 南倉出5個 | movement_confirm,error | 露營椅
+
+### 露營椅-30 那個近出紀錄呢
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 那個近出紀錄呢 | not:error,not:rejected | 露營椅
+
+### 露營椅-31 安全ㄎ存多少
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 安全ㄎ存多少 | not:error,not:rejected | 露營椅
+
+### 露營椅-32 那ㄍ快到期嗎
+> 露營椅還剩幾個 | not:error,not:rejected | 露營椅
+> 那ㄍ快到期嗎 | not:error,not:rejected | 露營椅
+
+### 慢跑鞋-00 那個呢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 那個呢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-01 它還剩幾個
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 它還剩幾個 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-02 那個進出紀錄呢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 那個進出紀錄呢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-03 這個快到期嗎
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 這個快到期嗎 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-04 那個多少錢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 那個多少錢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-05 它安全庫存多少
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 它安全庫存多少 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-06 進出
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 進出 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-07 進出紀錄
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 進出紀錄 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-08 到期
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 到期 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-09 快到期嗎
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 快到期嗎 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-10 安全庫存
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 安全庫存 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-11 安全庫存多少
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 安全庫存多少 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-12 搭配什麼賣
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 搭配什麼賣 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-13 多少錢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 多少錢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-14 還剩幾個
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 還剩幾個 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-15 現在剩幾個
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 現在剩幾個 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-16 快缺貨了嗎
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 快缺貨了嗎 | low_stock | 慢跑鞋
+
+### 慢跑鞋-17 夠不夠
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 夠不夠 | low_stock | 慢跑鞋
+
+### 慢跑鞋-18 南倉呢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 南倉呢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-19 北倉呢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 北倉呢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-20 中倉呢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 中倉呢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-21 北倉多少
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 北倉多少 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-22 南倉幾個
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 南倉幾個 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-23 南
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 南 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-24 北
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 北 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-25 哪一倉最多
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 哪一倉最多 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-26 呢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 呢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-27 咧
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 咧 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-28 北倉進20個
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 北倉進20個 | movement_confirm | 慢跑鞋
+
+### 慢跑鞋-29 南倉出5個
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 南倉出5個 | movement_confirm,error | 慢跑鞋
+
+### 慢跑鞋-30 那個近出紀錄呢
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 那個近出紀錄呢 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-31 安全ㄎ存多少
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 安全ㄎ存多少 | not:error,not:rejected | 慢跑鞋
+
+### 慢跑鞋-32 那ㄍ快到期嗎
+> 慢跑鞋還剩幾個 | not:error,not:rejected | 慢跑鞋
+> 那ㄍ快到期嗎 | not:error,not:rejected | 慢跑鞋
+
+### 露營馬克杯-00 那個呢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 那個呢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-01 它還剩幾個
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 它還剩幾個 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-02 那個進出紀錄呢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 那個進出紀錄呢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-03 這個快到期嗎
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 這個快到期嗎 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-04 那個多少錢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 那個多少錢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-05 它安全庫存多少
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 它安全庫存多少 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-06 進出
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 進出 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-07 進出紀錄
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 進出紀錄 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-08 到期
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 到期 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-09 快到期嗎
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 快到期嗎 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-10 安全庫存
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 安全庫存 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-11 安全庫存多少
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 安全庫存多少 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-12 搭配什麼賣
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 搭配什麼賣 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-13 多少錢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 多少錢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-14 還剩幾個
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 還剩幾個 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-15 現在剩幾個
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 現在剩幾個 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-16 快缺貨了嗎
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 快缺貨了嗎 | low_stock | 馬克杯
+
+### 露營馬克杯-17 夠不夠
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 夠不夠 | low_stock | 馬克杯
+
+### 露營馬克杯-18 南倉呢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 南倉呢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-19 北倉呢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 北倉呢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-20 中倉呢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 中倉呢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-21 北倉多少
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 北倉多少 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-22 南倉幾個
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 南倉幾個 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-23 南
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 南 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-24 北
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 北 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-25 哪一倉最多
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 哪一倉最多 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-26 呢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 呢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-27 咧
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 咧 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-28 北倉進20個
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 北倉進20個 | movement_confirm | 馬克杯
+
+### 露營馬克杯-29 南倉出5個
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 南倉出5個 | movement_confirm,error | 馬克杯
+
+### 露營馬克杯-30 那個近出紀錄呢
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 那個近出紀錄呢 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-31 安全ㄎ存多少
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 安全ㄎ存多少 | not:error,not:rejected | 馬克杯
+
+### 露營馬克杯-32 那ㄍ快到期嗎
+> 露營馬克杯還剩幾個 | not:error,not:rejected | 馬克杯
+> 那ㄍ快到期嗎 | not:error,not:rejected | 馬克杯
+
+### 露營燈-00 那個呢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 那個呢 | not:error,not:rejected | 露營燈
+
+### 露營燈-01 它還剩幾個
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 它還剩幾個 | not:error,not:rejected | 露營燈
+
+### 露營燈-02 那個進出紀錄呢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 那個進出紀錄呢 | not:error,not:rejected | 露營燈
+
+### 露營燈-03 這個快到期嗎
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 這個快到期嗎 | not:error,not:rejected | 露營燈
+
+### 露營燈-04 那個多少錢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 那個多少錢 | not:error,not:rejected | 露營燈
+
+### 露營燈-05 它安全庫存多少
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 它安全庫存多少 | not:error,not:rejected | 露營燈
+
+### 露營燈-06 進出
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 進出 | not:error,not:rejected | 露營燈
+
+### 露營燈-07 進出紀錄
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 進出紀錄 | not:error,not:rejected | 露營燈
+
+### 露營燈-08 到期
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 到期 | not:error,not:rejected | 露營燈
+
+### 露營燈-09 快到期嗎
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 快到期嗎 | not:error,not:rejected | 露營燈
+
+### 露營燈-10 安全庫存
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 安全庫存 | not:error,not:rejected | 露營燈
+
+### 露營燈-11 安全庫存多少
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 安全庫存多少 | not:error,not:rejected | 露營燈
+
+### 露營燈-12 搭配什麼賣
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 搭配什麼賣 | not:error,not:rejected | 露營燈
+
+### 露營燈-13 多少錢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 多少錢 | not:error,not:rejected | 露營燈
+
+### 露營燈-14 還剩幾個
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 還剩幾個 | not:error,not:rejected | 露營燈
+
+### 露營燈-15 現在剩幾個
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 現在剩幾個 | not:error,not:rejected | 露營燈
+
+### 露營燈-16 快缺貨了嗎
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 快缺貨了嗎 | low_stock | 露營燈
+
+### 露營燈-17 夠不夠
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 夠不夠 | low_stock | 露營燈
+
+### 露營燈-18 南倉呢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 南倉呢 | not:error,not:rejected | 露營燈
+
+### 露營燈-19 北倉呢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 北倉呢 | not:error,not:rejected | 露營燈
+
+### 露營燈-20 中倉呢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 中倉呢 | not:error,not:rejected | 露營燈
+
+### 露營燈-21 北倉多少
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 北倉多少 | not:error,not:rejected | 露營燈
+
+### 露營燈-22 南倉幾個
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 南倉幾個 | not:error,not:rejected | 露營燈
+
+### 露營燈-23 南
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 南 | not:error,not:rejected | 露營燈
+
+### 露營燈-24 北
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 北 | not:error,not:rejected | 露營燈
+
+### 露營燈-25 哪一倉最多
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 哪一倉最多 | not:error,not:rejected | 露營燈
+
+### 露營燈-26 呢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 呢 | not:error,not:rejected | 露營燈
+
+### 露營燈-27 咧
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 咧 | not:error,not:rejected | 露營燈
+
+### 露營燈-28 北倉進20個
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 北倉進20個 | movement_confirm | 露營燈
+
+### 露營燈-29 南倉出5個
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 南倉出5個 | movement_confirm,error | 露營燈
+
+### 露營燈-30 那個近出紀錄呢
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 那個近出紀錄呢 | not:error,not:rejected | 露營燈
+
+### 露營燈-31 安全ㄎ存多少
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 安全ㄎ存多少 | not:error,not:rejected | 露營燈
+
+### 露營燈-32 那ㄍ快到期嗎
+> 露營燈還剩幾個 | not:error,not:rejected | 露營燈
+> 那ㄍ快到期嗎 | not:error,not:rejected | 露營燈

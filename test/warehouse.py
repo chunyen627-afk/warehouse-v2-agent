@@ -506,6 +506,14 @@ def query_inventory(
         top_score = matches[0]["score"]
         matches = [m for m in matches if m["score"] * 2 >= top_score]
 
+    # 精確命中優先：keyword 完全等於某商品名 → 直接採它，不進 clarify。
+    #   （新增「露營燈罩」後查「露營燈罩」，會跟既有「LED 露營燈」一起被列成 2 筆
+    #    要人選——但「露營燈罩」精確等於自己的名字，就是要查它。r37 未知商品抗性抓到）
+    if keyword and len(matches) > 1:
+        _exact = [m for m in matches if m["item"]["name"] == keyword]
+        if len(_exact) == 1:
+            matches = _exact
+
     # 純 category 查詢 → 列出該類別所有商品（不進 clarify 選單）
     if category and not keyword:
         rows = []
@@ -526,17 +534,29 @@ def query_inventory(
                          "total_items": len(rows), "rows": rows}}
 
     # 多筆 match → clarify 讓使用者選哪個商品
+    # 設計原則（2026-07-15 定調）：不追求「精準命中每個句型」（修不完），而是把「模糊
+    #   近似」明確做成功能——列出所有疑似商品、每個附庫存概況，讓訪客一眼看清直接點。
     if len(matches) > 1:
         scope = CATEGORY_LABEL.get(category, "") if category else (keyword or "")
-        opts = [r["item"]["name"] + " 庫存" for r in matches[:3]]
-        # 加同類別查詢選項
-        first_cat = matches[0]["item"]["category"]
-        cat_label = CATEGORY_LABEL.get(first_cat, first_cat)
-        if len(set(r["item"]["category"] for r in matches)) == 1:
-            opts.append(f"{cat_label}類 全部庫存")
+        # 列全部疑似（上限 8，避免爆版），每個附三倉總量讓訪客好判斷
+        _cands = matches[:8]
+        opts, rich_rows = [], []
+        for r in _cands:
+            it = r["item"]
+            _tot, _pw = _sku_total_stock(it["sku_id"], warehouse)
+            opts.append(f"{it['name']} 庫存")
+            rich_rows.append({"sku_id": it["sku_id"], "name": it["name"],
+                              "category": CATEGORY_LABEL.get(it["category"], it["category"]),
+                              "qty": _tot, "unit": it.get("unit", "件"),
+                              "per_warehouse": _pw})
+        # 同類別再給一個「全部庫存」快捷
+        if len(set(r["item"]["category"] for r in _cands)) == 1:
+            _cl = CATEGORY_LABEL.get(_cands[0]["item"]["category"], "")
+            opts.append(f"{_cl}類 全部庫存")
         else:
             opts.append("全部商品庫存")
-        question = f"找到 {len(matches)} 筆「{scope}」相關商品，你想查哪個？"
+        question = (f"「{scope}」對應到 {len(_cands)} 個商品，"
+                    f"你要查哪一個？（點下方商品，或直接說完整名稱）")
         return {
             "ok": True,
             "summary": question,
@@ -544,6 +564,7 @@ def query_inventory(
             "data": {
                 "question": question,
                 "options":  opts,
+                "candidates": rich_rows,   # 前端可用來顯示每個疑似商品的庫存概況
                 "hint":     "輸入數字選擇，或直接輸入完整商品名稱",
             },
         }
@@ -621,6 +642,12 @@ def query_movement(
     if keyword:
         matches = match_items(keyword)
         if matches:
+            # 只認跟榜首同級的高分匹配，濾掉低分拖油瓶——否則「USB風扇」的進出會把
+            # 「USB-C 快充線」(靠 USB token 撈到 score 3)也加總，回「2 筆相關商品」而
+            # 不是單一商品（多輪全枚舉 r36 抓到：7 個短稱含共用 token 的商品全中）。
+            # 其他查詢層早有 score>=3 接地，movement 漏了這道。
+            _top = matches[0]["score"]
+            matches = [r for r in matches if r["score"] >= max(_top - 2, 3)]
             sku_filter = {r["item"]["sku_id"] for r in matches[:5]}
             if len(matches) == 1:
                 matched_item_label = matches[0]["item"]["name"]

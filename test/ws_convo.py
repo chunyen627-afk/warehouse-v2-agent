@@ -110,6 +110,46 @@ def check_expect(view: str, expect: str) -> str:
     return "" if view in allowed else f"view={view}，期望 {sorted(allowed)}"
 
 
+def check_candidates(result: dict, spec: str) -> str:
+    """驗 clarify 反問清單的內容正確性（回失敗說明；通過回空字串）。
+
+    「反問」不是免罪金牌——列漏了訪客要的、列了一堆不相干的、資訊錯的，都跟答錯
+    一樣糟。這裡把「反問對不對」變成可測的斷言。
+
+    spec 語法（分號分隔多條）：
+        cand:has=露營燈罩       清單必須含名為「露營燈罩」的項（沒漏）
+        cand:hasnot=無線滑鼠    清單不可含（沒亂列不相干的）
+        cand:count<=8           清單長度上限（沒爆版/沒把全表倒出來）
+        cand:count>=2           清單至少幾項
+    """
+    data = result.get("data") or {}
+    cands = data.get("candidates") or []
+    names = [c.get("name", "") for c in cands if isinstance(c, dict)]
+    # 沒有 candidates 欄位時，退回看 options（相容舊 clarify）
+    if not names:
+        names = [str(o).replace(" 庫存", "").strip() for o in (data.get("options") or [])]
+    for clause in spec.split(";"):
+        clause = clause.strip()
+        if not clause.startswith("cand:"):
+            continue
+        body = clause[5:]
+        if body.startswith("has="):
+            want = body[4:]
+            if not any(want in n for n in names):
+                return f"清單漏了「{want}」（實際：{names}）"
+        elif body.startswith("hasnot="):
+            bad = body[7:]
+            if any(bad in n for n in names):
+                return f"清單不該含「{bad}」（實際：{names}）"
+        elif body.startswith("count<="):
+            if len(names) > int(body[7:]):
+                return f"清單過長 {len(names)}>{body[7:]}（{names}）"
+        elif body.startswith("count>="):
+            if len(names) < int(body[7:]):
+                return f"清單過短 {len(names)}<{body[7:]}（{names}）"
+    return ""
+
+
 async def recv_result(ws, timeout=60):
     """收到 done 為止，回傳 (result, 串接的 tokens)。"""
     toks = []
@@ -187,8 +227,11 @@ async def run_scene(uri, ctx, name, steps, quiet):
             lat = (time.perf_counter() - t0) * 1000
 
             why_fail = check_expect(view, expect)
-            if not why_fail and must and must not in ans:
-                why_fail = f"回答缺「{must}」"
+            if not why_fail and must:
+                if "cand:" in must:
+                    why_fail = check_candidates(r, must)   # 驗反問清單內容
+                elif must not in ans:
+                    why_fail = f"回答缺「{must}」"
             why_sus = looks_bad(view, ans)
 
             if why_fail:
@@ -218,6 +261,8 @@ async def main():
     ap.add_argument("--rpi5", action="store_true")
     ap.add_argument("--quiet", action="store_true", help="只印 FAIL/可疑")
     ap.add_argument("--only", help="只跑名稱含此字串的情境")
+    ap.add_argument("--out", help="把失敗明細另外寫進這個檔（shell redirect 在 Windows "
+                                  "背景執行時會漏掉輸出，長跑一定要用這個）")
     ap.add_argument("--reset", action="store_true",
                     help="開跑前把展示資料重置回 baseline（劇本會真的寫入資料，"
                          "連跑兩本劇本會互相污染：前一本新增的商品讓後一本的同名"
@@ -273,6 +318,16 @@ async def main():
     if not all_fails and not all_sus:
         print("✅ 全綠")
     print(f"{'='*74}")
+
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(f"情境 {len(scenes)} · 斷言失敗 {len(all_fails)} · 可疑回答 {len(all_sus)}\n\n")
+            for n, l, w in all_fails:
+                f.write(f"FAIL\t{n}\t{l}\t{w}\n")
+            for n, l, w in all_sus:
+                f.write(f"SUS\t{n}\t{l}\t{w}\n")
+        print(f"（失敗明細已寫入 {args.out}）")
+
     sys.exit(1 if all_fails else 0)
 
 
