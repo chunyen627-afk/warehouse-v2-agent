@@ -4228,6 +4228,14 @@ _CTX_WH_ONLY = _re.compile(
     r"^(那|這)?([北中南])(區)?(倉)?(呢|的|嗎|多少|幾個|幾件|有多少|剩多少)?[?？。!！]*$")
 # 純語助詞追問（「呢」「咧」「勒」）——訪客用最短的方式問「那另一個呢」
 _CTX_PARTICLE = ("呢", "咧", "勒", "喔", "哦")
+# r40：時段追問——看完「本月進出」後問「上週呢」＝同商品換時段。過去被守門員
+#   當無意義輸入 rejected（時段詞不在任何追問詞表）。純時段詞+上一輪是進出查詢
+#   → 展開成「商品+時段+進出紀錄」。value=標準句用的時段詞。
+_CTX_PERIOD = {"上週": "上週", "上禮拜": "上週", "上星期": "上週",
+               "這週": "這週", "本週": "本週", "這禮拜": "這週", "這星期": "這週",
+               "本月": "本月", "這個月": "本月", "這月": "本月",
+               "上個月": "上個月", "上月": "上個月",
+               "今天": "今天", "昨天": "昨天", "前天": "前天"}
 _CTX_WRITE = ("進", "出", "調", "補")
 # 自帶完整意圖的全域查詢句 → 絕不接地（「哪些商品快缺貨了」曾被展開成
 # 「無線滑鼠哪些商品快缺貨了」→ 回無線滑鼠庫存；泛用詞「庫存/缺貨」是誘因）
@@ -4293,7 +4301,10 @@ def _ctx_expand(vid, text: str) -> str:
     #   「找不到商品『進20個』」。（r32 的守衛斷言只寫 not:error，clarify 也算過 → 假綠）
     has_write = any(w in text for w in _CTX_WRITE) and _re.search(r"\d", text)
     has_part = text.strip() in _CTX_PARTICLE     # r35：「呢」「咧」單字追問
-    if not (wh_only or has_pron or has_bare or has_write or has_part):
+    # r40：時段追問（「上週呢」「這個月呢」）——只在上一輪是進出查詢時成立
+    _period_stem = text.strip().strip("的呢嗎吧了?？。!！，, ")
+    has_period = (_period_stem in _CTX_PERIOD and ctx.get("last_func") == "query_movement")
+    if not (wh_only or has_pron or has_bare or has_write or has_part or has_period):
         return text
 
     stripped = text
@@ -4302,7 +4313,10 @@ def _ctx_expand(vid, text: str) -> str:
     stripped = stripped.strip("的呢嗎吧?？。!！，, ")
 
     fw = "進出紀錄" if ctx.get("last_func") == "query_movement" else "庫存"
-    if wh_only:
+    if has_period:
+        # 時段追問（「上週呢」→「藍牙耳機上週進出紀錄」）
+        new = f"{last}{_CTX_PERIOD[_period_stem]}進出紀錄"
+    elif wh_only:
         # 純倉別追問：「南倉呢」「北倉多少」「南」→ 只取倉別字，其餘（「多少」「幾個」）
         #   丟掉，否則組出「北倉多少無線滑鼠庫存」這種怪句
         new = f"{wh_only.group(2)}倉{last}{fw}"

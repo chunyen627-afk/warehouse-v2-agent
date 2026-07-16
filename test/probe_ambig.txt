@@ -1,0 +1,36 @@
+# 歧義商品短稱 — 訪客講「運動」「咖啡」「露營」等會 match 多筆的短稱
+# 最容易觸發平台分歧(RPI5 llm 抽詞 vs 本機 route 不同)
+# 底線:回疑似清單請選(反問=正確)、不亂猜單一、雙平台一致
+
+### A1 電動(電動牙刷 vs 電動拖把)
+> 電動的還剩幾個 | clarify,inventory,inventory_single,not:error
+> 電動庫存 | clarify,inventory,inventory_single,not:error
+
+### A2 運動(4筆)
+> 運動的庫存 | clarify,inventory,inventory_single,not:error
+> 運動還有嗎 | clarify,inventory,inventory_single,not:error
+
+### A3 咖啡(5筆:咖啡機/咖啡壺/咖啡豆/濾掛/黑咖啡)
+> 咖啡還剩多少 | clarify,inventory,inventory_single,not:error
+> 咖啡快沒了嗎 | clarify,low_stock,inventory,not:error
+
+### A4 露營(帳篷/椅/馬克杯/燈)
+> 露營的東西還有嗎 | clarify,inventory,inventory_single,not:error
+> 露營庫存 | clarify,inventory,inventory_single,not:error
+
+### A5 嬰兒(尿布/濕紙巾/連身衣)
+> 嬰兒用品還剩幾個 | clarify,inventory,inventory_single,not:error
+> 嬰兒的快到期嗎 | clarify,expiring,inventory,not:error
+
+### A6 歧義短稱 + 進出查詢(連身衣那類分歧的源頭)
+> 嬰兒進出紀錄 | clarify,movement,not:error
+> 運動這個月進出 | clarify,movement,not:error
+
+### A7 歧義短稱追問鏈
+> 咖啡還剩多少 | clarify,inventory,inventory_single,not:error
+> 進出紀錄呢 | clarify,movement,not:error
+
+### A8 明確全名不該有歧義(對照組,該直答)
+> 電動牙刷還剩幾個 | inventory_single,not:error | 牙刷
+> 全自動咖啡機庫存 | inventory_single,not:error | 咖啡機
+> 露營帳篷還有嗎 | inventory_single,not:error | 帳篷
