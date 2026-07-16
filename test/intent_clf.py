@@ -37,6 +37,13 @@ def _char_ngram(text: str) -> str:
         return " ".join(tokens)
 
 
+def reload():
+    """強制重載（clf watchdog 自癒用：自檢失敗先試 reload 再認輸）。"""
+    global _MODEL
+    _MODEL = None
+    load()
+
+
 def load():
     global _MODEL
     if _MODEL is not None:
@@ -66,9 +73,46 @@ def predict(text: str) -> tuple[str, float]:
         labels, probs = _MODEL.predict(tok, k=1)
         intent = labels[0].replace("__label__", "")
         conf   = float(list(probs)[0])
+    except ValueError:
+        # fasttext ≤0.9.3 的 predict() 末行 np.array(probs, copy=False) 在
+        # numpy≥2 直接 ValueError → clf 整條靜默死亡、每句 fallback LLM。
+        # RPI5 曾因此中招（2026-07-16 抓到：journalctl 全天 0 次 intent_clf
+        # primary、C18 全滅，靠 LLM+校正層扛住全綠）。改走底層 binding 拿
+        # (prob, label)，不經 numpy。
+        try:
+            preds = _MODEL.f.predict(tok + "\n", 1, 0.0, "strict")
+            if not preds:
+                return "unclear", 0.0
+            conf, label = preds[0]
+            return label.replace("__label__", ""), float(conf)
+        except Exception:
+            return "unknown", 1.0
     except Exception:
         return "unknown", 1.0
     return intent, conf
+
+
+# ── 金絲雀自檢（2026-07-16 numpy2 事件後加）────────────────────────
+# predict 的 fail-soft 設計會把內部崩潰吞成 ("unknown", 1.0)：主路由死掉時系統
+# 照常運作（每句 fallback LLM），但毫秒級路由與 C18 保護靜默蒸發——曾在 RPI5
+# 上死了多輪沒人發現（fasttext≤0.9.3 × numpy≥2）。金絲雀=固定句必須分對且高
+# 信心，開機與週期各驗一次，死掉就大聲（log CRITICAL + /health 曝光）。
+_CANARY = [
+    ("欸幫我看哪些快缺貨", "list_low_stock"),
+    ("不好意思幫我查一下藍牙耳機庫存", "query_inventory"),
+    ("這個月熱銷排行", "list_hot_items"),
+]
+
+
+def self_check() -> tuple[bool, str]:
+    """回 (ok, 說明)。ok=False 表示 clf 沒有真實分類能力（未載入/內部崩潰）。"""
+    if _MODEL is None:
+        return False, "model not loaded"
+    for sent, want in _CANARY:
+        intent, conf = predict(sent)
+        if intent != want or conf < 0.8:
+            return False, f"canary「{sent}」→ ({intent}, {conf:.2f})，應為 {want}"
+    return True, "ok"
 
 
 def check_mismatch(user_text: str, model_func: str) -> tuple[bool, str, float]:

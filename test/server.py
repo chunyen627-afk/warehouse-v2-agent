@@ -4062,6 +4062,7 @@ HEALTH = {
     "stage":   "starting",
     "message": "Server 啟動中...",
     "error":   None,
+    "clf":     "unknown",   # intent_clf 主路由自檢狀態（ok / DEAD: 原因 / unknown）
 }
 
 
@@ -4718,6 +4719,39 @@ async def push_display(payload: dict):
 app = FastAPI()
 
 
+async def _clf_watchdog_loop():
+    """intent_clf 週期金絲雀自檢（每 10 分鐘）。
+
+    開機自檢只擋「生下來就死」；這裡抓「跑到一半死」（套件熱更新/OOM/記憶體
+    損壞）。狀態轉變才吼（ok→DEAD 一次 CRITICAL），不洗版；/health 的 clf
+    欄位隨時反映最新狀態給外部監控。
+    """
+    while True:
+        await asyncio.sleep(600)
+        if HEALTH.get("stage") != "ready":
+            continue
+        try:
+            ok, msg = intent_clf.self_check()
+        except Exception as e:
+            ok, msg = False, f"self_check crashed: {e}"
+        if not ok:
+            # 自癒：先試 reload 一次（抓記憶體損壞/暫時性錯誤），reload 救不回
+            # 的（如 numpy2 這種確定性 bug）就留在 fallback 模式並大聲。
+            try:
+                await asyncio.to_thread(intent_clf.reload)
+                ok, msg = intent_clf.self_check()
+                if ok:
+                    log.warning("[clf-check] 自檢失敗但 reload 後恢復——曾短暫死亡")
+            except Exception as e:
+                msg = f"reload failed: {e}"
+        prev = HEALTH.get("clf")
+        HEALTH["clf"] = "ok" if ok else f"DEAD: {msg}"
+        if not ok and prev == "ok":
+            log.critical(f"[clf-check] intent_clf 週期自檢由 ok 轉失敗（reload 無效）: {msg}")
+        elif ok and prev != "ok":
+            log.info("[clf-check] intent_clf 自檢恢復 ok")
+
+
 def _background_init():
     """背景載入模型。"""
     global LLM, MODEL_FILE, SYSTEM_PROMPT
@@ -4727,12 +4761,19 @@ def _background_init():
         intent_clf.load()
         SYSTEM_PROMPT = load_system_prompt()
         LLM, MODEL_FILE = load_model()
-        # intent_clf 暖機：首次 predict 要載 jieba 分詞詞典（~900ms），先跑一句
-        # 讓第一個真訪客的路由就快（2026-07-04）
+        # intent_clf 暖機＋金絲雀自檢（首次 predict 載 jieba 詞典 ~900ms，順便驗真）。
+        # numpy2 事件（2026-07-16）：predict 內部崩潰被吞成 unknown、主路由在 RPI5
+        # 靜默死亡多輪沒被發現——舊版這裡只是 try/except pass 的暖機，bug 就從這
+        # 滑過去。自檢失敗不擋啟動（fail-soft：LLM+校正層扛得住、展場不能不開機），
+        # 但要大聲：log CRITICAL + /health 曝光給外部監控。
         try:
-            intent_clf.predict("藍牙耳機庫存")
-        except Exception:
-            pass
+            _clf_ok, _clf_msg = intent_clf.self_check()
+        except Exception as _e:
+            _clf_ok, _clf_msg = False, f"self_check crashed: {_e}"
+        HEALTH["clf"] = "ok" if _clf_ok else f"DEAD: {_clf_msg}"
+        if not _clf_ok:
+            log.critical(f"[clf-check] intent_clf 主路由自檢失敗，每句將 fallback LLM"
+                         f"（效能降級、C18 失效）: {_clf_msg}")
         snap = finance.state()
         log.info(f"快照日期：{snap.snapshot_date}")
         log.info(f"SKU 數：{len(snap.items)} / 倉庫：{len(snap.warehouses)} / 類別：{len(snap.categories)}")
@@ -4758,6 +4799,8 @@ async def startup():
         log.info(f"[anomaly] 背景異常掃描已啟動，間隔 {anomaly.AnomalyConfig.scan_interval_s}s")
     except Exception as e:
         log.error(f"[anomaly] 啟動失敗: {e}", exc_info=True)
+    # ── intent_clf 週期自檢（抓「跑到一半死掉」，numpy2 事件後加）──
+    asyncio.create_task(_clf_watchdog_loop())
     # ── 警示規則背景排程 ──
     asyncio.create_task(_alert_scheduler_loop())
     # ── 定時腳本排程 ──
