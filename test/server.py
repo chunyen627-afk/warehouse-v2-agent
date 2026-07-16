@@ -1678,10 +1678,16 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
     #   不到 → 空選單 clarify（訪客看到「你是指？」卻沒選項＝死路）。改用 match_items
     #   （score≥5 就算命中，不受空格影響，兩平台一致），命中就靜默修成真商品名。
     _oov_m = W.match_items(keyword)
+    # 只在「唯一明確命中」時 auto_fix：最高分要明顯領先第二名。否則有歧義（如 LLM 抽殘
+    # 的「嬰兒」同時 match 到「嬰兒連身衣」與「嬰兒紙尿布」，盲取第一名會靜默修成錯的
+    # 商品——RPI5 平台分歧抓到）。歧義時不 auto_fix，讓下游 carry-over / 反問處理。
     if _oov_m and _oov_m[0].get("score", 0) >= 5:
-        _oov_name = _oov_m[0]["item"]["name"]
-        return {"auto_fix": True, "original_keyword": func_args.get("keyword", ""),
-                "fixed_keyword": _oov_name, "score": 100}
+        _top_s = _oov_m[0]["score"]
+        _second_s = _oov_m[1]["score"] if len(_oov_m) > 1 else 0
+        if _top_s - _second_s >= 3:   # 領先夠多 = 唯一明確
+            _oov_name = _oov_m[0]["item"]["name"]
+            return {"auto_fix": True, "original_keyword": func_args.get("keyword", ""),
+                    "fixed_keyword": _oov_name, "score": 100}
     if any(keyword in name or name in keyword for name in all_names):
         if keyword != (func_args.get("keyword") or func_args.get("target") or "").strip():
             # 清理前後不同 → 靜默修復，讓 caller 更新 func_args
@@ -2394,6 +2400,27 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 _movement_in_words = _movement_in_words + ("進",)
             else:
                 _movement_out_words = _movement_out_words + ("出",)
+    # r40：無量詞的進出貨（「北倉進50藍牙耳機」——數量緊貼商品名、漏打「個」，展場
+    #   訪客打字快很常見）。上面的正則都要求「數字+量詞」，缺量詞就漏 → 掉進庫存查詢
+    #   （答錯：訪客要進貨卻查庫存）。這裡放寬：方向詞+數字+一段中文，且那段中文 match
+    #   得到真商品 → 算進出貨。用真商品驗證避免誤傷（「進50樓」match 不到商品就不算）。
+    if not _has_movement_word:
+        _nomu_m = _re13b_single.search(
+            r'([進出送補])\s*(?:[0-9]+|[零一二兩三四五六七八九十百千萬]+)\s*([一-鿿]{2,8})',
+            user_text)
+        if _nomu_m and _nomu_m.group(2) not in ("樓", "層", "號", "點", "度"):
+            import warehouse as _W_nomu
+            _nomu_kw = _extract_sku_keyword(_nomu_m.group(2))
+            _nomu_hit = _W_nomu.match_items(_nomu_kw) if _nomu_kw else []
+            if _nomu_hit and _nomu_hit[0].get("score", 0) >= 3:
+                _has_movement_word = True
+                _d = _nomu_m.group(1)
+                if _d in ("進", "送", "補"):
+                    _movement_in_words = _movement_in_words + (_d,)
+                else:
+                    _movement_out_words = _movement_out_words + (_d,)
+                log.info(f"[C13b-nomu] 無量詞進出貨: 方向{_d} 商品{_nomu_hit[0]['item']['name']}")
+
     # r26：白拿/搗蛋語境不開進出貨流程（「送我兩箱啤酒當試用品」曾追問異動哪個倉）
     # ——放在所有動詞/結構判定之後，才不會被 _single_dir/_rev_dir 重新點亮
     if any(w in user_text for w in ("送我", "送給我", "請我喝", "請我吃", "招待",
@@ -3301,6 +3328,25 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 log.info(f"[校正 C2c] query_movement 補 keyword: {cleaned!r}（剝尾巴後）")
                 func_args = dict(func_args)
                 func_args["keyword"] = cleaned
+        # r39：keyword 歧義（LLM 抽殘「嬰兒」match 到多個嬰兒類商品）但 user_text 含
+        #   更完整的商品名（carry-over 補的「嬰兒連身衣」）→ 用完整名。RPI5 LLM 抽詞弱、
+        #   常只抽共用前綴，本機 route 抽得準才沒露出來（全枚舉雙平台抓到）。
+        elif _c2c_kw:
+            import warehouse as _W_c2d
+            _c2d_m = _W_c2d.match_items(_c2c_kw)
+            _amb = (len(_c2d_m) > 1 and _c2d_m[0]["score"] - _c2d_m[1]["score"] < 3)
+            if _amb:
+                _c2d_full = None
+                for _it in _W_c2d.state().items:
+                    _nm = _it["name"]
+                    if _nm in _c2c_src and len(_nm) > len(_c2c_kw) and _c2c_kw in _nm:
+                        if _c2d_full is None or len(_nm) > len(_c2d_full):
+                            _c2d_full = _nm
+                if _c2d_full:
+                    log.info(f"[校正 C2d] movement keyword 歧義 → 用原句完整名: "
+                             f"{_c2c_kw!r} → {_c2d_full!r}")
+                    func_args = dict(func_args)
+                    func_args["keyword"] = _c2d_full
 
     # ── 通用：warehouse / category / period enum 容錯 ──
     if "warehouse" in func_args and func_args["warehouse"] not in VALID_WAREHOUSES:
@@ -5882,6 +5928,30 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _dw_msg,
                     "data": {"question": _dw_msg, "options": [], "hint": ""}}})
+                continue
+
+            # ── 同方向多商品寫入攔截（r40）：「北倉進50個藍牙耳機和30個滑鼠」曾只開
+            #   第一個商品的卡、第二個(滑鼠30個)完全漏掉——訪客誤以為兩個都進了(比查錯
+            #   庫存嚴重，因為他以為完成了)。確認卡是單商品設計，一次多商品請分開講。──
+            _mpw_has_mv = any(w in user_text for w in ("進", "出", "補", "送", "退")) \
+                and _re.search(r'\d', user_text)
+            # 數兩個以上「數字+量詞」段
+            _mpw_qty_n = len(_re.findall(
+                r'(?:[0-9]+|[零一二兩三四五六七八九十百千]+)\s*'
+                r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片)',
+                user_text))
+            _mpw_conn = any(w in user_text for w in ("和", "跟", "還有", "與", "、", "，", ",", "以及", "同時", "外加"))
+            if (_mpw_has_mv and _mpw_qty_n >= 2 and _mpw_conn
+                    and not any(w in user_text for w in ("調", "撥", "挪", "移到", "轉倉"))):
+                _mpw_msg = ("一次幫你進/出一種商品喔。請分開說，例如先講"
+                            "「北倉進50個藍牙耳機」，完成後再講「北倉進30個滑鼠」。")
+                log.info(f"[mpw-gate] 同方向多商品寫入 → clarify: {user_text!r}")
+                for ch in _mpw_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.008)
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _mpw_msg,
+                    "data": {"question": _mpw_msg, "options": [], "hint": ""}}})
                 continue
 
             # ── 不支援時間粒度誠實 clarify（r25）：「上上週的出貨量」曾回上週數字

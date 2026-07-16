@@ -1,0 +1,50 @@
+# 時間詞組合/邊界 — 不支援的時間粒度要誠實 clarify，不可回錯期間誤導
+# 支援：today/yesterday/前天/this_week/last_week/this_month
+# 底線：不當掉、不回錯期間的數字（那是誤導）
+
+# ══ 不支援時間粒度（該誠實 clarify，不可回相近期間）══
+
+### T1 上上週（不支援）
+> 上上週的出貨量 | clarify,guide,movement,not:error
+> 上上個月進了多少貨 | clarify,guide,movement,not:error
+
+### T2 週末（不支援）
+> 週末有進貨嗎 | clarify,guide,movement,not:error
+
+### T3 季/年（不支援）
+> 這一季賣最好的 | clarify,guide,hot_items,not:error
+> 去年進了多少 | clarify,guide,movement,not:error
+
+# ══ 支援的時間，但組合/口語 ══
+
+### T4 這個月到現在
+> 這個月到現在進了哪些貨 | movement,not:error
+> 本月至今出貨狀況 | movement,not:error
+
+### T5 昨天+今天（雙時段）
+> 昨天跟今天總共進多少 | movement,clarify,not:error
+
+### T6 時段詞（早上/下午=今天近似）
+> 今天下午有出貨嗎 | movement,not:error
+> 早上進的貨 | movement,not:error
+
+# ══ 時間+商品+進出（複合）══
+
+### T7 時間+商品進出
+> 藍牙耳機這個月進出多少 | movement,not:error | 耳機
+> 上週滑鼠出了幾個 | movement,not:error | 滑鼠
+
+### T8 時間+商品追問鏈
+> 藍牙耳機庫存 | not:error | 耳機
+> 這個月進出呢 | movement,not:error
+> 上週呢 | movement,not:error
+
+# ══ 時間詞當商品名（易誤判）══
+
+### T9 含時間字的句子不該亂配
+> 今天天氣如何 | rejected,guide,clarify,not:error
+> 這個月營收多少 | hot_items,inventory,clarify,not:error
+
+### T10 純時間詞（無商品無功能）
+> 這個月 | clarify,guide,rejected,not:error
+> 昨天 | clarify,guide,rejected,not:error

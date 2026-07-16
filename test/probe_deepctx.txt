@@ -1,0 +1,71 @@
+# 深層多輪 context 壓測 — carry-over 是產品核心，5輪以上追問鏈/跨功能切換/污染
+# 底線：追問要跟對的商品、不當掉、跨功能切換不錯配
+
+### D1 七輪同商品多功能追問
+> 藍牙耳機庫存 | not:error | 耳機
+> 進出紀錄呢 | movement,not:error
+> 南倉呢 | not:error
+> 快到期嗎 | not:error
+> 安全庫存多少 | not:error
+> 搭配什麼賣 | not:error
+> 還剩幾個 | not:error | 耳機
+
+### D2 商品每兩輪換一次（context 要跟上最新）
+> 藍牙耳機還剩幾個 | not:error | 耳機
+> 進出紀錄呢 | movement,not:error
+> 滑鼠還剩幾個 | not:error | 滑鼠
+> 進出紀錄呢 | movement,not:error
+> 瑜珈墊還剩幾個 | not:error | 瑜珈墊
+> 進出紀錄呢 | movement,not:error | 瑜珈墊
+
+### D3 追問中插入全域查詢再追問（context 不可被沖掉）
+> 藍牙耳機庫存 | not:error | 耳機
+> 哪些商品快缺貨了 | low_stock
+> 那個進出紀錄呢 | movement,not:error
+
+### D4 追問中插入寫入再追問
+> 滑鼠還剩幾個 | not:error | 滑鼠
+> 北倉進50個滑鼠 | movement_confirm
+[confirm]
+> 進出紀錄呢 | movement,not:error
+
+### D5 跨功能切換鏈（庫存→進出→到期→搭配→比較）
+> 藍牙耳機庫存 | not:error | 耳機
+> 這個月進出 | movement,not:error
+> 快到期嗎 | not:error
+> 跟什麼一起賣 | not:error
+> 跟滑鼠比哪個多 | not:error
+
+### D6 純代詞連環追問（每輪都靠 context）
+> 瑜珈墊庫存 | not:error | 瑜珈墊
+> 它呢 | not:error
+> 那個呢 | not:error
+> 這個快到期嗎 | not:error
+
+### D7 亂打夾在追問鏈中（context 不可被亂打清掉）
+> 藍牙耳機庫存 | not:error | 耳機
+> ㄅㄆㄇ | rejected,guide,clarify,not:error
+> 進出紀錄呢 | movement,not:error
+> asdf | rejected,guide,clarify,not:error
+> 還剩幾個 | not:error | 耳機
+
+### D8 rejected 後追問（context 該保留上一個成功商品）
+> 滑鼠庫存 | not:error | 滑鼠
+> 你好嗎 | rejected,guide,clarify,not:error
+> 進出紀錄呢 | movement,not:error
+
+### D9 十輪超長鏈（context 撐得住）
+> 藍牙耳機庫存 | not:error | 耳機
+> 北倉呢 | not:error
+> 中倉呢 | not:error
+> 南倉呢 | not:error
+> 進出紀錄 | movement,not:error
+> 上週呢 | movement,not:error
+> 快到期嗎 | not:error
+> 安全庫存 | not:error
+> 搭配什麼 | not:error
+> 還剩幾個 | not:error | 耳機
+
+### D10 追問切到不存在的商品名（不可 carry 到舊商品）
+> 藍牙耳機庫存 | not:error | 耳機
+> 鋼琴烤漆保養油呢 | clarify,rejected,inventory,not:error

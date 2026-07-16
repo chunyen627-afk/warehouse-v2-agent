@@ -1,0 +1,64 @@
+# 極端數量邊界 + 多商品混合寫入 — 展場訪客愛玩「進0個」「進負數」「進九萬」測會不會爆
+# 底線：不當掉(不crash/不卡)、不錯寫(不對假數量開卡/不寫入異常值)
+
+# ══ 極端數量：0 / 負數 / 超大 / 小數 ══
+
+### E1 進0個(無意義數量)
+> 北倉進0個藍牙耳機 | not:error,clarify,rejected,guide,movement_confirm
+
+### E2 進負數
+> 北倉進-5個藍牙耳機 | not:error
+> 北倉進負5個滑鼠 | not:error
+
+### E3 超大數量(倉庫塞不下)
+> 北倉進999999個藍牙耳機 | movement_confirm,clarify,error,not:rejected
+
+### E4 小數量
+> 北倉進0.5個藍牙耳機 | not:error
+
+### E5 出貨超過現有(該擋)
+> 北倉出999999個藍牙耳機 | error,clarify,not:movement_confirm
+
+### E6 數量給文字
+> 北倉進很多個藍牙耳機 | not:error
+> 北倉進一堆滑鼠 | not:error
+
+### E7 中文數字極大
+> 北倉進一百萬個藍牙耳機 | movement_confirm,clarify,error,not:rejected
+
+### E8 數量含單位混亂
+> 北倉進50箱又30個藍牙耳機 | not:error
+
+# ══ 多商品混合寫入(一句兩個以上寫入動作)══
+
+### M1 一句進兩商品
+> 北倉進50個藍牙耳機和30個滑鼠 | not:error
+
+### M2 進A調B(混合動作,r18曾攔)
+> 北倉進50個藍牙耳機 然後調20個滑鼠去南倉 | not:error,clarify
+
+### M3 三商品連進
+> 北倉進10個藍牙耳機20個滑鼠30個鍵盤 | not:error
+
+### M4 進貨+出貨同句
+> 北倉進50個藍牙耳機同時出10個滑鼠 | not:error
+
+# ══ 數量與商品名黏連(抽詞邊界)══
+
+### N1 數量緊貼商品名
+> 北倉進50藍牙耳機 | movement_confirm,clarify
+
+### N2 商品名含數字(10000mAh)
+> 北倉進20個行動電源10000mAh | movement_confirm,clarify
+
+### N3 倉庫+數量+商品全黏
+> 北倉進50個USB風扇 | movement_confirm,clarify
+
+# ══ 寫入確認後的邊界 ══
+
+### C1 進貨確認後再進同商品(累加)
+> 北倉進50個瑜珈墊 | movement_confirm
+[confirm]
+> 北倉再進50個瑜珈墊 | movement_confirm,clarify
+[confirm]
+> 北倉瑜珈墊還剩幾個 | not:error | 瑜珈墊
