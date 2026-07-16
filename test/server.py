@@ -5968,6 +5968,40 @@ async def ws_handler(ws: WebSocket):
                     "data": {"question": _mpw_msg, "options": [], "hint": ""}}})
                 continue
 
+            # ── 多商品並列查詢攔截（r40，user 定調）：「衛生紙跟濕紙巾的庫存」「A、B、C
+            #   各剩多少」曾只回第一個商品（其餘漏）。user 決定：同時問兩種以上庫存 →
+            #   請分開問（一次一個）。**比較題例外**（「A跟B哪個多」答案只有一個結論，
+            #   保留）。判別：多商品名 + 無比較詞 + 無進出詞（寫入歸 mpw-gate 管）。──
+            _plq_cmp = any(w in user_text for w in ("哪個", "哪一個", "誰", "比較", "比一比",
+                            "比一下", "比比看", "誰比較", "較多", "較少", "賣得", "賣最",
+                            "多還是", "大還是", "對比", "差多少", "哪邊", "誰多", "誰少", "哪種多"))
+            _plq_mv = any(w in user_text for w in ("進", "出", "補", "調", "退")) and _re.search(r'\d', user_text)
+            if (not _plq_cmp and not _plq_mv
+                    and any(w in user_text for w in ("庫存", "還剩", "剩多少", "各剩", "有多少", "還有多少", "剩幾"))):
+                import warehouse as _W_plq
+                # 只靠分隔符切（跟/和/、等）。無分隔黏寫（「衛生紙濕紙巾尿布」）不處理——
+                #   曾試「掃 2 字短稱」但誤傷嚴重（「無線藍牙耳機」被拆成藍牙耳機+藍牙喇叭、
+                #   「嬰兒濕紙巾」被拆成尿布+濕紙巾），穩定優先。訪客通常會加「跟/和」。
+                _plq_src = _re.sub(r"的?庫存|各剩多少|各剩幾|各有多少|還有多少|剩多少|剩幾個?|還剩", "", user_text)
+                _plq_parts = [p.strip() for p in _re.split(r"[跟和與、,，及]|還有|以及", _plq_src) if p.strip()]
+                _plq_hits = []
+                for p in _plq_parts:
+                    _m = _W_plq.match_items(_extract_sku_keyword(p) or p)
+                    if _m and _m[0].get("score", 0) >= 5 and _m[0]["item"]["name"] not in _plq_hits:
+                        _plq_hits.append(_m[0]["item"]["name"])
+                if len(_plq_hits) >= 2:
+                    _plq_msg = ("一次幫你查一種商品的庫存喔。請分開問，例如先問"
+                                f"「{_plq_hits[0]}庫存」，再問「{_plq_hits[1]}庫存」。"
+                                "（想比較多寡可以問「A 跟 B 哪個多」）")
+                    log.info(f"[plq-gate] 多商品並列查詢 → clarify: {user_text!r} hits={_plq_hits}")
+                    for ch in _plq_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _plq_msg,
+                        "data": {"question": _plq_msg, "options": [], "hint": ""}}})
+                    continue
+
             # ── 不支援時間粒度誠實 clarify（r25）：「上上週的出貨量」曾回上週數字
             #   （錯期間誤導）、「週末有進貨嗎」曾回本週。誠實列出支援範圍。──
             _UNSUPPORTED_TIME = ("上上週", "上上周", "上上禮拜", "大前天", "週末", "周末",
