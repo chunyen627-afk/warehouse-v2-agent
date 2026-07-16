@@ -74,13 +74,18 @@ ACCEPT = {
 
 
 async def _q_once(text):
+    llm_hit = False
     async with websockets.connect(WS_URI, ssl=SSL_CTX, max_size=None) as ws:
         await ws.send(json.dumps({'type': 'chat', 'text': text}, ensure_ascii=False))
         while True:
             raw = await asyncio.wait_for(ws.recv(), timeout=45)
             msg = json.loads(raw)
+            if msg.get('type') == 'perf' and msg.get('mode') == 'llm':
+                llm_hit = True   # 方案2側錄：這句進了 LLM（RPI5 子集成員）
             if msg.get('type') == 'done':
-                return msg.get('result', {})
+                r = msg.get('result', {})
+                r['_llm_hit'] = llm_hit
+                return r
 
 
 async def _q(text, tries=3):
@@ -130,6 +135,7 @@ def main():
 
     total = ok = 0
     fails = []
+    llm_lines = []   # 方案2側錄：進 LLM 的句子 → 另存子集檔供 RPI5 快驗
     for cat, text, must in qa:
         total += 1
         try:
@@ -139,6 +145,8 @@ def main():
             continue
         view = r.get("view", "?")
         summary = r.get("summary") or ""
+        if r.get("_llm_hit"):
+            llm_lines.append(f"{cat}|{text}" + (f"|{must}" if must else ""))
         if not ACCEPT[cat](view):
             fails.append((cat, text, view, summary[:70]))
         elif must and must not in summary:
@@ -149,6 +157,17 @@ def main():
     print(f"\n{'='*66}\n累積回歸: {ok}/{total} ({ok/total*100:.1f}%)\n")
     for cat, text, view, s in fails:
         print(f"  FAIL [{cat}] {text}\n       -> view={view} | {s}")
+
+    # 全量（非 smoke、非類別篩選）才寫子集，樣本才完整。
+    # 日常 RPI5 快驗：python3 regression_ws.py --rpi5 --file <子集檔>
+    # 動 LLM 相關層（fuzzy/校正/rewrite/prompt/keyword 抽取）或展前 → 仍跑全量。
+    if llm_lines and not smoke and not only:
+        sub = CORPUS.with_name(CORPUS.stem + "_llmsub.txt")
+        sub.write_text(
+            f"# LLM-hit 子集（自動產生：{CORPUS.name} 全量跑完側錄，"
+            f"{len(llm_lines)}/{total} 句進過 LLM）\n" + "\n".join(llm_lines) + "\n",
+            encoding="utf-8")
+        print(f"\n[llm-subset] {len(llm_lines)}/{total} 句 → {sub.name}")
 
 
 if __name__ == "__main__":

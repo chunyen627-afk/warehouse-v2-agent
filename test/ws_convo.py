@@ -151,22 +151,29 @@ def check_candidates(result: dict, spec: str) -> str:
 
 
 async def recv_result(ws, timeout=60):
-    """收到 done 為止，回傳 (result, 串接的 tokens)。"""
-    toks = []
+    """收到 done 為止，回傳 (result, 串接的 tokens, 本輪是否進 LLM)。
+
+    llm_hit 供「RPI5 子集快驗」用（方案2，2026-07-16）：平台分歧只可能發生在
+    進 LLM 的輪，全量跑完把 LLM-hit 情境另存 *_llmsub.txt，日常 RPI5 只重驗那份。
+    """
+    toks, llm_hit = [], False
     while True:
         m = json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
         t = m.get("type")
         if t == "token":
             toks.append(m.get("text", ""))
+        elif t == "perf" and m.get("mode") == "llm":
+            llm_hit = True
         elif t == "error":
-            return {"view": "error", "summary": m.get("text", "")}, "".join(toks)
+            return {"view": "error", "summary": m.get("text", "")}, "".join(toks), llm_hit
         elif t == "done":
-            return (m.get("result") or {}), "".join(toks)
+            return (m.get("result") or {}), "".join(toks), llm_hit
 
 
 async def run_scene(uri, ctx, name, steps, quiet):
     """一個情境 = 一位（或多位）訪客，每位一條連線（= 一個 vid），連發所有 step。"""
     fails, sus = [], []
+    scene_llm = False   # 任一輪進 LLM → 整個情境屬 RPI5 子集
     if not quiet:
         print(f"\n{'─'*74}\n### {name}\n{'─'*74}")
 
@@ -214,7 +221,8 @@ async def run_scene(uri, ctx, name, steps, quiet):
                 await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
 
             try:
-                r, toks = await recv_result(ws)
+                r, toks, _llm = await recv_result(ws)
+                scene_llm = scene_llm or _llm
             except Exception as e:
                 fails.append((name, label, f"WS 錯誤/逾時: {e}"))
                 if not quiet:
@@ -252,7 +260,7 @@ async def run_scene(uri, ctx, name, steps, quiet):
     finally:
         for ws, _ in conns.values():
             await ws.close()
-    return fails, sus
+    return fails, sus, scene_llm
 
 
 async def main():
@@ -300,10 +308,29 @@ async def main():
     print(f"\n{'='*74}\nws_convo → {uri}\n劇本 {path.name}：{len(scenes)} 情境 / {turns} 輪\n{'='*74}")
 
     all_fails, all_sus = [], []
+    llm_scene_names = set()
     for name, steps in scenes:
-        f, s = await run_scene(uri, ctx, name, steps, args.quiet)
+        f, s, _hit = await run_scene(uri, ctx, name, steps, args.quiet)
         all_fails += f
         all_sus += s
+        if _hit:
+            llm_scene_names.add(name)
+
+    # LLM-hit 情境另存 <劇本>_llmsub.txt（方案2：RPI5 日常只重驗這份；
+    # 動 LLM 相關層或展前仍跑原全本）。--only 篩過時樣本不全，不寫。
+    if llm_scene_names and not args.only:
+        _sub_path = path.with_name(path.stem + "_llmsub.txt")
+        _blocks, _cur_keep = [], False
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            if raw.strip().startswith("###"):
+                _cur_keep = raw.lstrip("#").strip() in llm_scene_names
+            if _cur_keep:
+                _blocks.append(raw)
+        _sub_path.write_text(
+            f"# LLM-hit 子集（自動產生：{path.name} 全量跑完側錄，"
+            f"{len(llm_scene_names)}/{len(scenes)} 情境進過 LLM）\n"
+            + "\n".join(_blocks) + "\n", encoding="utf-8")
+        print(f"[llm-subset] {len(llm_scene_names)}/{len(scenes)} 情境 → {_sub_path.name}")
 
     print(f"\n{'='*74}")
     print(f"情境 {len(scenes)} · 斷言失敗 {len(all_fails)} · 可疑回答 {len(all_sus)}")

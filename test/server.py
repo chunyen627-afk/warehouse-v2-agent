@@ -1688,6 +1688,18 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
             _oov_name = _oov_m[0]["item"]["name"]
             return {"auto_fix": True, "original_keyword": func_args.get("keyword", ""),
                     "fixed_keyword": _oov_name, "score": 100}
+        # 同分歧義且 keyword 不是任何商品名的片段（LLM 抽殘如「咖啡還」）→ 不准
+        # 掉進下面 fuzzy ≥85 對單一候選靜默猜（user 原則 2026-07-16 不猜）。
+        # 直接給同分候選選單；是片段的（咖啡/嬰兒）留給 query_inventory 列
+        # 更豐富的清單（含庫存概況），走既有 substring → None 路。
+        if not any(keyword in name for name in all_names):
+            _tied = [r["item"]["name"] for r in _oov_m
+                     if r["score"] * 2 >= _top_s][:8]
+            return {"auto_fix": False,
+                    "question": f"「{keyword}」對應到 {len(_tied)} 個商品，你是指哪一個？",
+                    "options": _tied,
+                    "hint": "點選其中一項，或直接輸入完整商品名稱",
+                    "oov": True, "original_keyword": keyword}
     if any(keyword in name or name in keyword for name in all_names):
         if keyword != (func_args.get("keyword") or func_args.get("target") or "").strip():
             # 清理前後不同 → 靜默修復，讓 caller 更新 func_args
@@ -1888,6 +1900,18 @@ def _extract_sku_keyword(text: str) -> str:
         hits = [n for n in all_names if n in src]
         if hits:
             return max(hits, key=len)
+
+    # ── Layer 2.5: 歧義短稱不猜（user 原則 2026-07-16「不喜歡用猜的」）──
+    #   cleaned 是 ≥2 個商品名的共同片段（咖啡×5/運動×4/露營×4/電動×2/嬰兒×3）
+    #   → 這是「模糊短稱」不是錯字，Layer 3/4 硬取最高分＝亂猜（「咖啡還剩多少」
+    #   曾靜默對應到濾掛咖啡）。回原片段讓下游 query_inventory 列疑似清單
+    #   （含各候選庫存概況）請訪客選。唯一命中（瑜珈→瑜珈墊）不受影響照樣直達。
+    if cleaned and len(cleaned) >= 2:
+        _contain_hits = [n for n in all_names if cleaned in n]
+        if len(_contain_hits) == 1:
+            return _contain_hits[0]
+        if len(_contain_hits) >= 2:
+            return cleaned
 
     # ── Layer 3: 商品名 part 在 text 中 ──
     for src in (cleaned, text):

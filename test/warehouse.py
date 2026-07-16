@@ -123,7 +123,9 @@ def _suggest_on_empty(keyword: str, action: str = "庫存") -> dict:
     opts.append("查倉管")  # 永遠有個「看功能列表」兜底
 
     hint_kw = f"「{keyword}」" if keyword else ""
-    question = f"找不到 {hint_kw}相關商品，你是想查："
+    # user 原則 2026-07-16：查無商品要提醒可新增，措辭不裝傻（舊句「找不到相關
+    # 商品」在有近似品時讀起來像系統很笨）。
+    question = f"倉庫目前沒有 {hint_kw}這個商品喔，你可以查："
 
     return {
         "ok": True,
@@ -132,7 +134,7 @@ def _suggest_on_empty(keyword: str, action: str = "庫存") -> dict:
         "data": {
             "question": question,
             "options":  opts,
-            "hint":     "輸入數字選擇，或直接輸入完整商品名稱",
+            "hint":     "點選項目或輸入完整商品名稱；如果是新商品，可以說「新增商品」建立",
         },
     }
 
@@ -466,6 +468,17 @@ def _aggregate_movements(
 # 5 個 function 實作
 # ────────────────────────────────────────────────
 
+# 單字通稱 → 商品名片段（查詢空手時的導回表，只進 query_inventory 的 clarify 清單，
+# 不進 match_items——寫入路徑不受影響）。片段須為商品名 substring。
+_GENERIC_QUERY_FALLBACK = {
+    "帽子": ("毛帽", "遮陽帽"),
+    "鞋子": ("慢跑鞋",),
+    "襪子": ("保暖襪",),
+    "褲子": ("牛仔褲",),
+    "鍋子": ("不沾鍋", "野炊鍋具"),
+}
+
+
 def query_inventory(
     keyword: str | None = None,
     category: str | None = None,
@@ -496,6 +509,15 @@ def query_inventory(
     wh_label = WAREHOUSE_LABEL.get(warehouse, warehouse)
 
     matches = match_items(keyword or "", category=category)
+    # 單字通稱 fallback（user 原則 2026-07-16 不猜）：「帽子」這類詞被弱配對防呆
+    # 刻意擋在 match_items 外（LCS<2），但商品其實存在 → 用小表把它導回下面的
+    # 多筆 clarify 清單（你是指毛帽還是遮陽帽），而不是掉進「找不到」空手訊息。
+    # 只在完全沒 match 時啟用、不動 match_items 核心（改核心有副作用前科）。
+    if not matches and keyword:
+        _frags = _GENERIC_QUERY_FALLBACK.get(keyword.strip())
+        if _frags:
+            matches = [{"item": it, "score": 5} for it in s.items
+                       if any(f in it["name"] for f in _frags)]
     if not matches:
         return _suggest_on_empty(keyword or category or "", action="庫存查詢")
 
