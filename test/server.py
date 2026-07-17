@@ -2382,6 +2382,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         "「哪些快過期」，我馬上列給你。",
             "options": ["哪些快過期", "庫存警示"], "hint": ""}, True
 
+    # C-excl（r48）：排除式否定（衛生紙不要 其他都查/除了啤酒 什麼都好）——clf 高信心
+    # route 曾帶著被排除的商品直查＝語意反轉。排除式總覽不支援 → 誠實說明。
+    _cexcl = _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要)', user_text)
+    if _cexcl and func_name in ("query_inventory", "list_low_stock", "list_hot_items"):
+        import warehouse as _W_cex
+        _cex_kw = _extract_sku_keyword(user_text)
+        _cex_m = _W_cex.match_items(_cex_kw) if _cex_kw else []
+        if _cex_m and _cex_m[0].get("score", 0) >= 5:
+            return "clarify", {
+                "question": f"「排除{_cex_m[0]['item']['name']}看其他全部」這種總覽還不支援喔——"
+                            "可以看「全部商品庫存」或直接指定想查的商品。",
+                "options": ["全部商品庫存", "商品清單"], "hint": ""}, True
+
     # C13-hypo2（r47）：假設/轉述語氣＋寫入近似句（「考慮進50個滑鼠」「供應商說要
     # 送100個滑鼠來」「如果我要出10箱啤酒的話」）曾進追問倉別的寫入流——非命令
     # 語氣不開寫入，查詢化回該商品庫存（訪客要的是「能不能/夠不夠」的判斷素材）。
@@ -6587,7 +6600,11 @@ async def ws_handler(ws: WebSocket):
             if (_desc_kw_ws
                     and _desc_q_ok
                     and not any(w in user_text for w in _DESC_BLOCK)
-                    and not _desc_intent_block):
+                    and not _desc_intent_block
+                    # r48：排除式否定（衛生紙不要 其他都查/除了啤酒 什麼都好）讓給下方
+                    # 專屬 gate——曾在這被直達搶走、偏偏回被排除的商品（倉名除外句不讓，
+                    # 「除了北倉以外哪裡有貨」走上面 wh=all 既有路）
+                    and not _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要)', user_text)):
                 # r25：「除了北倉以外哪裡有貨」曾被填 wh=north 只回被排除的倉——
                 # 除外句一律回三倉分佈讓訪客自己看其他倉
                 if any(w in user_text for w in ("除了", "以外", "之外")):
@@ -6609,6 +6626,25 @@ async def ws_handler(ws: WebSocket):
                     await send({"type": "done", "result": result})
                     continue
                 # 查詢失敗 → 不攔，交給 LLM 流程
+
+            # ── r48：排除式否定（「衛生紙不要 其他都查」「除了啤酒 什麼都好」）曾
+            #   偏偏回被排除的那個商品＝語意反轉（r16 家族）。排除式總覽不支援 →
+            #   誠實說明＋給路。──
+            _excl_m = _re.search(r'(?:不要|除了|排除)\s*(.{2,6}?)\s*(?:，|,| )?(?:其他|以外|什麼都|都查|都好|都要)', user_text)
+            if _excl_m:
+                import warehouse as _W_ex
+                _ex_hit = _W_ex.match_items(_extract_sku_keyword(_excl_m.group(1)) or _excl_m.group(1))
+                if _ex_hit and _ex_hit[0].get("score", 0) >= 5:
+                    _ex_msg = (f"「排除{_ex_hit[0]['item']['name']}看其他全部」這種總覽還不支援喔——"
+                               "可以看「全部商品庫存」或直接指定想查的商品。")
+                    log.info(f"[dispatch-ws] 排除式否定 → clarify: {user_text!r}")
+                    for ch in _ex_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _ex_msg,
+                        "data": {"question": _ex_msg, "options": ["全部商品庫存", "商品清單"], "hint": ""}}})
+                    continue
 
             # ── 否定排行（r16：「我不要排行榜我要庫存」曾偏偏回排行榜——最挑釁
             # 的答案）：否定詞+排行 → 尊重否定，回庫存概覽 ──
