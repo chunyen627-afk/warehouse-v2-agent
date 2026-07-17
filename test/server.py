@@ -637,6 +637,8 @@ _DESC_NONQUERY_INTENT = (
     # 進貨
     # r44：進出量問句（進多少/出了幾/出貨了沒——描述直達曾劫「南倉啤酒這個月進多少」）
     "進多少", "出多少", "進了幾", "出了幾", "出貨了沒", "進貨了沒", "出了沒", "進了沒",
+    # r45：差額比較（「衛生紙比濕紙巾多多少」曾被描述直達劫成單品查詢）
+    "多多少", "少多少", "多幾件", "少幾件",
     "進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨", "來貨", "收了",
     "送來", "送到", "卸了", "卸貨", "入了", "囤了", "囤貨", "補上", "補進",
     "補齊", "收到", "收一批", "入倉", "上架", "新到", "收進", "剛進", "叫",
@@ -3736,6 +3738,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C8] RCA 意圖 → search_log（原 {func_name}）keyword={kw!r}")
         return "search_log", new_args, True
 
+    # C9c（r45）：設定總覽句（「北倉的安全庫存總覽」曾回「找不到商品『總覽』」）——
+    # 要在 C9 抽 item 之前攔，否則 item='__unknown__:總覽' 進誠實拒絕路
+    if any(k in user_text for k in ("安全庫存", "安全水位", "警戒值")) \
+            and any(w in user_text for w in ("總覽", "全表", "一覽", "所有設定", "全部設定")):
+        log.info(f"[校正 C9c] 設定總覽 → manage_config read: {user_text!r}")
+        return "manage_config", {"action": "read", "key": "安全庫存"}, True
+
     # C9：含設定項詞 + 動作詞 → 強轉 manage_config（set_alert 已有自己的路由不干涉）
     # 也涵蓋 LLM 已經正確輸出 manage_config、但 key/value 自己抽壞的情況——原本
     # 只在 func_name 不是 manage_config 時才校正，等於預設 LLM 判對功能就一定
@@ -6144,7 +6153,10 @@ async def ws_handler(ws: WebSocket):
                             "比一下", "比比看", "誰比較", "較多", "較少", "賣得", "賣最",
                             "多還是", "大還是", "對比", "差多少", "哪邊", "誰多", "誰少", "哪種多"))
             _plq_mv = any(w in user_text for w in ("進", "出", "補", "調", "退")) and _re.search(r'\d', user_text)
-            if not _plq_mv and (_plq_cmp
+            # r45：裸並列（「北倉衛生紙、南倉啤酒」「衛生紙+濕紙巾」無庫存 cue）也進 gate
+            _plq_bare = (("、" in user_text or "+" in user_text) and len(user_text) <= 16
+                         and not _re.search(r'\d', user_text))
+            if not _plq_mv and (_plq_cmp or _plq_bare
                     or any(w in user_text for w in ("庫存", "還剩", "剩多少", "各剩", "有多少", "還有多少", "剩幾"))):
                 import warehouse as _W_plq
                 # 只靠分隔符切（跟/和/、等）。無分隔黏寫（「衛生紙濕紙巾尿布」）不處理——
@@ -6154,7 +6166,7 @@ async def ws_handler(ws: WebSocket):
                 # r43：比較尾巴一併剝（「尿布哪個賣最好」的尾巴害第三個商品抽不到 → hits=2
                 # 漏攔三商品比較）
                 _plq_src = _re.sub(r"(哪個|哪一個|誰|比一比|比比看|比較一下).*$", "", _plq_src)
-                _plq_parts = [p.strip() for p in _re.split(r"[跟和與、,，及]|還有|以及", _plq_src) if p.strip()]
+                _plq_parts = [p.strip() for p in _re.split(r"[跟和與、,，及+]|還有|以及", _plq_src) if p.strip()]
                 _plq_hits = []
                 for p in _plq_parts:
                     _m = _W_plq.match_items(_extract_sku_keyword(p) or p)
@@ -6581,6 +6593,73 @@ async def ws_handler(ws: WebSocket):
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(0.008)
                     await send({"type": "done", "result": result})
+                    continue
+
+            # ── r45 比較家族補洞 ──────────────────────────────
+            # A. 期間比較（今天比昨天/這週比上週）：compare_periods 只支援月級 → 誠實說明
+            # 帶真商品名的讓路（「藍牙喇叭上週跟這週哪週賣得多」C4-prod 有現成處理，守衛句）
+            if (_re.search(r'(今天|昨天|這週|本週|上週|這周|上周)(比|跟|和)(今天|昨天|這週|本週|上週|這周|上周)', user_text)
+                    or "這週比上週" in user_text or "今天比昨天" in user_text) \
+                    and not _text_has_item_name(user_text):
+                _pc_msg = ("期間對比目前支援「這個月跟上個月」的變化（可以問「這個月跟上個月"
+                           "差多少」）；單日／單週的直接對比還不支援喔。")
+                log.info(f"[dispatch-ws] 期間比較誠實說明: {user_text!r}")
+                for ch in _pc_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(0.008)
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _pc_msg,
+                    "data": {"question": _pc_msg, "options": [], "hint": ""}}})
+                continue
+            # B. 兩倉單品比較（「北倉比南倉多幾件衛生紙」「北倉南倉誰的衛生紙多」曾回全倉單品）
+            _w2m = _re.search(r'(北|中|南)[區]?倉?(?:比|跟|和)?(北|中|南)[區]?倉?(?:誰的|哪邊的?|比較|多幾件|少幾件|誰比較多|誰比較少|的)?(.{2,8}?)(?:多|少|比較多|比較少|哪邊多|誰多)?$', user_text) \
+                if _re.search(r'(北|中|南)[區]?倉.{0,4}(北|中|南)[區]?倉', user_text) else None
+            if _w2m and any(w in user_text for w in ("多", "少", "誰", "哪邊", "比")):
+                import warehouse as _W_w2
+                _w2_kw = _extract_sku_keyword(user_text)
+                _w2_m = _W_w2.match_items(_w2_kw) if _w2_kw else []
+                if _w2_m and _w2_m[0].get("score", 0) >= 5:
+                    _w2_name = _w2_m[0]["item"]["name"]
+                    _WH_E = {"北": "north", "中": "central", "南": "south"}
+                    _WH_L = {"北": "北區倉", "中": "中區倉", "南": "南區倉"}
+                    _wa, _wb = _w2m.group(1), _w2m.group(2)
+                    _ra2 = finance.execute("query_inventory", {"keyword": _w2_name, "warehouse": _WH_E[_wa]})
+                    _rb2 = finance.execute("query_inventory", {"keyword": _w2_name, "warehouse": _WH_E[_wb]})
+                    _qa2 = (_ra2.get("data") or {}).get("total_qty", 0)
+                    _qb2 = (_rb2.get("data") or {}).get("total_qty", 0)
+                    _diff2 = abs(_qa2 - _qb2)
+                    _winwh = _WH_L[_wa] if _qa2 >= _qb2 else _WH_L[_wb]
+                    _w2_sum = (f"「{_w2_name}」{_WH_L[_wa]} {_qa2:,} 件、{_WH_L[_wb]} {_qb2:,} 件"
+                               f"——{_winwh}多 {_diff2:,} 件。")
+                    log.info(f"[dispatch-ws] 兩倉單品比較: {_w2_name} {_wa}{_qa2}/{_wb}{_qb2}")
+                    for ch in _w2_sum:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "inventory_single", "summary": _w2_sum, "data": {}}})
+                    continue
+            # C. 兩商品差額比較（「衛生紙比濕紙巾多多少」「啤酒比氣泡水少幾件」曾回單品）
+            _d2m = _re.search(r'^(.{2,10}?)比(.{2,10}?)(?:多|少)(?:多少|幾件|幾個|幾)', user_text)
+            if _d2m:
+                import warehouse as _W_d2
+                _da = _W_d2.match_items(_extract_sku_keyword(_d2m.group(1)) or _d2m.group(1))
+                _db = _W_d2.match_items(_extract_sku_keyword(_d2m.group(2)) or _d2m.group(2))
+                if (_da and _da[0].get("score", 0) >= 5 and _db and _db[0].get("score", 0) >= 5
+                        and _da[0]["item"]["sku_id"] != _db[0]["item"]["sku_id"]):
+                    _na2, _nb2 = _da[0]["item"]["name"], _db[0]["item"]["name"]
+                    _ia = finance.execute("query_inventory", {"keyword": _na2})
+                    _ib = finance.execute("query_inventory", {"keyword": _nb2})
+                    _ta = (_ia.get("data") or {}).get("total_qty") or sum(r.get("qty", 0) for r in (_ia.get("data") or {}).get("rows", []))
+                    _tb = (_ib.get("data") or {}).get("total_qty") or sum(r.get("qty", 0) for r in (_ib.get("data") or {}).get("rows", []))
+                    _dw = _na2 if _ta >= _tb else _nb2
+                    _d2_sum = (f"「{_na2}」三倉共 {_ta:,} 件、「{_nb2}」三倉共 {_tb:,} 件"
+                               f"——「{_dw}」多 {abs(_ta - _tb):,} 件。")
+                    log.info(f"[dispatch-ws] 兩商品差額比較: {_na2}{_ta}/{_nb2}{_tb}")
+                    for ch in _d2_sum:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "inventory_single", "summary": _d2_sum, "data": {}}})
                     continue
 
             # ── 兩商品銷量比較（r18）：「防曬帽跟毛帽哪個賣得好」「e01跟e02哪個
