@@ -632,13 +632,12 @@ def run_script(script_name: str = "", **_kw) -> dict:
 
 # 白名單腳本實際指令（server confirm 後呼叫 commit_run_script）
 _SCRIPT_CMD = {
-    # id → (相對 warehouse_v2/ 的 python 腳本, 額外 args)
-    "stock_audit":      ("test/warehouse_data/scripts/stock_audit.py",
-                         ["--data-dir", "test/warehouse_data"]),
-    "export_movements": ("test/warehouse_data/scripts/export_movements.py",
-                         ["--data-dir", "test/warehouse_data", "--days", "30"]),
-    "generate_report":  ("test/warehouse_data/scripts/generate_report.py",
-                         ["--data-dir", "test/warehouse_data", "--type", "full"]),
+    # id → (scripts/ 下的檔名, 額外 args)。路徑一律從 _data_dir() 推導——
+    # 本機是 warehouse_v2/test/warehouse_data、RPI5 是 ~/warehouse_v2/warehouse_data
+    # （扁平佈局），寫死 test/ 前綴會在 RPI5 找不到檔（r55 收官批抓到）。
+    "stock_audit":      ("stock_audit.py",      []),
+    "export_movements": ("export_movements.py", ["--days", "30"]),
+    "generate_report":  ("generate_report.py",  ["--type", "full"]),
 }
 
 
@@ -650,14 +649,15 @@ def commit_run_script(script_id: str, actor: str = "user_confirmed",
     spec = _SCRIPT_CMD.get(script_id)
     if not spec:
         return W._err(f"腳本 {script_id} 未綁定指令")
-    rel, extra = spec
-    root = _data_dir().parent.parent          # warehouse_v2/
-    script_path = root / rel
+    fname, extra = spec
+    script_path = _data_dir() / "scripts" / fname
+    extra = ["--data-dir", str(_data_dir()), *extra]
+    root = _data_dir().parent                 # server.py 所在目錄（兩平台皆是）
     ts = datetime.now().isoformat(timespec="seconds")
     trace_id = trace_id or f"run-{ts}"
 
     if not script_path.exists():
-        return W._err(f"找不到腳本檔：{rel}")
+        return W._err(f"找不到腳本檔：{script_path.name}")
 
     try:
         import os as _os

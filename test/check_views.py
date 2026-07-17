@@ -6,7 +6,7 @@
 import re, io, sys
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 TEXT_ONLY = {"guide", "rejected", "clarify", "error", "item_list", "related_empty",
-             "reset_done", "alert_deleted", "schedule_deleted"}
+             "expiring_empty", "reset_done", "alert_deleted", "schedule_deleted"}
 srv = set()
 for f in ("server.py", "warehouse.py", "tools_v2.py"):
     srv |= set(re.findall(r'["\']view["\']\s*[:=]\s*["\']([a-z_]+)["\']', open(f, encoding="utf-8").read()))

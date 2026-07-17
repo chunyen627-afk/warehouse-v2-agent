@@ -49,3 +49,25 @@
 ### hand-r55-通稱config選單
 > 鍋子警戒值設成60 | clarify | 哪一個
 > 第二個 | config_confirm | 野炊
+
+### hand-r55f-垃圾詞不污染context（到期假全綠危險級）
+> 買咖啡機的人還買什麼 | related,related_empty
+> 連帶第一名的庫存 | not:error
+> 快過期的有哪些 | expiring | 到期
+### hand-r55f-排行第N追問
+> 本月熱銷前五 | hot_items
+> 第三名剩多少 | inventory_single | 第3名
+### hand-r55f-缺貨追問最緊急
+> 哪些快缺貨 | low_stock
+> 最緊急的是哪個 | low_stock | 最緊急
+### hand-r55f-調貨反悔維持原案
+> 調20個健身環從北倉到南倉 | transfer_confirm | 健身環
+> 等等 改15個 | clarify | 重新說
+> 算了照原本的 | clarify | 確認
+> 好啦確認 | transfer_done
+### hand-r55f-取消有回覆
+> 北倉進3個毛帽 | movement_confirm | 毛帽
+> 取消 | item_cancelled | 已取消
+### hand-r55f-到期清單倉別過濾
+> 快過期的有哪些 | expiring | 到期
+> 只看南倉的 | expiring | 南區倉

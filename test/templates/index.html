@@ -1817,7 +1817,8 @@ function renderViewCard(view, data, topSummary) {
       card.innerHTML = `<div class="label">✅ 完成</div>`;
     }
   } else if (view === 'item_cancelled') {
-    card.innerHTML = `<div class="label" style="color:var(--muted)">🚫 已取消新增商品</div>`;
+    // r55：取消對象不一定是新增商品（出貨/調貨/設定卡都走這個 view）——有 summary 用 summary
+    card.innerHTML = `<div class="label" style="color:var(--muted)">🚫 ${data.summary || topSummary || '已取消這筆操作'}</div>`;
   } else if (view === 'item_create_step1' || view === 'item_create_step2' || view === 'item_create_step3' || view === 'item_create_step4') {
     const stepData = data;
     card.innerHTML = `

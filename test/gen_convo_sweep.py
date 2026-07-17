@@ -134,8 +134,7 @@ if __name__ == "__main__":
 try:
     _hand = open(__file__.replace('gen_convo_sweep.py', '_convo_hand.txt'), encoding='utf-8').read()
     with open(__file__.replace('gen_convo_sweep.py', '_convo_sweep.txt'), 'a', encoding='utf-8') as _f:
-        _f.write('
-' + _hand)
+        _f.write('\n' + _hand)
     print('手寫守衛景已併入')
 except FileNotFoundError:
     pass

@@ -18,6 +18,9 @@ regression_ws.py 只吐 view 和通過率，看不到實際回答文字，導致
 
     # 從檔案讀（每行一句，# 註解；支援「類別|句子」格式，類別會被忽略只看回答）
     python ws_inspect.py --file mysents.txt
+
+    # 跨句劇情批：全部句子走同一條 WS 連線（context 會延續，像真訪客連續輸入）
+    python ws_inspect.py --file _conv100_r55.txt --session
 """
 import asyncio, json, ssl, sys, io, time, argparse
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
@@ -59,25 +62,29 @@ def looks_bad(view: str, text: str) -> str:
     return ""
 
 
-async def ask(uri, ctx, text, timeout=45):
+async def _ask_on(ws, text, timeout=45):
     t0 = time.perf_counter()
     toks, summary, view, mode, tps, tok = [], "", "?", "?", 0.0, 0
-    async with websockets.connect(uri, ssl=ctx, max_size=None) as ws:
-        await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
-        while True:
-            m = json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
-            t = m.get("type")
-            if t == "token":
-                toks.append(m.get("text", ""))
-            elif t == "perf":
-                mode = m.get("mode", mode)
-                if m.get("tps", 0): tps = m["tps"]
-                if m.get("tok", 0): tok = m["tok"]
-            elif t == "done":
-                r = m.get("result", {}) or {}
-                view = r.get("view", "?")
-                summary = r.get("summary", "") or ""
-                break
+    await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
+    while True:
+        m = json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+        t = m.get("type")
+        if t == "token":
+            toks.append(m.get("text", ""))
+        elif t == "perf":
+            mode = m.get("mode", mode)
+            if m.get("tps", 0): tps = m["tps"]
+            if m.get("tok", 0): tok = m["tok"]
+        elif t == "error":
+            # error frame 沒有後續 done——別等到 timeout（r56）
+            view = "error"
+            summary = m.get("text", "") or ""
+            break
+        elif t == "done":
+            r = m.get("result", {}) or {}
+            view = r.get("view", "?")
+            summary = r.get("summary", "") or ""
+            break
     lat = (time.perf_counter() - t0) * 1000.0
     # 畫面顯示的回答文字：summary 優先，沒有就用串接的 tokens
     answer = summary or "".join(toks)
@@ -85,11 +92,18 @@ async def ask(uri, ctx, text, timeout=45):
             "mode": mode, "tps": tps, "tok": tok}
 
 
+async def ask(uri, ctx, text, timeout=45):
+    async with websockets.connect(uri, ssl=ctx, max_size=None) as ws:
+        return await _ask_on(ws, text, timeout)
+
+
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("sents", nargs="*", help="要測的句子")
     ap.add_argument("--rpi5", action="store_true", help="連 RPI5 wss://localhost:8001")
     ap.add_argument("--file", help="從檔案讀句子（每行一句）")
+    ap.add_argument("--session", action="store_true",
+                    help="全部句子共用同一條 WS 連線（跨句劇情批用，context 延續）")
     args = ap.parse_args()
 
     if args.rpi5:
@@ -112,14 +126,26 @@ async def main():
     else:
         sents = DEFAULT_SENTS
 
-    print(f"\n{'='*74}\nws_inspect → {uri}  共 {len(sents)} 句\n{'='*74}")
+    mode_note = "（--session 單一連線、context 延續）" if args.session else ""
+    print(f"\n{'='*74}\nws_inspect → {uri}  共 {len(sents)} 句{mode_note}\n{'='*74}")
     bad = []
+    sess_ws = None
+    if args.session:
+        sess_ws = await websockets.connect(uri, ssl=ctx, max_size=None)
     for i, s in enumerate(sents, 1):
         try:
-            r = await ask(uri, ctx, s)
+            if args.session:
+                r = await _ask_on(sess_ws, s)
+            else:
+                r = await ask(uri, ctx, s)
         except Exception as e:
             print(f"\n[{i:3}] ✗ WS錯誤: {s}\n       {e}")
             bad.append((s, f"WS錯:{e}"))
+            if args.session:  # session 斷線就重連，劇情盡量續走
+                try:
+                    sess_ws = await websockets.connect(uri, ssl=ctx, max_size=None)
+                except Exception:
+                    pass
             continue
         why = looks_bad(r["view"], r["answer"])
         flag = "⚠️ " if why else "   "
@@ -136,6 +162,11 @@ async def main():
             print(f"       └─⚠️ 可疑：{why}")
             bad.append((s, why))
 
+    if sess_ws is not None:
+        try:
+            await sess_ws.close()
+        except Exception:
+            pass
     print(f"\n{'='*74}")
     if bad:
         print(f"⚠️ 可疑回答 {len(bad)} 句（要回頭看）：")

@@ -59,7 +59,8 @@ ACCEPT = {
     "rel":   lambda v: v in ("related", "related_help", "related_empty"),
     "mvt":   lambda v: v == "movement",
     "vague": lambda v: v in ("clarify", "guide", "rejected", "inventory"),
-    "noex":  lambda v: v in ("clarify", "rejected", "error", "related_empty", "guide"),
+    "noex":  lambda v: v in ("clarify", "rejected", "error", "related_empty", "guide",
+                              "expiring_empty"),
     "any":   lambda v: v not in ("error", "clarify", "rejected"),
     # 訪客閒聊/搗蛋防禦（第17輪）：優雅拒絕/引導/追問，不可幻覺商品或開卡
     "chat":   lambda v: v in ("rejected", "guide", "clarify"),

@@ -1265,6 +1265,18 @@ def list_expiring_items(
             it["sku_id"] for it in s.items
             if kw_lower in it["name"].lower() or kw_lower in it["sku_id"].lower()
         }
+        # r55 收官批：keyword 一個商品都對不到 → 明說查無，不能往下走成
+        # 「沒有快到期的批次 ✅」假全綠（到期警示被不存在的商品名濾光＝漏報）。
+        if not kw_skus:
+            return {
+                "ok": True,
+                "summary": f"倉庫目前沒有「{keyword}」這個商品喔，無法查它的到期狀況。"
+                           "想看全部的話可以說「快過期的有哪些」。",
+                "data": {"within_days": within_days, "warehouse": warehouse,
+                         "category": category, "keyword": keyword,
+                         "rows": [], "counts": {"red": 0, "orange": 0, "yellow": 0}},
+                "view": "expiring_empty",
+            }
 
     rows = []
     for b in s.batches:
