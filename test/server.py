@@ -251,6 +251,10 @@ GATEKEEPER_REJECT_MSG = (
 # 倉管關鍵字（「告訴我」撞通知詞、「壞掉」撞到期詞）誤入功能路由，
 # 黑名單優先於白名單直接友善拒絕。
 _GATEKEEPER_BLACKLIST = (
+    # r44 購物語境（把 demo 當電商：運費/付款/折扣/退貨——曾掉進空手訊息回顯醜句）
+    "運費", "貨到付款", "打幾折", "會員價", "積點", "退貨", "結帳", "下單",
+    # r44 觀念問題句（是什麼意思/怎麼算——曾回「找不到商品『意思』」）
+    "是什麼意思", "怎麼算的", "什麼叫",
     # 探人隱私（r19：「把別人的購物車給我看」曾進 related_empty）
     "別人的",
     # r27：「你們老闆電話多少」的「多少」曾繞進 movement
@@ -387,6 +391,13 @@ def _text_has_item_name(text: str) -> bool:
             for i in range(len(nm) - 2):
                 if nm[i:i + 3] in s:
                     return True
+            # r44：核心名尾 2 字也算（「毛帽」是「保暖毛帽」尾 2 字，3 字滑窗掃不到
+            # →「不知道能不能查一下毛帽」曾被 guide 搶走）。僅取純中文尾避免 ml/kg。
+            _core_gd = _it_gd["name"].split()[0].lower()
+            _tail_gd = _core_gd[-2:]
+            if (len(_core_gd) >= 3 and len(_tail_gd) == 2
+                    and all("一" <= c <= "鿿" for c in _tail_gd) and _tail_gd in s):
+                return True
     except Exception:
         pass
     return False
@@ -614,12 +625,18 @@ _EXPIRING_INTENT_WORDS = (
     "expire", "expiring", "expired", "shelf life", "best before",
 )
 
+# r44 C4-mv：進出量問句判準（進/出+量疑問緊鄰）——「上週出了幾件」「這個月進多少」
+# 「出貨了沒」是 movement 不是庫存；描述直達/C3e/C13 各 hard-return 出口都要讓路。
+_C4MV_RE = re.compile(r'([進出])貨?了?(幾|多少|了沒|沒有)')
+
 # 功能描述直達的「非查庫存意圖」守衛詞（2026-07-09）：進貨/出貨/調貨/連帶/
 # 銷況句常「描述命中+無查詢語氣」，錯字放寬會誤劫成查庫存。這些意圖詞出現時
 # 即使描述命中也不走直達，交回原本的 movement/transfer/related/銷況路徑。
 # 涵蓋 15 輪收斂累積的進出貨動詞（含 RPI5 回歸抓到的 新到/走了/掃走/訂了/抓/支援）。
 _DESC_NONQUERY_INTENT = (
     # 進貨
+    # r44：進出量問句（進多少/出了幾/出貨了沒——描述直達曾劫「南倉啤酒這個月進多少」）
+    "進多少", "出多少", "進了幾", "出了幾", "出貨了沒", "進貨了沒", "出了沒", "進了沒",
     "進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨", "來貨", "收了",
     "送來", "送到", "卸了", "卸貨", "入了", "囤了", "囤貨", "補上", "補進",
     "補齊", "收到", "收一批", "入倉", "上架", "新到", "收進", "剛進", "叫",
@@ -1241,6 +1258,9 @@ _TYPO_NORM = (
     # r43 注音殘字補（衛生ㄓˇ/ㄆㄧˊ酒/ㄩˊㄐㄧㄚ墊 曾空手；露營ㄉㄥ曾誤配露營椅）
     ("生ㄓˇ", "生紙"), ("ㄆㄧˊ酒", "啤酒"), ("ㄩˊㄐㄧㄚ", "瑜珈"),
     ("營ㄉㄥ", "營燈"), ("ㄋㄞˇ粉", "奶粉"),
+    # r44 英文俗稱補（check一下tissue曾空手、運動towel曾掉類別概覽）。
+    # paper towel 要排在 towel 前（長詞先換，否則被拆成 paper 毛巾 誤配運動毛巾）
+    ("paper towel", "衛生紙"), ("tissue", "衛生紙"), ("towel", "毛巾"),
     ("啞玲", "啞鈴"), ("啞零", "啞鈴"),
     ("按全庫存", "安全庫存"), ("按全水位", "安全水位"), ("案全庫存", "安全庫存"),
     ("庫純", "庫存"), ("庫崇", "庫存"),
@@ -2906,7 +2926,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         or any(w in user_text for w in _HOT_INTENT_WORDS_SLOW))
         # RCA 詞也放行讓 C8 轉 search_log（r22 RPI5：「庫存少得莫名其妙」
         # 曾被這裡搶成單品庫存）
-        if not _c3e_low and not _c3e_hotslow and not _has_rca_word(user_text):
+        if not _c3e_low and not _c3e_hotslow and not _has_rca_word(user_text) \
+                and not _C4MV_RE.search(user_text):
+            # （r44：進出量問句整塊讓給 C4-mv 轉 movement——商品線索與概覽兩個
+            #   hard-return 出口都曾把「咖啡機今天出貨了沒」定死）
             import warehouse as _W3e
             _c3e_kw = _extract_sku_keyword(user_text)
             _c3e_m = _W3e.match_items(_c3e_kw) if _c3e_kw else []
@@ -2941,6 +2964,34 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _c4_related_block = any(w in user_text for w in _RELATED_INTENT_WORDS)
     # 帶具體商品名的熱銷問句（「輕量羽絨外套最近賣得如何」）是問該商品銷況，
     # 回全類別排行答非所問 → 轉該商品 movement（conv100-r13）
+    _c4mv = _C4MV_RE.search(user_text)
+    if func_name in ("query_inventory", "list_low_stock") and _c4mv \
+            and not any(w in user_text for w in ("還有多少", "還剩多少", "剩多少")):
+        _mv_dir = "in" if _c4mv.group(1) == "進" else "out"
+        _mv_period = ("today" if "今天" in user_text else
+                      "yesterday" if "昨天" in user_text else
+                      "last_week" if any(w in user_text for w in ("上週", "上周", "上禮拜")) else
+                      "this_week" if any(w in user_text for w in ("這週", "本週", "這周", "本周", "這禮拜")) else
+                      "this_month")
+        _mv_src = _re.sub(r'[進出]貨?了?(幾|多少|了沒|沒有).*', '', user_text)
+        _mv_kw = _extract_sku_keyword(_mv_src)
+        _mv_args = {"period": _mv_period, "direction": _mv_dir}
+        if _mv_kw:
+            _mv_args["keyword"] = _mv_kw
+        for _zh4, _en4 in _WH_ZH_MAP.items():
+            if _zh4 in user_text:
+                _mv_args["warehouse"] = _en4
+                break
+        log.info(f"[校正 C4-mv] 進出量問句 → query_movement {_mv_args}")
+        return "query_movement", _mv_args, True
+
+    # ── C4-mvg（r44）：movement keyword 幻覺接地——「昨天出的貨是哪些」（無商品）
+    #   LLM 曾自帶 keyword=無線藍牙耳機 錨定單品。kw 對不上原句 → 丟棄改全商品統計。──
+    if func_name == "query_movement" and func_args.get("keyword") \
+            and not _kw_grounded(func_args["keyword"], user_text):
+        log.info(f"[校正 C4-mvg] movement kw 不接地丟棄: {func_args['keyword']!r}")
+        func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+
     if (is_hot or is_slow) and not _c4_related_block \
             and not any(w in user_text for w in ("類", "用品")):
         # （「露營用品類賣最好」是類別排行，fuzzy 會誤中帳篷 → 類/用品 句不轉）
@@ -7287,6 +7338,14 @@ async def ws_handler(ws: WebSocket):
                 if not _tool_intent_ok(func_name, user_text):
                     # reject 前先試降級救援（口語前綴害 LLM 輸出錯 function，RPI5 v21）
                     _rescue = _intent_guard_rescue(func_name, func_args, user_text)
+                    if not _rescue and _re.search(r'[進出]的?貨', user_text):
+                        # r44：「昨天出的貨是哪些」LLM 曾投 related(幻覺kw) 被 gate 拒
+                        # → 降級成當期進出統計（方向/期間從原句抽）
+                        _g44_args = {"direction": "out" if "出" in user_text else "in",
+                                     "period": ("yesterday" if "昨天" in user_text else
+                                                "today" if "今天" in user_text else "this_week")}
+                        log.info(f"[gate-rescue r44] 進出貨句 → query_movement {_g44_args}")
+                        _rescue = ("query_movement", _g44_args)
                     if not _rescue and _text_has_item_name(user_text):
                         # r43：句帶真商品/通稱（「帽子有哪些」clf 誤判 list_files 曾被拒）
                         # → 降級成該商品庫存查詢，不冤枉正經查詢句
