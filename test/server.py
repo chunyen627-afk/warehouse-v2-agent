@@ -6156,8 +6156,15 @@ async def ws_handler(ws: WebSocket):
             # r45：裸並列（「北倉衛生紙、南倉啤酒」「衛生紙+濕紙巾」無庫存 cue）也進 gate
             _plq_bare = (("、" in user_text or "+" in user_text) and len(user_text) <= 16
                          and not _re.search(r'\d', user_text))
-            if not _plq_mv and (_plq_cmp or _plq_bare
-                    or any(w in user_text for w in ("庫存", "還剩", "剩多少", "各剩", "有多少", "還有多少", "剩幾"))):
+            # r46：related/連帶句豁免（「衛生紙跟濕紙巾一起賣嗎」是連帶不是並列查詢）
+            _plq_rel = any(w in user_text for w in _RELATED_INTENT_WORDS)
+            if not _plq_mv and not _plq_rel and (_plq_cmp or _plq_bare
+                    or any(w in user_text for w in ("庫存", "還剩", "剩多少", "各剩", "有多少",
+                                                     "還有多少", "剩幾",
+                                                     # r46：「運動毛巾跟毛帽都查」「露營燈和露營椅和
+                                                     # 露營帳篷」（裸和三連）曾只回一個
+                                                     "都查", "都要", "都給我", "全都", "一起查"))
+                    or ("和" in user_text and len(user_text) <= 16 and not _re.search(r'\d', user_text))):
                 import warehouse as _W_plq
                 # 只靠分隔符切（跟/和/、等）。無分隔黏寫（「衛生紙濕紙巾尿布」）不處理——
                 #   曾試「掃 2 字短稱」但誤傷嚴重（「無線藍牙耳機」被拆成藍牙耳機+藍牙喇叭、
@@ -6598,7 +6605,7 @@ async def ws_handler(ws: WebSocket):
             # ── r45 比較家族補洞 ──────────────────────────────
             # A. 期間比較（今天比昨天/這週比上週）：compare_periods 只支援月級 → 誠實說明
             # 帶真商品名的讓路（「藍牙喇叭上週跟這週哪週賣得多」C4-prod 有現成處理，守衛句）
-            if (_re.search(r'(今天|昨天|這週|本週|上週|這周|上周)(比|跟|和)(今天|昨天|這週|本週|上週|這周|上周)', user_text)
+            if (_re.search(r'(今天|昨天|這週|本週|上週|這周|上周|早上|上午|中午|下午|晚上|傍晚)(比|跟|和)(今天|昨天|這週|本週|上週|這周|上周|早上|上午|中午|下午|晚上|傍晚)', user_text)
                     or "這週比上週" in user_text or "今天比昨天" in user_text) \
                     and not _text_has_item_name(user_text):
                 _pc_msg = ("期間對比目前支援「這個月跟上個月」的變化（可以問「這個月跟上個月"
