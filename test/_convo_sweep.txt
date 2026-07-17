@@ -7944,3 +7944,10 @@
 >@B 啤酒庫存 | inventory_single | 啤酒
 > 剩多少來著 | inventory_single | 衛生紙
 >@B 那個到期了嗎 | expiring | 啤酒
+
+### hand-r52-序數講法加寬
+> 咖啡還剩多少 | clarify | 哪一個
+> 選項1 | inventory_single
+### hand-r52-最後一個
+> 帽子有哪些 | clarify | 哪一個
+> 最後一個 | not:error

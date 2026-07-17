@@ -5981,12 +5981,22 @@ async def ws_handler(ws: WebSocket):
 
             # ── r51：clarify 選單序數選擇——「咖啡對應到5個商品」後說「第一個」
             #   曾回「沒有『第一個』這個商品」。有選單在場且句子是純序數 → 代入選項。──
-            _ord51 = _re.fullmatch(r"第?\s*([一二兩三四五六七八12345678])\s*(個|項|號)?\s*(好了|吧)?[?？。!！]*",
-                                   user_text.strip())
-            if _ord51 and _clarify_opts_by_vid.get(vid):
+            # 講法收斂：第一個/選項1/第一項/項目一/我要第一個/1號/最上面那個/最後一個 全吃
+            _ord_txt = user_text.strip()
+            _ord51 = _re.fullmatch(
+                r"(?:我?要|選|給我|就)?\s*(?:選項|項目|第)?\s*([一二兩三四五六七八12345678])\s*(?:個|項|號)?\s*(?:好了|吧|喔)?[?？。!！]*",
+                _ord_txt)
+            _ord_last = _re.fullmatch(r"(?:我?要|選)?\s*最後(?:一個|一項|那個)?\s*(?:好了|吧)?[?？。!！]*", _ord_txt)
+            _ord_first = _re.fullmatch(r"(?:我?要|選)?\s*(?:最上面|頭一個|頭一項)(?:那個)?\s*(?:好了|吧)?[?？。!！]*", _ord_txt)
+            if (_ord51 or _ord_last or _ord_first) and _clarify_opts_by_vid.get(vid):
                 _ORD_MAP = {"一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5,
                             "六": 6, "七": 7, "八": 8}
-                _oi = _ORD_MAP.get(_ord51.group(1)) or int(_ord51.group(1))
+                if _ord_last:
+                    _oi = len(_clarify_opts_by_vid[vid])
+                elif _ord_first:
+                    _oi = 1
+                else:
+                    _oi = _ORD_MAP.get(_ord51.group(1)) or int(_ord51.group(1))
                 _opts51g = _clarify_opts_by_vid[vid]
                 if 1 <= _oi <= len(_opts51g):
                     log.info(f"[ordinal-select] vid={vid} 「{user_text}」→ 選項{_oi}「{_opts51g[_oi-1]}」")
