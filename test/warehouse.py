@@ -122,10 +122,16 @@ def _suggest_on_empty(keyword: str, action: str = "庫存") -> dict:
         opts.append("本月熱銷商品")
     opts.append("查倉管")  # 永遠有個「看功能列表」兜底
 
-    hint_kw = f"「{keyword}」" if keyword else ""
+    # r43：keyword 回顯要過門檻——閒聊/亂打殘渣（「算我便宜一點啦」「。。。」「庫庫 存存」）
+    # 曾被原样塞進「沒有『…』這個商品」句，讀起來像壞掉。只有短且乾淨的中文詞才回顯。
+    _kw_s = (keyword or "").strip()
+    _echoable = (2 <= len(_kw_s) <= 6 and " " not in _kw_s
+                 and any("一" <= c <= "鿿" for c in _kw_s))
+    hint_kw = f"「{_kw_s}」" if _echoable else ""
     # user 原則 2026-07-16：查無商品要提醒可新增，措辭不裝傻（舊句「找不到相關
     # 商品」在有近似品時讀起來像系統很笨）。
-    question = f"倉庫目前沒有 {hint_kw}這個商品喔，你可以查："
+    question = (f"倉庫目前沒有 {hint_kw}這個商品喔，你可以查：" if _echoable
+                else "請問你想查哪個商品？你可以查：")
 
     return {
         "ok": True,
@@ -1627,7 +1633,16 @@ def query_related_items(
 # Dispatch
 # ────────────────────────────────────────────────
 
+def _clarify_passthrough(question: str = "請再說清楚一點，你想查什麼呢？",
+                         options: list | None = None, hint: str = "") -> dict:
+    """clarify 偽工具（r43）：校正層要「追問而非執行」時回傳 func_name='clarify'，
+    execute() 查表直接組追問卡——不用每個校正點自己拼 done envelope。"""
+    return {"ok": True, "view": "clarify", "summary": question,
+            "data": {"question": question, "options": options or [], "hint": hint}}
+
+
 FUNCTIONS = {
+    "clarify":             _clarify_passthrough,
     "query_inventory":     query_inventory,
     "query_movement":      query_movement,
     "list_low_stock":      list_low_stock,

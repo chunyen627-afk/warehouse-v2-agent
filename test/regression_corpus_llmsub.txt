@@ -1,4 +1,4 @@
-# LLM-hit 子集（自動產生：regression_corpus.txt 全量跑完側錄，255/882 句進過 LLM）
+# LLM-hit 子集（自動產生：regression_corpus.txt 全量跑完側錄，257/898 句進過 LLM）
 mv|南倉收了一批濾掛咖啡30盒
 mvt|今天有什麼進出嗎
 rca|玻璃保鮮盒的數量怪怪的
@@ -254,3 +254,5 @@ mvt|慢跑鞋進出紀錄|慢跑鞋
 rel|清潔手套的相關商品|手套
 rel|清潔手套搭配什麼賣|手套
 mvt|嬰兒進出紀錄|進貨
+cfg_clarify|咖啡安全庫存改成50|哪一個
+cfg_clarify|安全庫存調成200%|百分比

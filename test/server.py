@@ -374,6 +374,10 @@ def _text_has_item_name(text: str) -> bool:
     try:
         import warehouse as _W_gd
         s = text.lower().replace(" ", "")
+        # r43：單字通稱（帽子/鍋子…）也算具體商品指涉——「帽子有哪些」曾被 guide
+        # 拒絕，但通稱表能導到毛帽/遮陽帽清單，該讓句子進查詢流程
+        if any(_gt in s for _gt in getattr(_W_gd, "_GENERIC_QUERY_FALLBACK", {})):
+            return True
         for _it_gd in _W_gd.state().items:
             nm = _it_gd["name"].lower().replace(" ", "")
             if len(nm) <= 3:
@@ -1234,6 +1238,9 @@ _TYPO_NORM = (
     ("ㄎ存", "庫存"), ("ㄍㄨ存", "庫存"), ("褲存", "庫存"), ("酷存", "庫存"),
     ("安全ㄎ", "安全庫"), ("ㄐ錄", "紀錄"), ("記錄呢", "紀錄呢"),
     ("咖啡雞", "咖啡機"), ("珈啡", "咖啡"),
+    # r43 注音殘字補（衛生ㄓˇ/ㄆㄧˊ酒/ㄩˊㄐㄧㄚ墊 曾空手；露營ㄉㄥ曾誤配露營椅）
+    ("生ㄓˇ", "生紙"), ("ㄆㄧˊ酒", "啤酒"), ("ㄩˊㄐㄧㄚ", "瑜珈"),
+    ("營ㄉㄥ", "營燈"), ("ㄋㄞˇ粉", "奶粉"),
     ("啞玲", "啞鈴"), ("啞零", "啞鈴"),
     ("按全庫存", "安全庫存"), ("按全水位", "安全水位"), ("案全庫存", "安全庫存"),
     ("庫純", "庫存"), ("庫崇", "庫存"),
@@ -1912,6 +1919,17 @@ def _extract_sku_keyword(text: str) -> str:
             return _contain_hits[0]
         if len(_contain_hits) >= 2:
             return cleaned
+        # r43：整串比不到時逐 token 比（「咖啡 賣得怎樣」的「賣得怎樣」不在噪音表，
+        # 整串 containment 落空 → 曾掉到 Layer4 fuzzy 硬猜濾掛咖啡）。token 唯一命中
+        # →取全名；token 歧義（咖啡×5/露營×4）→回該 token 不猜，讓下游聚合或列清單。
+        for _tk in cleaned.split():
+            if len(_tk) < 2:
+                continue
+            _tk_hits = [n for n in all_names if _tk in n]
+            if len(_tk_hits) == 1:
+                return _tk_hits[0]
+            if len(_tk_hits) >= 2:
+                return _tk
 
     # ── Layer 3: 商品名 part 在 text 中 ──
     for src in (cleaned, text):
@@ -1958,6 +1976,10 @@ def _extract_sku_keyword(text: str) -> str:
         代價＝「帽子」這種單字通稱會 clarify「你是指遮陽帽還是毛帽」，可接受。）"""
         n_len, sub = _lcs_len(src_t, name)
         if n_len < 2:
+            return False
+        # r43：連續子串必須含中文字——「北倉吃得下100箱」的「100」跟規格「100x30cm」
+        # LCS=3 曾接地成運動毛巾（純數字/字母沾邊不算真配對）
+        if not any("一" <= c <= "鿿" for c in sub):
             return False
         core = name.split()[0]
         # 連續子串恰好是「開頭材質修飾詞」→ 只靠修飾詞沾邊，不接地
@@ -3857,6 +3879,34 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         if _c11c_item:
             func_args = {**func_args, "item": _c11c_item}
             log.info(f"[校正 C11c] manage_config 補 item={_c11c_item!r}")
+
+    # C11d（r43，不猜原則）：item 是歧義短稱（咖啡×5/露營×4…）→ 寫入卡曾一口氣
+    # 改整個家族 15 項。歧義寫入不猜、追問是哪一個。
+    if func_name == "manage_config" and func_args.get("action") == "set" \
+            and func_args.get("item"):
+        import warehouse as _W_c11d
+        _c11d_m = _W_c11d.match_items(func_args["item"])
+        if len(_c11d_m) >= 2:
+            _c11d_top = _c11d_m[0]["score"]
+            # 嚴格同分才算歧義（咖啡→5個全 7 分）；指名句的精確命中會領先，不誤攔
+            _c11d_tied = [r["item"]["name"] for r in _c11d_m if r["score"] == _c11d_top]
+            if len(_c11d_tied) >= 2:
+                log.info(f"[校正 C11d] config item 歧義 {func_args['item']!r} → clarify {len(_c11d_tied)} 候選")
+                return "clarify", {
+                    "question": f"「{func_args['item']}」對應到 {len(_c11d_tied)} 個商品，你要改哪一個的{func_args.get('key','設定')}？",
+                    "options": _c11d_tied[:8],
+                    "hint": "點選其中一項，或直接輸入完整商品名稱"}, True
+
+    # （r43 曾加 C11e「無 item 追問範圍」→ 守衛 11 句誤攔即撤：倉別/全域 config
+    #   不指名商品是既有合法行為，確認卡本身就是保險。危險防線收斂為 C11f 百分比。）
+
+    # C11f（r43）：百分比數值不支援——「調成200%」曾被當絕對值 200 寫入。誠實追問。
+    if func_name == "manage_config" and func_args.get("action") == "set" \
+            and _re.search(r"\d\s*[%％]", user_text):
+        log.info(f"[校正 C11f] config 百分比值 → clarify: {user_text!r}")
+        return "clarify", {
+            "question": "設定值請用實際數量（不支援百分比喔），你想設成多少？",
+            "options": [], "hint": "例如「安全庫存改成 80」"}, True
 
     # C11：manage_config set 缺 warehouse → 預設 all（不擋，給預設）
     if func_name == "manage_config" and func_args.get("action") == "set" \
@@ -6043,20 +6093,36 @@ async def ws_handler(ws: WebSocket):
                             "比一下", "比比看", "誰比較", "較多", "較少", "賣得", "賣最",
                             "多還是", "大還是", "對比", "差多少", "哪邊", "誰多", "誰少", "哪種多"))
             _plq_mv = any(w in user_text for w in ("進", "出", "補", "調", "退")) and _re.search(r'\d', user_text)
-            if (not _plq_cmp and not _plq_mv
-                    and any(w in user_text for w in ("庫存", "還剩", "剩多少", "各剩", "有多少", "還有多少", "剩幾"))):
+            if not _plq_mv and (_plq_cmp
+                    or any(w in user_text for w in ("庫存", "還剩", "剩多少", "各剩", "有多少", "還有多少", "剩幾"))):
                 import warehouse as _W_plq
                 # 只靠分隔符切（跟/和/、等）。無分隔黏寫（「衛生紙濕紙巾尿布」）不處理——
                 #   曾試「掃 2 字短稱」但誤傷嚴重（「無線藍牙耳機」被拆成藍牙耳機+藍牙喇叭、
                 #   「嬰兒濕紙巾」被拆成尿布+濕紙巾），穩定優先。訪客通常會加「跟/和」。
                 _plq_src = _re.sub(r"的?庫存|各剩多少|各剩幾|各有多少|還有多少|剩多少|剩幾個?|還剩", "", user_text)
+                # r43：比較尾巴一併剝（「尿布哪個賣最好」的尾巴害第三個商品抽不到 → hits=2
+                # 漏攔三商品比較）
+                _plq_src = _re.sub(r"(哪個|哪一個|誰|比一比|比比看|比較一下).*$", "", _plq_src)
                 _plq_parts = [p.strip() for p in _re.split(r"[跟和與、,，及]|還有|以及", _plq_src) if p.strip()]
                 _plq_hits = []
                 for p in _plq_parts:
                     _m = _W_plq.match_items(_extract_sku_keyword(p) or p)
                     if _m and _m[0].get("score", 0) >= 5 and _m[0]["item"]["name"] not in _plq_hits:
                         _plq_hits.append(_m[0]["item"]["name"])
-                if len(_plq_hits) >= 2:
+                # r43：三個以上商品的比較題（「衛生紙跟濕紙巾和尿布哪個賣最好」）曾被
+                # LLM 猜一個答 movement——比較一次只支援兩個，超過就請兩兩比。
+                if _plq_cmp and len(_plq_hits) >= 3:
+                    _plq_msg = (f"一次幫你比兩個喔——{'、'.join(_plq_hits[:4])}，"
+                                f"請兩兩比，例如「{_plq_hits[0]} 跟 {_plq_hits[1]} 哪個多」。")
+                    log.info(f"[plq-gate] ≥3 商品比較 → clarify: {user_text!r} hits={_plq_hits}")
+                    for ch in _plq_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _plq_msg,
+                        "data": {"question": _plq_msg, "options": [], "hint": ""}}})
+                    continue
+                if not _plq_cmp and len(_plq_hits) >= 2:
                     _plq_msg = ("一次幫你查一種商品的庫存喔。請分開問，例如先問"
                                 f"「{_plq_hits[0]}庫存」，再問「{_plq_hits[1]}庫存」。"
                                 "（想比較多寡可以問「A 跟 B 哪個多」）")
@@ -6454,6 +6520,18 @@ async def ws_handler(ws: WebSocket):
                     await send({"type": "done", "result": result})
                     continue
 
+            # ── r43：庫存最少/墊底排行 → 缺貨清單（「庫存最少的前三個」曾回 60 項概覽）──
+            if (("庫存最少" in user_text or "存量最少" in user_text)
+                    or ("最少" in user_text and _re.search(r"前[一二三四五12345]", user_text))):
+                log.info(f"[dispatch-ws] 庫存最少 → list_low_stock: {user_text!r}")
+                result = finance.execute("list_low_stock", {})
+                if result.get("ok") and result.get("summary"):
+                    for ch in result["summary"]:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(0.008)
+                    await send({"type": "done", "result": result})
+                    continue
+
             # ── 兩商品銷量比較（r18）：「防曬帽跟毛帽哪個賣得好」「e01跟e02哪個
             #   賣得好」曾回全類別熱銷 TOP10（兩商品都不在榜=答非所問）──
             _pvs = _re.search(r'^(.{1,12}?)[跟和與](.{1,12}?)(?:哪個|哪一個|誰)(?:比較)?'
@@ -6486,12 +6564,16 @@ async def ws_handler(ws: WebSocket):
 
             # ── 兩商品庫存比較（r20）：「運動毛巾跟登山水壺各剩多少」曾只回
             #   單品。倉名開頭句（北倉跟中倉…）比不到商品自然跳過。──
-            _pvi = _re.search(r'^(.{1,12}?)[跟和與](.{1,12}?)(?:各剩多少|各多少|各有多少'
+            _pvi = _re.search(r'^(.{1,12}?)(?:[跟和與]|還有)(.{1,12}?)(?:各剩多少|各多少|各有多少'
                               r'|各還[有剩]|庫存各|各庫存|各剩幾'
                               # r21：「露營馬克杯跟露營燈哪個庫存多」曾只回單品
                               r'|哪個庫存多|哪個庫存比較多|誰的?庫存多|哪個比較多|哪個多'
                               # r25：「瑜珈墊跟啞鈴的庫存比一下」曾被 Pre-C-Cmp2 只抽第一個商品
-                              r'|的?庫存比一下|的?庫存比一比|的?庫存比較一下|庫存比看看)', user_text)
+                              r'|的?庫存比一下|的?庫存比一比|的?庫存比較一下|庫存比看看'
+                              # r43：「防蚊液和蚊香液比較一下」曾只回單品；「A還有B誰比較少」
+                              # 分隔詞「還有」＋少方向 也漏
+                              r'|誰比較少|哪個比較少|誰的?庫存少|誰少|誰多'
+                              r'|的?比較一下|比一比$|比比看)', user_text)
             if _pvi:
                 import warehouse as _W_pvi
                 _pia_kw = _extract_sku_keyword(_pvi.group(1)) or _pvi.group(1).strip()
@@ -6525,6 +6607,11 @@ async def ws_handler(ws: WebSocket):
             _bs_rank_type = ("slow" if any(w in user_text for w in _bs_slow_words)
                              else "hot" if any(w in user_text for w in _bs_hot_words)
                              else None)
+            # r43：「排行榜第二名剩多少」——第N名+庫存語沒有賣最好字眼，曾只回排行榜
+            _bs_rankn_m = _re.search(r'第\s*([一二三四五六七八九十0-9]+)\s*名', user_text)
+            if (_bs_rankn_m and not _bs_rank_type
+                    and any(w in user_text for w in ("排行", "榜", "熱銷", "暢銷"))):
+                _bs_rank_type = "hot"
             if _bs_rank_type and any(w in user_text for w in _bs_stock_words):
                 _bs_period = "this_month" if "月" in user_text else "this_week"
                 _bs_hot = finance.execute("list_hot_items",
@@ -6532,8 +6619,16 @@ async def ws_handler(ws: WebSocket):
                 _bs_rank = (_bs_hot.get("data") or {}).get("rankings") or []
                 _bs_done = False
                 if _bs_rank:
-                    _bs_name = _bs_rank[0]["name"]
-                    _bs_rlabel = "賣最好" if _bs_rank_type == "hot" else "賣最差"
+                    _bs_idx = 0
+                    if _bs_rankn_m:
+                        _ZHN = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+                                "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+                        _bs_n_raw = _bs_rankn_m.group(1)
+                        _bs_n = _ZHN.get(_bs_n_raw) or (int(_bs_n_raw) if _bs_n_raw.isdigit() else 1)
+                        _bs_idx = min(max(_bs_n - 1, 0), len(_bs_rank) - 1)
+                    _bs_name = _bs_rank[_bs_idx]["name"]
+                    _bs_rlabel = (f"第{_bs_idx + 1}名" if _bs_idx else
+                                  ("賣最好" if _bs_rank_type == "hot" else "賣最差"))
                     # 帶倉別（「在南倉有幾個」要回南倉的數字，r16）
                     _bs_wh = ("north" if any(w in user_text for w in ("北倉", "北區")) else
                               "central" if any(w in user_text for w in ("中倉", "中區")) else
@@ -6546,7 +6641,7 @@ async def ws_handler(ws: WebSocket):
                         _bs_plabel = "本月" if _bs_period == "this_month" else "本週"
                         _bs_qty_label = ("出" if _bs_rank_type == "hot" else "只出")
                         result["summary"] = (f"{_bs_plabel}{_bs_rlabel}的是「{_bs_name}」"
-                                             f"（{_bs_qty_label} {_bs_rank[0]['out_qty']:,} 件）。"
+                                             f"（{_bs_qty_label} {_bs_rank[_bs_idx]['out_qty']:,} 件）。"
                                              + result["summary"])
                         for ch in result["summary"]:
                             await send({"type": "token", "text": ch})
@@ -7192,6 +7287,13 @@ async def ws_handler(ws: WebSocket):
                 if not _tool_intent_ok(func_name, user_text):
                     # reject 前先試降級救援（口語前綴害 LLM 輸出錯 function，RPI5 v21）
                     _rescue = _intent_guard_rescue(func_name, func_args, user_text)
+                    if not _rescue and _text_has_item_name(user_text):
+                        # r43：句帶真商品/通稱（「帽子有哪些」clf 誤判 list_files 曾被拒）
+                        # → 降級成該商品庫存查詢，不冤枉正經查詢句
+                        _g43_kw = _extract_sku_keyword(user_text)
+                        if _g43_kw:
+                            log.info(f"[gate-rescue r43] {func_name} 缺意圖詞但帶商品 → query_inventory kw={_g43_kw!r}")
+                            _rescue = ("query_inventory", {"keyword": _g43_kw})
                     if _rescue:
                         func_name, func_args = _rescue
                     else:
