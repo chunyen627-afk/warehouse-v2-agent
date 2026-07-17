@@ -1,0 +1,23 @@
+# 手寫多輪守衛景（gen_convo_sweep.py 重生時自動併入；r51 起累積不刪）
+### hand-r51-序數選單
+> 咖啡還剩多少 | clarify | 哪一個
+> 第一個 | inventory_single
+### hand-r51-倉別咧勒
+> 濕紙巾庫存 | inventory_single | 濕紙巾
+> 北倉呢 | inventory_single | 濕紙巾
+> 南倉咧 | inventory_single | 濕紙巾
+### hand-r51-無選單序數不誤觸
+> 第一個 | not:inventory_single
+### hand-r51-寫入後驗證
+> 北倉進30個毛帽 | movement_confirm | 毛帽
+[confirm]
+> 現在北倉毛帽多少 | inventory_single | 毛帽
+### hand-r51-取消後重來
+> 中倉出5個啞鈴 | movement_confirm | 啞鈴
+> 取消 | not:error
+> 中倉出3個啞鈴 | movement_confirm | 啞鈴
+### hand-r51-兩人交錯隔離
+> 衛生紙庫存 | inventory_single | 衛生紙
+>@B 啤酒庫存 | inventory_single | 啤酒
+> 剩多少來著 | inventory_single | 衛生紙
+>@B 那個到期了嗎 | expiring | 啤酒

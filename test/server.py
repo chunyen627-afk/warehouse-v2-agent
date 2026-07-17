@@ -4354,6 +4354,9 @@ _VIEW2FUNC = {"inventory": "query_inventory", "inventory_single": "query_invento
               "config_read": "manage_config", "agent_rca": "search_log"}
 
 
+_clarify_opts_by_vid: dict = {}   # r51：vid → 上一輪 clarify 的選單（序數選擇用）
+
+
 def _ctx_absorb(vid, result: dict):
     """每個 done 出口的統一切面：把答案裡的商品/倉別寫回 context、記住確認卡。"""
     if not isinstance(result, dict):
@@ -4366,6 +4369,17 @@ def _ctx_absorb(vid, result: dict):
         _pending_by_vid[vid] = {"view": view}
     elif view != "clarify":        # clarify=追問中，卡片還在畫面上，不清
         _pending_by_vid.pop(vid, None)
+
+    # r51：clarify 選單記憶——「咖啡對應到5個商品」後訪客說「第一個」要能選
+    # （語音輸入時代點不了按鈕，序數是最自然的選法）。非 clarify 回答即清。
+    if view == "clarify":
+        _opts51 = data.get("options") or []
+        if _opts51:
+            _clarify_opts_by_vid[vid] = list(_opts51)
+        else:
+            _clarify_opts_by_vid.pop(vid, None)
+    else:
+        _clarify_opts_by_vid.pop(vid, None)
 
     # 商品/倉別接地（只認單一字串，多商品列表不寫，避免 context 指到錯的那個）
     # r33：一定要驗證是真商品才寫 —— clarify「找不到商品『進30個』」的 data 也帶
@@ -4416,7 +4430,7 @@ _CTX_BARE_CANON = {"進出": "進出紀錄", "異動": "進出紀錄", "流水":
 # r35：追問的倉別句遠不只「南倉呢」——「北倉多少」「中倉幾個」「南」（單字）都是。
 #   過去「北倉多少」被當成獨立查詢 → 回全店 60 項概覽；單字「南」直接被守門員拒。
 _CTX_WH_ONLY = _re.compile(
-    r"^(那|這)?([北中南])(區)?(倉)?(呢|的|嗎|多少|幾個|幾件|有多少|剩多少)?[?？。!！]*$")
+    r"^(那|這)?([北中南])(區)?(倉)?(呢|咧|勒|的|嗎|多少|幾個|幾件|有多少|剩多少)?[?？。!！]*$")
 # 純語助詞追問（「呢」「咧」「勒」）——訪客用最短的方式問「那另一個呢」
 _CTX_PARTICLE = ("呢", "咧", "勒", "喔", "哦")
 # r40：時段追問——看完「本月進出」後問「上週呢」＝同商品換時段。過去被守門員
@@ -5964,6 +5978,19 @@ async def ws_handler(ws: WebSocket):
                 "stage":     "user_input",
                 "user_text": user_text,
             })
+
+            # ── r51：clarify 選單序數選擇——「咖啡對應到5個商品」後說「第一個」
+            #   曾回「沒有『第一個』這個商品」。有選單在場且句子是純序數 → 代入選項。──
+            _ord51 = _re.fullmatch(r"第?\s*([一二兩三四五六七八12345678])\s*(個|項|號)?\s*(好了|吧)?[?？。!！]*",
+                                   user_text.strip())
+            if _ord51 and _clarify_opts_by_vid.get(vid):
+                _ORD_MAP = {"一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5,
+                            "六": 6, "七": 7, "八": 8}
+                _oi = _ORD_MAP.get(_ord51.group(1)) or int(_ord51.group(1))
+                _opts51g = _clarify_opts_by_vid[vid]
+                if 1 <= _oi <= len(_opts51g):
+                    log.info(f"[ordinal-select] vid={vid} 「{user_text}」→ 選項{_oi}「{_opts51g[_oi-1]}」")
+                    user_text = str(_opts51g[_oi - 1])
 
             # ── 黑名單閘門（最高優先，在刪除/商品清單等任何功能攔截之前）──
             # HTTP 端守門員本來就在功能攔截之前，WS 端順序相反導致「把庫存
