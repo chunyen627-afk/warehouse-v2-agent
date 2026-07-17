@@ -290,12 +290,12 @@ async def main():
             print(f"[reset] {json.loads(r.read()).get('summary', '')}")
 
     if args.rpi5:
-        uri = "wss://localhost:8001/ws"
+        uri = "wss://localhost:8001/ws?fast=1"
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     else:
-        uri, ctx = "ws://localhost:8000/ws", None
+        uri, ctx = "ws://localhost:8000/ws?fast=1", None
 
     path = Path(args.file)
     if not path.is_absolute():

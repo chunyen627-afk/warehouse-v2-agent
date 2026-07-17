@@ -44,6 +44,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("demo")
 
+# r47：打字機動畫延遲（秒/字）。測試連線 ?fast=1 設 0——全量回歸曾為動畫純等 ~45 分鐘。
+import contextvars as _ctxvars
+_TK_DELAY = _ctxvars.ContextVar("tk_delay", default=0.008)
+
 # ─── Config ───────────────────────────────────────────────
 BASE_DIR           = Path(__file__).parent
 MODELS_DIR         = BASE_DIR / "models"
@@ -2367,6 +2371,28 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     break
             log.info(f"[校正 C13-hypo] 假設句 → query_inventory({_kw_hy!r})")
             return "query_inventory", _args_hy, True
+
+    # C-alert-exp（r47）：到期提醒訴求（「快過期前三天提醒」）曾開出「低於安全庫存」
+    # 條件卡＝卡片內容與訴求不符。警示引擎只支援庫存條件 → 誠實說明＋指路。
+    # 要有「主動通知」意圖詞才算設警示——「南倉的到期警示」是查詢，讓給 C7 轉到期清單
+    if func_name == "set_alert" and any(w in user_text for w in ("過期", "到期", "效期")) \
+            and any(w in user_text for w in ("提醒", "通知", "叫我", "跟我說", "告訴我")):
+        return "clarify", {
+            "question": "警示目前支援「低於安全庫存／低於指定數量」；到期資訊可以直接問"
+                        "「哪些快過期」，我馬上列給你。",
+            "options": ["哪些快過期", "庫存警示"], "hint": ""}, True
+
+    # C13-hypo2（r47）：假設/轉述語氣＋寫入近似句（「考慮進50個滑鼠」「供應商說要
+    # 送100個滑鼠來」「如果我要出10箱啤酒的話」）曾進追問倉別的寫入流——非命令
+    # 語氣不開寫入，查詢化回該商品庫存（訪客要的是「能不能/夠不夠」的判斷素材）。
+    _HYPO2 = ("考慮", "在想", "想說", "說要", "聽說", "朋友想", "有人要", "客人問",
+              "供應商說", "假設", "會怎樣", "的話")
+    if (any(w in user_text for w in _HYPO2)
+            and _re.search(r'[進出補調送][貨]?\s*\d', user_text)):
+        _kw_h2 = _extract_sku_keyword(user_text)
+        if _kw_h2 and _kw_grounded(_kw_h2, user_text):
+            log.info(f"[校正 C13-hypo2] 假設/轉述寫入近似句 → query_inventory({_kw_h2!r})")
+            return "query_inventory", {"keyword": _kw_h2}, True
 
     # C13-defer（r25）：寫入喊卡改查詢——「幫我把X出貨——喔不用了 先查庫存就好」
     # 「出貨的事等等 先看啞鈴還剩幾對」曾照走出貨流程 clarify 要異動哪個倉。
@@ -5691,6 +5717,13 @@ async def ws_display(ws: WebSocket):
 
 @app.websocket("/ws")
 async def ws_handler(ws: WebSocket):
+    # r47：測試連線帶 ?fast=1 → 該連線打字機動畫 sleep=0（同 code path、token frame
+    # 照送，只省純等待）。訪客不帶參數維持 8ms。contextvars 每 task（=每連線）隔離。
+    try:
+        if ws.query_params.get("fast") == "1":
+            _TK_DELAY.set(0.0)
+    except Exception:
+        pass
     global _visitor_closed
 
     # 多裝置展示模式：允許多個同時連線（桌面+手機），不踢舊連線
@@ -5779,7 +5812,7 @@ async def ws_handler(ws: WebSocket):
                                     "snapshot": finance.dashboard_snapshot()})
                 for ch in res.get("summary", ""):
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": res})
                 continue
 
@@ -5807,7 +5840,7 @@ async def ws_handler(ws: WebSocket):
                 summary = result.get("summary", "")
                 for ch in summary:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
 
@@ -5839,7 +5872,7 @@ async def ws_handler(ws: WebSocket):
                                "例如「南倉藍牙耳機庫存」「北倉進50個滑鼠」。")
                     for ch in _ab_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _ab_msg,
                         "data": {"question": _ab_msg, "options": [], "hint": ""}}})
@@ -5855,7 +5888,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[pending-gate] 對卡片講話 → 引導: {user_text!r}")
                     for ch in _pend_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _pend_msg,
                         "data": {"question": _pend_msg, "options": [], "hint": ""}}})
@@ -5880,7 +5913,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[ctx-empty] 無 context 的代詞句 → clarify: {user_text!r}")
                     for ch in _np_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _np_msg,
                         "data": {"question": _np_msg, "options": [], "hint": ""}}})
@@ -5925,7 +5958,7 @@ async def ws_handler(ws: WebSocket):
                                     "reason": f"blacklist:{_bl_hit_ws}"})
                 for ch in GATEKEEPER_REJECT_MSG:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {"ok": False, "view": "rejected",
                                                         "summary": GATEKEEPER_REJECT_MSG}})
                 continue
@@ -5943,7 +5976,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[gate] 刪除句含敏感對象 → rejected: {user_text!r}")
                     for ch in GATEKEEPER_REJECT_MSG:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {"ok": False, "view": "rejected",
                                                         "summary": GATEKEEPER_REJECT_MSG}})
                     continue
@@ -5970,7 +6003,7 @@ async def ws_handler(ws: WebSocket):
                     result = _tv2_del_ws.delete_item_start(keyword=kw)
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
 
@@ -5987,7 +6020,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[delete-gate] 流程中的查詢句 → 提示退出: {user_text!r}")
                     for ch in _dq_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _dq_msg,
                         "data": {"question": _dq_msg, "options": [], "hint": ""}}})
@@ -5997,7 +6030,7 @@ async def ws_handler(ws: WebSocket):
                 result = _tv2_del_mode.delete_item_start(keyword=user_text.strip())
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
 
@@ -6024,7 +6057,7 @@ async def ws_handler(ws: WebSocket):
                     _tot_sum = f"全部商品共 {len(snap.items)} 項、三倉總庫存 {_tot_qty:,} 件。"
                     for ch in _tot_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {"ok": True, "view": "inventory",
                                 "summary": _tot_sum, "data": {"total_qty": _tot_qty}}})
                     continue
@@ -6053,7 +6086,7 @@ async def ws_handler(ws: WebSocket):
                 result = _tv2_del_mode2.delete_item_start(keyword=user_text.strip())
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
 
@@ -6065,7 +6098,7 @@ async def ws_handler(ws: WebSocket):
                                     "reason": "輸入未命中倉管關鍵字"})
                 for ch in GATEKEEPER_REJECT_MSG:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {"ok": False, "view": "rejected",
                                                         "summary": GATEKEEPER_REJECT_MSG}})
                 continue
@@ -6096,7 +6129,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[meta-gate] 後設/取消句 → clarify（已清流程狀態）: {user_text!r}")
                     for ch in _meta_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _meta_msg,
                         "data": {"question": _meta_msg, "options": [], "hint": ""}}})
@@ -6115,7 +6148,7 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[dw-gate] 雙寫入複合句 → clarify: {user_text!r}")
                 for ch in _dw_msg:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _dw_msg,
                     "data": {"question": _dw_msg, "options": [], "hint": ""}}})
@@ -6139,7 +6172,7 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[mpw-gate] 同方向多商品寫入 → clarify: {user_text!r}")
                 for ch in _mpw_msg:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _mpw_msg,
                     "data": {"question": _mpw_msg, "options": [], "hint": ""}}})
@@ -6154,7 +6187,7 @@ async def ws_handler(ws: WebSocket):
                             "多還是", "大還是", "對比", "差多少", "哪邊", "誰多", "誰少", "哪種多"))
             _plq_mv = any(w in user_text for w in ("進", "出", "補", "調", "退")) and _re.search(r'\d', user_text)
             # r45：裸並列（「北倉衛生紙、南倉啤酒」「衛生紙+濕紙巾」無庫存 cue）也進 gate
-            _plq_bare = (("、" in user_text or "+" in user_text) and len(user_text) <= 16
+            _plq_bare = (any(c in user_text for c in "、+；？") and len(user_text) <= 16
                          and not _re.search(r'\d', user_text))
             # r46：related/連帶句豁免（「衛生紙跟濕紙巾一起賣嗎」是連帶不是並列查詢）
             _plq_rel = any(w in user_text for w in _RELATED_INTENT_WORDS)
@@ -6173,7 +6206,7 @@ async def ws_handler(ws: WebSocket):
                 # r43：比較尾巴一併剝（「尿布哪個賣最好」的尾巴害第三個商品抽不到 → hits=2
                 # 漏攔三商品比較）
                 _plq_src = _re.sub(r"(哪個|哪一個|誰|比一比|比比看|比較一下).*$", "", _plq_src)
-                _plq_parts = [p.strip() for p in _re.split(r"[跟和與、,，及+]|還有|以及", _plq_src) if p.strip()]
+                _plq_parts = [p.strip() for p in _re.split(r"[跟和與、,，及+；;？?]|還有|以及", _plq_src) if p.strip()]
                 _plq_hits = []
                 for p in _plq_parts:
                     _m = _W_plq.match_items(_extract_sku_keyword(p) or p)
@@ -6187,7 +6220,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[plq-gate] ≥3 商品比較 → clarify: {user_text!r} hits={_plq_hits}")
                     for ch in _plq_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _plq_msg,
                         "data": {"question": _plq_msg, "options": [], "hint": ""}}})
@@ -6199,7 +6232,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[plq-gate] 多商品並列查詢 → clarify: {user_text!r} hits={_plq_hits}")
                     for ch in _plq_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _plq_msg,
                         "data": {"question": _plq_msg, "options": [], "hint": ""}}})
@@ -6227,7 +6260,7 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[time-gate] 不支援時間粒度 → clarify: {user_text!r}")
                 for ch in _ut_msg:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _ut_msg,
                     "data": {"question": _ut_msg,
@@ -6257,7 +6290,7 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[dispatch-ws] 價格排序直答: {_pr_it['name']}")
                 for ch in _pr_sum:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {
                     "ok": True, "view": "inventory_single", "summary": _pr_sum,
                     "data": {"name": _pr_it["name"], "unit_price": _pr_it["unit_price"]}}})
@@ -6285,7 +6318,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[dispatch-ws] 單品分倉極值: {_wx_it['name']} → {_wx_pick}")
                     for ch in _wx_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "inventory_single", "summary": _wx_sum,
                         "data": {"name": _wx_it["name"], "warehouse": _wx_pick}}})
@@ -6329,7 +6362,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[dispatch-ws] 單品缺貨判定: {_ls_it['name']}")
                     for ch in _ls_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "low_stock", "summary": _ls_sum,
                         "data": {"name": _ls_it["name"], "safety_stock": _ls_shown,
@@ -6349,7 +6382,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[dispatch-ws] 單品價格直答: {_pq_it['name']}")
                     for ch in _pq_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "inventory_single", "summary": _pq_sum,
                         "data": {"name": _pq_it["name"], "unit_price": _pq_it["unit_price"]}}})
@@ -6375,7 +6408,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[create-gate] 流程中的查詢句 → 提示退出: {user_text!r}")
                     for ch in _cq_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _cq_msg,
                         "data": {"question": _cq_msg, "options": [], "hint": ""}}})
@@ -6415,7 +6448,7 @@ async def ws_handler(ws: WebSocket):
                     _item_create_state_ws[vid] = _new_st
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
 
@@ -6433,7 +6466,7 @@ async def ws_handler(ws: WebSocket):
                     _item_create_state_ws[vid] = _new_st
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
 
@@ -6572,7 +6605,7 @@ async def ws_handler(ws: WebSocket):
                                          "raw": f"[descriptor] query_inventory({_desc_kw_ws!r})"})
                     for ch in result["summary"]:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": result})
                     continue
                 # 查詢失敗 → 不攔，交給 LLM 流程
@@ -6586,7 +6619,7 @@ async def ws_handler(ws: WebSocket):
                 if result.get("ok") and result.get("summary"):
                     for ch in result["summary"]:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": result})
                     continue
 
@@ -6598,7 +6631,7 @@ async def ws_handler(ws: WebSocket):
                 if result.get("ok") and result.get("summary"):
                     for ch in result["summary"]:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": result})
                     continue
 
@@ -6613,7 +6646,7 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[dispatch-ws] 期間比較誠實說明: {user_text!r}")
                 for ch in _pc_msg:
                     await send({"type": "token", "text": ch})
-                    await asyncio.sleep(0.008)
+                    await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _pc_msg,
                     "data": {"question": _pc_msg, "options": [], "hint": ""}}})
@@ -6641,7 +6674,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[dispatch-ws] 兩倉單品比較: {_w2_name} {_wa}{_qa2}/{_wb}{_qb2}")
                     for ch in _w2_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "inventory_single", "summary": _w2_sum, "data": {}}})
                     continue
@@ -6664,7 +6697,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[dispatch-ws] 兩商品差額比較: {_na2}{_ta}/{_nb2}{_tb}")
                     for ch in _d2_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "inventory_single", "summary": _d2_sum, "data": {}}})
                     continue
@@ -6692,7 +6725,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[dispatch-ws] 兩商品銷量比較: {_na} vs {_nb} → {_qa}/{_qb}")
                     for ch in _pvs_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "movement", "summary": _pvs_sum,
                         "data": {"a": {"name": _na, "out_qty": _qa},
@@ -6725,7 +6758,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[dispatch-ws] 兩商品庫存比較: {_pia[0]['item']['name']} / {_pib[0]['item']['name']}")
                     for ch in _pvi_sum:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "inventory_single", "summary": _pvi_sum,
                         "data": {}}})
@@ -6782,7 +6815,7 @@ async def ws_handler(ws: WebSocket):
                                              + result["summary"])
                         for ch in result["summary"]:
                             await send({"type": "token", "text": ch})
-                            await asyncio.sleep(0.008)
+                            await asyncio.sleep(_TK_DELAY.get())
                         await send({"type": "done", "result": result})
                         _bs_done = True
                 if _bs_done:
@@ -7108,7 +7141,7 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[long-gate] 確定性層無接手 → 優雅引導: {user_text!r}")
                     for ch in _lg_msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.008)
+                        await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _lg_msg,
                         "data": {"question": _lg_msg, "options": [], "hint": ""}}})
@@ -7258,7 +7291,7 @@ async def ws_handler(ws: WebSocket):
                         msg = "請補充更明確的訊息再試一次"
                     for ch in msg:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.012)
+                        await asyncio.sleep(_TK_DELAY.get() * 1.5)
                     await send({"type": "done", "result": {
                         "ok": True, "summary": msg, "view": "compare_help", "data": {},
                     }})
@@ -7335,7 +7368,7 @@ async def ws_handler(ws: WebSocket):
                         _item_create_state_ws[vid] = _new_st
                     for ch in result.get("summary", ""):
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.012)
+                        await asyncio.sleep(_TK_DELAY.get() * 1.5)
                     await send({"type": "done", "result": result})
                     continue
 
@@ -7349,7 +7382,7 @@ async def ws_handler(ws: WebSocket):
                     result = _tv2_ci.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci.create_item_start()
                     for ch in result.get("summary", ""):
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.012)
+                        await asyncio.sleep(_TK_DELAY.get() * 1.5)
                     await send({"type": "done", "result": result})
                     _new_st = {k: v for k, v in result.get("data", {}).items()
                                if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}
@@ -7447,7 +7480,7 @@ async def ws_handler(ws: WebSocket):
                                             "reason": f"no_intent:{func_name}"})
                         for ch in GATEKEEPER_REJECT_MSG:
                             await send({"type": "token", "text": ch})
-                            await asyncio.sleep(0.008)
+                            await asyncio.sleep(_TK_DELAY.get())
                         await send({"type": "done", "result": {"ok": False, "view": "rejected",
                                                         "summary": GATEKEEPER_REJECT_MSG}})
                         continue
@@ -7566,7 +7599,7 @@ async def ws_handler(ws: WebSocket):
                 else:
                     for ch in summary:
                         await send({"type": "token", "text": ch})
-                        await asyncio.sleep(0.012)
+                        await asyncio.sleep(_TK_DELAY.get() * 1.5)
                     await send({"type": "done", "result": result})
 
     except WebSocketDisconnect:

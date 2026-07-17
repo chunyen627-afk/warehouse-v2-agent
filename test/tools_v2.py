@@ -617,7 +617,10 @@ def run_script(script_name: str = "", **_kw) -> dict:
     _trace(steps, "read", f"比對白名單 manifest.json → 「{script_name}」")
     if not sc:
         avail = "、".join(s["label"] for s in _load_manifest().get("scripts", []))
-        return W._err(f"「{script_name}」不在可執行白名單內。可用：{avail}", view="error")
+        return {"ok": True, "view": "clarify",
+                "summary": f"「{script_name}」不在可執行白名單內。可用：{avail}",
+                "data": {"question": f"「{script_name}」不在可執行白名單內，想跑哪一個？",
+                         "options": ["月底盤點", "匯出進出記錄", "產出體檢報告"], "hint": ""}}
 
     # 安全護欄：只回「待確認」，不直接 subprocess（執行交給 server confirm 後）
     _trace(steps, "confirm", f"命中白名單腳本：{sc['label']}（逾時上限 {sc['timeout_s']}s）")
@@ -1191,7 +1194,10 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
     existing = next((j for j in jobs if j["script_id"] == sc["id"]
                      and j["freq"] == freq and j.get("time_str") == time_str), None)
     if existing:
-        return W._err(f"已有相同排程：{sc['label']} {freq} {existing['time_str']}（ID: {existing['id']}）")
+        return {"ok": True, "view": "clarify",
+                "summary": f"已經有一個一樣的排程囉：{sc['label']} {freq} {existing['time_str']}（ID: {existing['id']}），不用重複設定。",
+                "data": {"question": f"已經有排程「{sc['label']}」（{freq} {existing['time_str']}）在跑囉，需要改時間或取消再跟我說。",
+                         "options": [], "hint": ""}}
 
     _freq_labels = {"daily": "每天", "weekly": "每週", "monthly": "每月"}
     freq_label = _freq_labels.get(freq, freq)

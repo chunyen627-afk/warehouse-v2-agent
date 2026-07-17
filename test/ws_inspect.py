@@ -93,10 +93,10 @@ async def main():
     args = ap.parse_args()
 
     if args.rpi5:
-        uri = "wss://localhost:8001/ws"
+        uri = "wss://localhost:8001/ws?fast=1"
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
     else:
-        uri = "ws://localhost:8000/ws"; ctx = None
+        uri = "ws://localhost:8000/ws?fast=1"; ctx = None
 
     if args.file:
         sents = []

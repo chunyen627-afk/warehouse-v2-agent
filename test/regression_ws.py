@@ -29,12 +29,12 @@ from pathlib import Path
 # --rpi5：在 RPI5 本機跑全量回歸（wss 8001，跟訪客同一條路）
 if "--rpi5" in sys.argv:
     sys.argv.remove("--rpi5")
-    WS_URI = 'wss://localhost:8001/ws'
+    WS_URI = 'wss://localhost:8001/ws?fast=1'
     SSL_CTX = ssl.create_default_context()
     SSL_CTX.check_hostname = False
     SSL_CTX.verify_mode = ssl.CERT_NONE
 else:
-    WS_URI = 'ws://localhost:8000/ws'
+    WS_URI = 'ws://localhost:8000/ws?fast=1'
     SSL_CTX = None
 CORPUS = Path(__file__).parent / "regression_corpus.txt"
 # --file X：跑替代語料（r31 短句掃蕩 _sweep_r31.txt 等，格式同 corpus）
