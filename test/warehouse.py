@@ -497,14 +497,24 @@ def query_inventory(
         wh_f = warehouse if warehouse in ("north", "central", "south") else "all"
         wh_label_all = WAREHOUSE_LABEL.get(wh_f, "全部倉")
         all_items = state().items
+        # r54（user 實測抓到）：舊版取 items[:10] 而主檔前 10 筆全是電子類——
+        # 「有哪些商品」變成電子產品專場。改跨類別輪流抽樣（每類 2 筆），
+        # summary 誠實寫「各類別代表」。
+        _by_cat: dict = {}
+        for it in all_items:
+            _by_cat.setdefault(it["category"], []).append(it)
+        sampled = []
+        for _cat_items in _by_cat.values():
+            sampled.extend(_cat_items[:2])
         rows = []
-        for it in all_items[:10]:
+        for it in sampled[:12]:
             total, _ = _sku_total_stock(it["sku_id"], wh_f)
             rows.append({"sku_id": it["sku_id"], "name": it["name"],
                          "category": CATEGORY_LABEL.get(it["category"], it["category"]),
                          "qty": total, "unit": it.get("unit", "件")})
         return {"ok": True,
-                "summary": f"目前共 {len(all_items)} 項商品，以下為前 {len(rows)} 筆庫存概覽",
+                "summary": f"目前共 {len(all_items)} 項商品，以下為各類別代表 {len(rows)} 筆"
+                           "（想看完整清單可以說「商品清單」）",
                 "view": "inventory",
                 "data": {"warehouse": wh_f, "warehouse_label": wh_label_all,
                          "keyword": "", "category": None,

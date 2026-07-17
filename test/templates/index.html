@@ -1397,6 +1397,49 @@ function renderViewCard(view, data, topSummary) {
         `).join('')}
       </div>
     `;
+  } else if (view === 'alert_list') {
+    // r54 視圖覆蓋審計補：警示規則列表曾只有「目前有 N 條」一句話、明細沒卡可看
+    const alRules = data.rules || [];
+    card.innerHTML = alRules.length === 0
+      ? `<div style="text-align:center;color:var(--muted)">目前沒有警示規則</div>`
+      : `<div class="label">🔔 警示規則（${alRules.length} 條）</div>
+         <table class="exp-table"><tr><th>ID</th><th>條件</th><th>範圍</th><th>狀態</th></tr>
+         ${alRules.map(r => `<tr><td>${r.id}</td><td>${r.condition_label || r.condition}</td>
+           <td style="font-size:12px">${(r.scope_names || []).join('、') || '全部商品'}</td>
+           <td>${r.enabled ? '✅' : '⏸'}</td></tr>`).join('')}
+         </table>
+         <div class="rel-baseline-note">想刪除可以說「刪掉 ${alRules[0]?.id || 'AL001'}」</div>`;
+  } else if (view === 'schedule_list') {
+    const scJobs = data.jobs || [];
+    card.innerHTML = scJobs.length === 0
+      ? `<div style="text-align:center;color:var(--muted)">目前沒有排程</div>`
+      : `<div class="label">⏰ 排程（${scJobs.length} 個）</div>
+         <table class="exp-table"><tr><th>ID</th><th>內容</th><th>頻率</th><th>狀態</th></tr>
+         ${scJobs.map(j => `<tr><td>${j.id}</td><td>${j.script_label || j.script_id}</td>
+           <td>${j.freq_label || j.freq} ${j.time_str || ''}</td>
+           <td>${j.enabled ? '✅' : '⏸'}</td></tr>`).join('')}
+         </table>
+         <div class="rel-baseline-note">想取消可以說「刪掉 ${scJobs[0]?.id || 'SCH001'}」</div>`;
+  } else if (view === 'inventory') {
+    // r54 修復（user 實測抓到）：「有哪些商品/類別庫存」的概覽清單 server 回
+    // view=inventory + rows，前端一直沒有這個 view 的渲染器 → 只顯示一句
+    // 「以下為前 10 筆」但表格從沒畫出來。複用 exp-table 樣式列出。
+    const invRows = data.rows || [];
+    const invCapt = data.category_label ? `${data.category_label}類`
+                   : (data.warehouse_label && data.warehouse_label !== '全部倉' ? data.warehouse_label : '全部商品');
+    const invTotal = data.total_items ?? invRows.length;
+    card.innerHTML = `
+      <div class="label">📦 ${invCapt} 庫存清單（共 ${invTotal} 項${invRows.length < invTotal ? `，顯示前 ${invRows.length} 筆` : ''}）</div>
+      <table class="exp-table">
+        <tr><th>商品</th><th>類別</th><th>庫存</th></tr>
+        ${invRows.map(r => `
+          <tr>
+            <td>${r.name}</td>
+            <td style="font-size:12px;color:var(--muted)">${r.category || ''}</td>
+            <td><b>${(r.qty ?? 0).toLocaleString()}</b> ${r.unit || '件'}</td>
+          </tr>
+        `).join('')}
+      </table>`;
   } else if (view === 'inventory_multi') {
     const matches = data.matches || [];
     card.innerHTML = `

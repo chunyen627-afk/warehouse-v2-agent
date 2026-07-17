@@ -255,6 +255,9 @@ GATEKEEPER_REJECT_MSG = (
 # 倉管關鍵字（「告訴我」撞通知詞、「壞掉」撞到期詞）誤入功能路由，
 # 黑名單優先於白名單直接友善拒絕。
 _GATEKEEPER_BLACKLIST = (
+    # r55 台語字＝搗蛋（user 定調：只支援國語，台語書寫一律優雅拒；挑字選台語
+    # 專屬詞避免誤傷國語——歹勢/拍謝/欸 屬台灣國語日常用語不列入）
+    "佇", "叨位", "攏總", "偌濟", "閣有", "啥物", "逐家", "咱攏", "叨個",
     # r44 購物語境（把 demo 當電商：運費/付款/折扣/退貨——曾掉進空手訊息回顯醜句）
     "運費", "貨到付款", "打幾折", "會員價", "積點", "退貨", "結帳", "下單",
     # r44 觀念問題句（是什麼意思/怎麼算——曾回「找不到商品『意思』」）
@@ -3777,6 +3780,28 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C8] RCA 意圖 → search_log（原 {func_name}）keyword={kw!r}")
         return "search_log", new_args, True
 
+    # C9-gen（r55·分支遍歷抓到）：單字通稱＋設定句（「鍋子警戒值設成60」）——C9
+    # hard-return 的 sentinel 曾讓它「找不到商品」。通稱展開成帶完整語的選單，
+    # 選完直接續 config 流。要在 C9 之前（鐵律：hard-return 前自帶防線）。
+    _c9g_key = max((w for w in ("安全庫存", "安全水位", "警戒值", "前置天數",
+                                 "補貨天數", "庫存上限", "庫存下限") if w in user_text),
+                   key=len, default="")
+    if _c9g_key and any(v in user_text for v in ("改", "設", "調", "變", "提高", "降")):
+        import warehouse as _W_c9g
+        for _gt, _gf in getattr(_W_c9g, "_GENERIC_QUERY_FALLBACK", {}).items():
+            if _gt in user_text:
+                _gv = _extract_config_value(user_text)
+                _gnames = [it["name"] for it in _W_c9g.state().items
+                           if any(f in it["name"] for f in _gf)]
+                if len(_gnames) >= 2:
+                    _gopts = ([f"{n} {_c9g_key}改成{_gv}" for n in _gnames]
+                              if _gv is not None else _gnames)
+                    log.info(f"[校正 C9-gen] 通稱設定句 {_gt!r} → clarify {len(_gnames)} 候選")
+                    return "clarify", {
+                        "question": f"「{_gt}」對應到 {len(_gnames)} 個商品，你要改哪一個的{_c9g_key}？",
+                        "options": _gopts, "hint": "點選其中一項，或直接輸入完整商品名稱"}, True
+                break
+
     # C9-pct（r50·危險修復）：百分比/「N成」值＋設定意圖 → 誠實追問。C9 hard-return
     # 曾把「警戒值設成八成」的值抽成 8 開全店 180 項卡——依鐵律在 hard-return 前自帶防線。
     _c9p_t = _re.sub(r"[改設調變換]成", "", user_text)
@@ -3997,16 +4022,32 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if func_name == "manage_config" and func_args.get("action") == "set" \
             and func_args.get("item"):
         import warehouse as _W_c11d
-        _c11d_m = _W_c11d.match_items(func_args["item"])
+        # r55（分支遍歷抓到）：單字通稱（鍋子/帽子…）在 config 路曾「找不到商品」——
+        # 通稱表展開成候選，跟查詢路同一套不猜邏輯
+        _c11d_item_s = str(func_args["item"]).strip()
+        if _c11d_item_s.startswith("__unknown__:"):
+            _c11d_item_s = _c11d_item_s.split(":", 1)[1]
+        _c11d_gen = getattr(_W_c11d, "_GENERIC_QUERY_FALLBACK", {}).get(_c11d_item_s)
+        if _c11d_gen:
+            _c11d_m = [{"item": it, "score": 7} for it in _W_c11d.state().items
+                       if any(f in it["name"] for f in _c11d_gen)]
+        else:
+            _c11d_m = _W_c11d.match_items(func_args["item"])
         if len(_c11d_m) >= 2:
             _c11d_top = _c11d_m[0]["score"]
             # 嚴格同分才算歧義（咖啡→5個全 7 分）；指名句的精確命中會領先，不誤攔
             _c11d_tied = [r["item"]["name"] for r in _c11d_m if r["score"] == _c11d_top]
             if len(_c11d_tied) >= 2:
                 log.info(f"[校正 C11d] config item 歧義 {func_args['item']!r} → clarify {len(_c11d_tied)} 候選")
+                # r55（分支遍歷抓到）：選項要帶完整語（商品+設定+值），點選/序數選完
+                # 直接續 config 流——裸商品名會丟失「改成50」的原意圖變成查詢追問
+                _c11d_key = func_args.get("key", "安全庫存")
+                _c11d_val = str(func_args.get("value", "")).strip()
+                _c11d_opts = ([f"{n} {_c11d_key}改成{_c11d_val}" for n in _c11d_tied[:8]]
+                              if _c11d_val else _c11d_tied[:8])
                 return "clarify", {
-                    "question": f"「{func_args['item']}」對應到 {len(_c11d_tied)} 個商品，你要改哪一個的{func_args.get('key','設定')}？",
-                    "options": _c11d_tied[:8],
+                    "question": f"「{func_args['item']}」對應到 {len(_c11d_tied)} 個商品，你要改哪一個的{_c11d_key}？",
+                    "options": _c11d_opts,
                     "hint": "點選其中一項，或直接輸入完整商品名稱"}, True
 
     # （r43 曾加 C11e「無 item 追問範圍」→ 守衛 11 句誤攔即撤：倉別/全域 config
@@ -4344,6 +4385,18 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
 _pending_by_vid: dict = {}     # vid → {"view": …}：server 端記住畫面上那張確認卡
 
 # 需要訪客按按鈕才寫入的確認卡（對照 templates/index.html 的 doConfirm）
+# r54：view → confirm action（口語確認代按用；對照前端 doConfirm data-action）
+_VIEW2ACTION_WS = {
+    "movement_confirm":  "create_movement",
+    "transfer_confirm":  "create_transfer",
+    "config_confirm":    "config_set",
+    "po_confirm":        "generate_po",
+    "alert_confirm":     "set_alert",
+    "schedule_confirm":  "set_schedule",
+    "script_confirm":    "run_script",
+    "item_confirm":      "item_create",
+}
+
 _PENDING_VIEWS = {"movement_confirm", "transfer_confirm", "config_confirm",
                   "item_confirm", "item_delete_confirm", "po_confirm",
                   "alert_confirm", "schedule_confirm", "script_confirm"}
@@ -4364,10 +4417,12 @@ def _ctx_absorb(vid, result: dict):
     view = result.get("view", "")
     data = result.get("data") if isinstance(result.get("data"), dict) else {}
 
-    # 確認卡記憶：卡片一出現就記，訪客下一句對著卡片講話時才知道有卡在
+    # 確認卡記憶：卡片一出現就記（r54 起含完整 data——口語確認代按要用它組
+    # confirm payload）。rejected/guide 不清卡（亂聊一句卡片還在畫面上，
+    # 「你晚餐吃什麼」後的「好啦確認」曾因此失效）。
     if view in _PENDING_VIEWS:
-        _pending_by_vid[vid] = {"view": view}
-    elif view != "clarify":        # clarify=追問中，卡片還在畫面上，不清
+        _pending_by_vid[vid] = {"view": view, "data": data}
+    elif view not in ("clarify", "rejected", "guide"):
         _pending_by_vid.pop(vid, None)
 
     # r51：clarify 選單記憶——「咖啡對應到5個商品」後訪客說「第一個」要能選
@@ -5800,6 +5855,28 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             msg_type = data.get("type")
+
+            # ── r54：口語確認代按——卡片在場＋純確認短句（好/確認/ok/就這樣送出）→
+            #   轉成 confirm 訊息走同一條 HITL 路（等同按下前端按鈕）。全語音展示的
+            #   最後一塊：以前只回「請點卡片按鈕」的引導，訪客得伸手摸螢幕。
+            #   範圍鎖：①有 pending 卡（per-vid）②句子=確認詞全匹配或含「按確認」類
+            #   片語且 ≤8 字——長句/其他意圖不會誤觸發。──
+            if msg_type == "chat":
+                _vc_txt = (data.get("text") or "").strip().rstrip("!！。~～喔啦唷呦")
+                _vc_pend = _pending_by_vid.get(vid) or {}
+                if _vc_pend.get("data") is not None and _vc_pend.get("view") in _VIEW2ACTION_WS:
+                    _vc_neg = any(n in _vc_txt for n in ("不", "別", "取消", "先", "等", "算了"))
+                    _vc_ok = (not _vc_neg
+                              and (_vc_txt.lower() in _PEND_OK
+                                   or (len(_vc_txt) <= 8 and any(w in _vc_txt for w in _PEND_OK_SUB))
+                                   or (len(_vc_txt) <= 6 and ("確認" in _vc_txt or "送出" in _vc_txt))))
+                    if _vc_ok:
+                        log.info(f"[voice-confirm] vid={vid} 「{_vc_txt}」→ 代按 {_vc_pend['view']}")
+                        msg_type = "confirm"
+                        data = {"type": "confirm",
+                                "action": _VIEW2ACTION_WS[_vc_pend["view"]],
+                                "pending": _vc_pend.get("data") or {},
+                                "script_id": (_vc_pend.get("data") or {}).get("script_id", "")}
 
             # ── confirm：Agent 進階工具寫入/執行的二次確認（HITL gate）──
             #   前端在收到 view=config_confirm / script_confirm 後，訪客按「確認」才送這個。

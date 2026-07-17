@@ -7951,3 +7951,27 @@
 ### hand-r52-最後一個
 > 帽子有哪些 | clarify | 哪一個
 > 最後一個 | not:error
+
+### hand-r54-口語確認movement
+> 北倉進7個毛帽 | movement_confirm | 毛帽
+> 好 | movement_done
+### hand-r54-口語確認config
+> 瑜珈墊安全庫存改成85 | config_confirm | 瑜珈墊
+> ok | config_done
+### hand-r54-亂聊不丟卡
+> 中倉出2個悶燒罐 | movement_confirm | 悶燒罐
+> 你晚餐吃什麼 | rejected
+> 好啦確認 | movement_done
+### hand-r54-負向不代按
+> 北倉進4個健身環 | movement_confirm
+> 先不要確認 | not:movement_done
+> 取消 | not:movement_done,error
+### hand-r54-無卡確認詞安全
+> 好 | not:movement_done,config_done
+
+### hand-r55-config選單續流帶值
+> 咖啡安全庫存改成50 | clarify | 哪一個
+> 第一個 | config_confirm | 全自動咖啡機
+### hand-r55-通稱config選單
+> 鍋子警戒值設成60 | clarify | 哪一個
+> 第二個 | config_confirm | 野炊
