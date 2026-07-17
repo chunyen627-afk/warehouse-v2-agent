@@ -2384,7 +2384,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
 
     # C-excl（r48）：排除式否定（衛生紙不要 其他都查/除了啤酒 什麼都好）——clf 高信心
     # route 曾帶著被排除的商品直查＝語意反轉。排除式總覽不支援 → 誠實說明。
-    _cexcl = _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要)', user_text)
+    _cexcl = _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要|通通|全列|列出來)', user_text)
     if _cexcl and func_name in ("query_inventory", "list_low_stock", "list_hot_items"):
         import warehouse as _W_cex
         _cex_kw = _extract_sku_keyword(user_text)
@@ -3777,6 +3777,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C8] RCA 意圖 → search_log（原 {func_name}）keyword={kw!r}")
         return "search_log", new_args, True
 
+    # C9-pct（r50·危險修復）：百分比/「N成」值＋設定意圖 → 誠實追問。C9 hard-return
+    # 曾把「警戒值設成八成」的值抽成 8 開全店 180 項卡——依鐵律在 hard-return 前自帶防線。
+    _c9p_t = _re.sub(r"[改設調變換]成", "", user_text)
+    if (any(k in user_text for k in ("安全庫存", "安全水位", "警戒值", "前置天數",
+                                      "補貨天數", "庫存上限", "庫存下限"))
+            and any(v in user_text for v in ("改", "設", "調", "變"))
+            and (_re.search(r"\d\s*[%％]", user_text)
+                 or _re.search(r"[一二兩三四五六七八九十半\d]\s*成", _c9p_t))):
+        log.info(f"[校正 C9-pct] 百分比/N成 設定值 → clarify: {user_text!r}")
+        return "clarify", {
+            "question": "設定值請用實際數量（百分比／幾成還不支援喔），你想設成多少？",
+            "options": [], "hint": "例如「安全庫存改成 80」"}, True
+
     # C9c（r45）：設定總覽句（「北倉的安全庫存總覽」曾回「找不到商品『總覽』」）——
     # 要在 C9 抽 item 之前攔，否則 item='__unknown__:總覽' 進誠實拒絕路
     if any(k in user_text for k in ("安全庫存", "安全水位", "警戒值")) \
@@ -4000,8 +4013,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   不指名商品是既有合法行為，確認卡本身就是保險。危險防線收斂為 C11f 百分比。）
 
     # C11f（r43）：百分比數值不支援——「調成200%」曾被當絕對值 200 寫入。誠實追問。
+    # r50：「設成八成」的「N成」也是百分比語（曾被抽成 value=8 開全店卡=危險）；
+    # 先剝「改成/設成/調成」的動詞成再驗，避免誤判。
+    _c11f_t = _re.sub(r"[改設調變換]成", "", user_text)
     if func_name == "manage_config" and func_args.get("action") == "set" \
-            and _re.search(r"\d\s*[%％]", user_text):
+            and (_re.search(r"\d\s*[%％]", user_text)
+                 or _re.search(r"[一二兩三四五六七八九十半\d]\s*成", _c11f_t)):
         log.info(f"[校正 C11f] config 百分比值 → clarify: {user_text!r}")
         return "clarify", {
             "question": "設定值請用實際數量（不支援百分比喔），你想設成多少？",
@@ -6604,7 +6621,7 @@ async def ws_handler(ws: WebSocket):
                     # r48：排除式否定（衛生紙不要 其他都查/除了啤酒 什麼都好）讓給下方
                     # 專屬 gate——曾在這被直達搶走、偏偏回被排除的商品（倉名除外句不讓，
                     # 「除了北倉以外哪裡有貨」走上面 wh=all 既有路）
-                    and not _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要)', user_text)):
+                    and not _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要|通通|全列|列出來)', user_text)):
                 # r25：「除了北倉以外哪裡有貨」曾被填 wh=north 只回被排除的倉——
                 # 除外句一律回三倉分佈讓訪客自己看其他倉
                 if any(w in user_text for w in ("除了", "以外", "之外")):
@@ -6630,7 +6647,7 @@ async def ws_handler(ws: WebSocket):
             # ── r48：排除式否定（「衛生紙不要 其他都查」「除了啤酒 什麼都好」）曾
             #   偏偏回被排除的那個商品＝語意反轉（r16 家族）。排除式總覽不支援 →
             #   誠實說明＋給路。──
-            _excl_m = _re.search(r'(?:不要|除了|排除)\s*(.{2,6}?)\s*(?:，|,| )?(?:其他|以外|什麼都|都查|都好|都要)', user_text)
+            _excl_m = _re.search(r'(?:不要|除了|排除)\s*(.{2,6}?)\s*(?:，|,| )?(?:其他|以外|什麼都|都查|都好|都要|通通|全列|列出來)', user_text)
             if _excl_m:
                 import warehouse as _W_ex
                 _ex_hit = _W_ex.match_items(_extract_sku_keyword(_excl_m.group(1)) or _excl_m.group(1))
@@ -6674,7 +6691,7 @@ async def ws_handler(ws: WebSocket):
             # ── r45 比較家族補洞 ──────────────────────────────
             # A. 期間比較（今天比昨天/這週比上週）：compare_periods 只支援月級 → 誠實說明
             # 帶真商品名的讓路（「藍牙喇叭上週跟這週哪週賣得多」C4-prod 有現成處理，守衛句）
-            if (_re.search(r'(今天|昨天|這週|本週|上週|這周|上周|早上|上午|中午|下午|晚上|傍晚)(比|跟|和)(今天|昨天|這週|本週|上週|這周|上周|早上|上午|中午|下午|晚上|傍晚)', user_text)
+            if (_re.search(r'(今天|昨天|前天|大前天|這週|本週|上週|這周|上周|早上|上午|中午|下午|晚上|傍晚)(比|跟|和)(今天|昨天|前天|大前天|這週|本週|上週|這周|上周|早上|上午|中午|下午|晚上|傍晚)', user_text)
                     or "這週比上週" in user_text or "今天比昨天" in user_text) \
                     and not _text_has_item_name(user_text):
                 _pc_msg = ("期間對比目前支援「這個月跟上個月」的變化（可以問「這個月跟上個月"
@@ -6741,7 +6758,7 @@ async def ws_handler(ws: WebSocket):
             # ── 兩商品銷量比較（r18）：「防曬帽跟毛帽哪個賣得好」「e01跟e02哪個
             #   賣得好」曾回全類別熱銷 TOP10（兩商品都不在榜=答非所問）──
             _pvs = _re.search(r'^(.{1,12}?)[跟和與](.{1,12}?)(?:哪個|哪一個|誰)(?:比較)?'
-                              r'(?:好賣|賣得比較好|賣得好|賣得快|賣得動|賣比較好|熱銷|暢銷)', user_text)
+                              r'(?:好賣|賣得比較好|賣得好|賣得快|賣得動|賣比較好|賣最好|賣最差|熱銷|暢銷)', user_text)
             if _pvs:
                 import warehouse as _W_pvs
                 _pa_kw = _extract_sku_keyword(_pvs.group(1)) or _pvs.group(1).strip()
