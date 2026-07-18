@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-"""context_fuzz.py — 跨句 context 空間半窮舉掃描（r56 起每輪必跑）
+"""context_fuzz.py — 跨句 context 空間半窮舉掃描（r56 起每輪必跑；r69 擴充到滿）
 
-背景：r55 收官批發現跨句連續對話是弱點——「上一輪 view × 這一句追問句型」是
-乘法組合，手寫劇本蓋不完。仿 branch_walk 的思路：前置動作 × 追問句型 做
-笛卡兒掃描，每對 (setup, followup) 開獨立連線實走兩輪，斷言分三級：
-  FAIL  = error / 空回答 / 無卡卻執行寫入 / 有卡卻沒執行 / 全域追問被前置商品污染
+背景：r55 收官批發現跨句連續對話是弱點——「上一輪狀態 × 這一句追問句型」是
+乘法組合，手寫劇本蓋不完。仿 branch_walk：前置狀態 × 追問句型 笛卡兒掃描，
+每對 (setup, followup) 開獨立連線實走（前置可多輪），斷言三級：
+  FAIL  = error / 空回答 / 無卡卻執行寫入 / 有卡說確認卻沒執行 /
+          裸數量、裸改值直接寫入（任何情況打字都不可直接寫）/ 全域追問被污染
   WARN  = 語意可疑（rejected 的追問、答非所問嫌疑）→ 人工回看
   ok    = 通過
+r69 滿版：19 前置（含 6 種確認卡、選單、清單、比較、寫入完成態）× 20 追問 = 380 對。
 用法：python context_fuzz.py [--rpi5] [--only setup_key]
 """
 import asyncio, json, ssl, sys, io
@@ -23,17 +25,35 @@ _ONLY = None
 if "--only" in sys.argv:
     _ONLY = sys.argv[sys.argv.index("--only") + 1]
 
-# ── 前置動作：key → (句子, 預期 view, 前置商品名或 None) ──
+# ── 前置狀態：key → (句子列表, 最後一句預期 view, 前置商品名或 None) ──
 SETUPS = {
-    "single":   ("無線滑鼠還剩幾個",       "inventory_single", "無線滑鼠"),
-    "hot":      ("本月熱銷前五",           "hot_items",        None),
-    "low":      ("哪些快缺貨",             "low_stock",        None),
-    "exp":      ("快過期的有哪些",         "expiring",         None),
-    "cfgread":  ("安全庫存是多少 全部的",  "config_read",      None),
-    "related":  ("買咖啡機的人還買什麼",   "related",          None),
-    "mvcard":   ("北倉進5個毛帽",          "movement_confirm", "保暖毛帽"),
-    "movement": ("今天進了什麼貨",         "movement",         None),
+    # 查詢面（r56 原有 8 個）
+    "single":    (["無線滑鼠還剩幾個"],        "inventory_single", "無線滑鼠"),
+    "hot":       (["本月熱銷前五"],            "hot_items",        None),
+    "low":       (["哪些快缺貨"],              "low_stock",        None),
+    "exp":       (["快過期的有哪些"],          "expiring",         None),
+    "cfgread":   (["安全庫存是多少 全部的"],   "config_read",      None),
+    "related":   (["買咖啡機的人還買什麼"],    "related",          None),
+    "movement":  (["今天進了什麼貨"],          "movement",         None),
+    "mvcard":    (["北倉進5個毛帽"],           "movement_confirm", "保暖毛帽"),
+    # r69 擴充：其餘 5 種確認卡
+    "tfcard":    (["調15個運動毛巾從北倉到中倉"], "transfer_confirm", "運動毛巾"),
+    "cfgcard":   (["瑜珈墊安全庫存改成85"],    "config_confirm",   "瑜珈墊"),
+    "scriptcard": (["盤點一下"],               "script_confirm",   None),
+    "pocard":    (["幫我開採購單"],            "po_confirm",       None),
+    "alertcard": (["瑜珈墊低於30就通知我"],    "alert_confirm",    "瑜珈墊"),
+    "schedcard": (["每天晚上七點跑盤點"],      "schedule_confirm", None),
+    # r69 擴充：選單/清單/比較/寫入完成態
+    "menu":      (["咖啡還剩多少"],            "clarify",          None),
+    "itemlist":  (["商品清單"],                "item_list",        None),
+    "catlist":   (["服飾類庫存"],              "inventory",        None),
+    "compare":   (["北倉跟南倉比"],            "compare_warehouses", None),
+    "mvdone":    (["北倉進5個毛帽", "好"],     "movement_done",    "保暖毛帽"),
 }
+
+# 有確認卡在畫面上的前置（確認詞必須執行、其他任何輸入絕不可直接寫入）
+CARD_SETUPS = {"mvcard", "tfcard", "cfgcard", "scriptcard", "pocard",
+               "alertcard", "schedcard"}
 
 DONE_VIEWS = {"movement_done", "config_done", "transfer_done", "script_done",
               "item_created", "po_done", "alert_done", "schedule_done"}
@@ -43,7 +63,6 @@ DONE_VIEWS = {"movement_done", "config_done", "transfer_done", "script_done",
 
 
 def _base(skey, item, view, ans):
-    """所有追問共用的底線：不 error、不空回答。"""
     if view == "error":
         return "FAIL:error view"
     if not ans.strip():
@@ -51,16 +70,24 @@ def _base(skey, item, view, ans):
     return None
 
 
-def _no_ghost_write(skey, item, view, ans):
-    """無卡片的前置後，確認詞絕不可執行寫入；有卡片則必須執行。"""
-    if skey == "mvcard":
+def _confirm_words(skey, item, view, ans):
+    """確認詞：有卡必須執行、無卡絕不可執行。"""
+    if skey in CARD_SETUPS:
         return None if view in DONE_VIEWS else "FAIL:有卡片說確認卻沒執行"
     return "FAIL:無卡片卻執行了寫入" if view in DONE_VIEWS else None
 
 
+def _never_write(skey, item, view, ans):
+    """裸數量/裸改值/維持語：任何情況打字都不可**直接**寫入（最多開新確認卡）。"""
+    if view in DONE_VIEWS:
+        return "FAIL:打字內容被直接寫入（未經確認卡）"
+    return None
+
+
 def _global_unpolluted(skey, item, view, ans):
-    """全域清單追問不可被前置商品污染成單品過濾（r55f 危險級守衛的泛化）。"""
-    if view in ("rejected",):
+    if view in DONE_VIEWS:
+        return "FAIL:全域追問執行了寫入"
+    if view == "rejected":
         return "WARN:全域追問被拒"
     if "沒有「" in ans or view == "expiring_empty":
         return "FAIL:全域追問被污染成查無商品"
@@ -70,7 +97,8 @@ def _global_unpolluted(skey, item, view, ans):
 
 
 def _wh_follow(skey, item, view, ans):
-    """倉別追問要換到南倉視角（含南字），不可退回全店概覽/被拒。"""
+    if view in DONE_VIEWS:
+        return "FAIL:倉別追問執行了寫入"
     if view == "rejected":
         return "WARN:倉別追問被拒"
     if "南" not in ans:
@@ -79,39 +107,48 @@ def _wh_follow(skey, item, view, ans):
 
 
 def _period_follow(skey, item, view, ans):
-    """期間追問：進出類前置 → 應回 movement；其他前置 → 不強制但不可 error。"""
+    if view in DONE_VIEWS:
+        return "FAIL:期間追問執行了寫入"
     if skey in ("movement", "single") and view not in ("movement", "clarify"):
         return f"WARN:期間追問回 {view}"
     return None
 
 
 def _ordinal(skey, item, view, ans):
-    """序數：排行/清單前置應接住；單品/卡片前置說第二個 → 合理是 clarify/引導。"""
-    if skey in ("hot",) and view in ("rejected",):
-        return "WARN:排行後序數被拒"
+    if view in DONE_VIEWS:
+        return "FAIL:序數執行了寫入"
+    if skey in ("hot", "menu") and view == "rejected":
+        return "WARN:排行/選單後序數被拒"
     return None
 
 
 def _cancel(skey, item, view, ans):
-    """取消：有卡 → item_cancelled；無卡 → 溫和 clarify。都不可寫入。"""
     if view in DONE_VIEWS:
         return "FAIL:取消卻執行了寫入"
+    if skey in CARD_SETUPS and view != "item_cancelled":
+        return "WARN:有卡片取消未回取消確認"
     return None
 
 
 def _pron(skey, item, view, ans):
-    """代詞追問（它/那個）：單品前置要接到該商品。"""
+    if view in DONE_VIEWS:
+        return "FAIL:代詞追問執行了寫入"
     if skey == "single":
         if view == "rejected":
             return "WARN:單品後代詞被拒"
         if item and item not in ans and view in ("inventory_single", "movement"):
-            return f"WARN:代詞接到別的商品"
+            return "WARN:代詞接到別的商品"
     return None
+
+
+def _soft(skey, item, view, ans):
+    return "FAIL:追問執行了寫入" if view in DONE_VIEWS else None
 
 
 FOLLOWUPS = [
     ("第二個",           _ordinal),
     ("最後一個",         _ordinal),
+    ("第一個",           _ordinal),
     ("南倉咧",           _wh_follow),
     ("只看南倉的",       _wh_follow),
     ("昨天呢",           _period_follow),
@@ -119,13 +156,18 @@ FOLLOWUPS = [
     ("它還剩幾個",       _pron),
     ("那個進出紀錄呢",   _pron),
     ("它快到期嗎",       _pron),
-    ("最急的是哪個",     lambda s, i, v, a: "WARN:最急追問被拒" if v == "rejected" else None),
-    ("多少錢",           lambda s, i, v, a: None),
+    ("最急的是哪個",     lambda s, i, v, a: ("FAIL:追問執行了寫入" if v in DONE_VIEWS
+                                             else "WARN:最急追問被拒" if v == "rejected" else None)),
+    ("多少錢",           _soft),
     ("哪些快缺貨",       _global_unpolluted),
     ("快過期的有哪些",   _global_unpolluted),
     ("取消",             _cancel),
-    ("好",               _no_ghost_write),
-    ("確認",             _no_ghost_write),
+    ("好",               _confirm_words),
+    ("確認",             _confirm_words),
+    # r69 新增：裸數量/裸改值/維持語（寫入安全不變量：打字絕不直接寫）
+    ("30件",             _never_write),
+    ("改成50",           _never_write),
+    ("算了照原本的",     _never_write),
 ]
 
 
@@ -137,8 +179,6 @@ async def ask(ws, text, timeout=45):
         if m.get("type") == "token":
             toks.append(m.get("text", ""))
         elif m.get("type") == "error":
-            # server 的 error frame（「我看不懂」/推理超時）沒有 done——直接回報，
-            # 否則這裡等到 timeout 會誤報成 WS 錯
             return "error", (m.get("text") or "").strip()
         elif m.get("type") == "done":
             r = m.get("result") or {}
@@ -147,20 +187,30 @@ async def ask(ws, text, timeout=45):
 
 async def main():
     fails, warns, total = [], [], 0
-    for skey, (setup, want_view, item) in SETUPS.items():
+    for skey, (setup_sents, want_view, item) in SETUPS.items():
         if _ONLY and skey != _ONLY:
             continue
-        print(f"\n▶ 前置[{skey}]「{setup}」")
+        print(f"\n▶ 前置[{skey}]「{' → '.join(setup_sents)}」")
         for fu, chk in FOLLOWUPS:
             total += 1
             try:
-                async with websockets.connect(URI, ssl=CTX, max_size=None) as ws:
-                    v0, _ = await ask(ws, setup)
-                    if v0 != want_view:
-                        print(f"   ⚠️ 前置歪掉 view={v0}（預期 {want_view}）→ 跳過本對")
-                        warns.append((skey, "(setup)", f"前置 view={v0}"))
-                        continue
-                    v, a = await ask(ws, fu)
+                # r69：前置偶發歪掉（LLM 抖動）→ 重試一次再放棄，降低 setup 噪音
+                v = a = None
+                for _try in range(2):
+                    async with websockets.connect(URI, ssl=CTX, max_size=None) as ws:
+                        v0 = "?"
+                        for _s in setup_sents:
+                            v0, _ = await ask(ws, _s)
+                        if v0 != want_view:
+                            if _try == 0:
+                                continue
+                            print(f"   ⚠️ 前置歪掉 view={v0}（預期 {want_view}）→ 跳過本對")
+                            warns.append((skey, "(setup)", f"前置 view={v0}"))
+                            break
+                        v, a = await ask(ws, fu)
+                        break
+                if v is None:
+                    continue
             except Exception as e:
                 fails.append((skey, fu, f"WS錯:{e}"))
                 print(f"   ❌ {fu} → WS錯: {e}")

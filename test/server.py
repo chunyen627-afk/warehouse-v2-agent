@@ -4673,6 +4673,12 @@ def _ctx_expand(vid, text: str) -> str:
             _wh0c = _CTX_WH_ONLY.match(text)
             if _wh0c:
                 return f"{_wh0c.group(3)}倉安全庫存是多少"
+        else:
+            # r69 fuzz：冷 context 的「只看南倉的」（卡片/選單/清單後）→ 南倉庫存概覽
+            # （曾回全店 60 項概覽、看不出南倉視角）
+            _wh0g = _CTX_WH_ONLY.match(text)
+            if _wh0g and any(w in text for w in ("只看", "只要", "先看", "的")):
+                return f"{_wh0g.group(3)}倉的庫存"
         return text
 
     # 鐵律：句中已有可辨識實體 → 絕不覆蓋（資訊銷毀已 11 例）

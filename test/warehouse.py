@@ -512,8 +512,10 @@ def query_inventory(
             rows.append({"sku_id": it["sku_id"], "name": it["name"],
                          "category": CATEGORY_LABEL.get(it["category"], it["category"]),
                          "qty": total, "unit": it.get("unit", "件")})
+        # r69：指定倉別時摘要要點名（「只看南倉的」曾回看不出南倉視角的泛話）
+        _wh_prefix = f"{wh_label_all}視角：" if wh_f != "all" else ""
         return {"ok": True,
-                "summary": f"目前共 {len(all_items)} 項商品，以下為各類別代表 {len(rows)} 筆"
+                "summary": f"{_wh_prefix}目前共 {len(all_items)} 項商品，以下為各類別代表 {len(rows)} 筆"
                            "（想看完整清單可以說「商品清單」）",
                 "view": "inventory",
                 "data": {"warehouse": wh_f, "warehouse_label": wh_label_all,
