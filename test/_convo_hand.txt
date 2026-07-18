@@ -113,3 +113,11 @@
 > 鍋子還有嗎 | clarify | 哪一個
 > 第二個 | inventory_single | 野炊
 > 它跟不沾鍋哪個賣得好 | movement | 賣得比較好
+
+### hand-r58-排行身分鏈
+> 本週熱銷前五 | hot_items
+> 第四名是啥 | inventory_single | 第4名
+> 第四名剩多少 | inventory_single
+### hand-r58-撐天追問
+> 最緊急的是哪個 | low_stock | 最緊急
+> 它撐幾天 | low_stock | 斷貨

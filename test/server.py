@@ -280,6 +280,7 @@ _GATEKEEPER_BLACKLIST = (
     "誰做的你", "什麼模型", "你是不是", "你多聰明", "你會說",
     "你好笨", "你好棒", "好厲害", "沒用的東西", "白癡", "廢物",
     "你很慢", "回答快一點", "你答錯", "當機",
+    "罵我", "罵人", "罵一下",   # r58：「罵我一下」曾回「沒有『罵我』這個商品」
     # 搗蛋 / 注入探測（永遠擋）
     "格式化", "重開機", "關機", "密碼", "管理員", "admin",
     "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
@@ -1074,8 +1075,9 @@ _REWRITE_RULES: list[tuple] = [
     # 「上次盤點結果在哪」曾答非所問回熱銷榜 → 列紀錄檔讓訪客看到檔案在哪
     (_re.compile(r"盤點.*(結果|報告|檔|紀錄|記錄).*(在哪|哪裡|哪邊|去哪|找)"),
                                                                     "有哪些紀錄檔"),
-    # 「北倉的設定」（config_read 後的分倉追問）曾被守門員拒
-    (_re.compile(r"^([北中南])(區)?倉的?(設定|安全庫存)$"),         "\\1倉安全庫存是多少"),
+    # 「北倉的設定」（config_read 後的分倉追問）曾被守門員拒；r58 放寬尾綴（給我看）
+    (_re.compile(r"^([北中南])(區)?倉的?(設定|安全庫存)(給我看|看一下|是多少|多少)?$"),
+                                                                    "\\1倉安全庫存是多少"),
 
     # ── 倉庫比較（優先於庫存查詢，避免「北中南倉差多少」被吃成 inventory）──
     (_re.compile(r"(北|中|南|東|西).*(倉|倉庫).*(比|差|對比|PK|差多少)"),
@@ -1316,6 +1318,8 @@ _TYPO_NORM = (
     ("椅子", "露營椅"), ("燈勒", "露營燈"), ("燈呢", "露營燈"), ("燈咧", "露營燈"),
     # r56：英拼殘字（yog墊/shuei壺 展場快打）。yog 要排在 yoga 對之後（那組在前面已換完）
     ("yog", "瑜珈"), ("shuei", "水"),
+    # r58：訛變補（悶少罐/電風扇——USB 風扇的口語稱呼）
+    ("悶少罐", "悶燒罐"), ("電風扇", "風扇"),
     # 俗稱正名
     ("健身墊", "瑜珈墊"), ("吸汗衣", "排汗衣"), ("T恤", "素T"),
     ("餅乾", "蘇打餅"),   # r28：config item「餅乾」曾誠實找不到（唯一對應）
@@ -6765,6 +6769,57 @@ async def ws_handler(ws: WebSocket):
                              "options": ["本週熱銷排行", "本月熱銷排行"], "hint": ""}}})
                 continue
 
+            # ── r58：排除式換看（「不要衛生紙 我要看濕紙巾」「衛生紙就算了 看一下
+            #   尿布好了」）——曾回被排除的 A＝語意反轉（r16 家族）。取「要/看」後的
+            #   B 直查。要放在所有庫存 dispatch 之前，否則 A 先被接走。──
+            _sw58 = _re.search(
+                r"(?:不要|不用|先不要|跳過|就算了|算了)[^，,]{0,5}[，,、 ]*"
+                r"(?:我要看|我要|改看|換看|換|看一下|看看|查一下|要看|看)\s*"
+                r"(.{2,10}?)(?:好了|吧|的庫存|庫存)?$", user_text)
+            if _sw58:
+                import warehouse as _W_sw
+                _sw_kw = _extract_sku_keyword(_sw58.group(1)) or _sw58.group(1).strip()
+                _sw_hit = _W_sw.match_items(_sw_kw) if _sw_kw else []
+                if _sw_hit and _sw_hit[0].get("score", 0) >= 5:
+                    result = finance.execute("query_inventory",
+                                             {"keyword": _sw_hit[0]["item"]["name"]})
+                    if result.get("ok") and result.get("summary"):
+                        log.info(f"[dispatch-ws] 排除式換看 → {_sw_hit[0]['item']['name']}")
+                        for ch in result["summary"]:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": result})
+                        continue
+
+            # ── r58：單品撐幾天直答（「它撐幾天」「衛生紙還能撐多久」）——days_left
+            #   資料一直都有（v3.9.1 起），過去只回庫存數字＝半答 ──
+            if any(w in user_text for w in ("撐幾天", "撐多久", "能撐", "幾天斷貨", "還能賣幾天")):
+                import warehouse as _W_dl
+                _dl_kw = _extract_sku_keyword(user_text) or _ctx_for(vid).get("last_sku") or ""
+                _dl_m = _W_dl.match_items(_dl_kw) if _dl_kw else []
+                if _dl_m and _dl_m[0].get("score", 0) >= 3:
+                    _dl_name = _dl_m[0]["item"]["name"]
+                    _dl_res = _W_dl.list_low_stock()
+                    _dl_ws = [w for w in (_dl_res.get("data") or {}).get("warnings", [])
+                              if w.get("name") == _dl_name]
+                    if _dl_ws:
+                        _dl_top = min(_dl_ws, key=lambda w: w.get("days_left", 999))
+                        _dl_sum = (f"「{_dl_name}」最吃緊的是{_dl_top['warehouse_label']}："
+                                   f"剩 {_dl_top['qty']} 件、日銷約 {_dl_top['daily_burn']}，"
+                                   f"約再 {_dl_top['days_left']} 天斷貨"
+                                   f"（建議補 {_dl_top['suggest_qty']} 件）。")
+                    else:
+                        _dl_sum = f"「{_dl_name}」目前各倉都在安全庫存之上，短期沒有斷貨風險 ✅"
+                    log.info(f"[dispatch-ws] 撐天直答: {_dl_name}")
+                    for ch in _dl_sum:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "low_stock", "summary": _dl_sum,
+                        "data": {"name": _dl_name, "warnings": _dl_ws,
+                                 "warehouse": "all", "count": len(_dl_ws)}}})
+                    continue
+
             # ── r56：寫入邊緣攔截 ──
             # 負數量寫入（「北倉進-5個衛生紙」曾被當庫存查詢＝答非所問）
             if (_re.search(r"[進出調補]\s*[-−]\s*\d", user_text)
@@ -6895,7 +6950,9 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # ── 單品價格直答（r25）：「機能排汗衣一件賣多少錢」曾回庫存無單價 ──
-            if (any(w in user_text for w in ("多少錢", "什麼價", "單價", "一件賣", "一個賣", "價格多少"))
+            # r58 補「價格/售價」裸詞（「露營全套價格」曾繞過組合詞選單回單品庫存）
+            if (any(w in user_text for w in ("多少錢", "什麼價", "單價", "一件賣", "一個賣",
+                                              "價格", "售價"))
                     and not any(w in user_text for w in ("改", "設", "調", "元", "折",
                                                           "最貴", "最便宜", "最高", "最低"))):
                 import warehouse as _W_pq
@@ -7432,6 +7489,9 @@ async def ws_handler(ws: WebSocket):
                         await send({"type": "done", "result": {
                             "ok": True, "view": "inventory_single", "summary": _bs_id_sum,
                             "data": {"name": _bs_name}}})
+                        # r58：身分追問後排行 context 要保留——「第四名是啥」→
+                        # 「第四名剩多少」曾因 last_func 被蓋成 query_inventory 而斷鏈
+                        _ctx_for(vid)["last_func"] = "list_hot_items"
                         _bs_done = True
                         continue
                     log.info(f"[dispatch-ws] 複合句攔截: {user_text!r} → "
