@@ -4494,13 +4494,15 @@ def _ctx_absorb(vid, result: dict):
         _clarify_opts_by_vid.pop(vid, None)
 
     # r56：寫入續流記憶——進出貨/調貨 clarify 帶 flow（tools_v2 標注待補槽位）就記住，
-    # 下一句短答（「北倉」「30件」）由 WS 層接回寫入。其他回答即清（單發）。
+    # 下一句短答（「北倉」「30件」）由 WS 層接回寫入。
+    # r61：rejected/guide 不清 flow（亂打一句 ㄎㄎ 曾把「進30個咖啡豆→問倉」流程
+    # 殺掉，接著答「北倉」變庫存查詢）——比照確認卡的存活規則；其他成功回答即清。
     if view == "clarify" and isinstance(data.get("flow"), dict):
         _write_flow_by_vid[vid] = dict(data["flow"])
         # r60 危險邊緣：新寫入意圖的 clarify 出現＝舊確認卡作廢——「出300卡在場說
         # 『那出200件就好』」曾開新 clarify 但舊卡沒清，接著「確認」執行了舊的 300
         _pending_by_vid.pop(vid, None)
-    else:
+    elif view not in ("rejected", "guide"):
         _write_flow_by_vid.pop(vid, None)
 
     # 商品/倉別接地（只認單一字串，多商品列表不寫，避免 context 指到錯的那個）
@@ -4563,8 +4565,10 @@ _CTX_BARE_CANON = {"進出": "進出紀錄", "異動": "進出紀錄", "流水":
 # r35：追問的倉別句遠不只「南倉呢」——「北倉多少」「中倉幾個」「南」（單字）都是。
 #   過去「北倉多少」被當成獨立查詢 → 回全店 60 項概覽；單字「南」直接被守門員拒。
 # r55 收官批：「只看南倉的」（到期/警示清單後的倉別過濾追問）也要吃——加可選前綴
+# r61：加「現在/目前」（「北倉現在幾個」曾回 60 項概覽）
 _CTX_WH_ONLY = _re.compile(
-    r"^(只看|只要|先看|看)?(那|這)?([北中南])(區)?(倉)?(的)?(呢|咧|勒|嗎|多少|幾個|幾件|有多少|剩多少)?[?？。!！]*$")
+    r"^(只看|只要|先看|看)?(那|這)?([北中南])(區)?(倉)?(的)?(現在|目前)?"
+    r"(呢|咧|勒|嗎|多少|幾個|幾件|有多少|剩多少)?[?？。!！]*$")
 # 純語助詞追問（「呢」「咧」「勒」）——訪客用最短的方式問「那另一個呢」
 _CTX_PARTICLE = ("呢", "咧", "勒", "喔", "哦")
 # r40：時段追問——看完「本月進出」後問「上週呢」＝同商品換時段。過去被守門員
@@ -6190,8 +6194,25 @@ async def ws_handler(ws: WebSocket):
                                     "qty": _wf56.get("qty", ""),
                                     "from_wh": _m_r56.group(2) + "倉",
                                     "to_wh": _m_r56.group(5) + "倉"}
-                _write_flow_by_vid.pop(vid, None)   # 單發：命中即消耗、沒命中也不殘留
+                    else:
+                        # r61：單邊倉回答（「從北倉調」「去南倉」）——補進缺的那一側
+                        _m_r1 = _re.fullmatch(
+                            r"(從|由|去|到|往)?\s*([北中南])(區)?倉?(調|出|走|吧|好了)?", _wf_t)
+                        if _m_r1:
+                            _wf_from = _wf56.get("from_wh", "")
+                            _wf_to = _wf56.get("to_wh", "")
+                            _wf_side_to = _m_r1.group(1) in ("去", "到", "往")
+                            if _wf_side_to or _wf_from:
+                                _wf_to = _m_r1.group(2) + "倉"
+                            else:
+                                _wf_from = _m_r1.group(2) + "倉"
+                            _wf_args = {"keyword": _wf56.get("keyword", ""),
+                                        "qty": _wf56.get("qty", ""),
+                                        "from_wh": _wf_from, "to_wh": _wf_to}
+                # r61：只在命中時消耗——沒命中的訊息讓它正常處理，flow 的清理交給
+                # _ctx_absorb（成功回答即清、rejected/guide 存活），亂打不再殺流程
                 if _wf_args is not None:
+                    _write_flow_by_vid.pop(vid, None)
                     import tools_v2 as _tv2_wf
                     _wf_res = getattr(_tv2_wf, _wf56["tool"])(**_wf_args)
                     log.info(f"[write-flow] vid={vid} {_wf56['tool']}"
@@ -6216,6 +6237,22 @@ async def ws_handler(ws: WebSocket):
                     await send({"type": "done", "result": {
                         "ok": True, "view": "clarify", "summary": _pend_msg,
                         "data": {"question": _pend_msg, "options": [], "hint": ""}}})
+                    continue
+
+                # r61：「剛剛那個進貨還在嗎」——沒卡片時老實說結案了（曾被 ctx
+                # 幻覺成新寫入 clarify「無線滑鼠要異動哪個倉」；有卡片由 _PEND_ASK 接）
+                if (vid not in _pending_by_vid and len(user_text) <= 14
+                        and _re.search(r"還在|還有效|還算數", user_text)
+                        and _re.search(r"剛剛|剛才|那個|那筆|進貨|出貨|調貨|操作|卡片", user_text)):
+                    _ps_msg = ("目前沒有進行中的操作（確認卡按過或取消後就結案囉）。"
+                               "要再來一筆直接說完整需求，例如「中倉進25個啤酒」。")
+                    log.info(f"[pending-status] 無卡的還在嗎 → 結案說明: {user_text!r}")
+                    for ch in _ps_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _ps_msg,
+                        "data": {"question": _ps_msg, "options": [], "hint": ""}}})
                     continue
 
                 # ── r32 追問展開：「那個進出紀錄呢」→「無線滑鼠進出紀錄」──
@@ -6303,11 +6340,15 @@ async def ws_handler(ws: WebSocket):
             # r60：放寬條件——config 讀完接著查了庫存（last_func 被蓋）「改成30」仍是
             # 改該商品的安全庫存；設定是唯一可「改」的數值且有確認卡把關，只要有
             # last_sku 就接（無卡時；有卡由 pending 層的「改」引導接走）
-            _cfg_bare57 = _re.fullmatch(r"(改成?|設成?|調成?)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
-                                        user_text.strip())
+            # r61：加可選倉別前綴——「南倉的改成130」曾回「沒有『改成130』這個商品」
+            _cfg_bare57 = _re.fullmatch(
+                r"(?:([北中南])(?:區)?倉的?)?(改成?|設成?|調成?)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
+                user_text.strip())
             if (_cfg_bare57 and _ctx_for(vid).get("last_sku")
                     and vid not in _pending_by_vid):
-                user_text = f"{_ctx_for(vid)['last_sku']}安全庫存改成{_cfg_bare57.group(2)}"
+                _cfg_wh61 = f"{_cfg_bare57.group(1)}倉" if _cfg_bare57.group(1) else ""
+                user_text = (f"{_cfg_wh61}{_ctx_for(vid)['last_sku']}"
+                             f"安全庫存改成{_cfg_bare57.group(3)}")
                 log.info(f"[ctx-cfg] 裸改值 → {user_text!r}")
 
             # r59：到期清單後「最急的那批放哪」——「放哪」過不了守門員（無倉管詞），

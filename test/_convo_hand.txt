@@ -145,3 +145,25 @@
 > 全自動咖啡機的 | inventory_single
 > 改成30 | config_confirm | 30
 > 取消 | item_cancelled
+
+### hand-r61-還在嗎誠實
+> 中倉進25個啤酒 | movement_confirm | 啤酒
+> 先看一下北倉滑鼠庫存 | inventory_single | 滑鼠
+> 剛剛那個進貨還在嗎 | clarify | 沒有進行中
+### hand-r61-倉別前綴裸改值
+> 尿布安全庫存多少 | config_read | 尿布
+> 南倉的改成130 | config_confirm | 130
+> 取消 | item_cancelled
+### hand-r61-寫入後倉別現在
+> 北倉進20個智慧手環 | movement_confirm | 手環
+> 好 | movement_done
+> 北倉現在幾個 | inventory_single | 智慧手環
+### hand-r61-route單邊
+> 幫我調10個登山水壺去南倉 | clarify | 哪個倉
+> 從北倉調 | transfer_confirm | 登山水壺
+> 取消 | item_cancelled
+### hand-r61-flow抗亂打
+> 進30個咖啡豆 | clarify | 哪個倉
+> ㄎㄎ | rejected
+> 北倉 | movement_confirm | 咖啡豆
+> 取消 | item_cancelled

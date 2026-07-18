@@ -1924,8 +1924,11 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
                                      f"南倉調{item['name']}去北倉{qty or 20}件",
                                      f"中倉調{item['name']}去北倉{qty or 20}件"],
                          "hint": "請講清楚來源倉跟目標倉，例如「北倉調{}去南倉」".format(item['name']),
+                         # r61：帶上已知的單邊倉——「調10個去南倉」只缺來源，
+                         # 訪客答「從北倉調」單邊也要能補
                          "flow": {"tool": "create_transfer", "await": "route",
-                                  "keyword": item["name"], "qty": str(qty)}}}
+                                  "keyword": item["name"], "qty": str(qty),
+                                  "from_wh": from_wh or "", "to_wh": to_wh or ""}}}
     if from_key == to_key:
         return W._err("來源倉跟目標倉不能是同一個，請確認一下要從哪調到哪。")
 
