@@ -8182,3 +8182,12 @@
 > 前三名各剩多少 | inventory_single | 第3名
 > 第一名北倉夠嗎 | low_stock
 > 第二名呢 | inventory_single,clarify
+### hand-r73-動得快與快沒了
+> 運動壓縮臂套庫存 | inventory_single | 臂套
+> 它跟毛巾比誰動得快 | movement | 比較好
+> 毛巾快沒了嗎 | low_stock | 毛巾
+### hand-r73-撐到與不管它
+> 南倉進20個啞鈴 | movement_confirm | 啞鈴
+> 好 | movement_done
+> 夠撐到下週嗎 | low_stock
+> 還很多啊 那不管它 | clarify | 沒問題
