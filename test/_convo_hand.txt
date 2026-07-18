@@ -225,3 +225,20 @@
 ### hand-r68-序數屬性
 > 咖啡還剩多少 | clarify | 哪一個
 > 第二個多少錢 | inventory_single | 單價
+
+### hand-r70-分倉裸改值調成
+> 氣泡水的安全庫存多少 | config_read | 氣泡水
+> 北倉的調成400 | config_confirm | 400
+> 取消 | item_cancelled
+### hand-r70-設定追問帶倉
+> 氣泡水的安全庫存多少 | config_read | 氣泡水
+> 現在北倉的設定多少 | config_read | 氣泡水
+### hand-r70-第一項建議補
+> 南倉庫存警示 | low_stock
+> 第一項建議補多少 | low_stock | 建議補
+### hand-r70-撐得過與冠亞季
+> 藍牙喇叭庫存 | inventory_single | 喇叭
+> 撐得過這個月嗎 | low_stock,inventory_single
+> 熱銷冠軍是誰 | inventory_single | 賣最好
+> 亞軍勒 | inventory_single | 第2名
+> 季軍剩多少 | inventory_single | 第3名

@@ -1084,6 +1084,10 @@ _REWRITE_RULES: list[tuple] = [
     # r67：「倒數第一名呢」＝滯銷名次
     (_re.compile(r"^倒數第([一二三四五六七八九十\d]+)名?(呢|剩多少|是什麼)?[?？]*$"),
                                                                     "滯銷第\\1名剩多少"),
+    # r70：冠亞季軍口語（整句開頭才改，避免傷長句守衛「…銷售冠軍是誰」）
+    (_re.compile(r"^(?:熱銷)?冠軍(.{0,6})$"),                       "熱銷第一名\\1"),
+    (_re.compile(r"^亞軍(.{0,6})$"),                                "第二名\\1"),
+    (_re.compile(r"^季軍(.{0,6})$"),                                "第三名\\1"),
     # r56：「最少人買的是什麼」曾被守門員拒——滯銷排行的口語講法
     (_re.compile(r"(最少人買|沒什麼人買|沒人買|買最少|賣最少)"),    "滯銷品有哪些"),
     # 「月底結算」＝展場訪客對月底盤點的另一種講法
@@ -1372,6 +1376,8 @@ _TYPO_NORM = (
     ("橡膠的", "橡膠清潔手套的"),
     # r68：網路語尾（先醬=先這樣）
     ("先醬", "先這樣"),
+    # （r70 冠亞季軍 pair 撤回：曾改壞守衛句「最近電子產品的銷售冠軍是誰」——
+    #   改用 rewrite 表的整句規則）
     # 俗稱正名
     ("健身墊", "瑜珈墊"), ("吸汗衣", "排汗衣"), ("T恤", "素T"),
     ("餅乾", "蘇打餅"),   # r28：config item「餅乾」曾誠實找不到（唯一對應）
@@ -6342,6 +6348,32 @@ async def ws_handler(ws: WebSocket):
                     user_text = f"{_cv65}{_corr65.group(2)}個"
                     log.info(f"[inline-fix] 糾錯句 → {user_text!r}")
 
+                # ── r57/r62/r59（r70 上移到展開之前）：config 裸改值/設定追問/最急批
+                #   ctx 改寫——「北倉的調成400」的「調」曾先觸發寫入展開把句子吃掉 ──
+                _cfg_bare57 = _re.fullmatch(
+                    r"(?:([北中南])(?:區)?倉的?)?(改回|改成?|設成?|調成?|調回)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
+                    user_text.strip())
+                if (_cfg_bare57 and _ctx_for(vid).get("last_sku")
+                        and vid not in _pending_by_vid):
+                    _cfg_wh61 = f"{_cfg_bare57.group(1)}倉" if _cfg_bare57.group(1) else ""
+                    user_text = (f"{_cfg_wh61}{_ctx_for(vid)['last_sku']}"
+                                 f"安全庫存改成{_cfg_bare57.group(3)}")
+                    log.info(f"[ctx-cfg] 裸改值 → {user_text!r}")
+                _cfgq70 = _re.fullmatch(
+                    r"(現在|目前)?(?:([北中南])(?:區)?倉)?的?設定(是)?(多少)?[?？。!！]*",
+                    user_text.strip())
+                if (_cfgq70 and _ctx_for(vid).get("last_func") == "manage_config"
+                        and _ctx_for(vid).get("last_sku")):
+                    _cfgq70_wh = f"{_cfgq70.group(2)}倉" if _cfgq70.group(2) else ""
+                    user_text = f"{_cfgq70_wh}{_ctx_for(vid)['last_sku']}安全庫存是多少"
+                    log.info(f"[ctx-cfg] 設定追問 → {user_text!r}")
+                if (_ctx_for(vid).get("last_func") == "list_expiring_items"
+                        and len(user_text) <= 12
+                        and _re.search(r"最緊?急", user_text)
+                        and _re.search(r"批|放哪|在哪", user_text)):
+                    log.info(f"[ctx-exp] 最急批追問 → 快過期的有哪些（原 {user_text!r}）")
+                    user_text = "快過期的有哪些"
+
                 # ── r32 追問展開：「那個進出紀錄呢」→「無線滑鼠進出紀錄」──
                 user_text = _ctx_expand(vid, user_text)
 
@@ -6417,8 +6449,11 @@ async def ws_handler(ws: WebSocket):
                 if 1 <= _oi68 <= len(_opts68):
                     _core68 = _re.sub(r"\s*(庫存|多少錢|進了?\d+件?|安全庫存.*)$", "",
                                       str(_opts68[_oi68 - 1])).strip()
-                    user_text = f"{_core68}{_ord_attr.group(2)}"
-                    log.info(f"[ordinal-attr] 選項{_oi68}+屬性 → {user_text!r}")
+                    # r70：選項主幹必須是真商品才改寫——功能型選單（「你想查食品類
+                    # 的什麼」的選項是庫存/進出）曾被拼成「進出紀錄剩多少」亂配
+                    if _has_real_item(_core68):
+                        user_text = f"{_core68}{_ord_attr.group(2)}"
+                        log.info(f"[ordinal-attr] 選項{_oi68}+屬性 → {user_text!r}")
             elif _ord51 and _ctx_for(vid).get("last_func") == "list_hot_items":
                 # r56 fuzz：排行榜後裸序數（「第二個」）＝問那一名——改寫成
                 # 「第N名剩多少」讓排行追問路（r43/r55）接手，期間自動沿用
@@ -6428,45 +6463,15 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[ordinal-rank] vid={vid} 「{user_text}」→ 排行第{_oi56}名")
                 user_text = f"第{_oi56}名剩多少"
             elif (_ctx_for(vid).get("last_func") == "list_hot_items"
-                  and _re.fullmatch(r"第[一二兩三四五六七八九十\d]+名的?(是)?(什麼|哪個|啥|誰)?[?？。!！]*",
-                                    _ord_txt)):
+                  and _re.fullmatch(r"第[一二兩三四五六七八九十\d]+名的?(是)?(什麼|哪個|啥|誰)?"
+                                    r"[呢勒咧?？。!！]*", _ord_txt)):
                 # r57：「第五名是什麼」——排行身分追問光句面過不了守門員（無功能詞），
                 # 前綴補「熱銷排行」讓它自然走排行追問路
                 user_text = f"熱銷排行{_ord_txt}" + ("是什麼" if "是" not in _ord_txt else "")
                 log.info(f"[ordinal-rank] vid={vid} 身分追問 → {user_text!r}")
 
-            # ── r57：config 讀取後的裸改值（「改成90」）→ 接回該商品安全庫存設定
-            #   （必須在守門員之前改寫，裸「改成90」過不了 is_meaningful_input；
-            #   有卡片時由 pending 層的「改」引導接走，不會到這）──
-            # r60：放寬條件——config 讀完接著查了庫存（last_func 被蓋）「改成30」仍是
-            # 改該商品的安全庫存；設定是唯一可「改」的數值且有確認卡把關，只要有
-            # last_sku 就接（無卡時；有卡由 pending 層的「改」引導接走）
-            # r61：加可選倉別前綴——「南倉的改成130」曾回「沒有『改成130』這個商品」
-            _cfg_bare57 = _re.fullmatch(
-                r"(?:([北中南])(?:區)?倉的?)?(改回|改成?|設成?|調成?|調回)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
-                user_text.strip())
-            if (_cfg_bare57 and _ctx_for(vid).get("last_sku")
-                    and vid not in _pending_by_vid):
-                _cfg_wh61 = f"{_cfg_bare57.group(1)}倉" if _cfg_bare57.group(1) else ""
-                user_text = (f"{_cfg_wh61}{_ctx_for(vid)['last_sku']}"
-                             f"安全庫存改成{_cfg_bare57.group(3)}")
-                log.info(f"[ctx-cfg] 裸改值 → {user_text!r}")
-
-            # r62：config 操作後「現在設定多少」——曾回「沒有『設定』這個商品」
-            if (_re.fullmatch(r"(現在|目前)?的?設定(是)?(多少)?[?？。!！]*", user_text.strip())
-                    and _ctx_for(vid).get("last_func") == "manage_config"
-                    and _ctx_for(vid).get("last_sku")):
-                user_text = f"{_ctx_for(vid)['last_sku']}安全庫存是多少"
-                log.info(f"[ctx-cfg] 設定追問 → {user_text!r}")
-
-            # r59：到期清單後「最急的那批放哪」——「放哪」過不了守門員（無倉管詞），
-            # gate 前改寫成完整到期查詢（清單開頭就是最急批+倉別）
-            if (_ctx_for(vid).get("last_func") == "list_expiring_items"
-                    and len(user_text) <= 12
-                    and _re.search(r"最緊?急", user_text)
-                    and _re.search(r"批|放哪|在哪", user_text)):
-                log.info(f"[ctx-exp] 最急批追問 → 快過期的有哪些（原 {user_text!r}）")
-                user_text = "快過期的有哪些"
+            # （r70：裸改值/設定追問/最急批 三組 ctx 改寫已上移到 ctx_expand 之前——
+            #   「北倉的調成400」的「調」曾先觸發寫入展開把句子吃掉）
 
             # ── r55 收官批：告別/道謝句友善回應——「掰掰」「謝謝辛苦了」曾回
             #   守門員教學文（展場冷場）。純客套短句 → 溫暖收尾；混雜其他內容不攔。──
@@ -7025,10 +7030,16 @@ async def ws_handler(ws: WebSocket):
                                              "還能賣幾天", "夠賣多久", "賣多久",
                                              "日銷", "每天賣幾", "一天賣幾",
                                              # r68：撐得了/建議補（答案本來就含建議補 N 件）
-                                             "撐得了", "建議補", "該補幾", "要補幾")):
+                                             "撐得了", "建議補", "該補幾", "要補幾",
+                                             "撐得過")):   # r70
                 import warehouse as _W_dl
-                _dl_kw = _extract_sku_keyword(user_text) or _ctx_for(vid).get("last_sku") or ""
+                # r70：extract 抽到垃圾詞（「第一項建議補多少」的「第一項」）曾蓋掉
+                # ctx——比不到就退回 last_sku 再試
+                _dl_kw = _extract_sku_keyword(user_text) or ""
                 _dl_m = _W_dl.match_items(_dl_kw) if _dl_kw else []
+                if not (_dl_m and _dl_m[0].get("score", 0) >= 3):
+                    _dl_kw = _ctx_for(vid).get("last_sku") or ""
+                    _dl_m = _W_dl.match_items(_dl_kw) if _dl_kw else []
                 if _dl_m and _dl_m[0].get("score", 0) >= 3:
                     _dl_name = _dl_m[0]["item"]["name"]
                     _dl_res = _W_dl.list_low_stock()
