@@ -7921,6 +7921,7 @@
 ### 露營燈-32 那ㄍ快到期嗎
 > 露營燈還剩幾個 | not:error,not:rejected | 露營燈
 > 那ㄍ快到期嗎 | not:error,not:rejected | 露營燈
+
 # 手寫多輪守衛景（gen_convo_sweep.py 重生時自動併入；r51 起累積不刪）
 ### hand-r51-序數選單
 > 咖啡還剩多少 | clarify | 哪一個
@@ -7944,14 +7945,12 @@
 >@B 啤酒庫存 | inventory_single | 啤酒
 > 剩多少來著 | inventory_single | 衛生紙
 >@B 那個到期了嗎 | expiring | 啤酒
-
 ### hand-r52-序數講法加寬
 > 咖啡還剩多少 | clarify | 哪一個
 > 選項1 | inventory_single
 ### hand-r52-最後一個
 > 帽子有哪些 | clarify | 哪一個
 > 最後一個 | not:error
-
 ### hand-r54-口語確認movement
 > 北倉進7個毛帽 | movement_confirm | 毛帽
 > 好 | movement_done
@@ -7968,7 +7967,6 @@
 > 取消 | not:movement_done,error
 ### hand-r54-無卡確認詞安全
 > 好 | not:movement_done,config_done
-
 ### hand-r55-config選單續流帶值
 > 咖啡安全庫存改成50 | clarify | 哪一個
 > 第一個 | config_confirm | 全自動咖啡機
@@ -7997,6 +7995,7 @@
 ### hand-r55f-到期清單倉別過濾
 > 快過期的有哪些 | expiring | 到期
 > 只看南倉的 | expiring | 南區倉
+
 ### hand-r56-寫入續流問倉
 > 進30個毛帽 | clarify | 哪個倉
 > 北倉 | movement_confirm | 保暖毛帽
@@ -8015,6 +8014,7 @@
 ### hand-r56-到期最急批追問
 > 快過期的有哪些 | expiring | 到期
 > 最急的那批放哪個倉 | expiring | 最急
+
 ### hand-r57-寫入鏈連續操作
 > 北倉進30個悶燒罐 | movement_confirm | 悶燒罐
 > 好 | movement_done
@@ -8037,6 +8037,7 @@
 > 鍋子還有嗎 | clarify | 哪一個
 > 第二個 | inventory_single | 野炊
 > 它跟不沾鍋哪個賣得好 | movement | 賣得比較好
+
 ### hand-r58-排行身分鏈
 > 本週熱銷前五 | hot_items
 > 第四名是啥 | inventory_single | 第4名
@@ -8044,6 +8045,7 @@
 ### hand-r58-撐天追問
 > 最緊急的是哪個 | low_stock | 最緊急
 > 它撐幾天 | low_stock | 斷貨
+
 ### hand-r59-最急批放哪
 > 快過期的有哪些 | expiring | 到期
 > 最急的那批放哪 | expiring | 最急
@@ -8055,6 +8057,7 @@
 > 第三名是什麼 | inventory_single | 第3名
 > 它剩多少 | inventory_single
 > 第七名剩幾個 | inventory_single | 第7名
+
 ### hand-r60-舊卡作廢（危險邊緣：改量句開新流程要清舊卡）
 > 北倉出300個氣泡水 | movement_confirm | 300
 > 庫存不夠喔 那出200件就好 | clarify | 哪個倉
@@ -8066,6 +8069,7 @@
 > 全自動咖啡機的 | inventory_single
 > 改成30 | config_confirm | 30
 > 取消 | item_cancelled
+
 ### hand-r61-還在嗎誠實
 > 中倉進25個啤酒 | movement_confirm | 啤酒
 > 先看一下北倉滑鼠庫存 | inventory_single | 滑鼠
@@ -8087,6 +8091,7 @@
 > ㄎㄎ | rejected
 > 北倉 | movement_confirm | 咖啡豆
 > 取消 | item_cancelled
+
 ### hand-r62-奶瓶不奪context
 > 保鮮盒還有庫存嗎 | inventory_single | 保鮮盒
 > 奶瓶還有多少庫存 | clarify,rejected
@@ -8100,6 +8105,7 @@
 > 現在設定多少 | config_read | 瑜珈墊
 > 改回50 | config_confirm | 50
 > 確認 | config_done
+
 ### hand-r64-到期kw勝category（假全綠家族）
 > 本月熱銷前五 | hot_items
 > 第五名剩多少 | inventory_single | 運動飲
@@ -8117,6 +8123,7 @@
 > 濕紙巾安全庫存南倉的改成100 | config_confirm | 100
 > 算了維持原樣 | clarify | 確認
 > 取消 | item_cancelled
+
 ### hand-r65-撥字route
 > 滑鼠撥20個去中倉 | clarify | 哪個倉
 > 從北倉撥 | transfer_confirm | 滑鼠
@@ -8126,6 +8133,7 @@
 > 好 | movement_done
 > 出10個 打錯 是出20個 | movement_confirm | 20
 > 確認 | movement_done
+
 ### hand-r68-上週勒與撐得了
 > 藍牙喇叭進出紀錄 | movement | 喇叭
 > 上週勒 | movement | 上週
@@ -8141,6 +8149,7 @@
 ### hand-r68-序數屬性
 > 咖啡還剩多少 | clarify | 哪一個
 > 第二個多少錢 | inventory_single | 單價
+
 ### hand-r70-分倉裸改值調成
 > 氣泡水的安全庫存多少 | config_read | 氣泡水
 > 北倉的調成400 | config_confirm | 400
@@ -8157,6 +8166,7 @@
 > 熱銷冠軍是誰 | inventory_single | 賣最好
 > 亞軍勒 | inventory_single | 第2名
 > 季軍剩多少 | inventory_single | 第3名
+
 ### hand-r71-概覽不吸rows0
 > 倉租多少錢一個月 | rejected
 > 輸的那個要促銷嗎 | clarify,rejected
@@ -8169,6 +8179,7 @@
 > 防曬遮陽帽庫存 | inventory_single | 遮陽帽
 > 這個會不會不夠賣 | low_stock
 > 那不用補囉 | clarify | 沒問題
+
 ### hand-r72-還缺嗎與達標
 > 中倉進13個電動牙刷 | movement_confirm | 牙刷
 > 確認 | movement_done
@@ -8182,6 +8193,7 @@
 > 前三名各剩多少 | inventory_single | 第3名
 > 第一名北倉夠嗎 | low_stock
 > 第二名呢 | inventory_single,clarify
+
 ### hand-r73-動得快與快沒了
 > 運動壓縮臂套庫存 | inventory_single | 臂套
 > 它跟毛巾比誰動得快 | movement | 比較好
@@ -8191,3 +8203,28 @@
 > 好 | movement_done
 > 夠撐到下週嗎 | low_stock
 > 還很多啊 那不管它 | clarify | 沒問題
+
+### hand-r74-排程生命週期
+> 每天早上九點看警示 | clarify | 缺貨警示由它負責
+> 排程列表 | schedule_list
+> 刪掉它 | schedule_delete_confirm | SCH001
+> 確認刪除 | schedule_deleted | 已刪除
+### hand-r74-總值與類別排行
+> 嬰兒濕紙巾庫存 | inventory_single | 濕紙巾
+> 那看庫存總值 | inventory_single | 全店庫存總值
+> 哪一類最值錢 | inventory_single | 總值最高
+### hand-r74-幾台與多久賣完
+> 咖啡機庫存 | inventory_single | 咖啡機
+> 北倉剩幾台 | inventory_single | 北區倉
+> 精釀啤酒庫存 | inventory_single | 啤酒
+> 照這樣多久賣完 | low_stock
+### hand-r74-警示刪除與ID選擇
+> 警示規則列表 | alert_list | 警示規則
+> 刪掉它 | clarify | 請說 ID
+> AL001 | alert_delete_confirm | AL001
+> 確認刪除 | alert_deleted | 已刪除
+### hand-r74-序數選擇與取消
+> 警示規則列表 | alert_list
+> 刪掉它 | clarify | 請說 ID
+> 第二個 | alert_delete_confirm | 此動作無法復原
+> 取消 | item_cancelled | 已取消

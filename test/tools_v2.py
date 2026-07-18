@@ -1199,8 +1199,13 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
     existing = next((j for j in jobs if j["script_id"] == sc["id"]
                      and j["freq"] == freq and j.get("time_str") == time_str), None)
     if existing:
+        # r74：訪客說「看警示」被 alias 對到盤點腳本，回「已有月底盤點」讓人一頭
+        # 霧水——點明兩者是同一件事
+        _alias_note = ("（盤點腳本就是掃全倉比對安全庫存，缺貨警示由它負責）"
+                       if sc["id"] == "stock_audit"
+                       and any(w in (raw_text or "") for w in ("警示", "缺貨")) else "")
         return {"ok": True, "view": "clarify",
-                "summary": f"已經有一個一樣的排程囉：{sc['label']} {freq} {existing['time_str']}（ID: {existing['id']}），不用重複設定。",
+                "summary": f"已經有一個一樣的排程囉：{sc['label']} {freq} {existing['time_str']}（ID: {existing['id']}）{_alias_note}，不用重複設定。",
                 "data": {"question": f"已經有排程「{sc['label']}」（{freq} {existing['time_str']}）在跑囉，需要改時間或取消再跟我說。",
                          "options": [], "hint": ""}}
 

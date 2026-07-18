@@ -279,3 +279,28 @@
 > 好 | movement_done
 > 夠撐到下週嗎 | low_stock
 > 還很多啊 那不管它 | clarify | 沒問題
+
+### hand-r74-排程生命週期
+> 每天早上九點看警示 | clarify | 缺貨警示由它負責
+> 排程列表 | schedule_list
+> 刪掉它 | schedule_delete_confirm | SCH001
+> 確認刪除 | schedule_deleted | 已刪除
+### hand-r74-總值與類別排行
+> 嬰兒濕紙巾庫存 | inventory_single | 濕紙巾
+> 那看庫存總值 | inventory_single | 全店庫存總值
+> 哪一類最值錢 | inventory_single | 總值最高
+### hand-r74-幾台與多久賣完
+> 咖啡機庫存 | inventory_single | 咖啡機
+> 北倉剩幾台 | inventory_single | 北區倉
+> 精釀啤酒庫存 | inventory_single | 啤酒
+> 照這樣多久賣完 | low_stock
+### hand-r74-警示刪除與ID選擇
+> 警示規則列表 | alert_list | 警示規則
+> 刪掉它 | clarify | 請說 ID
+> AL001 | alert_delete_confirm | AL001
+> 確認刪除 | alert_deleted | 已刪除
+### hand-r74-序數選擇與取消
+> 警示規則列表 | alert_list
+> 刪掉它 | clarify | 請說 ID
+> 第二個 | alert_delete_confirm | 此動作無法復原
+> 取消 | item_cancelled | 已取消
