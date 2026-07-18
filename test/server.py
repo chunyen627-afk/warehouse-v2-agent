@@ -1065,7 +1065,10 @@ _REWRITE_RULES: list[tuple] = [
 
     # ── r55 收官批：低庫存追問/盤點結果/月底結算/分倉設定 ──
     # 「最緊急的是哪個」（剛看完缺貨警示的追問，也可獨立問）→ 警示列表開頭就是答案
-    (_re.compile(r"最緊?急.*(哪個|哪一個|哪項|是誰)"),              "哪些商品缺貨警示"),
+    # r56 收窄成全句比對：「最急的那批放哪個倉」是到期追問，曾被這條搶走
+    (_re.compile(r"^最緊?急的?(是)?(哪個|哪一個|哪項|誰)[?？。!！]*$"), "哪些商品缺貨警示"),
+    # r56：「最少人買的是什麼」曾被守門員拒——滯銷排行的口語講法
+    (_re.compile(r"(最少人買|沒什麼人買|沒人買|買最少|賣最少)"),    "滯銷品有哪些"),
     # 「月底結算」＝展場訪客對月底盤點的另一種講法
     (_re.compile(r"^(月底)?結算$"),                                 "執行腳本 月底盤點"),
     # 「上次盤點結果在哪」曾答非所問回熱銷榜 → 列紀錄檔讓訪客看到檔案在哪
@@ -1308,6 +1311,8 @@ _TYPO_NORM = (
     ("揚聲器", "喇叭"), ("冒子", "帽子"), ("拉圾", "垃圾"),
     # r55 收官批：露營裝備口語短稱（「椅子呢」「燈勒」曾被守門員拒——店裡唯一的椅/燈）
     ("椅子", "露營椅"), ("燈勒", "露營燈"), ("燈呢", "露營燈"), ("燈咧", "露營燈"),
+    # r56：英拼殘字（yog墊/shuei壺 展場快打）。yog 要排在 yoga 對之後（那組在前面已換完）
+    ("yog", "瑜珈"), ("shuei", "水"),
     # 俗稱正名
     ("健身墊", "瑜珈墊"), ("吸汗衣", "排汗衣"), ("T恤", "素T"),
     ("餅乾", "蘇打餅"),   # r28：config item「餅乾」曾誠實找不到（唯一對應）
@@ -4433,6 +4438,8 @@ _VIEW2FUNC = {"inventory": "query_inventory", "inventory_single": "query_invento
 
 
 _clarify_opts_by_vid: dict = {}   # r51：vid → 上一輪 clarify 的選單（序數選擇用）
+_write_flow_by_vid: dict = {}     # r56：vid → 寫入續流（進出貨/調貨 clarify 問倉別/數量後，
+                                  #        短答「北倉」「30件」要接回寫入而不是變庫存查詢）
 
 
 def _ctx_absorb(vid, result: dict):
@@ -4460,6 +4467,13 @@ def _ctx_absorb(vid, result: dict):
             _clarify_opts_by_vid.pop(vid, None)
     else:
         _clarify_opts_by_vid.pop(vid, None)
+
+    # r56：寫入續流記憶——進出貨/調貨 clarify 帶 flow（tools_v2 標注待補槽位）就記住，
+    # 下一句短答（「北倉」「30件」）由 WS 層接回寫入。其他回答即清（單發）。
+    if view == "clarify" and isinstance(data.get("flow"), dict):
+        _write_flow_by_vid[vid] = dict(data["flow"])
+    else:
+        _write_flow_by_vid.pop(vid, None)
 
     # 商品/倉別接地（只認單一字串，多商品列表不寫，避免 context 指到錯的那個）
     # r33：一定要驗證是真商品才寫 —— clarify「找不到商品『進30個』」的 data 也帶
@@ -4636,6 +4650,20 @@ def _ctx_expand(vid, text: str) -> str:
             new = f"{_whc}倉{last}{fw}"
     elif any(w in stripped for w in _CTX_WRITE) and _re.search(r"\d", stripped):
         # 寫入追問（「北倉進20個」）→ 商品名補在句尾，維持「動作+數量+商品」語序
+        # r56 危險邊緣：「奶茶進30杯」——句中自帶（查無的）商品名，曾被黏上 context
+        # 舊商品變「奶茶進30杯無線滑鼠」→ 進錯貨。剝掉動作/數字/單位/倉名後還有
+        # ≥2 字殘留＝訪客自己講了商品，不展開，讓下游誠實回「找不到」。
+        _wr_res = stripped
+        for _ww in ("進貨", "出貨", "調貨", "補貨", "進", "出", "調", "補", "到", "去", "從"):
+            _wr_res = _wr_res.replace(_ww, "")
+        _wr_res = _re.sub(r"[\d０-９]+", "", _wr_res)
+        for _wu in ("個", "件", "箱", "杯", "打", "包", "盒", "罐", "瓶", "組", "雙",
+                    "入", "台", "支", "條", "頂", "卡車", "車", "北倉", "中倉", "南倉",
+                    "北區倉", "中區倉", "南區倉"):
+            _wr_res = _wr_res.replace(_wu, "")
+        _wr_res = _wr_res.strip("的呢嗎吧了好就喔啦 ")
+        if len(_wr_res) >= 2:
+            return text
         new = f"{stripped}{last}"
     elif not stripped or text.strip() in _CTX_PARTICLE:
         # 純代詞句（「那個呢」）／純語助詞（「呢」「咧」）→ 用上一輪的功能補完
@@ -6040,10 +6068,12 @@ async def ws_handler(ws: WebSocket):
             #   守門員回教學文。
             if _abort_intent(user_text):
                 _in_flow = (_item_create_state_ws.get(vid, {}).get("active")
-                            or _item_delete_state.get(vid))
+                            or _item_delete_state.get(vid)
+                            or _write_flow_by_vid.get(vid))
                 _had_card = vid in _pending_by_vid
                 _item_create_state_ws.pop(vid, None)   # 只清自己這位訪客的流程
                 _item_delete_state.pop(vid, None)
+                _write_flow_by_vid.pop(vid, None)      # r56：寫入續流也一併清
                 _pending_by_vid.pop(vid, None)
                 log.info(f"[abort] {user_text!r} → 清流程/卡片（flow={bool(_in_flow)} card={_had_card}）")
                 if _in_flow or _had_card:
@@ -6065,6 +6095,58 @@ async def ws_handler(ws: WebSocket):
                         "ok": True, "view": "clarify", "summary": _ab_msg,
                         "data": {"question": _ab_msg, "options": [], "hint": ""}}})
                 continue
+
+            # ── r56：寫入續流——進出貨/調貨 clarify（問倉別/數量/路線）後的短答接回 ──
+            #   「進30個毛帽」→「要異動哪個倉？」→ 訪客答「北倉」曾被當獨立查詢回庫存、
+            #   流程斷裂。tools_v2 在 clarify data 帶 flow 槽位，這裡比對短答並重呼叫。
+            _wf56 = _write_flow_by_vid.get(vid)
+            if _wf56 and not _item_create_state_ws.get(vid, {}).get("active"):
+                _wf_args = None
+                _wf_t = user_text.strip().strip("!！。.~～ ")
+                if _wf56.get("await") == "warehouse":
+                    _m_wh56 = _re.fullmatch(
+                        r"(不對[ ，,]*)?(是|放|到|去)?\s*([北中南])(區)?(倉)?(好了|吧|喔)?", _wf_t)
+                    if _m_wh56:
+                        _wf_args = {"keyword": _wf56.get("keyword", ""),
+                                    "direction": _wf56.get("direction", ""),
+                                    "qty": _wf56.get("qty", ""),
+                                    "is_return": bool(_wf56.get("is_return")),
+                                    "warehouse": _m_wh56.group(3) + "倉"}
+                elif _wf56.get("await") == "qty":
+                    _m_q56 = _re.fullmatch(
+                        r"(進貨?|出貨?|調貨?)?\s*([0-9]{1,7})\s*(個|件|箱|台|支|包|盒|罐|瓶|組|雙)?(就好|好了|吧|喔)?",
+                        _wf_t)
+                    if _m_q56:
+                        if _wf56.get("tool") == "create_transfer":
+                            _wf_args = {"keyword": _wf56.get("keyword", ""),
+                                        "from_wh": _wf56.get("from_wh", ""),
+                                        "to_wh": _wf56.get("to_wh", ""),
+                                        "qty": _m_q56.group(2)}
+                        else:
+                            _wf_args = {"keyword": _wf56.get("keyword", ""),
+                                        "warehouse": _wf56.get("warehouse", ""),
+                                        "direction": _wf56.get("direction", ""),
+                                        "is_return": bool(_wf56.get("is_return")),
+                                        "qty": _m_q56.group(2)}
+                elif _wf56.get("await") == "route":
+                    _m_r56 = _re.search(
+                        r"(從)?([北中南])(區)?倉?\s*(調|到|去|往|搬)+\s*([北中南])(區)?倉?", _wf_t)
+                    if _m_r56 and len(_wf_t) <= 14:
+                        _wf_args = {"keyword": _wf56.get("keyword", ""),
+                                    "qty": _wf56.get("qty", ""),
+                                    "from_wh": _m_r56.group(2) + "倉",
+                                    "to_wh": _m_r56.group(5) + "倉"}
+                _write_flow_by_vid.pop(vid, None)   # 單發：命中即消耗、沒命中也不殘留
+                if _wf_args is not None:
+                    import tools_v2 as _tv2_wf
+                    _wf_res = getattr(_tv2_wf, _wf56["tool"])(**_wf_args)
+                    log.info(f"[write-flow] vid={vid} {_wf56['tool']}"
+                             f" {_wf56.get('await')}←{_wf_t!r}")
+                    for ch in (_wf_res.get("summary") or ""):
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": _wf_res})
+                    continue
 
             # ── r32 pending 卡片口語層（rewrite 之前）──
             #   卡片在畫面上時訪客打「好」→ 過去被守門員 rejected；打「不對是100個」
@@ -6158,7 +6240,7 @@ async def ws_handler(ws: WebSocket):
             #   守門員教學文（展場冷場）。純客套短句 → 溫暖收尾；混雜其他內容不攔。──
             _fw_bye = _re.fullmatch(
                 r"(?:(?:掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|先走了|"
-                r"我走了|走囉|閃人|告辭)[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
+                r"我走了|走囉|閃人|告辭|沒事)[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
                 user_text.strip(), _re.IGNORECASE)
             _fw_thx = _re.fullmatch(
                 r"(?:(?:謝謝你?們?|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
@@ -6484,8 +6566,11 @@ async def ws_handler(ws: WebSocket):
 
             # ── 不支援時間粒度誠實 clarify（r25）：「上上週的出貨量」曾回上週數字
             #   （錯期間誤導）、「週末有進貨嗎」曾回本週。誠實列出支援範圍。──
+            # r56：上個月改誠實 clarify——資料快照只涵蓋近期，過去「近似成本月」會讓
+            # 「上個月呢」拿到本月數字（答非所問且訪客無從發現）
             _UNSUPPORTED_TIME = ("上上週", "上上周", "上上禮拜", "大前天", "週末", "周末",
-                                 "上季", "上一季", "去年", "前年", "年初", "年底")
+                                 "上季", "上一季", "去年", "前年", "年初", "年底",
+                                 "上個月", "上月")
             # r26：「上個月跟這個月哪個賣得多」雙期間比較不支援（上個月單獨出現時
             # 既有規則近似成本月，僅在兩期間同句要求比較時誠實 clarify）
             _dual_period = (("上個月" in user_text
@@ -6612,6 +6697,85 @@ async def ws_handler(ws: WebSocket):
                         "data": {"name": _ls_it["name"], "safety_stock": _ls_shown,
                                  "total": _ls_tot}}})
                     continue
+
+            # ── r56：寫入邊緣攔截 ──
+            # 負數量寫入（「北倉進-5個衛生紙」曾被當庫存查詢＝答非所問）
+            if (_re.search(r"[進出調補]\s*[-−]\s*\d", user_text)
+                    or _re.search(r"[-−]\d+\s*[個件箱包]", user_text)):
+                _neg_msg = ("數量不能是負數喔。要減少庫存請用「出貨」，"
+                            "例如「北倉出5個衛生紙」。")
+                log.info(f"[write-edge] 負數量 → clarify: {user_text!r}")
+                for ch in _neg_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _neg_msg,
+                    "data": {"question": _neg_msg, "options": [], "hint": ""}}})
+                continue
+            # 目標水位式寫入（「出到剩10個」「補到100個」）——語意是「補/出到剩 N」，
+            # 若照數字開卡會異動錯量（危險邊緣），誠實說不支援
+            if _re.search(r"[出進補]到剩?\s*\d+", user_text):
+                _tl_msg = ("「出到剩幾件／補到幾件」這種目標水位操作還不支援，"
+                           "請直接說要異動的數量，例如「北倉出20個衛生紙」。")
+                log.info(f"[write-edge] 目標水位 → clarify: {user_text!r}")
+                for ch in _tl_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _tl_msg,
+                    "data": {"question": _tl_msg, "options": [], "hint": ""}}})
+                continue
+            # 清空/比例式出貨（「全部的衛生紙都出掉」「衛生紙出一半」）→ 不猜數量
+            if (any(w in user_text for w in ("出掉", "出光", "清光")) or
+                    (_re.search(r"出", user_text)
+                     and any(w in user_text for w in ("全部", "全都", "通通", "整批", "一半", "一部分")))) \
+                    and not any(w in user_text for w in ("庫存", "警示", "排行", "統計",
+                                                          "紀錄", "記錄", "多少", "幾件", "比較",
+                                                          # 「排程全部列出來」「通通列出來」的
+                                                          # 「出」是列出不是出貨（r56 誤傷修正）
+                                                          "列出", "出來", "排程", "清單")):
+                _pc_msg = ("「全部／一半」這類比例我不會自己換算成件數（怕出錯量）。"
+                           "請說確切數量，例如「北倉出50個衛生紙」。")
+                log.info(f"[write-edge] 比例出貨 → clarify: {user_text!r}")
+                for ch in _pc_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _pc_msg,
+                    "data": {"question": _pc_msg, "options": [], "hint": ""}}})
+                continue
+
+            # ── r56：空間方位句（倉位/樓層/地址沒建檔）→ 優雅明說，不再回
+            #   「沒有『在哪裡』這個商品」這種醜 clarify ──
+            # 只收「位置疑問」詞——貨架/架子這類純名詞不收（「貨架上還有衛生紙嗎」
+            # 是存量查詢，r56 誤傷修正）；「第三排架子上有什麼」由第N排 regex 接
+            _SPATIAL56 = ("在哪裡", "在哪邊", "地址", "幾坪", "坪數", "放得下", "放不下",
+                          "哪一排", "第幾排", "幾樓", "樓上", "樓下", "哪一區", "位置在哪")
+            if (any(w in user_text for w in _SPATIAL56)
+                    or _re.search(r"第[一二三四五六七八九十\d]+排", user_text)):
+                _sp_msg = ("這個 demo 沒有建倉位／樓層／地址這類實體位置資料，"
+                           "我能查的是數量與警示——例如「衛生紙庫存」「北倉缺貨清單」。")
+                log.info(f"[spatial-gate] {user_text!r} → 位置資訊未建檔")
+                for ch in _sp_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _sp_msg, "data": {}}})
+                continue
+
+            # ── r56：到期清單後問「最急的那批放哪個倉」——曾被缺貨警示搶走，
+            #   依 context 分流回到期清單（開頭就是最急批+倉別）──
+            if (any(w in user_text for w in ("最急", "最緊急"))
+                    and any(w in user_text for w in ("批", "哪個倉", "哪一倉", "在哪倉"))
+                    and _ctx_for(vid).get("last_func") == "list_expiring_items"):
+                import warehouse as _W_xq
+                _xq_res = _W_xq.list_expiring_items()
+                log.info(f"[dispatch-ws] 到期最急批分流: {user_text!r}")
+                for ch in (_xq_res.get("summary") or ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": _xq_res})
+                continue
 
             # ── r55 收官批：本週 vs 上週進出比較——「這禮拜跟上週比」曾答非所問
             #   回倉庫庫存價值比較（訪客問的是時段進出量）──

@@ -1687,6 +1687,19 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
     item = matches[0]
     sku = item["sku_id"]
 
+    # r56：數量上限/負數要在「問倉別」之前攔——「進99999999個氣泡水」缺倉別時
+    # 曾先問倉，訪客答完倉才見上限（或根本沒攔）
+    try:
+        _pre_qty = int(str(qty).strip() or 0)
+    except ValueError:
+        _pre_qty = 0
+    if _pre_qty > 9999:
+        return {"ok": True, "view": "clarify",
+                "summary": (f"一次異動 {_pre_qty:,} 件不太尋常"
+                            "（單次上限 9,999 件），請確認數量後再說一次。"),
+                "data": {"question": f"要異動 {_pre_qty:,} 件？請確認數量",
+                         "options": [], "hint": ""}}
+
     wh = (warehouse or "").strip()
     _WH_ALIASES = {"north": "north", "北": "north", "北倉": "north", "北區倉": "north", "北區": "north",
                    "central": "central", "中": "central", "中倉": "central", "中區倉": "central", "中區": "central",
@@ -1701,7 +1714,12 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                          "options": [f"北倉{_dir_label_zh}{item['name']}{_qty_txt}",
                                      f"中倉{_dir_label_zh}{item['name']}{_qty_txt}",
                                      f"南倉{_dir_label_zh}{item['name']}{_qty_txt}"],
-                         "hint": "請輸入完整描述，例如「北倉進了{}{}」".format(item['name'], _qty_txt)}}
+                         "hint": "請輸入完整描述，例如「北倉進了{}{}」".format(item['name'], _qty_txt),
+                         # r56：寫入續流——追問倉別後訪客只答「北倉」也要能接回進出貨
+                         # （曾變成庫存查詢、流程斷裂）。server WS 層讀這包重呼叫。
+                         "flow": {"tool": "create_movement", "await": "warehouse",
+                                  "keyword": item["name"], "direction": direction,
+                                  "qty": str(qty), "is_return": is_return}}}
 
     # 退貨（客人退回來）= 庫存增加，走 in 的算法，不需要判斷方向詞
     if is_return:
@@ -1729,7 +1747,10 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                 "summary": f"「{item['name']}」要{_dir_zh}幾件呢？例如「{_dir_zh}50件」。",
                 "data": {"question": f"「{item['name']}」要{_dir_zh}幾件？",
                          "options": [f"{_dir_zh}10件", f"{_dir_zh}30件", f"{_dir_zh}50件"],
-                         "hint": "請說明數量，例如「進了50件」"}}
+                         "hint": "請說明數量，例如「進了50件」",
+                         "flow": {"tool": "create_movement", "await": "qty",
+                                  "keyword": item["name"], "warehouse": wh,
+                                  "direction": direction, "is_return": is_return}}}
     if qty_val > 9999:
         # r17：999999 件這種展場搗蛋數字不開卡，追問確認
         return {"ok": True, "view": "clarify",
@@ -1897,7 +1918,9 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
                          "options": [f"北倉調{item['name']}去南倉{qty or 20}件",
                                      f"南倉調{item['name']}去北倉{qty or 20}件",
                                      f"中倉調{item['name']}去北倉{qty or 20}件"],
-                         "hint": "請講清楚來源倉跟目標倉，例如「北倉調{}去南倉」".format(item['name'])}}
+                         "hint": "請講清楚來源倉跟目標倉，例如「北倉調{}去南倉」".format(item['name']),
+                         "flow": {"tool": "create_transfer", "await": "route",
+                                  "keyword": item["name"], "qty": str(qty)}}}
     if from_key == to_key:
         return W._err("來源倉跟目標倉不能是同一個，請確認一下要從哪調到哪。")
 
@@ -1912,7 +1935,9 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
         return {"ok": True, "view": "clarify",
                 "summary": f"要調多少{('「'+_kwn+'」') if _kwn else ''}呢？請說個數量，例如「調20件」。",
                 "data": {"pending_transfer": True, "keyword": _kwn,
-                         "from_wh": from_wh, "to_wh": to_wh}}
+                         "from_wh": from_wh, "to_wh": to_wh,
+                         "flow": {"tool": "create_transfer", "await": "qty",
+                                  "keyword": _kwn, "from_wh": from_wh, "to_wh": to_wh}}}
 
     s = W.state()
     from_cur = s.stock.get(from_key, {}).get(sku, 0)

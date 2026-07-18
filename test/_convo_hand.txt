@@ -71,3 +71,22 @@
 ### hand-r55f-到期清單倉別過濾
 > 快過期的有哪些 | expiring | 到期
 > 只看南倉的 | expiring | 南區倉
+
+### hand-r56-寫入續流問倉
+> 進30個毛帽 | clarify | 哪個倉
+> 北倉 | movement_confirm | 保暖毛帽
+> 好 | movement_done
+### hand-r56-寫入續流問量
+> 北倉進一打藍牙喇叭 | clarify | 幾件
+> 25件 | movement_confirm | 25
+> 取消 | item_cancelled
+### hand-r56-查無商品寫入不奪context
+> 無線滑鼠還剩幾個 | inventory_single
+> 奶茶進30杯 | clarify | 找不到
+### hand-r56-調貨續流問路線
+> 我想調10個健身環 | clarify | 哪個倉
+> 北倉到南倉 | transfer_confirm | 健身環
+> 取消 | item_cancelled
+### hand-r56-到期最急批追問
+> 快過期的有哪些 | expiring | 到期
+> 最急的那批放哪個倉 | expiring | 最急
