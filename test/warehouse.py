@@ -1265,6 +1265,10 @@ def list_expiring_items(
             it["sku_id"] for it in s.items
             if kw_lower in it["name"].lower() or kw_lower in it["sku_id"].lower()
         }
+        # r64：keyword 有命中就丟掉 category——LLM 曾同時給「電解質運動飲」+錯類別
+        # 「運動用品」（飲品其實是食品飲料類），交集空 → 假「沒有快到期 ✅」漏報
+        if kw_skus:
+            category = None
         # r55 收官批：keyword 一個商品都對不到 → 明說查無，不能往下走成
         # 「沒有快到期的批次 ✅」假全綠（到期警示被不存在的商品名濾光＝漏報）。
         if not kw_skus:

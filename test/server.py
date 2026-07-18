@@ -1110,6 +1110,12 @@ _REWRITE_RULES: list[tuple] = [
                                                                     "\\1進了什麼貨"),
     # r63：「南倉的濕紙巾昨天有異動嗎」曾被庫存 fast-path 搶（保留商品/倉/時間）
     (_re.compile(r"^(.{2,14}?)(今天|昨天|前天)有?異動嗎?$"),        "\\1\\2進出紀錄"),
+    # r64：「最會賣的飲料是哪個」曾 clarify 你想查什麼——類別排行口語
+    (_re.compile(r"^最會?賣(?:得最好)?的(飲料|食品|電子|家電|廚具|日用品?|服飾|運動用品)"
+                 r"類?(?:是哪個|是什麼)?$"),                        "\\1類熱銷排行"),
+    # r64：審計/設定異動紀錄 → 紀錄檔清單（曾回商品庫存/熱銷榜）
+    (_re.compile(r"(審計|audit).{0,3}(紀錄|記錄|log)|(今天)?(改過什麼|誰改過)(設定)?"),
+                                                                    "有哪些紀錄檔"),
     # r62：「它上週賣幾個」——賣幾個是銷量(出貨)不是庫存（保留商品與期間）
     (_re.compile(r"^(.{2,10}?)(上週|本週|這週|昨天|今天|本月)賣了?幾[個件]?$"),
                                                                     "\\1\\2出貨多少"),
@@ -1346,6 +1352,8 @@ _TYPO_NORM = (
     ("yog", "瑜珈"), ("shuei", "水"),
     # r58：訛變補（悶少罐/電風扇——USB 風扇的口語稱呼）
     ("悶少罐", "悶燒罐"), ("電風扇", "風扇"),
+    # r64：注音告別
+    ("ㄅㄞˋㄅㄞˋ", "掰掰"), ("ㄅㄞㄅㄞ", "掰掰"),
     # 俗稱正名
     ("健身墊", "瑜珈墊"), ("吸汗衣", "排汗衣"), ("T恤", "素T"),
     ("餅乾", "蘇打餅"),   # r28：config item「餅乾」曾誠實找不到（唯一對應）
@@ -4565,6 +4573,9 @@ def _ctx_absorb(vid, result: dict):
     # r56 fuzz：記住進出查詢的期間標籤——全店進出後「只看南倉的」要沿用同期間
     if view == "movement" and data.get("period_label"):
         _ctx_for(vid)["last_mv_plabel"] = data["period_label"]
+    # r64：記住排行榜的類別範圍——「廚具類熱銷」→「第二名多少錢」要在同榜內解析
+    if view == "hot_items":
+        _ctx_for(vid)["last_hot_cat"] = data.get("category") or None
 
 
 # 追問展開：代詞句/純功能句/純倉別句 → 在 rewrite 前補回上一輪的商品名，
@@ -4774,7 +4785,9 @@ _PEND_ASK = ("對嗎", "可以嗎", "是這樣嗎", "要按哪", "怎麼按", "�
              # r55 收官批：「算了照原本的」＝維持卡片內容 → 引導按確認（不代按、不取消）
              "照原本", "照舊", "維持原本",
              # r57：暫停詞（「先等一下」「還在嗎」）＝卡片留著等訪客想，引導不取消
-             "等一下", "等等", "先等", "考慮一下", "讓我想", "還在嗎")
+             "等一下", "等等", "先等", "考慮一下", "讓我想", "還在嗎",
+             # r64：維持語新形
+             "維持原樣", "保持原樣", "維持現狀")
 _PEND_FIX = ("不對", "不是", "改成", "改為", "錯了", "應該是", "換成", "改一下", "多一點",
              "少一點", "太多", "太少", "數量錯", "倉庫錯", "商品錯",
              # r35 反悔鏈：訪客改主意的實際講法（「還是80好了」曾落到守門員教學文、
@@ -6155,7 +6168,12 @@ async def ws_handler(ws: WebSocket):
             #   涵蓋三種情境：流程中放棄、卡片在時放棄、閒置時說放棄。
             #   過去只認「取消」二字 → 其他講法在流程中被吞成商品名、在卡片時被
             #   守門員回教學文。
-            if _abort_intent(user_text):
+            # r64：卡片在場的拒絕開頭句（「不要好了 我自己叫貨」len>8 過不了
+            # _abort_intent）——不要/不用開頭且非換看句 → 視為放棄卡片
+            _abort64 = (vid in _pending_by_vid and len(user_text) <= 14
+                        and _re.match(r"^(不要|不用|先不|不然算了)", user_text.strip())
+                        and not _re.search(r"我要|查|看|換", user_text))
+            if _abort_intent(user_text) or _abort64:
                 _in_flow = (_item_create_state_ws.get(vid, {}).get("active")
                             or _item_delete_state.get(vid)
                             or _write_flow_by_vid.get(vid))
@@ -6418,8 +6436,8 @@ async def ws_handler(ws: WebSocket):
             # r57：告別+道謝混雜（「辛苦了88」）也要接——token 聯集全句比對，
             # 有告別詞就走告別回覆，否則道謝回覆
             _FW_BYE_TOK = (r"掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|"
-                           r"先走了|我走了|走囉|閃人|告辭|沒事|沒了|下班了|回家了")
-            _FW_THX_TOK = (r"謝謝你?們?|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
+                           r"先走了|我走了|走囉|閃人|告辭|沒事|沒了|下班了|回家了|各位")
+            _FW_THX_TOK = (r"謝謝你?們?|謝了|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
                            r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了|"
                            r"差不多了|就到這|先這樣")
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）
@@ -6928,9 +6946,30 @@ async def ws_handler(ws: WebSocket):
                         await send({"type": "done", "result": result})
                         continue
 
+            # ── r64：類別身分追問（「它是廚具還是食品」）——曾重回庫存卡＝半答 ──
+            if (len(user_text) <= 24 and _ctx_for(vid).get("last_sku")
+                    and (any(w in user_text for w in ("是什麼類", "哪一類", "屬於什麼"))
+                         or _re.search(r"是[一-鿿]{2,4}還是[一-鿿]{2,4}類?", user_text))
+                    and not any(w in user_text for w in ("賣", "熱銷", "排行", "庫存", "比較"))):
+                import warehouse as _W_cat
+                _cat_m = _W_cat.match_items(_ctx_for(vid)["last_sku"])
+                if _cat_m:
+                    _cat_it = _cat_m[0]["item"]
+                    _cat_lbl = _W_cat.CATEGORY_LABEL.get(_cat_it["category"], _cat_it["category"])
+                    _cat_sum = f"「{_cat_it['name']}」屬於{_cat_lbl}類。"
+                    log.info(f"[dispatch-ws] 類別身分: {_cat_it['name']} → {_cat_lbl}")
+                    for ch in _cat_sum:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "inventory_single", "summary": _cat_sum,
+                        "data": {"name": _cat_it["name"]}}})
+                    continue
+
             # ── r58：單品撐幾天直答（「它撐幾天」「衛生紙還能撐多久」）——days_left
             #   資料一直都有（v3.9.1 起），過去只回庫存數字＝半答 ──
-            if any(w in user_text for w in ("撐幾天", "撐多久", "能撐", "幾天斷貨", "還能賣幾天")):
+            if any(w in user_text for w in ("撐幾天", "撐多久", "能撐", "幾天斷貨",
+                                             "還能賣幾天", "夠賣多久", "賣多久")):
                 import warehouse as _W_dl
                 _dl_kw = _extract_sku_keyword(user_text) or _ctx_for(vid).get("last_sku") or ""
                 _dl_m = _W_dl.match_items(_dl_kw) if _dl_kw else []
@@ -7637,7 +7676,11 @@ async def ws_handler(ws: WebSocket):
             # r57：「第五名是什麼」——排行後問名次身分（沒有庫存語）也要接
             _bs_idwords = ("是什麼", "是哪個", "是啥", "叫什麼", "是誰")
             _bs_want_id = bool(_bs_rankn_m) and any(w in user_text for w in _bs_idwords)
-            if _bs_rank_type and (any(w in user_text for w in _bs_stock_words) or _bs_want_id):
+            # r64：「第二名多少錢」——排行後問名次價格
+            _bs_want_pr = bool(_bs_rankn_m) and any(
+                w in user_text for w in ("多少錢", "單價", "什麼價", "售價"))
+            if _bs_rank_type and (any(w in user_text for w in _bs_stock_words)
+                                  or _bs_want_id or _bs_want_pr):
                 # 期間：句內有講就照句子，沒講沿用上一輪排行榜的期間（r55）
                 if "月" in user_text:
                     _bs_period = "this_month"
@@ -7645,8 +7688,12 @@ async def ws_handler(ws: WebSocket):
                     _bs_period = "this_week"
                 else:
                     _bs_period = _ctx_for(vid).get("last_hot_period") or "this_week"
-                _bs_hot = finance.execute("list_hot_items",
-                                          {"rank_type": _bs_rank_type, "period": _bs_period})
+                # r64：沿用上一輪排行榜的類別範圍（「廚具類熱銷」→「第二名多少錢」
+                # 曾用全類別榜解析到錯的商品）
+                _bs_args = {"rank_type": _bs_rank_type, "period": _bs_period}
+                if _ctx_for(vid).get("last_hot_cat"):
+                    _bs_args["category"] = _ctx_for(vid)["last_hot_cat"]
+                _bs_hot = finance.execute("list_hot_items", _bs_args)
                 _bs_rank = (_bs_hot.get("data") or {}).get("rankings") or []
                 _bs_done = False
                 if _bs_rank:
@@ -7678,6 +7725,23 @@ async def ws_handler(ws: WebSocket):
                             "data": {"name": _bs_name}}})
                         # r58：身分追問後排行 context 要保留——「第四名是啥」→
                         # 「第四名剩多少」曾因 last_func 被蓋成 query_inventory 而斷鏈
+                        _ctx_for(vid)["last_func"] = "list_hot_items"
+                        _bs_done = True
+                        continue
+                    # r64：名次價格追問（「第二名多少錢」）→ 直接報單價
+                    if _bs_want_pr and not any(w in user_text for w in _bs_stock_words):
+                        import warehouse as _W_bp
+                        _bp_m = _W_bp.match_items(_bs_name)
+                        _bp_price = (_bp_m[0]["item"]["unit_price"] if _bp_m else 0)
+                        _bs_pr_sum = (f"{'本月' if _bs_period == 'this_month' else '本週'}"
+                                      f"{_bs_rlabel}是「{_bs_name}」，單價 NT$ {_bp_price:,}。")
+                        log.info(f"[dispatch-ws] 排行價格追問: {_bs_name} → {_bp_price}")
+                        for ch in _bs_pr_sum:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": {
+                            "ok": True, "view": "inventory_single", "summary": _bs_pr_sum,
+                            "data": {"name": _bs_name, "unit_price": _bp_price}}})
                         _ctx_for(vid)["last_func"] = "list_hot_items"
                         _bs_done = True
                         continue

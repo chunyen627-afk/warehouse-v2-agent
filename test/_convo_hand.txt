@@ -181,3 +181,21 @@
 > 現在設定多少 | config_read | 瑜珈墊
 > 改回50 | config_confirm | 50
 > 確認 | config_done
+
+### hand-r64-到期kw勝category（假全綠家族）
+> 本月熱銷前五 | hot_items
+> 第五名剩多少 | inventory_single | 運動飲
+> 那個倉的到期品順便看看 | expiring | 到期
+### hand-r64-po卡拒絕
+> 哪些快缺貨 | low_stock
+> 那開採購單 | po_confirm
+> 不要好了 我自己叫貨 | item_cancelled | 取消
+### hand-r64-類別身分與名次價格
+> 廚具類熱銷 | hot_items
+> 第二名多少錢 | inventory_single | 單價
+> 悶燒罐咧 | inventory_single | 悶燒罐
+> 它是廚具還是食品 | inventory_single | 家電廚具
+### hand-r64-維持原樣
+> 濕紙巾安全庫存南倉的改成100 | config_confirm | 100
+> 算了維持原樣 | clarify | 確認
+> 取消 | item_cancelled
