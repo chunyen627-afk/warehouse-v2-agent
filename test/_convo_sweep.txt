@@ -8087,3 +8087,16 @@
 > ㄎㄎ | rejected
 > 北倉 | movement_confirm | 咖啡豆
 > 取消 | item_cancelled
+### hand-r62-奶瓶不奪context
+> 保鮮盒還有庫存嗎 | inventory_single | 保鮮盒
+> 奶瓶還有多少庫存 | clarify,rejected
+### hand-r62-上週賣幾個
+> 瑜珈墊庫存 | inventory_single | 瑜珈墊
+> 它上週賣幾個 | movement | 出貨
+### hand-r62-設定追問與改回
+> 瑜珈墊安全庫存多少 | config_read | 瑜珈墊
+> 改成60 | config_confirm | 60
+> 確認 | config_done
+> 現在設定多少 | config_read | 瑜珈墊
+> 改回50 | config_confirm | 50
+> 確認 | config_done

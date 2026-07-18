@@ -228,6 +228,11 @@ def is_meaningful_input(text: str) -> bool:
     # 閒聊（「放音樂給我聽」描述命中但無查詢語氣 → 不放行、續走黑名單擋下）。
     if _descriptor_hit(text) and any(c in s for c in _DESC_GATE_CUES):
         return True
+    # r62：「退貨3個耳機 北倉」是倉管退貨入庫（is_return 一直支援），不是購物
+    # 退貨搗蛋——退貨+數量+（倉別或真商品）豁免黑名單
+    if re.search(r"退[貨回]?\s*\d", s) and (re.search(r"[北中南][倉區]", s)
+                                            or _text_has_item_name(s)):
+        return True
     # 黑名單：明顯非倉管領域 → 直接擋
     for kw in _GATEKEEPER_BLACKLIST:
         if kw in s:
@@ -1097,6 +1102,12 @@ _REWRITE_RULES: list[tuple] = [
     # r60：「家電廚具類有哪些」曾被拒——類別清單口語
     (_re.compile(r"^(電子|家電|家電廚具|食品|食品飲料|日用|日用品|服飾|運動|運動用品)"
                  r"(產品|用品|廚具|飲料)?類?(有哪些|有什麼|清單)$"), "\\1類庫存"),
+    # r62：「這幾天的進出」曾被 ctx 黏上舊商品（近似本週、全店）
+    (_re.compile(r"^(這幾天|最近幾天|近幾天)的?(進出|異動)(紀錄|記錄|統計)?$"),
+                                                                    "本週進出統計"),
+    # r62：「它上週賣幾個」——賣幾個是銷量(出貨)不是庫存（保留商品與期間）
+    (_re.compile(r"^(.{2,10}?)(上週|本週|這週|昨天|今天|本月)賣了?幾[個件]?$"),
+                                                                    "\\1\\2出貨多少"),
 
     # ── 缺貨 / 低庫存 ──
     (_re.compile(r"(快沒貨|快沒了|即將缺貨|快缺貨)"),              "哪些商品缺貨警示"),
@@ -4647,6 +4658,8 @@ def _ctx_expand(vid, text: str) -> str:
         _stem = text
         for _fw in sorted(_CTX_BARE, key=len, reverse=True):
             _stem = _stem.replace(_fw, "")
+        for _fp62 in ("來著", "是說", "啊這"):   # r62b：語尾填充詞非商品（「剩多少來著」）
+            _stem = _stem.replace(_fp62, "")
         _stem = _stem.strip("的呢嗎吧了還剩現在有多少什麼賣怎麼哪個要幫我？?。!！， 　")
         # 剩餘要「像商品名」：≥3 字、非代詞/倉別、不含疑問殘字（「什麼賣」→ 剝完剩空
         #   或殘字，不算；「鋼琴烤漆保養油」→ 實質商品名，算）
@@ -4655,6 +4668,19 @@ def _ctx_expand(vid, text: str) -> str:
                 and not any(q in _stem for q in _qwords)
                 and not _CTX_WH_ONLY.match(_stem)):
             has_bare = False   # 自帶商品名，交給下游回「找不到」
+        elif (len(_stem) == 2 and not any(p in _stem for p in _CTX_PRON)
+                and not any(q in _stem for q in _qwords)
+                # 代詞殘字（「那ㄍ」「這ㄍ」注音殘）不是商品名——曾誤殺 60 條
+                # 「那ㄍ快到期嗎」多輪守衛（r62 修正的修正）
+                and not _re.search(r"[那這它牠]", _stem)):
+            # r62：2 字未知商品（「奶瓶還有多少庫存」）——查無比黏上 context 舊商品
+            # 錯答好（曾回玻璃保鮮盒）。2 字真商品（耳機）已被 _has_real_item 擋在前面。
+            try:
+                import warehouse as _W_st62
+                if not _W_st62.match_items(_stem):
+                    has_bare = False
+            except Exception:
+                pass
     # r34：寫入追問（「北倉進20個」——查完商品接著進貨，展場高頻）。r32 寫了
     #   組句邏輯卻沒把它列進觸發條件 → 這條路徑從來沒被走到，訪客拿到
     #   「找不到商品『進20個』」。（r32 的守衛斷言只寫 not:error，clarify 也算過 → 假綠）
@@ -6342,7 +6368,7 @@ async def ws_handler(ws: WebSocket):
             # last_sku 就接（無卡時；有卡由 pending 層的「改」引導接走）
             # r61：加可選倉別前綴——「南倉的改成130」曾回「沒有『改成130』這個商品」
             _cfg_bare57 = _re.fullmatch(
-                r"(?:([北中南])(?:區)?倉的?)?(改成?|設成?|調成?)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
+                r"(?:([北中南])(?:區)?倉的?)?(改回|改成?|設成?|調成?|調回)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
                 user_text.strip())
             if (_cfg_bare57 and _ctx_for(vid).get("last_sku")
                     and vid not in _pending_by_vid):
@@ -6350,6 +6376,13 @@ async def ws_handler(ws: WebSocket):
                 user_text = (f"{_cfg_wh61}{_ctx_for(vid)['last_sku']}"
                              f"安全庫存改成{_cfg_bare57.group(3)}")
                 log.info(f"[ctx-cfg] 裸改值 → {user_text!r}")
+
+            # r62：config 操作後「現在設定多少」——曾回「沒有『設定』這個商品」
+            if (_re.fullmatch(r"(現在|目前)?的?設定(是)?(多少)?[?？。!！]*", user_text.strip())
+                    and _ctx_for(vid).get("last_func") == "manage_config"
+                    and _ctx_for(vid).get("last_sku")):
+                user_text = f"{_ctx_for(vid)['last_sku']}安全庫存是多少"
+                log.info(f"[ctx-cfg] 設定追問 → {user_text!r}")
 
             # r59：到期清單後「最急的那批放哪」——「放哪」過不了守門員（無倉管詞），
             # gate 前改寫成完整到期查詢（清單開頭就是最急批+倉別）
@@ -6382,7 +6415,8 @@ async def ws_handler(ws: WebSocket):
             _FW_BYE_TOK = (r"掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|"
                            r"先走了|我走了|走囉|閃人|告辭|沒事|沒了")
             _FW_THX_TOK = (r"謝謝你?們?|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
-                           r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了")
+                           r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了|"
+                           r"差不多了|就到這|先這樣")
             _fw_all = _re.fullmatch(
                 rf"(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
                 user_text.strip(), _re.IGNORECASE)
@@ -6419,6 +6453,12 @@ async def ws_handler(ws: WebSocket):
                                    and not any(w in user_text.lower() for w in _BL_NEVER_EXEMPT))
             _bl_hit_ws = None if _desc_exempt_ws else next(
                 (b for b in _GATEKEEPER_BLACKLIST if b in user_text.lower()), None)
+            # r62：倉管退貨句豁免（同 is_meaningful_input 的豁免，兩處要同步）
+            if (_bl_hit_ws in ("退貨", "退換貨")
+                    and _re.search(r"退[貨回]?\s*\d", user_text)
+                    and (_re.search(r"[北中南][倉區]", user_text)
+                         or _has_real_item(user_text))):
+                _bl_hit_ws = None
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",
@@ -6709,9 +6749,13 @@ async def ws_handler(ws: WebSocket):
             #   （錯期間誤導）、「週末有進貨嗎」曾回本週。誠實列出支援範圍。──
             # r56：上個月改誠實 clarify——資料快照只涵蓋近期，過去「近似成本月」會讓
             # 「上個月呢」拿到本月數字（答非所問且訪客無從發現）
+            # r62：時段粒度（早上/下午）也誠實——「下午出了幾件」曾默默回整天數字。
+            # 「每天晚上七點」排程句要讓路（Pre-C-Sched 在後面接）
             _UNSUPPORTED_TIME = ("上上週", "上上周", "上上禮拜", "大前天", "週末", "周末",
                                  "上季", "上一季", "去年", "前年", "年初", "年底",
                                  "上個月", "上月")
+            # （r62 撤回時段粒度 gate：「中午前的異動」「下午有出貨嗎」是既有守衛
+            #   接受的整天近似行為——出手前要先查 corpus，守衛既定行為優先）
             # r26：「上個月跟這個月哪個賣得多」雙期間比較不支援（上個月單獨出現時
             # 既有規則近似成本月，僅在兩期間同句要求比較時誠實 clarify）
             _dual_period = (("上個月" in user_text
@@ -6953,6 +6997,23 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _pc_msg,
                     "data": {"question": _pc_msg, "options": [], "hint": ""}}})
+                continue
+
+            # ── r62：促銷/檔期語（打折/主打/買一送一）——沒有價格促銷資料，優雅明說
+            #   （曾回商品庫存＝答非所問、或 related_help 亂接）──
+            # r62b：帶真商品的促銷句（「衛生紙有優惠嗎」）是既有守衛接受的
+            # 「顯示該商品庫存」半答——只攔沒點名商品的檔期句
+            if (any(w in user_text for w in ("打折", "促銷", "特價", "主打", "主推",
+                                              "買一送一", "優惠", "檔期", "折扣"))
+                    and not _has_real_item(user_text)):
+                _pm_msg = ("這個 demo 沒有建價格促銷／檔期資料，我能查的是庫存、"
+                           "進出貨、缺貨與到期警示——例如「啤酒庫存」「本月熱銷排行」。")
+                log.info(f"[promo-gate] {user_text!r} → 促銷資料未建檔")
+                for ch in _pm_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _pm_msg, "data": {}}})
                 continue
 
             # ── r56：空間方位句（倉位/樓層/地址沒建檔）→ 優雅明說，不再回
