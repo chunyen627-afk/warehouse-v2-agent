@@ -1081,6 +1081,8 @@ _REWRITE_RULES: list[tuple] = [
     # r66 加同義：最慘/最糟/最嚴重
     (_re.compile(r"^最(緊?急|慘|糟|嚴重)的?(是)?(哪個|哪一個|哪項|誰)[?？。!！]*$"),
                                                                     "哪些商品缺貨警示"),
+    # r72：「都達標了嗎」＝安全庫存達標總檢（警示清單就是答案）
+    (_re.compile(r"^(都|全部)?達標(了)?嗎?[?？]*$"),                "哪些商品缺貨警示"),
     # r66：「篩選一下30天內到期的」——剝掉篩選前綴讓到期查詢自然接
     (_re.compile(r"^(?:幫我)?篩選?一?下?(.{4,})$"),                 "\\1"),
     # r67：「倒數第一名呢」＝滯銷名次
@@ -6471,7 +6473,8 @@ async def ws_handler(ws: WebSocket):
                 _oi56 = _ORD_MAP56.get(_ord51.group(1)) or int(_ord51.group(1))
                 log.info(f"[ordinal-rank] vid={vid} 「{user_text}」→ 排行第{_oi56}名")
                 user_text = f"第{_oi56}名剩多少"
-            elif (_ctx_for(vid).get("last_func") == "list_hot_items"
+            elif ((_ctx_for(vid).get("last_func") == "list_hot_items"
+                   or _ctx_for(vid).get("last_hot_period"))
                   and _re.fullmatch(r"第[一二兩三四五六七八九十\d]+名的?(是)?(什麼|哪個|啥|誰)?"
                                     r"[呢勒咧?？。!！]*", _ord_txt)):
                 # r57：「第五名是什麼」——排行身分追問光句面過不了守門員（無功能詞），
@@ -6936,11 +6939,19 @@ async def ws_handler(ws: WebSocket):
             if any(w in user_text for w in ("快缺貨", "缺貨了嗎", "缺貨嗎", "夠不夠",
                                             "夠嗎", "不夠嗎", "要補貨嗎", "要補嗎",
                                             "需要補", "低於安全庫存",
-                                            "不夠賣", "會不會缺")):   # r71
+                                            "不夠賣", "會不會缺",     # r71
+                                            "還缺嗎", "缺嗎")):        # r72
                 import warehouse as _W_ls
                 _ls_kw = _extract_sku_keyword(user_text)
                 _ls_m = _W_ls.match_items(_ls_kw) if _ls_kw else []
-                if _ls_m and _ls_m[0].get("score", 0) >= 3 and _kw_grounded(_ls_kw, user_text):
+                # r72：「還缺嗎」補貨後追問——extract 失敗退回 ctx（同 r70 撐天修法）
+                _ls_grounded = bool(_ls_m and _ls_m[0].get("score", 0) >= 3
+                                    and _kw_grounded(_ls_kw, user_text))
+                if not _ls_grounded and len(user_text) <= 8 and _ctx_for(vid).get("last_sku"):
+                    _ls_kw = _ctx_for(vid)["last_sku"]
+                    _ls_m = _W_ls.match_items(_ls_kw)
+                    _ls_grounded = bool(_ls_m and _ls_m[0].get("score", 0) >= 3)
+                if _ls_grounded:
                     _ls_it = _ls_m[0]["item"] if "item" in _ls_m[0] else _ls_m[0]
                     _ls_st = _W_ls.state()          # 庫存在 state().stock[倉][sku]，不在 item 上
                     _ls_sku = _ls_it["sku_id"]
@@ -7238,6 +7249,26 @@ async def ws_handler(ws: WebSocket):
                     await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": _rc_out})
                 continue
+
+            # ── r72：數量×單價試算（「買10組總共多少錢」）——ctx 商品 × N ──
+            _qp72 = _re.search(r"[買進拿]?\s*([0-9]{1,4})\s*[組個件盒箱].{0,4}(總共|一共|共)?多少錢",
+                               user_text)
+            if _qp72 and _ctx_for(vid).get("last_sku"):
+                import warehouse as _W_qp
+                _qp_m = _W_qp.match_items(_ctx_for(vid)["last_sku"])
+                if _qp_m:
+                    _qp_it = _qp_m[0]["item"]
+                    _qp_n = int(_qp72.group(1))
+                    _qp_sum = (f"「{_qp_it['name']}」單價 NT$ {_qp_it['unit_price']:,}，"
+                               f"{_qp_n} 件約 NT$ {_qp_it['unit_price'] * _qp_n:,}。")
+                    log.info(f"[dispatch-ws] 數量試算: {_qp_it['name']} × {_qp_n}")
+                    for ch in _qp_sum:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "inventory_single", "summary": _qp_sum,
+                        "data": {"name": _qp_it["name"], "unit_price": _qp_it["unit_price"]}}})
+                    continue
 
             # ── 單品價格直答（r25）：「機能排汗衣一件賣多少錢」曾回庫存無單價 ──
             # r58 補「價格/售價」裸詞（「露營全套價格」曾繞過組合詞選單回單品庫存）
@@ -7757,6 +7788,35 @@ async def ws_handler(ws: WebSocket):
                         "data": {}}})
                     continue
 
+            # ── r72：「前三名各剩多少」——逐名列庫存（曾回「沒有『前三名各』」）──
+            _topn72 = _re.search(r"前\s*([一二三四五12345])\s*名各?(剩多少|庫存|各剩|還剩)",
+                                 user_text)
+            if _topn72 and (_ctx_for(vid).get("last_hot_period")
+                            or any(w in user_text for w in ("熱銷", "排行"))):
+                _tn = ({"一": 1, "二": 2, "三": 3, "四": 4, "五": 5}.get(_topn72.group(1))
+                       or int(_topn72.group(1)))
+                _tn_args = {"rank_type": "hot",
+                            "period": _ctx_for(vid).get("last_hot_period") or "this_week"}
+                if _ctx_for(vid).get("last_hot_cat"):
+                    _tn_args["category"] = _ctx_for(vid)["last_hot_cat"]
+                _tn_hot = finance.execute("list_hot_items", _tn_args)
+                _tn_rank = (_tn_hot.get("data") or {}).get("rankings") or []
+                if _tn_rank:
+                    _tn_lines = []
+                    for _ti, _tr in enumerate(_tn_rank[:_tn], 1):
+                        _tri = finance.execute("query_inventory", {"keyword": _tr["name"]})
+                        _tn_lines.append(f"第{_ti}名 {(_tri.get('summary') or '').strip()}")
+                    _tn_sum = "\n".join(_tn_lines)
+                    log.info(f"[dispatch-ws] 前{_tn}名各庫存")
+                    for ch in _tn_sum:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "inventory_single", "summary": _tn_sum,
+                        "data": {}}})
+                    _ctx_for(vid)["last_func"] = "list_hot_items"
+                    continue
+
             # ── 複合句攔截：「賣最好/賣最差的還剩多少」= 排行 Top1 + 它的庫存 ──
             # C4 會把「賣最好/滯銷」強轉 list_hot_items 回排行榜，但這句訪客
             # 要的是那個商品的庫存數字（RPI5 實測 2026-07-06），進 LLM 前先攔。
@@ -7766,7 +7826,8 @@ async def ws_handler(ws: WebSocket):
                               "最不好賣", "最滯銷", "滯銷", "賣不動", "賣不掉")
             # r16 補「有幾個/有多少」（「熱銷第一名在南倉有幾個」曾漏攔回排行榜）
             _bs_stock_words = ("剩多少", "還剩", "剩幾", "庫存", "還有多少", "還有幾",
-                               "存量", "有幾個", "有多少", "有幾件")
+                               "存量", "有幾個", "有多少", "有幾件",
+                               "夠嗎", "夠不夠")   # r72：「第一名北倉夠嗎」
             _bs_rank_type = ("slow" if any(w in user_text for w in _bs_slow_words)
                              else "hot" if any(w in user_text for w in _bs_hot_words)
                              else None)

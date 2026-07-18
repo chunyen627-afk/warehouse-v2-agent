@@ -255,3 +255,17 @@
 > 防曬遮陽帽庫存 | inventory_single | 遮陽帽
 > 這個會不會不夠賣 | low_stock
 > 那不用補囉 | clarify | 沒問題
+
+### hand-r72-還缺嗎與達標
+> 中倉進13個電動牙刷 | movement_confirm | 牙刷
+> 確認 | movement_done
+> 還缺嗎 | low_stock
+> 都達標了嗎 | low_stock
+### hand-r72-數量試算
+> 保鮮盒庫存 | inventory_single | 保鮮盒
+> 買10組總共多少錢 | inventory_single | 5,900
+### hand-r72-前三名各與名次夠嗎
+> 本週熱銷前五 | hot_items
+> 前三名各剩多少 | inventory_single | 第3名
+> 第一名北倉夠嗎 | low_stock
+> 第二名呢 | inventory_single,clarify
