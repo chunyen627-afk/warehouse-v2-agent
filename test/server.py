@@ -282,6 +282,7 @@ _GATEKEEPER_BLACKLIST = (
     "你很慢", "回答快一點", "你答錯", "當機",
     "罵我", "罵人", "罵一下",   # r58：「罵我一下」曾回「沒有『罵我』這個商品」
     "講中文", "說中文",         # r59：「講中文好嗎」曾回「沒有『講中文』這個商品」
+    "加油好嗎", "加加油",       # r60：「中倉加油好嗎」曾回「沒有『加油』這個商品」
     # 搗蛋 / 注入探測（永遠擋）
     "格式化", "重開機", "關機", "密碼", "管理員", "admin",
     "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
@@ -1090,8 +1091,12 @@ _REWRITE_RULES: list[tuple] = [
     (_re.compile(r"(倉庫|倉).*(比較|對比|差多少)"),                 "比較各倉庫庫存"),
     (_re.compile(r"比較.*(倉庫|倉|北|中|南)"),                     "比較各倉庫庫存"),
     # r57：「三個倉哪個最滿」曾回庫存排行 TOP10（答非所問）
-    (_re.compile(r"(哪個|哪一個|誰)(倉|倉庫)?最(滿|空)|倉.*(最滿|最空|貨最多|東西最多)"),
-                                                                    "比較各倉庫庫存"),
+    # r60 補：「北中南倉哪個最強」「誰墊底」倉別最上級也走比較
+    (_re.compile(r"(哪個|哪一個|誰)(倉|倉庫)?最(滿|空)|倉.*(最滿|最空|貨最多|東西最多"
+                 r"|最強|最弱|墊底)"),                              "比較各倉庫庫存"),
+    # r60：「家電廚具類有哪些」曾被拒——類別清單口語
+    (_re.compile(r"^(電子|家電|家電廚具|食品|食品飲料|日用|日用品|服飾|運動|運動用品)"
+                 r"(產品|用品|廚具|飲料)?類?(有哪些|有什麼|清單)$"), "\\1類庫存"),
 
     # ── 缺貨 / 低庫存 ──
     (_re.compile(r"(快沒貨|快沒了|即將缺貨|快缺貨)"),              "哪些商品缺貨警示"),
@@ -1213,7 +1218,9 @@ _DESCRIPTOR_ALIASES = (
     (_re.compile(_DA_HEAD + r"(?:筆電包|電腦包|筆電袋|裝電腦的包)" + _DA_TAIL), "筆電包"),
     (_re.compile(_DA_HEAD + r"(?:打字|打電腦|敲鍵盤|鍵盤|機械鍵盤|青軸)" + _DA_TAIL), "鍵盤"),
     (_re.compile(_DA_HEAD + r"(?:滑鼠|點滑鼠|移游標|無線滑鼠|游標|點來點去)" + _DA_TAIL), "無線滑鼠"),
-    (_re.compile(_DA_HEAD + r"(?:吹風|吹涼|消暑|散熱|電風扇|小風扇|桌扇|usb風扇|風扇|吹電風)" + _DA_TAIL), "風扇"),
+    # r60：吹風(?!機)——「有賣吹風機嗎」曾被吹風描述搶成 USB 風扇（吹風機是別的商品，
+    # 店裡沒有，該走查無）
+    (_re.compile(_DA_HEAD + r"(?:吹風(?!機)|吹涼|消暑|散熱|電風扇|小風扇|桌扇|usb風扇|風扇|吹電風)" + _DA_TAIL), "風扇"),
     # ── 食品飲料 ──
     (_re.compile(r"(?:有氣的水|氣泡的水|帶氣的水|碳酸水|汽水|蘇打水|氣泡水|開特力那種)"), "氣泡水"),
     (_re.compile(r"(?:會醉的|有酒精的|喝的酒|啤酒|精釀|生啤|麥酒|喝的beer)"), "精釀啤酒"),
@@ -1391,6 +1398,10 @@ def _rewrite_query(user_text: str) -> str:
     # 句中已點名 ≥2 倉、或含指標詞（週轉/價值/缺貨）→ 保留原句給 LLM + Pre-C-Cmp。
     _cmp_wh_cnt = len({z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in t})
     _cmp_keep = _cmp_wh_cnt >= 2 or any(w in t for w in ("週轉", "價值", "總值", "缺貨"))
+    # r60：倉別最上級（「北中南倉哪個最強」）例外——比較固定句會列三倉排名，
+    # 點名倉不損資訊；保留原句反而掉 LLM 回庫存排行（答非所問）
+    if any(w in t for w in ("最強", "最弱", "最滿", "最空", "墊底")):
+        _cmp_keep = False
     # 熱銷 rewrite 同病：「這個月熱銷排行」被改成固定句「熱銷商品排行」→ 時間詞
     # 銷毀，C4b 拿改寫後句子校 period 校不回 this_month（conv100-r8）
     # r16 補：倉名/庫存語氣也要保留原句——「熱銷第一名在南倉有幾個」曾被改寫成
@@ -1440,6 +1451,10 @@ def _rewrite_query(user_text: str) -> str:
                 _ent_hit = bool(_m_rw) and _m_rw[0].get("score", 0) >= 3
             except Exception:
                 pass
+    # r60：倉別最上級（「北中南倉哪個最強」）例外——固定句比較會列三倉排名，
+    # 倉名不算會被銷毀的資訊；不例外會掉 LLM 回庫存排行（答非所問）
+    if "倉" in t and any(w in t for w in ("最強", "最弱", "最滿", "最空", "墊底")):
+        _ent_hit = False
     for pattern, replacement in _REWRITE_RULES:
         if _ent_hit and "\\1" not in replacement:
             continue
@@ -4482,6 +4497,9 @@ def _ctx_absorb(vid, result: dict):
     # 下一句短答（「北倉」「30件」）由 WS 層接回寫入。其他回答即清（單發）。
     if view == "clarify" and isinstance(data.get("flow"), dict):
         _write_flow_by_vid[vid] = dict(data["flow"])
+        # r60 危險邊緣：新寫入意圖的 clarify 出現＝舊確認卡作廢——「出300卡在場說
+        # 『那出200件就好』」曾開新 clarify 但舊卡沒清，接著「確認」執行了舊的 300
+        _pending_by_vid.pop(vid, None)
     else:
         _write_flow_by_vid.pop(vid, None)
 
@@ -4686,7 +4704,9 @@ def _ctx_expand(vid, text: str) -> str:
                     "入", "台", "支", "條", "頂", "卡車", "車", "北倉", "中倉", "南倉",
                     "北區倉", "中區倉", "南區倉"):
             _wr_res = _wr_res.replace(_wu, "")
-        _wr_res = _wr_res.strip("的呢嗎吧了好就喔啦 ")
+        for _wq in ("一點", "一些", "一批", "幾件", "幾個", "就好", "好了"):
+            _wr_res = _wr_res.replace(_wq, "")   # r60：「調一點…調20個」的量詞副詞非商品名
+        _wr_res = _wr_res.strip("的呢嗎吧了好就喔啦那 ")
         if len(_wr_res) >= 2:
             return text
         # r57：「馬上出10個」句中沒倉別 → 沿用上一輪倉別（確認卡會顯示、HITL 把關）
@@ -6280,10 +6300,13 @@ async def ws_handler(ws: WebSocket):
             # ── r57：config 讀取後的裸改值（「改成90」）→ 接回該商品安全庫存設定
             #   （必須在守門員之前改寫，裸「改成90」過不了 is_meaningful_input；
             #   有卡片時由 pending 層的「改」引導接走，不會到這）──
+            # r60：放寬條件——config 讀完接著查了庫存（last_func 被蓋）「改成30」仍是
+            # 改該商品的安全庫存；設定是唯一可「改」的數值且有確認卡把關，只要有
+            # last_sku 就接（無卡時；有卡由 pending 層的「改」引導接走）
             _cfg_bare57 = _re.fullmatch(r"(改成?|設成?|調成?)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
                                         user_text.strip())
-            if (_cfg_bare57 and _ctx_for(vid).get("last_func") == "manage_config"
-                    and _ctx_for(vid).get("last_sku")):
+            if (_cfg_bare57 and _ctx_for(vid).get("last_sku")
+                    and vid not in _pending_by_vid):
                 user_text = f"{_ctx_for(vid)['last_sku']}安全庫存改成{_cfg_bare57.group(2)}"
                 log.info(f"[ctx-cfg] 裸改值 → {user_text!r}")
 

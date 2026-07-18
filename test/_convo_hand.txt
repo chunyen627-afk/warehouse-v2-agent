@@ -133,3 +133,15 @@
 > 第三名是什麼 | inventory_single | 第3名
 > 它剩多少 | inventory_single
 > 第七名剩幾個 | inventory_single | 第7名
+
+### hand-r60-舊卡作廢（危險邊緣：改量句開新流程要清舊卡）
+> 北倉出300個氣泡水 | movement_confirm | 300
+> 庫存不夠喔 那出200件就好 | clarify | 哪個倉
+> 確認 | not:movement_done
+> 北倉出200個氣泡水 | movement_confirm | 200
+> 確認 | movement_done
+### hand-r60-config後查庫存再改值
+> 咖啡機安全庫存多少 | config_read | 咖啡機
+> 全自動咖啡機的 | inventory_single
+> 改成30 | config_confirm | 30
+> 取消 | item_cancelled
