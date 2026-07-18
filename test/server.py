@@ -1081,6 +1081,9 @@ _REWRITE_RULES: list[tuple] = [
                                                                     "哪些商品缺貨警示"),
     # r66：「篩選一下30天內到期的」——剝掉篩選前綴讓到期查詢自然接
     (_re.compile(r"^(?:幫我)?篩選?一?下?(.{4,})$"),                 "\\1"),
+    # r67：「倒數第一名呢」＝滯銷名次
+    (_re.compile(r"^倒數第([一二三四五六七八九十\d]+)名?(呢|剩多少|是什麼)?[?？]*$"),
+                                                                    "滯銷第\\1名剩多少"),
     # r56：「最少人買的是什麼」曾被守門員拒——滯銷排行的口語講法
     (_re.compile(r"(最少人買|沒什麼人買|沒人買|買最少|賣最少)"),    "滯銷品有哪些"),
     # 「月底結算」＝展場訪客對月底盤點的另一種講法
@@ -1365,6 +1368,8 @@ _TYPO_NORM = (
     ("ㄅㄞˋㄅㄞˋ", "掰掰"), ("ㄅㄞㄅㄞ", "掰掰"),
     # r66：排汗衣口語短稱（「排汗的呢」——排汗的 不會撞完整名「機能排汗衣」）
     ("排汗的", "排汗衣的"),
+    # r67：橡膠手套口語（「橡膠的那種」）
+    ("橡膠的", "橡膠清潔手套的"),
     # 俗稱正名
     ("健身墊", "瑜珈墊"), ("吸汗衣", "排汗衣"), ("T恤", "素T"),
     ("餅乾", "蘇打餅"),   # r28：config item「餅乾」曾誠實找不到（唯一對應）
@@ -1454,6 +1459,9 @@ def _rewrite_query(user_text: str) -> str:
                                      "不要", "不是", "滯銷", "賣不動", "賣最差", "冷門",
                                      # r28：「運動類熱銷排行」類別被固定句銷毀（第十一例）
                                      "類", "用品"))
+    # r67：「熱銷第十名是什麼」名次被固定句銷毀（第十二例）——帶第N名一律保留原句
+    if _re.search(r"第[一二三四五六七八九十\d]+名", t):
+        _hot_keep = True
     # expiring rewrite 同病（r18，固定句資訊銷毀第六例）：「香皂快過期了嗎」被
     # 改寫成「哪些商品即將到期」→ 商品名銷毀，C7 的「指名未知商品誠實回找不到」
     # 接不到。剝掉到期語後仍有具體名詞殘餘 → 保留原句。
@@ -6462,8 +6470,9 @@ async def ws_handler(ws: WebSocket):
                            r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了|"
                            r"差不多了|就到這|先這樣")
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）
+            # r67：+今天/那我/我先（「今天就到這 感謝」）
             _fw_all = _re.fullmatch(
-                rf"[\s好啦嗯哦喔]*(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})"
+                rf"(?:今天|那我|我先|那就)?[\s好啦嗯哦喔]*(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})"
                 rf"[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
                 user_text.strip(), _re.IGNORECASE)
             _fw_bye = _fw_all and _re.search(rf"(?:{_FW_BYE_TOK})", user_text, _re.IGNORECASE)
@@ -7654,10 +7663,20 @@ async def ws_handler(ws: WebSocket):
                               r'|的?比較一下|比一比$|比比看)', user_text)
             if _pvi:
                 import warehouse as _W_pvi
+
+                def _pv_resolve67(_kw):
+                    """r67：比較句側邊解析——直接比不到就走通稱表（襪子→保暖襪）。"""
+                    _m = _W_pvi.match_items(_kw) if _kw else []
+                    if not (_m and _m[0].get("score", 0) >= 3):
+                        _g = getattr(_W_pvi, "_GENERIC_QUERY_FALLBACK", {}).get(_kw)
+                        if _g and len(_g) == 1:
+                            _m = _W_pvi.match_items(_g[0])
+                    return _m
+
                 _pia_kw = _extract_sku_keyword(_pvi.group(1)) or _pvi.group(1).strip()
                 _pib_kw = _extract_sku_keyword(_pvi.group(2)) or _pvi.group(2).strip()
-                _pia = _W_pvi.match_items(_pia_kw) if _pia_kw else []
-                _pib = _W_pvi.match_items(_pib_kw) if _pib_kw else []
+                _pia = _pv_resolve67(_pia_kw)
+                _pib = _pv_resolve67(_pib_kw)
                 if (_pia and _pia[0].get("score", 0) >= 3 and _pib and _pib[0].get("score", 0) >= 3
                         and _pia[0]["item"]["sku_id"] != _pib[0]["item"]["sku_id"]):
                     _ria = finance.execute("query_inventory", {"keyword": _pia[0]["item"]["name"]})
