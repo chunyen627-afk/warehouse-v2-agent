@@ -121,3 +121,15 @@
 ### hand-r58-撐天追問
 > 最緊急的是哪個 | low_stock | 最緊急
 > 它撐幾天 | low_stock | 斷貨
+
+### hand-r59-最急批放哪
+> 快過期的有哪些 | expiring | 到期
+> 最急的那批放哪 | expiring | 最急
+### hand-r59-config清單不污染
+> 警戒值用八成算 | config_read
+> 快到期的東西 | expiring | 到期
+### hand-r59-排行期間持續
+> 本月熱銷前十 | hot_items
+> 第三名是什麼 | inventory_single | 第3名
+> 它剩多少 | inventory_single
+> 第七名剩幾個 | inventory_single | 第7名

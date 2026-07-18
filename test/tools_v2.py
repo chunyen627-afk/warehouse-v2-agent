@@ -448,7 +448,12 @@ def manage_config(action: str = "read", key: str = "", value=None,
                         parts.append(f"「{r['name']}」{seg}（基準 {r['base']}）")
                 summary = "目前安全庫存：" + "；".join(parts) + "。"
             else:
-                summary = f"目前安全庫存設定（{len(rows)} 項）：基準值寫在 config，可分倉覆寫。"
+                # r59：指定倉別時摘要要講出來（「只看南倉的」曾回不含倉別的泛話）
+                _sc_lbl = {"north": "北區倉", "central": "中區倉",
+                           "south": "南區倉"}.get(warehouse, "")
+                summary = (f"目前{_sc_lbl}安全庫存設定（{len(rows)} 項，含分倉覆寫值）如下表。"
+                           if _sc_lbl else
+                           f"目前安全庫存設定（{len(rows)} 項）：基準值寫在 config，可分倉覆寫。")
             return {"ok": True, "summary": summary, "view": "config_read",
                     "data": {"canon": canon, "rows": rows, "trace": steps}}
         else:

@@ -281,6 +281,7 @@ _GATEKEEPER_BLACKLIST = (
     "你好笨", "你好棒", "好厲害", "沒用的東西", "白癡", "廢物",
     "你很慢", "回答快一點", "你答錯", "當機",
     "罵我", "罵人", "罵一下",   # r58：「罵我一下」曾回「沒有『罵我』這個商品」
+    "講中文", "說中文",         # r59：「講中文好嗎」曾回「沒有『講中文』這個商品」
     # 搗蛋 / 注入探測（永遠擋）
     "格式化", "重開機", "關機", "密碼", "管理員", "admin",
     "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
@@ -461,6 +462,8 @@ def _is_guide_request(text: str) -> bool:
         "幾項", "幾種",
         # r30：「全部商品裡最貴的前五名」曾搶成 guide（讓給價格直答）
         "最貴", "最便宜",
+        # r59：「全部的啞鈴都出光」曾搶成 guide（讓給比例出貨攔截）
+        "出光", "出掉", "清光",
         "連帶", "也買", "一起買", "搭配", "帶動", "好夥伴",
         "到期", "過期", "保存期限", "效期", "保鮮", "賞味", "即期",
         "壞掉", "快壞", "快爛", "快過期",
@@ -4499,10 +4502,14 @@ def _ctx_absorb(vid, result: dict):
             kw = _kw_core
     # r34：清單類（缺貨/熱銷）的 data 是列表 → 取榜首，讓「最急的那個還剩幾個」
     #   「第一名還有多少」接得住（過去回「找不到商品『最急』」）。
+    # r59：generic config_read（10 項無排序）的 rows[0] 是任意商品，不可當榜首吸——
+    #   曾把耳機存進 last_sku，下一句「快到期的東西」被污染成查耳機到期（假 ✅ 家族）
     if not isinstance(kw, str):
         for _lk in ("warnings", "rankings", "preview", "items", "rows"):
             _lv = data.get(_lk)
             if isinstance(_lv, list) and _lv and isinstance(_lv[0], dict):
+                if view == "config_read" and len(_lv) > 1:
+                    break
                 kw = _lv[0].get("name") or _lv[0].get("item")
                 break
     if isinstance(kw, str) and kw.strip():
@@ -4591,6 +4598,11 @@ def _ctx_expand(vid, text: str) -> str:
             _wh0 = _CTX_WH_ONLY.match(text)
             if _wh0:
                 return f"{_wh0.group(3)}倉{ctx.get('last_mv_plabel', '今天')}進出紀錄"
+        elif ctx.get("last_func") == "manage_config":
+            # r59：generic config 總覽（不吸 last_sku）後「只看南倉的」＝南倉設定
+            _wh0c = _CTX_WH_ONLY.match(text)
+            if _wh0c:
+                return f"{_wh0c.group(3)}倉安全庫存是多少"
         return text
 
     # 鐵律：句中已有可辨識實體 → 絕不覆蓋（資訊銷毀已 11 例）
@@ -6275,6 +6287,15 @@ async def ws_handler(ws: WebSocket):
                 user_text = f"{_ctx_for(vid)['last_sku']}安全庫存改成{_cfg_bare57.group(2)}"
                 log.info(f"[ctx-cfg] 裸改值 → {user_text!r}")
 
+            # r59：到期清單後「最急的那批放哪」——「放哪」過不了守門員（無倉管詞），
+            # gate 前改寫成完整到期查詢（清單開頭就是最急批+倉別）
+            if (_ctx_for(vid).get("last_func") == "list_expiring_items"
+                    and len(user_text) <= 12
+                    and _re.search(r"最緊?急", user_text)
+                    and _re.search(r"批|放哪|在哪", user_text)):
+                log.info(f"[ctx-exp] 最急批追問 → 快過期的有哪些（原 {user_text!r}）")
+                user_text = "快過期的有哪些"
+
             # ── r55 收官批：告別/道謝句友善回應——「掰掰」「謝謝辛苦了」曾回
             #   守門員教學文（展場冷場）。純客套短句 → 溫暖收尾；混雜其他內容不攔。──
             # ── r57：接續詞（「換一個」「下一個」「繼續」）——訪客要看別的但沒說
@@ -6295,7 +6316,7 @@ async def ws_handler(ws: WebSocket):
             # r57：告別+道謝混雜（「辛苦了88」）也要接——token 聯集全句比對，
             # 有告別詞就走告別回覆，否則道謝回覆
             _FW_BYE_TOK = (r"掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|"
-                           r"先走了|我走了|走囉|閃人|告辭|沒事")
+                           r"先走了|我走了|走囉|閃人|告辭|沒事|沒了")
             _FW_THX_TOK = (r"謝謝你?們?|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
                            r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了")
             _fw_all = _re.fullmatch(
@@ -6756,8 +6777,9 @@ async def ws_handler(ws: WebSocket):
 
             # ── r57：上個月的排行——資料不含上個月，過去默默回本週榜（拿錯榜單
             #   不自知），誠實說支援範圍 ──
-            if (any(w in user_text for w in ("上個月", "上月"))
+            if (any(w in user_text for w in ("上個月", "上月", "上週", "上禮拜", "上星期"))
                     and any(w in user_text for w in ("熱銷", "排行", "賣最", "暢銷", "滯銷"))):
+                # r59：「上週的排行呢」也曾默默回本週榜——排行只有本週/本月資料
                 _rk_msg = "排行目前支援本週／本月。想看哪個範圍呢？"
                 log.info(f"[time-gate] 上個月排行 → clarify: {user_text!r}")
                 for ch in _rk_msg:
@@ -6992,6 +7014,36 @@ async def ws_handler(ws: WebSocket):
                         continue
                 _pq_kw = _extract_sku_keyword(user_text)
                 _pq_m = _W_pq.match_items(_pq_kw) if _pq_kw else []
+                # r59：「鍋子價格」extractor 抽不到 → 剝價格詞取詞幹，用通稱表展開選單
+                if not _pq_m:
+                    _pq_st59 = user_text
+                    for _bw59 in ("多少錢", "什麼價", "單價", "價格多少", "價格", "售價",
+                                  "的", "要", "買", "一個", "一件"):
+                        _pq_st59 = _pq_st59.replace(_bw59, "")
+                    _pq_st59 = _pq_st59.strip("?？。!！， ")
+                    _pq_g59 = (getattr(_W_pq, "_GENERIC_QUERY_FALLBACK", {}).get(_pq_st59)
+                               if len(_pq_st59) >= 2 else None)
+                    if _pq_g59:
+                        _pq_n59 = []
+                        for _gf59 in _pq_g59:
+                            _gm59 = _W_pq.match_items(_gf59)
+                            if _gm59:
+                                _pq_n59.append(_gm59[0]["item"]["name"])
+                        if len(_pq_n59) > 1:
+                            _pq_q59 = (f"「{_pq_st59}」對應到 {len(_pq_n59)} 個商品，"
+                                       f"你想問哪一個的價格？")
+                            log.info(f"[dispatch-ws] 通稱價格選單: {_pq_st59!r}")
+                            for ch in _pq_q59:
+                                await send({"type": "token", "text": ch})
+                                await asyncio.sleep(_TK_DELAY.get())
+                            await send({"type": "done", "result": {
+                                "ok": True, "view": "clarify", "summary": _pq_q59,
+                                "data": {"question": _pq_q59,
+                                         "options": [f"{n} 多少錢" for n in _pq_n59],
+                                         "hint": "點選其中一項，或直接說完整商品名稱"}}})
+                            continue
+                        elif len(_pq_n59) == 1:
+                            _pq_m = _W_pq.match_items(_pq_n59[0])
                 # r55 收官批：多商品同分歧義（「露營全套多少錢」曾靜默挑折疊露營椅報價）
                 # → 跟庫存查詢同一套不猜邏輯，列選單讓訪客選
                 if (_pq_m and len(_pq_m) > 1 and _pq_m[0].get("score", 0) >= 3
@@ -7445,7 +7497,10 @@ async def ws_handler(ws: WebSocket):
             _bs_rankn_m = _re.search(r'第\s*([一二三四五六七八九十0-9]+)\s*名', user_text)
             if (_bs_rankn_m and not _bs_rank_type
                     and (any(w in user_text for w in ("排行", "榜", "熱銷", "暢銷"))
-                         or _ctx_for(vid).get("last_func") == "list_hot_items")):
+                         or _ctx_for(vid).get("last_func") == "list_hot_items"
+                         # r59：排行後又追問了商品（last_func 被蓋），只要這段對話
+                         # 看過排行榜（last_hot_period 有值）「第七名剩幾個」就接
+                         or _ctx_for(vid).get("last_hot_period"))):
                 _bs_rank_type = "hot"
             # r57：「第五名是什麼」——排行後問名次身分（沒有庫存語）也要接
             _bs_idwords = ("是什麼", "是哪個", "是啥", "叫什麼", "是誰")
