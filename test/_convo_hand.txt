@@ -199,3 +199,13 @@
 > 濕紙巾安全庫存南倉的改成100 | config_confirm | 100
 > 算了維持原樣 | clarify | 確認
 > 取消 | item_cancelled
+
+### hand-r65-撥字route
+> 滑鼠撥20個去中倉 | clarify | 哪個倉
+> 從北倉撥 | transfer_confirm | 滑鼠
+> 取消 | item_cancelled
+### hand-r65-行內糾錯
+> 北倉進50個毛帽 | movement_confirm | 毛帽
+> 好 | movement_done
+> 出10個 打錯 是出20個 | movement_confirm | 20
+> 確認 | movement_done

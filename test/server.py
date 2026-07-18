@@ -1116,6 +1116,11 @@ _REWRITE_RULES: list[tuple] = [
     # r64：審計/設定異動紀錄 → 紀錄檔清單（曾回商品庫存/熱銷榜）
     (_re.compile(r"(審計|audit).{0,3}(紀錄|記錄|log)|(今天)?(改過什麼|誰改過)(設定)?"),
                                                                     "有哪些紀錄檔"),
+    # r65：行內糾錯句（「出10個 打錯 是出20個」）——取更正後的量（商品/倉由 ctx 補）
+    (_re.compile(r"^(?:[進出調]\s*\d+\s*[個件]?)\s*(?:打錯|說錯|講錯|不對)\s*是?"
+                 r"([進出調])\s*(\d+)\s*[個件]?$"),                 "\\1\\2個"),
+    (_re.compile(r"^([進出調])\s*\d+\s*[個件]?\s*(?:打錯|說錯|講錯|不對)\s*是?"
+                 r"(\d+)\s*[個件]?$"),                              "\\1\\2個"),
     # r62：「它上週賣幾個」——賣幾個是銷量(出貨)不是庫存（保留商品與期間）
     (_re.compile(r"^(.{2,10}?)(上週|本週|這週|昨天|今天|本月)賣了?幾[個件]?$"),
                                                                     "\\1\\2出貨多少"),
@@ -6237,7 +6242,7 @@ async def ws_handler(ws: WebSocket):
                                         "qty": _m_q56.group(2)}
                 elif _wf56.get("await") == "route":
                     _m_r56 = _re.search(
-                        r"(從)?([北中南])(區)?倉?\s*(調|到|去|往|搬)+\s*([北中南])(區)?倉?", _wf_t)
+                        r"(從)?([北中南])(區)?倉?\s*(調|到|去|往|搬|撥|挪)+\s*([北中南])(區)?倉?", _wf_t)
                     if _m_r56 and len(_wf_t) <= 14:
                         _wf_args = {"keyword": _wf56.get("keyword", ""),
                                     "qty": _wf56.get("qty", ""),
@@ -6246,7 +6251,7 @@ async def ws_handler(ws: WebSocket):
                     else:
                         # r61：單邊倉回答（「從北倉調」「去南倉」）——補進缺的那一側
                         _m_r1 = _re.fullmatch(
-                            r"(從|由|去|到|往)?\s*([北中南])(區)?倉?(調|出|走|吧|好了)?", _wf_t)
+                            r"(從|由|去|到|往)?\s*([北中南])(區)?倉?(調|出|走|撥|挪|搬|吧|好了)?", _wf_t)
                         if _m_r1:
                             _wf_from = _wf56.get("from_wh", "")
                             _wf_to = _wf56.get("to_wh", "")
@@ -6303,6 +6308,16 @@ async def ws_handler(ws: WebSocket):
                         "ok": True, "view": "clarify", "summary": _ps_msg,
                         "data": {"question": _ps_msg, "options": [], "hint": ""}}})
                     continue
+
+                # r65：行內糾錯（「出10個 打錯 是出20個」）→ 先化簡成更正後的量，
+                # 再交給 ctx 展開補商品/倉（rewrite 表跑在展開之後，來不及）
+                _corr65 = _re.fullmatch(
+                    r"(?:[進出調]\s*\d+\s*[個件]?)\s*(?:打錯|說錯|講錯|不對)\s*是?"
+                    r"([進出調])?\s*(\d+)\s*[個件]?", user_text.strip())
+                if _corr65:
+                    _cv65 = _corr65.group(1) or user_text.strip()[0]
+                    user_text = f"{_cv65}{_corr65.group(2)}個"
+                    log.info(f"[inline-fix] 糾錯句 → {user_text!r}")
 
                 # ── r32 追問展開：「那個進出紀錄呢」→「無線滑鼠進出紀錄」──
                 user_text = _ctx_expand(vid, user_text)
