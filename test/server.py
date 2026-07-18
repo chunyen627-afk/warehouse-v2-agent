@@ -1370,6 +1370,8 @@ _TYPO_NORM = (
     ("排汗的", "排汗衣的"),
     # r67：橡膠手套口語（「橡膠的那種」）
     ("橡膠的", "橡膠清潔手套的"),
+    # r68：網路語尾（先醬=先這樣）
+    ("先醬", "先這樣"),
     # 俗稱正名
     ("健身墊", "瑜珈墊"), ("吸汗衣", "排汗衣"), ("T恤", "素T"),
     ("餅乾", "蘇打餅"),   # r28：config item「餅乾」曾誠實找不到（唯一對應）
@@ -4723,7 +4725,8 @@ def _ctx_expand(vid, text: str) -> str:
     has_part = text.strip() in _CTX_PARTICLE     # r35：「呢」「咧」單字追問
     # r40：時段追問（「上週呢」「這個月呢」）——上一輪是進出查詢時成立
     # r56 fuzz：庫存查詢後的「昨天呢」也是問那個商品的進出（曾被守門員拒）
-    _period_stem = text.strip().strip("的呢嗎吧了?？。!！，, ")
+    # r68：語尾補「勒/咧」（「上週勒」曾被拒）
+    _period_stem = text.strip().strip("的呢咧勒嗎吧了?？。!！，, ")
     has_period = (_period_stem in _CTX_PERIOD
                   and ctx.get("last_func") in ("query_movement", "query_inventory"))
     if not (wh_only or has_pron or has_bare or has_write or has_part or has_period):
@@ -6396,6 +6399,20 @@ async def ws_handler(ws: WebSocket):
                 if 1 <= _oi <= len(_opts51g):
                     log.info(f"[ordinal-select] vid={vid} 「{user_text}」→ 選項{_oi}「{_opts51g[_oi-1]}」")
                     user_text = str(_opts51g[_oi - 1])
+            elif _clarify_opts_by_vid.get(vid) and (_ord_attr := _re.fullmatch(
+                    r"(?:第)?([一二兩三四五六七八12345678])(?:個|項|名)?"
+                    r"(多少錢|單價|剩多少|還剩幾個|庫存|快到期嗎)[?？]*", _ord_txt)):
+                # r68：選單序數+屬性後綴（「第二個多少錢」曾回 60 項概覽）——
+                # 取該選項的商品主幹，接上屬性問句
+                _ORD_MAP68 = {"一": 1, "二": 2, "兩": 2, "三": 3, "四": 4,
+                              "五": 5, "六": 6, "七": 7, "八": 8}
+                _oi68 = _ORD_MAP68.get(_ord_attr.group(1)) or int(_ord_attr.group(1))
+                _opts68 = _clarify_opts_by_vid[vid]
+                if 1 <= _oi68 <= len(_opts68):
+                    _core68 = _re.sub(r"\s*(庫存|多少錢|進了?\d+件?|安全庫存.*)$", "",
+                                      str(_opts68[_oi68 - 1])).strip()
+                    user_text = f"{_core68}{_ord_attr.group(2)}"
+                    log.info(f"[ordinal-attr] 選項{_oi68}+屬性 → {user_text!r}")
             elif _ord51 and _ctx_for(vid).get("last_func") == "list_hot_items":
                 # r56 fuzz：排行榜後裸序數（「第二個」）＝問那一名——改寫成
                 # 「第N名剩多少」讓排行追問路（r43/r55）接手，期間自動沿用
@@ -7000,7 +7017,9 @@ async def ws_handler(ws: WebSocket):
             #   資料一直都有（v3.9.1 起），過去只回庫存數字＝半答 ──
             if any(w in user_text for w in ("撐幾天", "撐多久", "能撐", "幾天斷貨",
                                              "還能賣幾天", "夠賣多久", "賣多久",
-                                             "日銷", "每天賣幾", "一天賣幾")):
+                                             "日銷", "每天賣幾", "一天賣幾",
+                                             # r68：撐得了/建議補（答案本來就含建議補 N 件）
+                                             "撐得了", "建議補", "該補幾", "要補幾")):
                 import warehouse as _W_dl
                 _dl_kw = _extract_sku_keyword(user_text) or _ctx_for(vid).get("last_sku") or ""
                 _dl_m = _W_dl.match_items(_dl_kw) if _dl_kw else []
@@ -7115,7 +7134,10 @@ async def ws_handler(ws: WebSocket):
             #   依 context 分流回到期清單（開頭就是最急批+倉別）──
             if (any(w in user_text for w in ("最急", "最緊急"))
                     and any(w in user_text for w in ("批", "哪個倉", "哪一倉", "在哪倉"))
-                    and _ctx_for(vid).get("last_func") == "list_expiring_items"):
+                    and _ctx_for(vid).get("last_func") == "list_expiring_items"
+                    # r68：複合寫入句（「最急那批處理掉 出586件北倉氣泡水」）不可
+                    # 被到期重秀吃掉——帶寫入動詞+數字就讓路給寫入流程
+                    and not _re.search(r"[進出調補]\s*\d", user_text)):
                 import warehouse as _W_xq
                 _xq_res = _W_xq.list_expiring_items()
                 log.info(f"[dispatch-ws] 到期最急批分流: {user_text!r}")
