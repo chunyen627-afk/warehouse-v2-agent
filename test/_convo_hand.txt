@@ -90,3 +90,26 @@
 ### hand-r56-到期最急批追問
 > 快過期的有哪些 | expiring | 到期
 > 最急的那批放哪個倉 | expiring | 最急
+
+### hand-r57-寫入鏈連續操作
+> 北倉進30個悶燒罐 | movement_confirm | 悶燒罐
+> 好 | movement_done
+> 馬上出10個 | movement_confirm | 悶燒罐
+> 確認 | movement_done
+### hand-r57-卡片暫停詞
+> 中倉進20個防蚊液 | movement_confirm | 防蚊液
+> 先等一下 | clarify | 確認
+> 還在嗎 | clarify | 確認
+> 好 確認 | movement_done
+### hand-r57-排行第N名身分
+> 本月熱銷前十 | hot_items
+> 第五名是什麼 | inventory_single | 第5名
+### hand-r57-config讀後續改
+> 瑜珈墊的安全庫存多少 | config_read | 瑜珈墊
+> 北倉的呢 | config_read
+> 改成90 | config_confirm | 90
+> 取消 | item_cancelled
+### hand-r57-代詞銷量比較
+> 鍋子還有嗎 | clarify | 哪一個
+> 第二個 | inventory_single | 野炊
+> 它跟不沾鍋哪個賣得好 | movement | 賣得比較好

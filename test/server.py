@@ -1084,6 +1084,9 @@ _REWRITE_RULES: list[tuple] = [
                                                                     "比較各倉庫庫存"),
     (_re.compile(r"(倉庫|倉).*(比較|對比|差多少)"),                 "比較各倉庫庫存"),
     (_re.compile(r"比較.*(倉庫|倉|北|中|南)"),                     "比較各倉庫庫存"),
+    # r57：「三個倉哪個最滿」曾回庫存排行 TOP10（答非所問）
+    (_re.compile(r"(哪個|哪一個|誰)(倉|倉庫)?最(滿|空)|倉.*(最滿|最空|貨最多|東西最多)"),
+                                                                    "比較各倉庫庫存"),
 
     # ── 缺貨 / 低庫存 ──
     (_re.compile(r"(快沒貨|快沒了|即將缺貨|快缺貨)"),              "哪些商品缺貨警示"),
@@ -4646,6 +4649,9 @@ def _ctx_expand(vid, text: str) -> str:
             new = f"{_whc}倉快到期的有哪些"
         elif ctx.get("last_func") == "list_low_stock":
             new = f"{_whc}倉庫存警示"
+        elif ctx.get("last_func") == "manage_config":
+            # r57：「瑜珈墊安全庫存多少」→「北倉的呢」＝問北倉的設定值（曾回北倉庫存）
+            new = f"{_whc}倉{last}安全庫存是多少"
         else:
             new = f"{_whc}倉{last}{fw}"
     elif any(w in stripped for w in _CTX_WRITE) and _re.search(r"\d", stripped):
@@ -4654,7 +4660,10 @@ def _ctx_expand(vid, text: str) -> str:
         # 舊商品變「奶茶進30杯無線滑鼠」→ 進錯貨。剝掉動作/數字/單位/倉名後還有
         # ≥2 字殘留＝訪客自己講了商品，不展開，讓下游誠實回「找不到」。
         _wr_res = stripped
-        for _ww in ("進貨", "出貨", "調貨", "補貨", "進", "出", "調", "補", "到", "去", "從"):
+        for _ww in ("進貨", "出貨", "調貨", "補貨", "進", "出", "調", "補", "到", "去", "從",
+                    # r57：「馬上出10個」的副詞不是商品名（曾回「找不到商品『馬上』」）
+                    "馬上", "立刻", "趕快", "順便", "然後", "再", "先", "幫我", "請", "麻煩",
+                    "直接", "快點"):
             _wr_res = _wr_res.replace(_ww, "")
         _wr_res = _re.sub(r"[\d０-９]+", "", _wr_res)
         for _wu in ("個", "件", "箱", "杯", "打", "包", "盒", "罐", "瓶", "組", "雙",
@@ -4664,7 +4673,12 @@ def _ctx_expand(vid, text: str) -> str:
         _wr_res = _wr_res.strip("的呢嗎吧了好就喔啦 ")
         if len(_wr_res) >= 2:
             return text
-        new = f"{stripped}{last}"
+        # r57：「馬上出10個」句中沒倉別 → 沿用上一輪倉別（確認卡會顯示、HITL 把關）
+        _pref_wh57 = ""
+        if not _re.search(r"[北中南]", stripped):
+            _pref_wh57 = {"north": "北倉", "central": "中倉",
+                          "south": "南倉"}.get(ctx.get("last_wh"), "")
+        new = f"{_pref_wh57}{stripped}{last}"
     elif not stripped or text.strip() in _CTX_PARTICLE:
         # 純代詞句（「那個呢」）／純語助詞（「呢」「咧」）→ 用上一輪的功能補完
         new = f"{last}{fw}"
@@ -4687,7 +4701,9 @@ _PEND_OK_SUB = ("按確認", "幫我按", "幫我確認", "按下去", "按鈕",
 # 疑問/求助（「這樣對嗎」「要按哪裡」）→ 也該引導，不可回教學文
 _PEND_ASK = ("對嗎", "可以嗎", "是這樣嗎", "要按哪", "怎麼按", "然後呢", "接下來", "要幹嘛",
              # r55 收官批：「算了照原本的」＝維持卡片內容 → 引導按確認（不代按、不取消）
-             "照原本", "照舊", "維持原本")
+             "照原本", "照舊", "維持原本",
+             # r57：暫停詞（「先等一下」「還在嗎」）＝卡片留著等訪客想，引導不取消
+             "等一下", "等等", "先等", "考慮一下", "讓我想", "還在嗎")
 _PEND_FIX = ("不對", "不是", "改成", "改為", "錯了", "應該是", "換成", "改一下", "多一點",
              "少一點", "太多", "太少", "數量錯", "倉庫錯", "商品錯",
              # r35 反悔鏈：訪客改主意的實際講法（「還是80好了」曾落到守門員教學文、
@@ -4742,12 +4758,14 @@ def _pending_reply(vid, text: str) -> str:
     view = pend.get("view", "")
     btn = _PEND_LABEL.get(view, "確認")
     t = text.strip().strip("!！。.~ ").lower()
-    if t in _PEND_OK or any(w in text for w in _PEND_OK_SUB) or any(w in text for w in _PEND_ASK):
-        return f"請點上方卡片的「✅ {btn}」按鈕才會真的寫入，或說「取消」放棄。"
+    # r57：FIX 先於 ASK——「等等 改15個」同時含暫停詞(等等)與修改詞(改)，
+    # 訪客要的是改內容，修改引導比按鈕引導對
     if any(w in text for w in _PEND_FIX):
         eg = _PEND_EXAMPLE.get(view, "北倉進100個無線滑鼠")
         return (f"要改內容的話，請重新說一次完整需求（例如「{eg}」），"
                 f"或直接點上方卡片的「✅ {btn}」按鈕確認原本的內容。")
+    if t in _PEND_OK or any(w in text for w in _PEND_OK_SUB) or any(w in text for w in _PEND_ASK):
+        return f"請點上方卡片的「✅ {btn}」按鈕才會真的寫入，或說「取消」放棄。"
     return ""
 
 # ─── Util ─────────────────────────────────────────────────
@@ -6235,18 +6253,52 @@ async def ws_handler(ws: WebSocket):
                 _oi56 = _ORD_MAP56.get(_ord51.group(1)) or int(_ord51.group(1))
                 log.info(f"[ordinal-rank] vid={vid} 「{user_text}」→ 排行第{_oi56}名")
                 user_text = f"第{_oi56}名剩多少"
+            elif (_ctx_for(vid).get("last_func") == "list_hot_items"
+                  and _re.fullmatch(r"第[一二兩三四五六七八九十\d]+名的?(是)?(什麼|哪個|啥|誰)?[?？。!！]*",
+                                    _ord_txt)):
+                # r57：「第五名是什麼」——排行身分追問光句面過不了守門員（無功能詞），
+                # 前綴補「熱銷排行」讓它自然走排行追問路
+                user_text = f"熱銷排行{_ord_txt}" + ("是什麼" if "是" not in _ord_txt else "")
+                log.info(f"[ordinal-rank] vid={vid} 身分追問 → {user_text!r}")
+
+            # ── r57：config 讀取後的裸改值（「改成90」）→ 接回該商品安全庫存設定
+            #   （必須在守門員之前改寫，裸「改成90」過不了 is_meaningful_input；
+            #   有卡片時由 pending 層的「改」引導接走，不會到這）──
+            _cfg_bare57 = _re.fullmatch(r"(改成?|設成?|調成?)\s*([0-9]{1,6})\s*(好了|吧|喔)?",
+                                        user_text.strip())
+            if (_cfg_bare57 and _ctx_for(vid).get("last_func") == "manage_config"
+                    and _ctx_for(vid).get("last_sku")):
+                user_text = f"{_ctx_for(vid)['last_sku']}安全庫存改成{_cfg_bare57.group(2)}"
+                log.info(f"[ctx-cfg] 裸改值 → {user_text!r}")
 
             # ── r55 收官批：告別/道謝句友善回應——「掰掰」「謝謝辛苦了」曾回
             #   守門員教學文（展場冷場）。純客套短句 → 溫暖收尾；混雜其他內容不攔。──
-            _fw_bye = _re.fullmatch(
-                r"(?:(?:掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|先走了|"
-                r"我走了|走囉|閃人|告辭|沒事)[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
+            # ── r57：接續詞（「換一個」「下一個」「繼續」）——訪客要看別的但沒說
+            #   是什麼（曾回「沒有『換一個』這個商品」醜 clarify）──
+            if _re.fullmatch(r"(那)?(換|下|再來)一?個(呢|吧|好了)?|繼續|再來|然後呢",
+                             user_text.strip().strip("!！?？。~～ ")):
+                _nx_msg = ("想看哪個商品呢？直接說名稱就可以——例如「藍牙喇叭庫存」；"
+                           "或說「商品清單」看全部 60 項。")
+                log.info(f"[continue-word] {user_text!r} → 請指名商品")
+                for ch in _nx_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _nx_msg,
+                    "data": {"question": _nx_msg, "options": [], "hint": ""}}})
+                continue
+
+            # r57：告別+道謝混雜（「辛苦了88」）也要接——token 聯集全句比對，
+            # 有告別詞就走告別回覆，否則道謝回覆
+            _FW_BYE_TOK = (r"掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|"
+                           r"先走了|我走了|走囉|閃人|告辭|沒事")
+            _FW_THX_TOK = (r"謝謝你?們?|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
+                           r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了")
+            _fw_all = _re.fullmatch(
+                rf"(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
                 user_text.strip(), _re.IGNORECASE)
-            _fw_thx = _re.fullmatch(
-                r"(?:(?:謝謝你?們?|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
-                r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了)"
-                r"[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
-                user_text.strip(), _re.IGNORECASE)
+            _fw_bye = _fw_all and _re.search(rf"(?:{_FW_BYE_TOK})", user_text, _re.IGNORECASE)
+            _fw_thx = _fw_all and not _fw_bye
             if ((_fw_bye or _fw_thx)
                     and not _item_create_state_ws.get(vid, {}).get("active")
                     and not _item_delete_state.get(vid)):   # 流程中「88」是欄位值不是告別
@@ -6698,6 +6750,21 @@ async def ws_handler(ws: WebSocket):
                                  "total": _ls_tot}}})
                     continue
 
+            # ── r57：上個月的排行——資料不含上個月，過去默默回本週榜（拿錯榜單
+            #   不自知），誠實說支援範圍 ──
+            if (any(w in user_text for w in ("上個月", "上月"))
+                    and any(w in user_text for w in ("熱銷", "排行", "賣最", "暢銷", "滯銷"))):
+                _rk_msg = "排行目前支援本週／本月。想看哪個範圍呢？"
+                log.info(f"[time-gate] 上個月排行 → clarify: {user_text!r}")
+                for ch in _rk_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _rk_msg,
+                    "data": {"question": _rk_msg,
+                             "options": ["本週熱銷排行", "本月熱銷排行"], "hint": ""}}})
+                continue
+
             # ── r56：寫入邊緣攔截 ──
             # 負數量寫入（「北倉進-5個衛生紙」曾被當庫存查詢＝答非所問）
             if (_re.search(r"[進出調補]\s*[-−]\s*\d", user_text)
@@ -6733,7 +6800,9 @@ async def ws_handler(ws: WebSocket):
                                                           "紀錄", "記錄", "多少", "幾件", "比較",
                                                           # 「排程全部列出來」「通通列出來」的
                                                           # 「出」是列出不是出貨（r56 誤傷修正）
-                                                          "列出", "出來", "排程", "清單")):
+                                                          "列出", "出來", "排程", "清單")) \
+                    and not _re.search(r"\d+\s*[件個箱瓶罐組雙]", user_text):
+                    # r57：「出掉20件 北倉」帶確切數字＝正常出貨，不攔（r56 誤傷修正）
                 _pc_msg = ("「全部／一半」這類比例我不會自己換算成件數（怕出錯量）。"
                            "請說確切數量，例如「北倉出50個衛生紙」。")
                 log.info(f"[write-edge] 比例出貨 → clarify: {user_text!r}")
@@ -6833,13 +6902,23 @@ async def ws_handler(ws: WebSocket):
                 # r55 收官批：「露營全套多少錢」——「全套/整套」是多件組合，extractor 會
                 # 靜默挑一件（曾只報折疊露營椅）。剝掉組合詞+價格詞取詞幹，詞幹對到
                 # 多個商品就列選單讓訪客選。
-                if any(w in user_text for w in ("全套", "整套", "一整組", "一套", "組合價")):
+                if any(w in user_text for w in ("全套", "整套", "一整組", "一套", "組合價",
+                                                 "全部", "全都")):   # r57：「帽子全部多少錢」
                     _pq_stem = user_text
-                    for _bw in ("全套", "整套", "一整組", "一套", "組合價", "多少錢",
-                                "什麼價", "單價", "價格多少", "價格", "要", "的", "買"):
+                    for _bw in ("全套", "整套", "一整組", "一套", "組合價", "全部", "全都",
+                                "多少錢", "什麼價", "單價", "價格多少", "價格", "要", "的", "買"):
                         _pq_stem = _pq_stem.replace(_bw, "")
                     _pq_stem = _pq_stem.strip("?？。!！， ")
                     _pq_sm = _W_pq.match_items(_pq_stem) if len(_pq_stem) >= 2 else []
+                    # r57：通稱詞幹（帽子/鍋子）比不到 → 用通稱表展開候選
+                    if len(_pq_sm) <= 1 and len(_pq_stem) >= 2:
+                        _pq_gen = getattr(_W_pq, "_GENERIC_QUERY_FALLBACK", {}).get(_pq_stem)
+                        if _pq_gen:
+                            _pq_sm = []
+                            for _gfrag in _pq_gen:
+                                _gm = _W_pq.match_items(_gfrag)
+                                if _gm:
+                                    _pq_sm.append(_gm[0])
                     if len(_pq_sm) > 1:
                         _pq_snames = [r["item"]["name"] for r in _pq_sm[:8]]
                         _pq_sq = (f"「{_pq_stem}」相關有 {len(_pq_snames)} 個商品，"
@@ -7234,6 +7313,11 @@ async def ws_handler(ws: WebSocket):
                 _pb_kw = _extract_sku_keyword(_pvs.group(2)) or _pvs.group(2).strip()
                 _pa = _W_pvs.match_items(_pa_kw) if _pa_kw else []
                 _pb = _W_pvs.match_items(_pb_kw) if _pb_kw else []
+                # r57：一側是代詞（「它跟不沾鍋哪個賣得好」）→ 用 context 商品接地
+                if ((not _pa or _pa[0].get("score", 0) < 3)
+                        and any(p in _pvs.group(1) for p in ("它", "牠", "這個", "那個"))
+                        and _ctx_for(vid).get("last_sku")):
+                    _pa = _W_pvs.match_items(_ctx_for(vid)["last_sku"])
                 if (_pa and _pa[0].get("score", 0) >= 3 and _pb and _pb[0].get("score", 0) >= 3
                         and _pa[0]["item"]["sku_id"] != _pb[0]["item"]["sku_id"]):
                     _na, _nb = _pa[0]["item"]["name"], _pb[0]["item"]["name"]
@@ -7306,7 +7390,10 @@ async def ws_handler(ws: WebSocket):
                     and (any(w in user_text for w in ("排行", "榜", "熱銷", "暢銷"))
                          or _ctx_for(vid).get("last_func") == "list_hot_items")):
                 _bs_rank_type = "hot"
-            if _bs_rank_type and any(w in user_text for w in _bs_stock_words):
+            # r57：「第五名是什麼」——排行後問名次身分（沒有庫存語）也要接
+            _bs_idwords = ("是什麼", "是哪個", "是啥", "叫什麼", "是誰")
+            _bs_want_id = bool(_bs_rankn_m) and any(w in user_text for w in _bs_idwords)
+            if _bs_rank_type and (any(w in user_text for w in _bs_stock_words) or _bs_want_id):
                 # 期間：句內有講就照句子，沒講沿用上一輪排行榜的期間（r55）
                 if "月" in user_text:
                     _bs_period = "this_month"
@@ -7333,6 +7420,20 @@ async def ws_handler(ws: WebSocket):
                     _bs_wh = ("north" if any(w in user_text for w in ("北倉", "北區")) else
                               "central" if any(w in user_text for w in ("中倉", "中區")) else
                               "south" if any(w in user_text for w in ("南倉", "南區")) else "all")
+                    # r57：純身分追問（「第五名是什麼」）→ 直接報名字+出量，不帶庫存
+                    if _bs_want_id and not any(w in user_text for w in _bs_stock_words):
+                        _bs_plabel_id = "本月" if _bs_period == "this_month" else "本週"
+                        _bs_id_sum = (f"{_bs_plabel_id}{_bs_rlabel}的是"
+                                      f"「{_bs_name}」（出 {_bs_rank[_bs_idx]['out_qty']:,} 件）。")
+                        log.info(f"[dispatch-ws] 排行身分追問: 第{_bs_idx + 1}名 → {_bs_name}")
+                        for ch in _bs_id_sum:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": {
+                            "ok": True, "view": "inventory_single", "summary": _bs_id_sum,
+                            "data": {"name": _bs_name}}})
+                        _bs_done = True
+                        continue
                     log.info(f"[dispatch-ws] 複合句攔截: {user_text!r} → "
                              f"{_bs_rlabel}Top1「{_bs_name}」庫存 wh={_bs_wh}")
                     result = finance.execute("query_inventory",
