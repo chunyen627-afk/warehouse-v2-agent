@@ -153,6 +153,7 @@ GATEKEEPER_KEYWORDS = {
     # 動作補強 (v3.8 round 2)
     "記錄", "紀錄", "明細", "清單", "排行", "所有", "全部", "查", "看", "顯示",
     "最差", "最好", "賣", "進", "出", "貨", "交易", "報表", "自動", "沒了", "快要沒",
+    "撐多久", "撐幾天", "撐得", "日銷",   # r71：「照這速度撐多久」曾被守門員拒
     # 保存期限(v3.9 連動)
     "到期", "過期", "快到期", "即將到期", "保存期限", "效期", "保鮮",
     "賞味", "新鮮度", "快爛", "即期", "expire", "expiring", "shelf life",
@@ -288,6 +289,7 @@ _GATEKEEPER_BLACKLIST = (
     "罵我", "罵人", "罵一下",   # r58：「罵我一下」曾回「沒有『罵我』這個商品」
     "講中文", "說中文",         # r59：「講中文好嗎」曾回「沒有『講中文』這個商品」
     "加油好嗎", "加加油",       # r60：「中倉加油好嗎」曾回「沒有『加油』這個商品」
+    "倉租", "租金", "水電費",   # r71：「倉租多少錢一個月」曾回 60 項概覽
     # 搗蛋 / 注入探測（永遠擋）
     "格式化", "重開機", "關機", "密碼", "管理員", "admin",
     "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
@@ -4575,11 +4577,15 @@ def _ctx_absorb(vid, result: dict):
     #   「第一名還有多少」接得住（過去回「找不到商品『最急』」）。
     # r59：generic config_read（10 項無排序）的 rows[0] 是任意商品，不可當榜首吸——
     #   曾把耳機存進 last_sku，下一句「快到期的東西」被污染成查耳機到期（假 ✅ 家族）
+    # r71：60 項總覽（view=inventory 無 keyword/category）同病——「倉租多少錢」掉
+    #   概覽後，「輸的那個要促銷嗎」曾回從沒查過的耳機（rows[0]=e01）
     if not isinstance(kw, str):
+        _generic_inv = (view == "inventory"
+                        and not data.get("category") and not data.get("keyword"))
         for _lk in ("warnings", "rankings", "preview", "items", "rows"):
             _lv = data.get(_lk)
             if isinstance(_lv, list) and _lv and isinstance(_lv[0], dict):
-                if view == "config_read" and len(_lv) > 1:
+                if (view == "config_read" or _generic_inv) and len(_lv) > 1:
                     break
                 kw = _lv[0].get("name") or _lv[0].get("item")
                 break
@@ -4777,7 +4783,9 @@ def _ctx_expand(vid, text: str) -> str:
         for _ww in ("進貨", "出貨", "調貨", "補貨", "進", "出", "調", "補", "到", "去", "從",
                     # r57：「馬上出10個」的副詞不是商品名（曾回「找不到商品『馬上』」）
                     "馬上", "立刻", "趕快", "順便", "然後", "再", "先", "幫我", "請", "麻煩",
-                    "直接", "快點"):
+                    "直接", "快點",
+                    # r71：「保險起見北倉進30頂」的狀語（曾回找不到商品「保險起見」）
+                    "保險起見", "以防萬一", "乾脆", "還是"):
             _wr_res = _wr_res.replace(_ww, "")
         _wr_res = _re.sub(r"[\d０-９]+", "", _wr_res)
         for _wu in ("個", "件", "箱", "杯", "打", "包", "盒", "罐", "瓶", "組", "雙",
@@ -4849,7 +4857,8 @@ _PEND_EXAMPLE = {"movement_confirm": "北倉進100個無線滑鼠",
 # 「跳過」不可列入——那是新增商品第四步的合法值。
 _ABORT_WORDS = ("取消", "算了", "不用了", "不要了", "我不要", "先不要", "不想要",
                 "不用查", "不查了", "不用了啦", "退出", "離開", "結束", "停止",
-                "放棄", "當我沒說", "沒事了", "不管了", "先不用", "不繼續", "不做了")
+                "放棄", "當我沒說", "沒事了", "不管了", "先不用", "不繼續", "不做了",
+                "不用補", "不補了")   # r71：「那不用補囉」曾被 ctx 當查詢回庫存
 
 
 # 「取消所有排程」「取消瑜珈墊的警示」是**管理指令**不是放棄——有明確對象詞就豁免
@@ -6926,7 +6935,8 @@ async def ws_handler(ws: WebSocket):
             #   → 拿該商品各倉的 qty 跟 safety_stock 比，直接講缺不缺。──
             if any(w in user_text for w in ("快缺貨", "缺貨了嗎", "缺貨嗎", "夠不夠",
                                             "夠嗎", "不夠嗎", "要補貨嗎", "要補嗎",
-                                            "需要補", "低於安全庫存")):
+                                            "需要補", "低於安全庫存",
+                                            "不夠賣", "會不會缺")):   # r71
                 import warehouse as _W_ls
                 _ls_kw = _extract_sku_keyword(user_text)
                 _ls_m = _W_ls.match_items(_ls_kw) if _ls_kw else []
@@ -6968,9 +6978,11 @@ async def ws_handler(ws: WebSocket):
 
             # ── r57：上個月的排行——資料不含上個月，過去默默回本週榜（拿錯榜單
             #   不自知），誠實說支援範圍 ──
-            if (any(w in user_text for w in ("上個月", "上月", "上週", "上禮拜", "上星期"))
+            if (any(w in user_text for w in ("上個月", "上月", "上週", "上禮拜", "上星期",
+                                              "昨天", "前天"))
                     and any(w in user_text for w in ("熱銷", "排行", "賣最", "暢銷", "滯銷"))):
                 # r59：「上週的排行呢」也曾默默回本週榜——排行只有本週/本月資料
+                # r71：「昨天賣最好的是什麼」同病（日粒度排行不支援）
                 _rk_msg = "排行目前支援本週／本月。想看哪個範圍呢？"
                 log.info(f"[time-gate] 上個月排行 → clarify: {user_text!r}")
                 for ch in _rk_msg:
@@ -7040,6 +7052,21 @@ async def ws_handler(ws: WebSocket):
                 if not (_dl_m and _dl_m[0].get("score", 0) >= 3):
                     _dl_kw = _ctx_for(vid).get("last_sku") or ""
                     _dl_m = _W_dl.match_items(_dl_kw) if _dl_kw else []
+                if not (_dl_m and _dl_m[0].get("score", 0) >= 3):
+                    # r71：冷 context 純撐天短句 → 友善反問（曾掉守門員教學文）。
+                    # 全域句（「見底的貨…要補幾個」）放行給既有缺貨清單路。
+                    if (len(user_text) <= 12
+                            and not any(w in user_text for w in ("見底", "哪些", "全部",
+                                                                  "清單", "的貨", "什麼"))):
+                        _dl_msg = "想看哪個商品能撐幾天？直接說商品名，例如「衛生紙撐幾天」。"
+                        log.info(f"[dispatch-ws] 撐天無指涉 → 反問: {user_text!r}")
+                        for ch in _dl_msg:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": {
+                            "ok": True, "view": "clarify", "summary": _dl_msg,
+                            "data": {"question": _dl_msg, "options": [], "hint": ""}}})
+                        continue
                 if _dl_m and _dl_m[0].get("score", 0) >= 3:
                     _dl_name = _dl_m[0]["item"]["name"]
                     _dl_res = _W_dl.list_low_stock()

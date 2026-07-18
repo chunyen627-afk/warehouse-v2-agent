@@ -242,3 +242,16 @@
 > 熱銷冠軍是誰 | inventory_single | 賣最好
 > 亞軍勒 | inventory_single | 第2名
 > 季軍剩多少 | inventory_single | 第3名
+
+### hand-r71-概覽不吸rows0
+> 倉租多少錢一個月 | rejected
+> 輸的那個要促銷嗎 | clarify,rejected
+### hand-r71-撐與狀語
+> 防曬遮陽帽庫存 | inventory_single | 遮陽帽
+> 照這速度撐多久 | low_stock | 斷貨
+> 保險起見北倉進30頂 | movement_confirm | 遮陽帽
+> 取消 | item_cancelled
+### hand-r71-不夠賣與不用補
+> 防曬遮陽帽庫存 | inventory_single | 遮陽帽
+> 這個會不會不夠賣 | low_stock
+> 那不用補囉 | clarify | 沒問題
