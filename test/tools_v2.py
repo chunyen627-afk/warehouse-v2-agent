@@ -1938,7 +1938,10 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
                     qty: str = "") -> dict:
     """觸發調貨流程：找商品 → 解析來源/目標倉 → 檢查來源庫存 → 回確認卡（不寫入）。"""
     if not keyword:
-        return W._err("請說明要調哪個商品，例如「北倉調20個藍牙耳機去南倉」")
+        return {"ok": True, "view": "clarify",
+                "summary": "要調哪個商品呢？直接說商品名就可以，例如「衛生紙」。",
+                "data": {"question": "要調哪個商品？直接說商品名",
+                         "options": [], "hint": ""}}
 
     scored = W.match_items(keyword)
     if not scored:

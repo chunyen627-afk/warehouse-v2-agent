@@ -384,3 +384,20 @@
 > 北倉缺的前三個列出來 | low_stock
 > 第三個補到安全線要幾個 | low_stock | 建議補
 > 好 那先不補 | clarify | 沒問題
+
+### hand-r80-調貨補ctx商品與剛排刪除
+> 南倉衛生紙剩多少 | inventory_single | 衛生紙
+> 太少了 中倉調100過來南倉 | transfer_confirm | 衛生紙
+> 確認 | transfer_done | 調到
+### hand-r80-剛排的刪與差幾件
+> 排程一下 每週五晚上六點體檢報告 | schedule_confirm | 體檢報告
+> 確認 | schedule_done
+> 剛排的那個刪了 | schedule_delete_confirm | 此動作無法復原
+> 確認刪除 | schedule_deleted | 已刪除
+### hand-r80-類別總值與照建議補
+> 對了電子類總值多少 | inventory_single | 總值
+> 上週跟這週哪週出比較多 | movement | 本週比上週
+> 差幾件 | movement | 本週比上週
+> 有缺的列出來 | low_stock
+> 照建議補 | movement_confirm | 電動牙刷
+> 確認 | movement_done

@@ -135,6 +135,8 @@ GATEKEEPER_KEYWORDS = {
     "每週", "每天", "每月", "改成", "維持", "原樣",
     # r78：改回原本/差最多/第N急 追問
     "改回", "恢復", "原本", "差最多", "第二急", "第三急", "最急",
+    # r80：掉最多前三/就總值/大家辛苦
+    "掉最多", "總值", "辛苦",
     # r28：最沒人氣（曾被守門員拒）
     "沒人氣",
     # conv100-r6：缺貨/滯銷/連帶/RCA/明細 口語
@@ -1076,7 +1078,7 @@ _REWRITE_RULES: list[tuple] = [
     # ── r79：最操倉/待辦/處理完 口語 ──
     (_re.compile(r"(哪個?倉|北中南|三個?倉)[^。]{0,6}最[操忙累]"),   "各倉週轉率比較"),
     (_re.compile(r"(還有什麼|有什麼)要處理|要處理的事?"),            "庫存警示"),
-    (_re.compile(r"^都?(處理|弄|搞定)完了?嗎[?？]?$"),              "哪些商品缺貨警示"),
+    (_re.compile(r"^都?(處理|弄|搞定|補)[完好]了?嗎[?？]?$"),        "哪些商品缺貨警示"),
 
     # ── r78：對帳/盤點排程/改回 口語 ──
     (_re.compile(r"^(對帳|帳目)(有沒有|有無)(問題|異常|對不上)?[?？]*$"), "採購對帳異常"),
@@ -2430,6 +2432,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         r'([0-9]+|[零一二兩三四五六七八九十百千萬億]+)\s*'
         # 「個」排除「三個倉」（曾把倉數吃成 qty=3，conv100-r6）；單位補「盞」
         r'(?:件|個(?!月|星期|禮拜|小時|鐘頭|倉)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞)', user_text)
+    # r80：調貨裸數字（「中倉調100過來南倉」沒帶量詞）——同 r79 進出貨裸數字形
+    if not _qty13a_m:
+        _qty13a_m = _re13a.search(
+            r'[調撥挪搬移轉勻]\s*([0-9]{1,6})(?![0-9]*[月日號點樓年%．\.])', user_text)
     _qty13a_int = _cn_to_int(_qty13a_m.group(1)) if _qty13a_m else None
     # 動詞跟介系詞被商品隔開的句型：「北倉送20個藍牙耳機到南倉」的「送…到」
     # 子字串比對不到（第11輪抓到）。兩倉名+數量的前提下跨距比對安全。
@@ -2480,7 +2486,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _WH_ZH2KEY = {"北": "北倉", "中": "中倉", "南": "南倉"}
         _to_key = ""
         # 「往南倉調」「支援南倉」「撤回北倉」的目標倉介系詞（conv100-r6/r7）
-        _to_m = _re13a.search(r'(?:到|去|過去|給|往|支援|回)\s*([北中南])', user_text)
+        # r80：「調100過來南倉」的「過來…南倉」目標介系詞——過來/來也要收
+        _to_m = _re13a.search(r'(?:到|去|過去|過來|來|給|往|支援|回)\s*([北中南])',
+                              user_text)
         if _to_m:
             _to_key = _to_m.group(1)
         # 來源倉：第一個出現、且不是目標倉的倉名
@@ -2521,8 +2529,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _oov_ok = (_kw13a and " " not in _kw13a and 2 <= len(_kw13a) <= 8
                        and bool(_re_oov.fullmatch(r"[一-鿿]+", _kw13a))
                        and not any(g in _kw13a for g in ("庫存", "東西", "商品", "的貨", "一些")))
+            # r80：純調貨句缺商品名（「中倉調100過來南倉」沒說調什麼）——退回
+            # 概覽答非所問。改標記讓 WS 層用 ctx 商品補回或 clarify 問商品
             log.info(f"[校正 C13a] 調貨但商品名抽壞/低分 kw={_kw13a!r} → "
-                     f"{'OOV clarify' if _oov_ok else '查詢概覽'}")
+                     f"{'OOV clarify' if _oov_ok else '調貨缺商品'}")
+            if not _oov_ok and (_qty13a_int is not None) and len(_wh_keys13a) >= 2:
+                return "create_transfer", {"keyword": "", "from_wh": _from_zh,
+                                           "to_wh": _to_zh,
+                                           "qty": str(_qty13a_int)}, True
             return "query_inventory", {"keyword": _kw13a if _oov_ok else ""}, True
         log.info(f"[校正 C13a] 調貨意圖 → create_transfer kw={_kw13a!r} from={_from_zh!r} to={_to_zh!r} qty={_qty13a_int}")
         return "create_transfer", {"keyword": _kw13a, "from_wh": _from_zh,
@@ -6542,6 +6556,23 @@ async def ws_handler(ws: WebSocket):
                         "data": {"question": _ps_msg, "options": [], "hint": ""}}})
                     continue
 
+                # r80：純調貨句缺商品名（「太少了 中倉調100過來南倉」）——訪客
+                # 指的是剛查過的商品，用 ctx last_sku 補回，不要退成概覽。
+                # 條件嚴：調貨動詞+數字+兩倉+句中抽不到真商品+有 ctx
+                _tf80_bare = _re.search(r"[調撥挪搬移]\s*[0-9]{1,4}", user_text)
+                _tf80_whs = {z for z in "北中南" if z + "倉" in user_text
+                             or z + "區" in user_text}
+                if (_tf80_bare and len(_tf80_whs) >= 2
+                        and _ctx_for(vid).get("last_sku")
+                        and vid not in _pending_by_vid):
+                    import warehouse as _W_tf80
+                    _tf80_kw = _extract_sku_keyword(user_text) or ""
+                    _tf80_m = _W_tf80.match_items(_tf80_kw) if _tf80_kw else []
+                    if not (_tf80_m and _tf80_m[0].get("score", 0) >= 3):
+                        # 句中無真商品 → 注入 ctx 商品名到句首
+                        user_text = f"{_ctx_for(vid)['last_sku']}{user_text}"
+                        log.info(f"[ctx-tf] 純調貨補商品 → {user_text!r}")
+
                 # r65：行內糾錯（「出10個 打錯 是出20個」）→ 先化簡成更正後的量，
                 # 再交給 ctx 展開補商品/倉（rewrite 表跑在展開之後，來不及）
                 _corr65 = _re.fullmatch(
@@ -6599,8 +6630,9 @@ async def ws_handler(ws: WebSocket):
                 _sd74_skip = (_ctx_for(vid).get("last_view") in
                               ("schedule_list", "alert_list", "schedule_done", "alert_done")
                               and _re.fullmatch(
-                                  r"(把|幫我)?(剛加的?|剛剛的?|最新的?)?(它|這個|那個|那條|那筆)?"
-                                  r"(刪掉|刪除|移除|取消|停掉)(它|這個|那個)?(吧|喔|囉|好了)?",
+                                  r"(把|幫我)?(剛加的?|剛剛的?|最新的?|剛排的?|剛設的?)?"
+                                  r"(它|這個|那個|那條|那筆)?"
+                                  r"(刪掉|刪除|移除|取消|停掉|刪了)(它|這個|那個)?(吧|喔|囉|好了)?",
                                   user_text.strip().strip("!！?？。 ")))
                 if not _sd74_skip:
                     user_text = _ctx_expand(vid, user_text)
@@ -6615,8 +6647,8 @@ async def ws_handler(ws: WebSocket):
                         and any(p in user_text for p in _CTX_PRON)
                         and not any(w in user_text for w in _CTX_TIME_WORDS)
                         and not any(w in user_text for w in _CTX_GLOBAL)
-                        # r74：schedule_list/alert_list（r75 +done 態）後的「刪掉它」指
-                        # 清單項目，讓給刪除閘的排程/警示分支（沒查過商品也成立）
+                        # r74：schedule_list/alert_list（r75 +done 態）後的「刪掉它/
+                        # 剛排的那個刪了」指清單項目，讓給刪除閘的排程/警示分支
                         and not (_ctx_for(vid).get("last_view") in
                                  ("schedule_list", "alert_list", "schedule_done", "alert_done")
                                  and any(w in user_text for w in ("刪", "移除", "取消", "停掉")))
@@ -6748,7 +6780,7 @@ async def ws_handler(ws: WebSocket):
             _FW_THX_TOK = (r"謝謝你?們?|謝了|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
                            r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了|"
                            r"差不多了|就到這|先這樣|都?沒問題|[就先]?巡到這|看到這裡?|"
-                           r"ok瞭解|okay|ok|瞭解|我?知道了|就[醬降]")
+                           r"ok瞭解|okay|ok|瞭解|我?知道了|就[醬降]|大家辛苦了?|懂了")
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）
             # r67：+今天/那我/我先（「今天就到這 感謝」）
             _fw_all = _re.fullmatch(
@@ -6849,7 +6881,7 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # ── 刪除/下架（優先於 clarify）──
-            _delete_kws_ws = ("刪除", "下架", "砍掉", "移除", "刪掉")
+            _delete_kws_ws = ("刪除", "下架", "砍掉", "移除", "刪掉", "刪了")
             # r19：「刪掉早上九點的排程」是排程管理不是刪商品——排程/警示對象
             # 讓給 Pre-C-Sched 的取消排程規則（列排程讓訪客選）
             if (any(w in user_text for w in _delete_kws_ws)
@@ -6868,7 +6900,8 @@ async def ws_handler(ws: WebSocket):
                     _obj74 = "排程" if _sched74 else "警示規則"
                     # r75：「剛加的那條刪掉」→ 直指最後一筆，不再反問 ID
                     if (len(_sj74) > 1 and any(w in user_text for w in
-                                               ("剛加", "剛剛", "最新", "最後"))):
+                                               ("剛加", "剛剛", "最新", "最後",
+                                                "剛排", "剛設"))):
                         _sj74 = [_sj74[-1]]
                     if len(_sj74) == 1:
                         result = (_tv2_sd74.delete_schedule(job_id=_sj74[0])
@@ -7525,10 +7558,60 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": result})
                 continue
 
+            # ── r80：單一類別總值直答（「電子類總值多少」）——曾掉今天進出統計 ──
+            _catv80 = _re.search(r"(電子|家電|廚具|食品|飲料|日用|服飾|運動)"
+                                 r"(產品|用品|品)?類?[^。]{0,4}(總值|總價值|值多少)",
+                                 user_text)
+            if _catv80:
+                import warehouse as _W_cv80
+                _cv80_map = {"電子": "electronics", "家電": "appliance_kitchen",
+                             "廚具": "appliance_kitchen", "食品": "food_beverage",
+                             "飲料": "food_beverage", "日用": "daily_goods",
+                             "服飾": "apparel", "運動": "sports"}
+                _cv80_key = _cv80_map.get(_catv80.group(1))
+                _cv80_s = _W_cv80.state()
+                _cv80_val = sum(
+                    _it["unit_price"] * _cv80_s.stock.get(w["key"], {}).get(_it["sku_id"], 0)
+                    for _it in _cv80_s.items if _it["category"] == _cv80_key
+                    for w in _cv80_s.warehouses)
+                _cv80_lbl = _W_cv80.CATEGORY_LABEL.get(_cv80_key, _cv80_key)
+                _cv80_msg = f"「{_cv80_lbl}」類庫存總值約 NT$ {_cv80_val:,}。"
+                log.info(f"[dispatch-ws] 類別總值直答: {_cv80_key} {_cv80_val:,}")
+                for ch in _cv80_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "inventory_single", "summary": _cv80_msg,
+                    "data": {"category": _cv80_key, "total_value": _cv80_val}}})
+                continue
+
+            # ── r80：「照建議補」——行動意圖，直接開最急項的進貨卡（HITL）──
+            if (_re.fullmatch(r"(好|嗯|那)?就?照(這個)?建議[補進來辦](吧|好了)?",
+                              user_text.strip().strip("!！?？。 "))
+                    and _ctx_for(vid).get("last_view") == "low_stock"):
+                import warehouse as _W_sg80
+                _sg80_ws = ((_W_sg80.list_low_stock().get("data") or {})
+                            .get("warnings") or [])
+                if _sg80_ws:
+                    _w80 = _sg80_ws[0]
+                    result = finance.execute("create_movement", {
+                        "keyword": _w80.get("name"),
+                        "warehouse": _w80.get("warehouse_label", ""),
+                        "direction": "in", "qty": str(_w80.get("suggest_qty", ""))})
+                    if result.get("ok") and result.get("summary"):
+                        log.info(f"[dispatch-ws] 照建議補 → 開卡 {_w80.get('name')}")
+                        for ch in result["summary"]:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": result})
+                        continue
+
             # ── r77：全店平均單價（「全店東西平均一件多少錢」）──
             if (_re.search(r"平均[^。]{0,6}(一件|單價|多少錢|幾錢)", user_text)
-                    and any(w in user_text for w in ("全店", "全部", "商品", "東西",
-                                                      "庫存", "整體"))):
+                    and (any(w in user_text for w in ("全店", "全部", "商品", "東西",
+                                                       "庫存", "整體"))
+                         # r80：「懂了 平均一件多少」——「平均一件」本身就夠明確
+                         or "平均一件" in user_text)):
                 import warehouse as _W_avg
                 _av_s = _W_avg.state()
                 _av_val = _av_qty = 0
@@ -7946,7 +8029,11 @@ async def ws_handler(ws: WebSocket):
             _wkc = _re.search(r"(這|本)(週|禮拜|星期).{0,6}(上|前)(週|禮拜|星期).{0,4}(比|差)"
                               r"|(上|前)(週|禮拜|星期).{0,6}(這|本)(週|禮拜|星期).{0,4}(比|差)",
                               user_text)
-            if _wkc:
+            # r80：週對週比較後「差幾件」追問——重算差值直答
+            _wkc_f80 = (_re.fullmatch(r"(那)?差了?(幾|多少)件?",
+                                      user_text.strip().strip("!！?？。 "))
+                        and _ctx_for(vid).get("last_func") == "query_movement")
+            if _wkc or _wkc_f80:
                 import warehouse as _W_wk
                 _wk_a = _W_wk.query_movement(period="this_week")
                 _wk_b = _W_wk.query_movement(period="last_week")
