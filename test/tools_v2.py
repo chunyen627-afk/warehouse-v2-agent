@@ -1479,6 +1479,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             new_sku = _next_sku(_found_cat)
             pending = {
                 "name": _name, "category": _found_cat,
+                "category_label": W.CATEGORY_LABEL.get(_found_cat, _found_cat),
                 "price": int(_price_m.group(1)) if _price_m else 0,
                 "safety": int(_safety_m.group(1)) if _safety_m else 0,
                 "stock_north": int(_north_m.group(1)) if _north_m else 0,
@@ -1488,9 +1489,17 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             }
             return {"ok": True, "summary": "已解析商品資訊，請確認", "view": "item_confirm",
                     "data": {"pending": True, "item": pending}}
+        # r75：只給了名稱沒給類別（「新增商品 保溫杯」）→ 名稱接進分步流程，
+        # 從第二步問類別（過去靜默丟掉名稱、空名前進）
+        if _name and not name:
+            name = _name
 
     # 分步模式
     if step == 1:
+        # r75 危險級：名稱空白曾一路推進到建出商品「」（「幫我新增商品」的殘字
+        # 走 raw_text 解析失敗後掉進這裡）——空名一律留在第一步重問
+        if not (name or "").strip():
+            return create_item_start()
         # 防呆：檢查是否已有同名商品
         existing = [it for it in W.state().items if it["name"] == name]
         if existing:
@@ -1501,8 +1510,29 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 "view": "item_create_step2",
                 "data": {"step": 2, "name": name, "prompt": "請選擇類別（或輸入「取消」退出）"}}
     elif step == 2:
+        # r75：類別欄要驗證＋正規化成主檔 key——「陶瓷馬克杯」曾被當類別吸收
+        # 造成整條流程欄位錯位；中文原字入檔會生出幻影類別（SKU 也拿到 x 前綴）
+        _cat_zh2key = {"電子": "electronics", "3c": "electronics",
+                       "家電": "appliance_kitchen", "廚具": "appliance_kitchen", "廚房": "appliance_kitchen",
+                       "食品": "food_beverage", "飲料": "food_beverage",
+                       "日用": "daily_goods", "生活": "daily_goods",
+                       "服飾": "apparel", "衣": "apparel",
+                       "運動": "sports"}
+        _cat_key = next((v for k, v in _cat_zh2key.items()
+                         if k in (category or "").lower()), "")
+        if not _cat_key and category in _cat_zh2key.values():
+            _cat_key = category
+        if not _cat_key:
+            return {"ok": True,
+                    "summary": (f"「{category}」不是類別喔。請從：電子產品／家電廚具／"
+                                "食品飲料／日用品／服飾／運動用品 選一個（輸入「取消」可退出）"),
+                    "view": "item_create_step2",
+                    "data": {"step": 2, "name": name,
+                             "prompt": "請選擇類別（或輸入「取消」退出）"}}
+        category = _cat_key
+        _cat_lbl2 = W.CATEGORY_LABEL.get(category, category)
         return {"ok": True,
-                "summary": f"已記錄：「{name}」→ {category}\n第三步：單價多少？安全庫存幾件？\n例如：150 100（輸入「取消」可退出）",
+                "summary": f"已記錄：「{name}」→ {_cat_lbl2}\n第三步：單價多少？安全庫存幾件？\n例如：150 100（輸入「取消」可退出）",
                 "view": "item_create_step3",
                 "data": {"step": 3, "name": name, "category": category,
                          "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
@@ -1520,6 +1550,15 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 safety_val = nums[1] if len(nums) >= 2 else 0
         except (ValueError, IndexError):
             return W._err(f"價格或安全庫存格式錯誤：{price} / {safety}")
+        # r75：輸入裡沒有數字（「廚具」曾被吸成單價0/安全0 靜默過關）→ 留在
+        # 第三步重問，不帶 0 值前進
+        if price_val <= 0:
+            return {"ok": True,
+                    "summary": ("第三步需要數字喔：單價多少？安全庫存幾件？\n"
+                                "例如：150 100（輸入「取消」可退出）"),
+                    "view": "item_create_step3",
+                    "data": {"step": 3, "name": name, "category": category,
+                             "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
         return {"ok": True,
                 "summary": f"已記錄：單價 {price_val} 元，安全庫存 {safety_val} 件\n第四步（可選）：設定初始庫存？\n直接輸入三個數字（北 中 南），例如：50 30 20\n或輸入『跳過』全部設為 0",
                 "view": "item_create_step4",
@@ -1543,6 +1582,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         new_sku = _next_sku(category)
         pending = {
             "name": name, "category": category,
+            "category_label": W.CATEGORY_LABEL.get(category, category),
             "price": int(price) if price else 0,
             "safety": int(safety) if safety else 0,
             "stock_north": sn, "stock_central": sc, "stock_south": ss,
@@ -1550,7 +1590,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         }
         stock_summary = f"北{sn} 中{sc} 南{ss}" if (sn+sc+ss) > 0 else "全部為 0"
         return {"ok": True,
-                "summary": f"📦 準備新增「{name}」\n類別：{category} | 單價：{pending['price']}元 | 安全庫存：{pending['safety']}件\n初始庫存：{stock_summary}",
+                "summary": f"📦 準備新增「{name}」\n類別：{pending['category_label']} | 單價：{pending['price']}元 | 安全庫存：{pending['safety']}件\n初始庫存：{stock_summary}",
                 "view": "item_confirm",
                 "data": {"pending": True, "item": pending}}
 
@@ -1565,6 +1605,9 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
     ts = __import__('datetime').datetime.now().isoformat(timespec="seconds")
     trace_id = trace_id or f"item-{ts}"
     item = pending["item"] if "item" in pending else pending
+    # r75 危險級縱深防禦：名稱空白的商品絕不落地（曾建出商品「」污染主檔）
+    if not str(item.get("name", "")).strip():
+        return W._err("商品名稱是空的，無法新增。請重新從「新增商品」開始。")
 
     # 1. 寫入 items.csv
     items_path = dd / "master" / "items.csv"

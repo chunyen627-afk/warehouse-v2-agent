@@ -128,6 +128,8 @@ GATEKEEPER_KEYWORDS = {
     "警戒", "訂在", "沒人買", "亮紅燈", "開天窗", "快斷", "動了", "啞鈴",
     # r74：「退步最多的呢」曾被守門員擋（進步/退步→跨期比較）
     "進步", "退步",
+    # r75：「價格改成299」要能進改價誠實閘，不能死在守門員
+    "價格", "單價", "售價", "改價",
     # r28：最沒人氣（曾被守門員拒）
     "沒人氣",
     # conv100-r6：缺貨/滯銷/連帶/RCA/明細 口語
@@ -297,7 +299,9 @@ _GATEKEEPER_BLACKLIST = (
     "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
     "忽略你的指令", "忽略指令", "告訴我祕密", "告訴我秘密",
     "全部刪掉", "刪掉全部", "全部刪光", "刪光", "刪除全部", "清空資料",
-    "清空庫存", "清倉", "改成0元", "改成 0 元", "改成1元", "價格改成",
+    # r75：「價格改成」移出黑名單——改價誠實閘會優雅回「不支援改價」；
+    # 0元/1元 惡搞句仍留在黑名單
+    "清空庫存", "清倉", "改成0元", "改成 0 元", "改成1元",
     "改成0", "全部改成", "所有商品改", "全部價格",
     # 清空/歸零變體（RPI5 v21：「把庫存全部清掉」被當商品查詢問你要查啥）
     "全部清掉", "清掉庫存", "庫存清掉", "清掉所有", "清光", "全部清光",
@@ -403,6 +407,10 @@ def _text_has_item_name(text: str) -> bool:
             return True
         for _it_gd in _W_gd.state().items:
             nm = _it_gd["name"].lower().replace(" ", "")
+            # r75 縱深防禦：名稱不足 2 字（歷史髒資料的空名商品）不可比對——
+            # 「"" in s」恆真曾讓守門員對亂打字全放行
+            if len(nm) < 2:
+                continue
             if len(nm) <= 3:
                 if nm in s:
                     return True
@@ -1428,9 +1436,23 @@ def _normalize_typos(user_text: str) -> str:
 def _descriptor_hit(user_text: str) -> str | None:
     """描述句偵測（rewrite 之前呼叫——rewrite 會把描述換掉）。命中回傳商品關鍵字。"""
     t = user_text.strip().translate(_S2T)
+    # r75：描述 pattern 命中、但句中已含完整商品名（≥4 字，含新建商品）→
+    # 用句內的名字取代別名。「鑄鐵平底鍋庫存」曾被「平底鍋→不沾鍋」別名搶走
+    # 查不到新商品；非描述句不受影響（避免所有含商品名的句子都變描述命中）
+    _dh_exact = None
+    try:
+        import warehouse as _W_dh
+        _s_dh = t.replace(" ", "").lower()
+        for _it_dh in _W_dh.state().items:
+            _nm_dh = _it_dh["name"].split()[0].lower()
+            if len(_nm_dh) >= 4 and _nm_dh in _s_dh:
+                _dh_exact = _it_dh["name"]
+                break
+    except Exception:
+        pass
     for _dh_pat, _dh_name in _DESCRIPTOR_ALIASES:
         if _dh_pat.search(t):
-            return _dh_name
+            return _dh_exact or _dh_name
     return None
 
 
@@ -4518,6 +4540,8 @@ _VIEW2ACTION_WS = {
     # r74：排程/警示刪除卡口語確認（schedule_list 後「刪掉它」→ 卡片→「確認刪除」）
     "schedule_delete_confirm": "delete_schedule",
     "alert_delete_confirm":    "delete_alert",
+    # r75：商品刪除卡的「確認刪除」曾重新進刪除閘再列一次清單（老缺口）
+    "item_delete_confirm":     "item_delete",
 }
 
 _PENDING_VIEWS = {"movement_confirm", "transfer_confirm", "config_confirm",
@@ -4556,6 +4580,11 @@ def _ctx_absorb(vid, result: dict):
         _ctx_for(vid)["last_alert_rules"] = [
             r.get("id") for r in (data.get("rules") or [])
             if isinstance(r, dict) and r.get("id")]
+    # r75：剛建立完排程/警示，「剛加的那條刪掉」也要能直指
+    if view == "alert_done" and data.get("rule_id"):
+        _ctx_for(vid)["last_alert_rules"] = [data["rule_id"]]
+    if view == "schedule_done" and (data.get("job") or {}).get("id"):
+        _ctx_for(vid)["last_sched_jobs"] = [data["job"]["id"]]
 
     # 確認卡記憶：卡片一出現就記（r54 起含完整 data——口語確認代按要用它組
     # confirm payload）。rejected/guide 不清卡（亂聊一句卡片還在畫面上，
@@ -6427,10 +6456,11 @@ async def ws_handler(ws: WebSocket):
                 # ── r32 追問展開：「那個進出紀錄呢」→「無線滑鼠進出紀錄」──
                 # r74：schedule_list 後的「刪掉它」，「它」指的是排程不是 ctx 商品——
                 # 展開會變「刪掉行動電源」誤入商品刪除流程，跳過展開讓刪除閘接手
-                _sd74_skip = (_ctx_for(vid).get("last_view") in ("schedule_list", "alert_list")
+                _sd74_skip = (_ctx_for(vid).get("last_view") in
+                              ("schedule_list", "alert_list", "schedule_done", "alert_done")
                               and _re.fullmatch(
-                                  r"(把|幫我)?(它|這個|那個)?(刪掉|刪除|移除|取消|停掉)"
-                                  r"(它|這個|那個)?(吧|喔|囉|好了)?",
+                                  r"(把|幫我)?(剛加的?|剛剛的?|最新的?)?(它|這個|那個|那條|那筆)?"
+                                  r"(刪掉|刪除|移除|取消|停掉)(它|這個|那個)?(吧|喔|囉|好了)?",
                                   user_text.strip().strip("!！?？。 ")))
                 if not _sd74_skip:
                     user_text = _ctx_expand(vid, user_text)
@@ -6445,9 +6475,10 @@ async def ws_handler(ws: WebSocket):
                         and any(p in user_text for p in _CTX_PRON)
                         and not any(w in user_text for w in _CTX_TIME_WORDS)
                         and not any(w in user_text for w in _CTX_GLOBAL)
-                        # r74：schedule_list/alert_list 後的「刪掉它」指清單項目，
-                        # 讓給刪除閘的排程/警示分支（沒查過商品也成立）
-                        and not (_ctx_for(vid).get("last_view") in ("schedule_list", "alert_list")
+                        # r74：schedule_list/alert_list（r75 +done 態）後的「刪掉它」指
+                        # 清單項目，讓給刪除閘的排程/警示分支（沒查過商品也成立）
+                        and not (_ctx_for(vid).get("last_view") in
+                                 ("schedule_list", "alert_list", "schedule_done", "alert_done")
                                  and any(w in user_text for w in ("刪", "移除", "取消", "停掉")))
                         and not _has_real_item(user_text)):
                     _np_msg = ("請問你想查哪個商品呢？直接說商品名就可以，"
@@ -6559,7 +6590,7 @@ async def ws_handler(ws: WebSocket):
                            r"先走了|我走了|走囉|閃人|告辭|沒事|沒了|下班了?|回家了?|各位|收工")
             _FW_THX_TOK = (r"謝謝你?們?|謝了|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
                            r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了|"
-                           r"差不多了|就到這|先這樣")
+                           r"差不多了|就到這|先這樣|都沒問題|[就先]?巡到這|看到這裡?")
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）
             # r67：+今天/那我/我先（「今天就到這 感謝」）
             _fw_all = _re.fullmatch(
@@ -6663,15 +6694,22 @@ async def ws_handler(ws: WebSocket):
                 # r74：schedule_list/alert_list 畫面後的短刪除句（「刪掉它」）是刪
                 # 排程/警示不是刪商品——曾誤入商品刪除流程回「電動牙刷無法刪除」
                 _lv74 = _ctx_for(vid).get("last_view")
-                _sj74 = (_ctx_for(vid).get("last_sched_jobs") if _lv74 == "schedule_list"
+                _sj74 = (_ctx_for(vid).get("last_sched_jobs")
+                         if _lv74 in ("schedule_list", "schedule_done")
                          else _ctx_for(vid).get("last_alert_rules")) or []
-                if (_lv74 in ("schedule_list", "alert_list")
+                if (_lv74 in ("schedule_list", "alert_list",
+                              "schedule_done", "alert_done")
                         and _sj74 and len(user_text) <= 10):
                     import tools_v2 as _tv2_sd74
-                    _obj74 = "排程" if _lv74 == "schedule_list" else "警示規則"
+                    _sched74 = _lv74 in ("schedule_list", "schedule_done")
+                    _obj74 = "排程" if _sched74 else "警示規則"
+                    # r75：「剛加的那條刪掉」→ 直指最後一筆，不再反問 ID
+                    if (len(_sj74) > 1 and any(w in user_text for w in
+                                               ("剛加", "剛剛", "最新", "最後"))):
+                        _sj74 = [_sj74[-1]]
                     if len(_sj74) == 1:
                         result = (_tv2_sd74.delete_schedule(job_id=_sj74[0])
-                                  if _lv74 == "schedule_list"
+                                  if _sched74
                                   else _tv2_sd74.delete_alert(rule_id=_sj74[0]))
                     else:
                         _q74 = (f"要刪哪一個{_obj74}？目前有 {len(_sj74)} 個，"
@@ -6680,7 +6718,7 @@ async def ws_handler(ws: WebSocket):
                                   "data": {"question": _q74,
                                            "options": list(_sj74), "hint": ""}}
                         _del_select_by_vid[vid] = {
-                            "kind": "sched" if _lv74 == "schedule_list" else "alert",
+                            "kind": "sched" if _sched74 else "alert",
                             "ids": list(_sj74)}
                     log.info(f"[gate-r74] {_lv74} 後刪除句 → {_obj74}刪除 {_sj74}")
                     for ch in result.get("summary", ""):
@@ -6747,6 +6785,12 @@ async def ws_handler(ws: WebSocket):
                 import tools_v2 as _tv2_del_mode
                 _item_delete_state.pop(vid, None)
                 result = _tv2_del_mode.delete_item_start(keyword=user_text.strip())
+                # r75：流程中亂打（「ㄟ奇怪」）曾吐 error frame——換成友善收口
+                if not result.get("ok") or result.get("view") == "error":
+                    _dm_msg = (f"「{user_text.strip()}」不像商品名，先幫你退出刪除流程。"
+                               "要刪商品再說「刪除商品」就可以。")
+                    result = {"ok": True, "view": "clarify", "summary": _dm_msg,
+                              "data": {"question": _dm_msg, "options": [], "hint": ""}}
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(_TK_DELAY.get() * 1.5)
@@ -7169,18 +7213,23 @@ async def ws_handler(ws: WebSocket):
 
             # ── r74：類別總值排行直答（「哪一類最值錢」）——曾誤觸類別身分答
             #   「濕紙巾屬於日用品類」＝答非所問 ──
-            if _re.search(r"(哪一?類|什麼類|哪個?類別).{0,3}(最值錢|最貴|價值最高|總值最高)",
-                          user_text):
+            _cv_m75 = _re.search(r"(哪一?類|什麼類|哪個?類別).{0,3}"
+                                 r"(最值錢|最貴|價值最高|總值最高|最不值錢|最沒價值|"
+                                 r"價值最低|總值最低|最便宜)", user_text)
+            if _cv_m75:
                 import warehouse as _W_cv
                 _cv_s = _W_cv.state()
+                _cv_low = _cv_m75.group(2) in ("最不值錢", "最沒價值", "價值最低",
+                                               "總值最低", "最便宜")
                 _cv_by: dict = {}
                 for _it in _cv_s.items:
                     _q = sum(_cv_s.stock.get(w["key"], {}).get(_it["sku_id"], 0)
                              for w in _cv_s.warehouses)
                     _cv_by[_it["category"]] = (_cv_by.get(_it["category"], 0)
                                                + _it["unit_price"] * _q)
-                _cv_rank = sorted(_cv_by.items(), key=lambda kv: -kv[1])[:3]
-                _cv_sum = ("庫存總值最高的是「"
+                _cv_rank = sorted(_cv_by.items(),
+                                  key=lambda kv: kv[1] if _cv_low else -kv[1])[:3]
+                _cv_sum = (("庫存總值最低的是「" if _cv_low else "庫存總值最高的是「")
                            + _W_cv.CATEGORY_LABEL.get(_cv_rank[0][0], _cv_rank[0][0])
                            + f"類」約 NT$ {_cv_rank[0][1]:,}；其次 "
                            + "、".join(f"{_W_cv.CATEGORY_LABEL.get(c, c)}類 NT$ {v:,}"
@@ -7316,6 +7365,64 @@ async def ws_handler(ws: WebSocket):
                     "ok": True, "view": "guide", "summary": _pm_msg, "data": {}}})
                 continue
 
+            # ── r75：排程查詢短句（「之前設的排程還在嗎」）——clf 常判 no_function
+            #   掉 rejected，直達 list_schedules ──
+            if any(w in user_text for w in ("排程還在", "排程還有", "還有排程",
+                                             "排程狀態", "我的排程")):
+                import tools_v2 as _tv2_sl75
+                result = _tv2_sl75.list_schedules()
+                log.info("[dispatch-ws] 排程查詢直達 → list_schedules")
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": result})
+                continue
+
+            # ── r75：報告/檔案在哪看——曾重跑一次報告（答非所問），直接回最新
+            #   檔案路徑 ──
+            if (any(w in user_text for w in ("在哪", "放哪", "去哪", "哪裡", "哪邊"))
+                    and any(w in user_text for w in ("報告", "報表", "檔案", "csv", "CSV"))
+                    and not any(w in user_text for w in ("產出", "產生", "跑一"))):
+                import tools_v2 as _tv2_rp75
+                _dd75 = _tv2_rp75._data_dir()
+                _cands75 = []
+                for _sub75 in ("reports", "audit"):
+                    _p75 = _dd75 / _sub75
+                    if _p75.exists():
+                        # 只認產出物（md/csv/png）——*.log 是稽核流水不是報告
+                        _cands75 += [(f.stat().st_mtime, f"{_sub75}/{f.name}")
+                                     for f in _p75.iterdir()
+                                     if f.is_file()
+                                     and f.suffix.lower() in (".md", ".csv", ".png")]
+                if _cands75:
+                    _rp_msg = (f"最新產出的檔案在 {max(_cands75)[1]}"
+                               "（伺服器 warehouse_data 資料夾底下）。")
+                else:
+                    _rp_msg = "目前還沒有產出過報告，可以說「產出體檢報告」或「月底盤點」。"
+                log.info(f"[report-where] {user_text!r} → {_rp_msg[:40]}")
+                for ch in _rp_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _rp_msg, "data": {}}})
+                continue
+
+            # ── r75：改價句誠實閘（「價格改成299」）——demo 單價是固定資料，
+            #   不支援改價，曾掉守門員教學文 ──
+            if (any(w in user_text for w in ("價格", "單價", "售價", "定價"))
+                    and any(w in user_text for w in ("改", "調成", "調高", "調低",
+                                                      "設成", "變更", "漲", "降"))
+                    and not any(w in user_text for w in ("安全", "庫存", "警戒", "水位"))):
+                _pp_msg = ("這個 demo 的商品單價是固定資料，不支援改價喔。"
+                           "可以查單價，例如「藍牙耳機一個賣多少」。")
+                log.info(f"[price-gate] {user_text!r} → 不支援改價")
+                for ch in _pp_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _pp_msg, "data": {}}})
+                continue
+
             # ── r74：訂單/預約出貨句（「先看今天要出的單」「有預定出貨嗎」）——
             #   沒有訂單系統，曾回熱銷榜＝答非所問，優雅明說 ──
             if (any(w in user_text for w in ("要出的單", "預定出貨", "預約出貨",
@@ -7418,7 +7525,9 @@ async def ws_handler(ws: WebSocket):
             # ── r74：庫存總值直答（「那看庫存總值」「全店值多少錢」）——過去被
             #   ctx 注入成單品查詢或掉進 60 項概覽，總值問句直接加總回答 ──
             _tv74 = (any(w in user_text for w in ("總值", "總價值", "總市值"))
-                     or _re.search(r"(庫存|全店|全倉|倉庫)[^。]{0,4}值多少", user_text))
+                     # r75：「南倉整體值多少錢」也算總值問句
+                     or _re.search(r"(庫存|全店|全倉|倉庫|整體|[北中南](?:區)?倉)"
+                                   r"[^。]{0,4}值多少", user_text))
             if _tv74 and not any(c in user_text for c in
                                  ("電子", "家電", "廚具", "食品", "飲料", "日用",
                                   "服飾", "運動", "清潔", "嬰兒", "類")):
@@ -7652,6 +7761,12 @@ async def ws_handler(ws: WebSocket):
                 import tools_v2 as _tv2_ci2
                 raw = user_text
                 for kw in _create_item_kws_ws2: raw = raw.replace(kw, "").strip()
+                # r75 危險級：「幫我新增商品」剝掉關鍵字剩「幫我」，曾被當 raw_text
+                # 解析→靜默落到 step1 空名前進→建出商品「」。填充詞剝乾淨，
+                # 剩空字串就老實從第一步開始問
+                for _fw75 in ("幫我", "幫忙", "麻煩", "請", "我要", "我想", "想要",
+                              "一下", "喔", "啊", "吧", "了"):
+                    raw = raw.replace(_fw75, "").strip()
                 result = _tv2_ci2.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci2.create_item_start()
                 if result.get("view") != "item_confirm":
                     d = result.get("data", {})
@@ -8269,7 +8384,9 @@ async def ws_handler(ws: WebSocket):
                                    # r19：「把排程都列出來」曾 clarify 找不到
                                    "排程都列", "列出排程", "排程列出來", "排程清單", "列排程",
                                    # r26：「排程全部列出來」（插字）/「明天有什麼排程」
-                                   "排程全部", "全部排程", "有什麼排程", "排程有哪些", "排程有什麼")
+                                   "排程全部", "全部排程", "有什麼排程", "排程有哪些", "排程有什麼",
+                                   # r75：「之前設的排程還在嗎」曾被 rejected
+                                   "排程還在", "排程還有", "還有排程", "排程狀態", "我的排程")
                 _is_alert_set_ws = any(w in user_text for w in ("新增", "設定", "加入", "建立", "通知我", "提醒我"))
                 if (not _is_alert_set_ws and
                         (any(w in user_text for w in _list_alert_kws) or

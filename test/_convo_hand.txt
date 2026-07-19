@@ -304,3 +304,20 @@
 > 刪掉它 | clarify | 請說 ID
 > 第二個 | alert_delete_confirm | 此動作無法復原
 > 取消 | item_cancelled | 已取消
+
+### hand-r75-新增商品全流程
+> 幫我新增商品 | item_create_step1 | 名字
+> 鑄鐵平底鍋 | item_create_step2
+> 不知道耶 | item_create_step2 | 不是類別
+> 廚具 | item_create_step3 | 家電廚具
+> 480 30 | item_create_step4
+> 20 10 5 | item_confirm | 鑄鐵平底鍋
+> 確認 | item_done | 已新增
+> 鑄鐵平底鍋庫存 | inventory_single | 鑄鐵平底鍋
+> 刪除鑄鐵平底鍋 | item_delete_confirm | 鑄鐵平底鍋
+> 確認刪除 | item_done | 已刪除
+### hand-r75-剛加的警示刪除
+> 加一條 電子產品低於20通知我 | alert_confirm
+> 確認 | alert_done | 警示規則
+> 剛加的那條刪掉 | alert_delete_confirm | 此動作無法復原
+> 確認刪除 | alert_deleted | 已刪除
