@@ -321,3 +321,19 @@
 > 確認 | alert_done | 警示規則
 > 剛加的那條刪掉 | alert_delete_confirm | 此動作無法復原
 > 確認刪除 | alert_deleted | 已刪除
+
+### hand-r76-排程建立與名次出量
+> 本週熱銷排行 | hot_items
+> 第三名上週賣幾件 | movement | 第3名
+> 排程 每週一早上八點匯出進出記錄 | schedule_confirm | 匯出進出記錄
+> 確認 | schedule_done | 已建立
+> 排程列表 | schedule_list
+> 改成每週五 | clarify | 不支援
+> 刪掉它 | schedule_delete_confirm | 此動作無法復原
+> 取消 | item_cancelled | 已取消
+### hand-r76-建議補與寫入不被吞
+> 缺的列出來 | low_stock
+> 第一個缺的補到安全線 要進幾個 | low_stock | 建議補
+> 那就照建議補 中倉進13個電動牙刷 | movement_confirm | 電動牙刷
+> 不對 等等 那批幾件來著 | clarify | 確認
+> 就進13件 確認 | movement_done | 已記錄
