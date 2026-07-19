@@ -54,3 +54,10 @@
 ## 實作落點
 - **寫入三要素閘門**：所有寫入 dispatch 最前面的統一切面，取代散落各處的補 ctx 邏輯。
 - 流程：偵測寫入句 → 抽三要素 → 齊則開卡、缺則 clarify 補問（不猜）→ 搗蛋特徵則拒。
+
+## 自動化守護（r82）
+本契約由 `context_fuzz.py` 的 **write_contract_fuzz** 段機器化守護，每輪必跑：
+- 29 句 × 六類鐵律（full 開卡／miss 追問／nf 查無不頂替／sab 搗蛋拒／lim 比例負數擋／typo 漏打字纠錯）
+- FAIL = 契約違反（CI 擋）；WARN = 可更好但不危險（人工回看）
+- 單獨跑：`python context_fuzz.py --rpi5 --only write`
+- 新增寫入操作或契約規則時，同步在 `WRITE_CASES` 補測試句。
