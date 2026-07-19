@@ -337,3 +337,17 @@
 > 那就照建議補 中倉進13個電動牙刷 | movement_confirm | 電動牙刷
 > 不對 等等 那批幾件來著 | clarify | 確認
 > 就進13件 確認 | movement_done | 已記錄
+
+### hand-r77-查無商品寫入防護（危險級：不拿舊品頂替、查無作廢舊卡）
+> 藍牙耳機庫存 | inventory_single | 耳機
+> 那先補中倉的 進20個保溫瓶 中倉 | clarify | 找不到
+> 確認 | rejected
+> 北倉出30個藍牙耳機 | movement_confirm | 30
+> 中倉進15個保溫瓶 | clarify | 找不到
+> 確認 | not:movement_done
+> 保溫瓶還缺嗎 | clarify | 找不到
+### hand-r77-連帶序數與評論追問
+> 智慧手環的連帶商品 | related | 手環
+> 第一個連帶的庫存 | inventory_single | 連帶第1名
+> 看一下今天進出 | movement
+> 進的比出的多喔 正常嗎 | guide | 正常節奏
