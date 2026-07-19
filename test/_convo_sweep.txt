@@ -8275,3 +8275,24 @@
 > 第一個連帶的庫存 | inventory_single | 連帶第1名
 > 看一下今天進出 | movement
 > 進的比出的多喔 正常嗎 | guide | 正常節奏
+
+### hand-r78-採購單與短收追問
+> 缺貨的開張採購單 | po_confirm
+> 確認 | po_done | PO_draft
+> 剛開的採購單在哪看 | guide | PO_draft
+> 對帳有沒有問題 | agent_rca | 對帳異常
+> 它短收幾件 | agent_rca | 短收
+### hand-r78-安全線生命週期
+> 衛生紙安全線多少 | config_read | 安全庫存
+> 北倉的改成150 | config_confirm | 150
+> 確認 | config_done | 已寫入
+> 改完了嗎 現在北倉多少 | config_read | 150
+> 那全部倉都改150好了 | config_confirm | 全部倉
+> 確認 | config_done
+> 算了算了 改回原本的 | clarify | 沒有記住舊值
+### hand-r78-排程跑一次與第二急
+> 月底盤點什麼時候跑 | schedule_list
+> 現在先跑一次 | script_confirm | 白名單腳本
+> 確認 | script_done
+> 有缺的直接列出來 | low_stock
+> 第二急的是什麼 | low_stock | 第2急
