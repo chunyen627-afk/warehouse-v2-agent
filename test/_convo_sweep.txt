@@ -8325,3 +8325,14 @@
 > 有缺的列出來 | low_stock
 > 照建議補 | movement_confirm | 電動牙刷
 > 確認 | movement_done
+
+### hand-r81-寫入契約（缺量追問、查無不頂替、搗蛋拒）
+> 北倉進滑鼠 | clarify | 幾件
+> 滑鼠北倉進50個 | movement_confirm | 50
+> 北倉進20個保溫瓶 | clarify | 找不到
+> 全部商品歸零 | guide,rejected
+> 把所有商品刪掉 | guide,rejected
+### hand-r81-漏打字友善纠错
+> 衛生只庫存 | inventory_single | 衛生紙
+> 藍芽耳機庫存 | inventory_single | 藍牙
+> 瑜迦墊庫存 | inventory_single | 瑜珈墊

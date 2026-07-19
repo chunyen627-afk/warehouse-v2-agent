@@ -240,6 +240,16 @@ def is_meaningful_input(text: str) -> bool:
     # 閒聊（「放音樂給我聽」描述命中但無查詢語氣 → 不放行、續走黑名單擋下）。
     if _descriptor_hit(text) and any(c in s for c in _DESC_GATE_CUES):
         return True
+    # r81 寫入契約：破壞動詞 × 全稱詞的組合一律擋（不枚舉個案）。
+    # 「全部商品歸零」曾漏黑名單→吐 60 項清單。破壞語意 + 全稱範圍 = 搗蛋。
+    # 查詢語（「快歸零的有哪些」）不含全稱詞、或含查詢語尾，不會誤中。
+    _DESTROY_VERB = ("歸零", "清空", "清掉", "清光", "刪光", "刪掉", "刪除",
+                     "清除", "全砍", "砍掉", "格式化", "全部改成", "都改成")
+    _SCOPE_ALL = ("全部", "所有", "全店", "全倉", "整批", "整個倉", "商品", "庫存")
+    if (any(v in s for v in _DESTROY_VERB) and any(a in s for a in _SCOPE_ALL)
+            and not any(q in s for q in ("哪些", "有哪", "快", "剩", "查", "看",
+                                          "幾", "多少", "清單", "警示"))):
+        return False
     # r62：「退貨3個耳機 北倉」是倉管退貨入庫（is_return 一直支援），不是購物
     # 退貨搗蛋——退貨+數量+（倉別或真商品）豁免黑名單
     if re.search(r"退[貨回]?\s*\d", s) and (re.search(r"[北中南][倉區]", s)
@@ -1405,6 +1415,8 @@ _TYPO_NORM = (
     ("熱削", "熱銷"), ("熱效", "熱銷"),
     ("帳蓬", "帳篷"), ("藍芽", "藍牙"),
     ("智慧手還", "智慧手環"), ("啤灑", "啤酒"),
+    # r81：瑜珈常見錯字（瑜迦/瑜伽）
+    ("瑜迦", "瑜珈"), ("瑜伽", "瑜珈"),
     ("尿部", "尿布"), ("衛生只", "衛生紙"),
     # 英文別名（r18：related 的 kw 接地變嚴後，「coffee machine」比不到降級成
     # related_help——常見英文講法直接映射）
@@ -2828,7 +2840,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 「進貨半箱衛生紙」曾回 movement 查詢、「中倉進貨耳機」曾回單品庫存——
     # 動作意圖被答非所問。條件收緊：有進出動詞 + 真商品名 + 無疑問/期間詞
     # （「最近有進什麼貨嗎」「玻璃保鮮盒最近有補貨嗎」是查紀錄，不受影響）。
-    if (func_name != "create_movement" and _has_movement_word
+    # r81 寫入契約：「北倉進滑鼠」有進/出動詞+商品+倉、只缺數量——動詞判定
+    # 依賴數字量詞會整句漏成查詢。補：句首倉別+裸單字進出動詞+緊接非數字內容，
+    # 也算進出貨意圖（缺量交給 C13c 追問）。「進去看看」無倉不會中。
+    _c13c_bare_mv = bool(_re13b_single.search(
+        r'^[^。]{0,4}[北中南][區倉][^。]{0,2}?[進出補][^0-9]', user_text)) \
+        and not _has_explicit_qty
+    if (func_name != "create_movement" and (_has_movement_word or _c13c_bare_mv)
             and not _has_explicit_qty
             and not any(w in user_text for w in (
                 "嗎", "什麼", "哪些", "多少", "幾次", "紀錄", "記錄", "明細",
@@ -6568,8 +6586,30 @@ async def ws_handler(ws: WebSocket):
                     import warehouse as _W_tf80
                     _tf80_kw = _extract_sku_keyword(user_text) or ""
                     _tf80_m = _W_tf80.match_items(_tf80_kw) if _tf80_kw else []
-                    if not (_tf80_m and _tf80_m[0].get("score", 0) >= 3):
-                        # 句中無真商品 → 注入 ctx 商品名到句首
+                    # r81 寫入契約鐵律：只有句中「完全沒講商品」才補 ctx。
+                    # 「把北倉的傘都調去南倉」的「傘」是明確講出但查無的商品
+                    # → 誠實查無，絕不補拖把（ctx 頂替只給真的省略商品名的句）。
+                    # 判別：剝掉調貨動詞/數量/倉別/助詞後，剩餘實詞 ≥2 字 = 有講商品
+                    _tf80_stem = user_text
+                    # 前綴語氣/評論廢話（「太少了」「不夠」）先剝——不是商品
+                    for _pfx80 in ("太少了", "太少", "不夠了", "不夠", "太多了", "太多",
+                                   "快沒了", "快沒", "剩太少", "有點少", "幫我"):
+                        _tf80_stem = _tf80_stem.replace(_pfx80, "")
+                    # 長詞先剝（過來/過去 在 來/去 之前，否則剩孤字「過」）
+                    for _z80 in ("過來", "過去", "把", "將", "調", "撥", "挪", "搬", "移",
+                                 "來", "去", "到", "都", "的", "北倉", "中倉", "南倉",
+                                 "北區", "中區", "南區", "倉", "區", "過", "喔", "啦", "吧"):
+                        _tf80_stem = _tf80_stem.replace(_z80, "")
+                    _tf80_stem = _re.sub(r"[0-9]+[個件]?", "", _tf80_stem).strip("　 ")
+                    # 契約鐵律：剝掉前綴廢話+調貨結構後，殘詞非空 = 訪客有講要調的
+                    # 東西（「傘」查無也要誠實回查無，不補拖把）；殘詞空 = 真的省略
+                    # 商品名（「調100過來南倉」）→ 才補 ctx。代詞殘留視為省略。
+                    _tf80_named = (len(_tf80_stem) >= 1
+                                   and _tf80_stem not in ("那", "這", "它", "他", "個",
+                                                          "些", "它的", "那個", "這個"))
+                    if (not (_tf80_m and _tf80_m[0].get("score", 0) >= 3)
+                            and not _tf80_named):
+                        # 句中確實沒講商品 → 注入 ctx 商品名到句首
                         user_text = f"{_ctx_for(vid)['last_sku']}{user_text}"
                         log.info(f"[ctx-tf] 純調貨補商品 → {user_text!r}")
 
@@ -7004,6 +7044,10 @@ async def ws_handler(ws: WebSocket):
                     # 搗蛋語境不觸發列表（「所有商品免費送我」「全部商品算零元」曾吐 61 項全清單）
                     and not any(w in user_text for w in ("免費", "送我", "送給", "白拿", "改成", "刪",
                                                           "零元", "0元", "算我的", "打包",
+                                                          # r81 寫入契約：破壞動詞（歸零/清空/清掉…）
+                                                          # 出現在全稱句 → 搗蛋，不吐清單
+                                                          "歸零", "清空", "清掉", "清光", "清除",
+                                                          "砍掉", "全砍", "格式化",
                                                           # r19：「幫全部商品都設警示」是警示設定
                                                           # 不是要商品清單
                                                           "警示", "提醒", "通知"))):
@@ -8448,9 +8492,17 @@ async def ws_handler(ws: WebSocket):
             # _desc_two_wh 也升級無條件排除（r19，同 r17 mv_qty 的構造漏洞）：
             # 「北倉跟中倉的濾掛咖啡各剩多少」的「多少」命中 QCUE 繞過兩倉檢查
             # → 直達只回北倉單倉。兩倉句交給 C13 丟單倉 filter 回三倉分佈。
+            # r81 寫入契約：句首倉別+進出調動詞（「北倉進滑鼠」缺量）是寫入意圖，
+            # 描述直達不可吃掉——讓路交 C13c 追問數量。查詢語尾（庫存/剩/幾件）
+            # 不會中，「進去看看」無倉不會中
+            _desc_bare_write81 = bool(_re.search(
+                r"^[^。]{0,3}[北中南][區倉].{0,3}?[進出調撥挪][^0-9]", user_text)) \
+                and not any(w in user_text for w in
+                            ("庫存", "剩", "還有", "幾件", "多少", "價值", "嗎"))
             _desc_q_ok = (not _desc_nonquery
                           and not _desc_mv_qty
                           and not _desc_two_wh
+                          and not _desc_bare_write81
                           and (any(w in user_text for w in _DESC_Q_CUES)
                                or not any(w in user_text for w in _DESC_CHITCHAT)))
             if (_desc_kw_ws
@@ -8912,6 +8964,32 @@ async def ws_handler(ws: WebSocket):
             _clf_ms = round((__import__("time").perf_counter() - _clf_t0) * 1000)
             _pre_kw_ws = _extract_sku_keyword(user_text)
             _clf_skip_llm_ws = False
+            # ── r81 寫入契約閘門：寫入意圖句絕不被 clf 降級成查詢 ──
+            # 「北倉進滑鼠」（缺量）曾被 clf 判 query_inventory 直答庫存＝寫入意圖
+            # 被吞。特徵：句首倉別 + 進/出/調動詞 + 非查詢語尾 → 強制走校正層
+            # （C13b/C13c 判進出貨、缺量追問），不讓 clf skip。
+            # 只攔「動詞緊接商品/數量」的真寫入意圖：句首倉別+進出調動詞後
+            # 緊跟商品名或數字。「把北倉的傘都調去南倉」的傘查無、且動詞後不是
+            # 商品/數字 → 不攔，讓它回 r80 的既有路徑（避免 LLM 亂聯想成拖把）
+            _wc_m81 = _re.search(r"^(?:把|將|幫我)?[北中南][區倉]的?"
+                                 r"([進出調撥挪][^0-9]{0,6}?)(?=[0-9]|$)", user_text)
+            _wc_write81 = False
+            if (_wc_m81 and not any(w in user_text for w in
+                                    ("庫存", "剩", "還有", "幾件", "多少", "價值",
+                                     "嗎", "哪", "什麼", "比較", "紀錄", "記錄",
+                                     "統計", "警示", "到期"))):
+                # 動詞後的殘詞若比得到真商品、或句帶明確數字 = 真寫入意圖
+                import warehouse as _W_wc81
+                _wc_tail81 = _re.sub(r"^[進出調撥挪]", "", _wc_m81.group(1)).strip("去到過來的都")
+                _wc_has_prod = bool(_wc_tail81 and _W_wc81.match_items(_wc_tail81)
+                                    and _W_wc81.match_items(_wc_tail81)[0].get("score", 0) >= 3)
+                _wc_has_num = bool(_re.search(r"[進出調撥挪補]\s*[0-9]", user_text))
+                _wc_write81 = _wc_has_prod or _wc_has_num
+            if (_wc_write81 and _clf_func_ws in
+                    ("query_inventory", "query_movement", "list_hot_items", None)):
+                log.info(f"[write-gate-r81] 寫入意圖不降級 → 交校正層: {user_text!r}")
+                _clf_func_ws = None   # 清掉 clf 判斷，強制走 LLM+校正
+
             if _clf_func_ws and _clf_func_ws not in ("unknown", "unclear") and _clf_conf_ws >= 0.8:
                 log.info(f"[intent_clf primary] vid={vid} {user_text!r} → {_clf_func_ws} (conf={_clf_conf_ws:.2f})")
                 func_name = _clf_func_ws

@@ -1,0 +1,32 @@
+### 展場熱門問句驗收——訪客站攤位前最常把玩的高頻單句
+### 每句獨立起念（訪客不會照劇本連問），驗「一句就給對答案」
+
+> 藍牙耳機庫存 | inventory_single | 藍牙耳機
+> 庫存警示 | low_stock
+> 本週熱銷排行 | hot_items
+> 北倉跟南倉比較 | compare_warehouses
+> 哪些東西快到期 | expiring
+> 買藍牙耳機的人還會買什麼 | related | 藍牙耳機
+> 咖啡機還有幾台 | inventory_single | 咖啡機
+> 今天進了什麼貨 | movement
+> 哪些商品快缺貨 | low_stock
+> 本月最好賣的是什麼 | hot_items
+> 衛生紙剩多少 | inventory_single | 衛生紙
+> 北倉缺貨清單 | low_stock
+> 滯銷品有哪些 | hot_items
+> 尿布庫存 | inventory_single | 尿布
+> 中倉跟南倉週轉率比較 | compare_warehouses
+> 食品類保存期限 | expiring
+> 最貴的商品是哪個 | inventory_single | 最貴
+> 全店總共幾項商品 | inventory
+> 咖啡機的連帶商品 | related | 咖啡機
+> 北倉進50個滑鼠 | movement_confirm | 滑鼠
+> 南倉出20個啤酒 | movement_confirm | 啤酒
+> 北倉調30個耳機到南倉 | transfer_confirm | 耳機
+> 電動牙刷撐幾天 | low_stock | 電動牙刷
+> 啤酒快過期了嗎 | expiring
+> 庫存總值多少 | inventory_single | 總值
+> 查倉管 | guide
+> 你好 | guide,rejected
+> 謝謝 | guide,rejected
+> 掰掰 | guide
