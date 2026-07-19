@@ -8296,3 +8296,15 @@
 > 確認 | script_done
 > 有缺的直接列出來 | low_stock
 > 第二急的是什麼 | low_stock | 第2急
+
+### hand-r79-裸數字寫入與比例（危險邊緣：無量詞寫入不可被查詢吞）
+> 出9999個衛生紙 北倉 | error | 庫存不足
+> 沒那麼多喔 那全出 | clarify | 換算
+> 好啦出400就好 北倉出400衛生紙 | movement_confirm | 400
+> 確認 | movement_done
+> 北倉衛生紙剩幾包 | inventory_single | 衛生紙
+### hand-r79-最操倉與缺貨序數
+> 幫我比北中南三個倉哪個最操 | compare_warehouses | 週轉
+> 北倉缺的前三個列出來 | low_stock
+> 第三個補到安全線要幾個 | low_stock | 建議補
+> 好 那先不補 | clarify | 沒問題

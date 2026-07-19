@@ -1073,6 +1073,11 @@ _REWRITE_RULES: list[tuple] = [
                                                                     "查看警示規則"),
     (_re.compile(r"(目前|現在).*(警示|告警)"),                      "查看警示規則"),
 
+    # ── r79：最操倉/待辦/處理完 口語 ──
+    (_re.compile(r"(哪個?倉|北中南|三個?倉)[^。]{0,6}最[操忙累]"),   "各倉週轉率比較"),
+    (_re.compile(r"(還有什麼|有什麼)要處理|要處理的事?"),            "庫存警示"),
+    (_re.compile(r"^都?(處理|弄|搞定)完了?嗎[?？]?$"),              "哪些商品缺貨警示"),
+
     # ── r78：對帳/盤點排程/改回 口語 ──
     (_re.compile(r"^(對帳|帳目)(有沒有|有無)(問題|異常|對不上)?[?？]*$"), "採購對帳異常"),
     (_re.compile(r"(盤點|匯出|報告)[^。]{0,4}(什麼時候|何時|幾點)(跑|執行|會跑)?"),
@@ -2663,6 +2668,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _movement_in_words = _movement_in_words + (_single_dir_m.group(0),)
         else:
             _movement_out_words = _movement_out_words + ("出",)
+    # r79 危險邊緣：動詞+裸數字（「北倉出400衛生紙」沒帶量詞）也是進出貨——
+    # 曾被查詢直答/庫存卡吞掉。排除日期形（出12月報表），且要求句帶倉名保精度
+    if not _has_movement_word:
+        _bare_dir_m79 = _re13b_single.search(
+            r'[進出補](?=\s*[0-9]{1,6}(?![0-9]*[月日號點樓年%．\.]))', user_text)
+        if _bare_dir_m79 and _re13b_single.search(r'[北中南][區倉]', user_text):
+            _has_movement_word = True
+            if _bare_dir_m79.group(0) in ("進", "補"):
+                _movement_in_words = _movement_in_words + (_bare_dir_m79.group(0),)
+            else:
+                _movement_out_words = _movement_out_words + ("出",)
     # 數字開頭的反向詞序（r18：「30個耳機進北倉」——方向詞在商品後、倉名前，
     # 上面的 lookahead 只往後看抓不到）：數量+量詞+商品+進/出+倉名 一樣是進出貨
     if not _has_movement_word:
@@ -2712,6 +2728,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 「數量35」這種無量詞寫法（「南倉補進來一批防蚊液 數量35」，conv100-r7）
     if not _qty13b_m:
         _qty13b_m = _re13b_pre.search(r'數量\s*([0-9]+)', user_text)
+    # r79：動詞緊跟裸數字（「北倉出400衛生紙」）——量詞省略形，排除日期
+    if not _qty13b_m:
+        _qty13b_m = _re13b_pre.search(
+            r'[進出補調]\s*([0-9]{1,6})(?![0-9]*[月日號點樓年%．\.])', user_text)
     # 中文數字要能真的轉成整數才算數（避免「幾個」的「幾」等非數字被誤收）
     _qty13b_int = _cn_to_int(_qty13b_m.group(1)) if _qty13b_m else None
     # r26：0 件是無效異動量 → 當數量不明追問（「出貨0個耳機」曾先問倉別）
@@ -5012,7 +5032,8 @@ _ABORT_WORDS = ("取消", "算了", "不用了", "不要了", "我不要", "先�
                 "不用查", "不查了", "不用了啦", "退出", "離開", "結束", "停止",
                 "放棄", "當我沒說", "沒事了", "不管了", "先不用", "不繼續", "不做了",
                 "不用補", "不補了",   # r71：「那不用補囉」曾被 ctx 當查詢回庫存
-                "不管它", "不理它", "隨它")   # r73：「還很多啊 那不管它」曾回庫存
+                "不管它", "不理它", "隨它",   # r73：「還很多啊 那不管它」曾回庫存
+                "先不補")   # r79：「好 那先不補」曾回庫存卡
 
 
 # 「取消所有排程」「取消瑜珈墊的警示」是**管理指令**不是放棄——有明確對象詞就豁免
@@ -6727,7 +6748,7 @@ async def ws_handler(ws: WebSocket):
             _FW_THX_TOK = (r"謝謝你?們?|謝了|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
                            r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了|"
                            r"差不多了|就到這|先這樣|都?沒問題|[就先]?巡到這|看到這裡?|"
-                           r"ok瞭解|okay|ok|瞭解|我?知道了")
+                           r"ok瞭解|okay|ok|瞭解|我?知道了|就[醬降]")
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）
             # r67：+今天/那我/我先（「今天就到這 感謝」）
             _fw_all = _re.fullmatch(
@@ -7684,7 +7705,7 @@ async def ws_handler(ws: WebSocket):
                     "data": {"question": _tl_msg, "options": [], "hint": ""}}})
                 continue
             # 清空/比例式出貨（「全部的衛生紙都出掉」「衛生紙出一半」）→ 不猜數量
-            if (any(w in user_text for w in ("出掉", "出光", "清光")) or
+            if (any(w in user_text for w in ("出掉", "出光", "清光", "全出", "全部出")) or
                     (_re.search(r"出", user_text)
                      and any(w in user_text for w in ("全部", "全都", "通通", "整批", "一半", "一部分")))) \
                     and not any(w in user_text for w in ("庫存", "警示", "排行", "統計",
@@ -8321,6 +8342,9 @@ async def ws_handler(ws: WebSocket):
                 r"[進出退補來調撥挪移轉送到][一-鿿\s]{0,8}(?:[0-9]+\.[0-9]+|[0-9]+|[零一二兩三四五六七八九十百千萬億半]+)\s*"
                 r"(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞|打|手)",
                 user_text) or _re.search(
+                # r79 危險邊緣：「北倉出400衛生紙」沒帶量詞曾漏判——寫入動詞
+                # 緊跟裸數字也是寫入句，不可被描述直達吞
+                r"[進出退補調撥挪]\s*[0-9]{1,6}", user_text) or _re.search(
                 r"[進出退補來調撥挪移轉送到]\s*(?:個)?\s*(?:十幾|十來|幾)\s*"
                 r"(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|打)", user_text)
             # ↑ r22b：「幾」從主結構移出後（「出門充電的還有幾個」曾被誤殺），
