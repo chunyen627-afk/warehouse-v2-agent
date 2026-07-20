@@ -1481,6 +1481,16 @@ def _normalize_typos(user_text: str) -> str:
     _m_fix = _re_fix.match(r"^[^，,。]{1,10}?[…\.]*\s*(?:不對|不是啦|不是)[ ，,是]+(.{3,})$", t)
     if _m_fix:
         t = _m_fix.group(1)
+    # r82：反向口誤更正「Y啦不是X」——正確商品在前（「咖啡豆啦不是咖啡機」要咖啡豆）。
+    # 前段 2-8 字＋「啦/才對」＋「不是/不對」＋後段 → 取前段 Y
+    _m_fix2 = _re_fix.match(r"^(?:呃|欸|喔|唉|啊)?\s*(.{2,8}?)(?:啦|才對|才對啦|對啦)?"
+                            r"\s*(?:不是|不對)\s*.{2,10}$", t)
+    if _m_fix2 and not _m_fix:
+        import warehouse as _W_fix2
+        _fix2_kw = _m_fix2.group(1).strip()
+        if _fix2_kw and _W_fix2.match_items(_fix2_kw) and \
+                _W_fix2.match_items(_fix2_kw)[0].get("score", 0) >= 3:
+            t = _fix2_kw
     for _bad, _good in _TYPO_NORM:
         if _bad in t:
             t = t.replace(_bad, _good)
@@ -6613,6 +6623,23 @@ async def ws_handler(ws: WebSocket):
                         user_text = f"{_ctx_for(vid)['last_sku']}{user_text}"
                         log.info(f"[ctx-tf] 純調貨補商品 → {user_text!r}")
 
+                # ── r82 危險級：代詞寫入句（「北倉那個補一下 進20」）——「那個」
+                #   指剛查的商品，用 ctx last_sku 替換代詞，避免 C13b 抽不到真商品
+                #   後 fuzzy 亂中低分商品開錯卡（蚊香被誤補）。寫入代詞補全安全
+                #   （訪客明確指上一個）；無 ctx 則不動、讓後續誠實查無 ──
+                _pw82 = _re.search(r"(那個|這個|那支|這支|那款|這款|那批)\s*"
+                                   r"[^。]{0,4}?[進出補調撥挪]\s*[0-9]", user_text)
+                if _pw82 and _ctx_for(vid).get("last_sku"):
+                    import warehouse as _W_pw82
+                    # 句中若已有真商品名就不替（避免「北倉那個藍牙耳機補20」誤動）
+                    _pw82_kw = _extract_sku_keyword(user_text) or ""
+                    _pw82_has = (_pw82_kw and _W_pw82.match_items(_pw82_kw)
+                                 and _W_pw82.match_items(_pw82_kw)[0].get("score", 0) >= 3)
+                    if not _pw82_has:
+                        user_text = user_text.replace(_pw82.group(1),
+                                                      _ctx_for(vid)["last_sku"], 1)
+                        log.info(f"[ctx-pron-write] 代詞寫入補商品 → {user_text!r}")
+
                 # r65：行內糾錯（「出10個 打錯 是出20個」）→ 先化簡成更正後的量，
                 # 再交給 ctx 展開補商品/倉（rewrite 表跑在展開之後，來不及）
                 _corr65 = _re.fullmatch(
@@ -6674,7 +6701,13 @@ async def ws_handler(ws: WebSocket):
                                   r"(它|這個|那個|那條|那筆)?"
                                   r"(刪掉|刪除|移除|取消|停掉|刪了)(它|這個|那個)?(吧|喔|囉|好了)?",
                                   user_text.strip().strip("!！?？。 ")))
-                if not _sd74_skip:
+                # r82：招呼句（「安安 剛剛做到哪」）不可被 ctx_expand 把「做到哪」
+                # 當追問展開成「電動牙刷做到哪」——招呼開頭即跳過展開，讓下方
+                # 招呼 gate 接手
+                _greet_skip82 = bool(_re.match(
+                    r"^(哈囉|嗨+|hi|hello|安安|你好|大家好|早+)[啊呀!！~～\s]",
+                    user_text.strip(), _re.IGNORECASE))
+                if not _sd74_skip and not _greet_skip82:
                     user_text = _ctx_expand(vid, user_text)
 
                 # r33：一進門就用代詞追問（沒有上一輪可指）→ 過去回全店統計/60 項概覽，
@@ -6799,10 +6832,17 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # r76：招呼開場（「哈囉開店啦」）曾掉「沒有這個商品」醜 clarify
-            if _re.fullmatch(r"(哈囉|嗨+|hi|hello|安安|你好|大家好|早+)[啊呀!！~～\s]*"
-                             r"(開店|開工|上班|來了|開始)?[啦囉了喔吧]?",
-                             user_text.strip().strip("!！?？。 "), _re.IGNORECASE):
-                _gr_msg = ("早安！我是倉管助理。要不要先看「庫存警示」或「本週熱銷排行」？"
+            _gr_m82 = _re.fullmatch(
+                r"(哈囉|嗨+|hi|hello|安安|你好|大家好|早+)[啊呀!！~～\s]*"
+                r"(開店|開工|上班|來了|開始)?[啦囉了喔吧]?"
+                # r82：招呼+問進度（「安安 剛剛做到哪」）——demo 無 session 記憶
+                r"(\s*剛剛?做到哪|\s*做到哪了?|\s*剛剛?做啥|\s*上次做到哪)?",
+                user_text.strip().strip("!！?？。 "), _re.IGNORECASE)
+            if _gr_m82:
+                _gr_prog = bool(_gr_m82.group(3))
+                _gr_msg = (("嗨！這個 demo 每次都是全新開始（不保留上次操作）。"
+                            "要看「庫存警示」還是「本週熱銷排行」？") if _gr_prog else
+                           "早安！我是倉管助理。要不要先看「庫存警示」或「本週熱銷排行」？"
                            "也可以直接問，例如「藍牙耳機庫存」。")
                 log.info(f"[greet] {user_text!r} → 招呼回覆")
                 for ch in _gr_msg:
@@ -7602,6 +7642,56 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": result})
                 continue
 
+            # ── r82：營收/毛利/賺多少 誠實閘——demo 只有出貨量與熱銷榜營收，
+            #   沒有成本/毛利資料 ──
+            if (any(w in user_text for w in ("賺多少", "賺了多少", "毛利", "淨利",
+                                              "利潤", "獲利", "賺錢嗎"))
+                    and not any(w in user_text for w in ("熱銷", "排行", "賣最"))):
+                _rev_msg = ("這個 demo 沒有成本/毛利資料，能看的是出貨量與營收——"
+                            "例如「本週熱銷排行」每名都帶營收，或「庫存總值」。")
+                log.info(f"[revenue-gate] {user_text!r} → 無毛利資料")
+                for ch in _rev_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _rev_msg, "data": {}}})
+                continue
+
+            # ── r82：倉別總值佔比（「北倉佔比咧」「中南倉勒」）——接在總值後 ──
+            _ratio82 = _re.search(r"([北中南]{1,3})(?:區)?倉?[^。]{0,2}(佔比|占比|比重|佔幾成)",
+                                  user_text)
+            if (_ratio82 or (_re.fullmatch(r"[北中南]{1,3}(?:區)?倉?[的]?[咧勒呢]?",
+                                           user_text.strip())
+                             and (_ctx_for(vid).get("_last_ratio")
+                                  or (_ctx_for(vid).get("last_view") == "inventory_single"
+                                      and "總值" in (_ctx_for(vid).get("_cur_text") or ""))))):
+                import warehouse as _W_r82
+                _r82_s = _W_r82.state()
+                _r82_vals, _r82_tot = {}, 0
+                for _wh in _r82_s.warehouses:
+                    _v = sum(_r82_s._items_by_sku[sk]["unit_price"] * q
+                             for sk, q in _r82_s.stock.get(_wh["key"], {}).items()
+                             if sk in _r82_s._items_by_sku)
+                    _r82_vals[_wh["key"]] = (_wh["label"], _v)
+                    _r82_tot += _v
+                _ctx_for(vid).pop("_last_ratio", None)   # 用完即清，不殘留污染
+                _r82_zh = {"北": "north", "中": "central", "南": "south"}
+                _r82_ask = [_r82_zh[z] for z in "北中南"
+                            if z in (user_text)] or list(_r82_vals.keys())
+                _r82_parts = [f"{_r82_vals[k][0]} {_r82_vals[k][1] * 100 // _r82_tot}%"
+                              f"（NT$ {_r82_vals[k][1]:,}）"
+                              for k in _r82_ask if k in _r82_vals]
+                _r82_msg = "各倉庫存總值佔比：" + "、".join(_r82_parts) + "。"
+                _ctx_for(vid)["_last_ratio"] = True   # r82：讓「中南倉勒」接續佔比
+                log.info(f"[dispatch-ws] 倉別佔比直答: {_r82_ask}")
+                for ch in _r82_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "inventory_single", "summary": _r82_msg,
+                    "data": {}}})
+                continue
+
             # ── r80：單一類別總值直答（「電子類總值多少」）——曾掉今天進出統計 ──
             _catv80 = _re.search(r"(電子|家電|廚具|食品|飲料|日用|服飾|運動)"
                                  r"(產品|用品|品)?類?[^。]{0,4}(總值|總價值|值多少)",
@@ -7684,7 +7774,9 @@ async def ws_handler(ws: WebSocket):
                     and (_re.search(r"[補進].{0,4}幾|補到安全|要[補進]多少|建議補多少",
                                     user_text)
                          # r78：「第二急的是什麼」身分形也接
-                         or _re.search(r"是什麼|是誰|是哪個|是哪一個", user_text))
+                         # r82：「第一個是啥」（缺貨清單後追問榜首）——啥/哪一項
+                         or _re.search(r"是什麼|是誰|是哪個|是哪一個|是啥|哪一項|是哪項",
+                                       user_text))
                     and not _re.search(r"[進出調補]\s*\d", user_text)):
                 import warehouse as _W_ls76
                 _ls76_res = _W_ls76.list_low_stock()
