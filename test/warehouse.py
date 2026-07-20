@@ -26,6 +26,90 @@ from typing import Any
 _log = logging.getLogger("warehouse")
 
 # ────────────────────────────────────────────────
+# 發音容錯層（語音 POC）：字形 match 失敗時的救底。
+#   背景：語音 ASR 錯字多為「同音字形遠」（滑鼠→華數、藍牙耳機→藍雅爾基），
+#   字形 LCS 救不到；注音輸入的同音選錯字同理。→ 轉拼音（去聲調）比對商品
+#   核心名，發音夠像就救回。業界正解（2024-2025 中文 ASR 糾錯論文共識）。
+#   ⚠️ 只在字形完全失敗時跑（字形優先、發音救底，誤配風險低），零回歸。
+#   pypinyin 是純 Python 套件；載入失敗（未裝）則整層靜默停用，不影響字形。
+import difflib as _difflib
+
+try:
+    from pypinyin import lazy_pinyin as _lazy_pinyin
+
+    def _py(s: str) -> str:
+        return "".join(_lazy_pinyin(s))
+    _PHONETIC_ON = True
+except ImportError:
+    _PHONETIC_ON = False
+
+    def _py(s: str) -> str:  # noqa
+        return ""
+
+# 商品核心名拼音快取（首次用時建，商品固定不變）
+_ITEM_PY_CACHE: dict | None = None
+_GENERIC_PREFIX = ("無線", "全自動", "運動", "精釀", "嬰兒", "三層抽取", "機能")
+
+
+def _build_item_py(items) -> dict:
+    """建 {核心名拼音: item}——核心名去通用前綴，讓「華數」對得到「滑鼠」。"""
+    tbl = {}
+    for it in items:
+        core = it["name"].split()[0]
+        for pfx in _GENERIC_PREFIX:
+            if core.startswith(pfx) and len(core) > len(pfx) + 1:
+                core = core[len(pfx):]
+                break
+        cjk = "".join(c for c in core if "一" <= c <= "鿿")
+        if len(cjk) >= 2:
+            tbl.setdefault(_py(cjk), it)
+    return tbl
+
+
+def _phonetic_match(keyword: str, items) -> list[dict]:
+    """字形失敗的發音救底。句中滑窗轉拼音比對商品核心名拼音，夠像就回。
+    回 [{item, score}]（score 給 3，過門檻但不搶字形正解）。"""
+    global _ITEM_PY_CACHE
+    if not _PHONETIC_ON or not keyword:
+        return []
+    # ⚠️ 觸發條件從嚴（守衛回歸教訓）：發音層只救「乾淨短查詢詞」，
+    # 絕不碰「帶雜訊的寫入句」——寫入句 keyword 字形本就低分，拿去發音比對
+    # 會亂配商品、打壞進出貨判定（63 條守衛 FAIL）。
+    #   ①含寫入動詞/倉別/供應鏈詞 → 這是寫入句，不救（交 C13b 開卡流程）
+    #   ②含數字（量詞）→ 寫入句特徵，不救
+    #   ③純中文詞太長（>6 字）→ 不是單純商品名，多半夾雜句子，不救
+    _WRITE_NOISE = ("進", "出", "調", "撥", "挪", "搬", "移", "補", "收", "送",
+                    "卸", "囤", "領", "發", "退", "供應商", "廠商", "客戶",
+                    "客人", "顧客", "到了", "剛", "台", "盒", "包", "支", "瓶",
+                    "罐", "組", "個", "件", "批")
+    if any(w in keyword for w in _WRITE_NOISE):
+        return []
+    if any(c.isdigit() for c in keyword):
+        return []
+    cjk = "".join(c for c in keyword if "一" <= c <= "鿿")
+    if len(cjk) < 2 or len(cjk) > 6:
+        return []
+    if _ITEM_PY_CACHE is None:
+        _ITEM_PY_CACHE = _build_item_py(items)
+    kw_py = _py(cjk)
+    best_it, best_score = None, 0.0
+    for it_py, it in _ITEM_PY_CACHE.items():
+        # 滑窗：核心名拼音 vs keyword 拼音的最佳對齊相似度
+        r = _difflib.SequenceMatcher(None, it_py, kw_py).ratio()
+        # 核心名拼音是 keyword 拼音的近似子串 → 高分（華數 huashu ⊂ 句拼音）
+        if it_py and it_py in kw_py:
+            r = max(r, 0.95)
+        if r > best_score:
+            best_it, best_score = it, r
+    # 門檻 0.82：夠像才救（同音≈1.0、音近≈0.85）；太低會誤配
+    if best_it and best_score >= 0.82:
+        _log.info(f"[phonetic] 字形失敗 → 發音救回「{best_it['name']}」"
+                  f"（{kw_py} ≈ {best_score:.2f}）")
+        return [{"item": best_it, "score": 3}]
+    return []
+
+
+# ────────────────────────────────────────────────
 # v2 資料來源開關：seed（單檔，相容 v1）/ multi（warehouse_data/ 多檔）
 #   環境變數 WAREHOUSE_DATA_MODE 控制；預設 multi（v2 上線取代 v1）。
 # ────────────────────────────────────────────────
@@ -406,6 +490,12 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
             results.append({"item": it, "score": score})
 
     results.sort(key=lambda r: -r["score"])
+    # 發音救底（語音 POC）：字形完全失敗（無結果或最高分 <3）→ 轉拼音比對。
+    # 字形優先，只有字形救不到才用發音，零回歸；含 category 過濾也適用。
+    if not results or results[0]["score"] < 3:
+        _ph = _phonetic_match(keyword, items)
+        if _ph:
+            return _ph
     return results
 
 
