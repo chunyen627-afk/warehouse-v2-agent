@@ -700,6 +700,10 @@ _DESC_NONQUERY_INTENT = (
     "進了", "進貨", "到貨", "收貨", "入庫", "補了", "補貨", "來貨", "收了",
     "送來", "送到", "卸了", "卸貨", "入了", "囤了", "囤貨", "補上", "補進",
     "補齊", "收到", "收一批", "入倉", "上架", "新到", "收進", "剛進", "叫",
+    # r92：「加」是展場自然講法（「北倉加五十個滑鼠」）。這裡是描述直達的
+    #   排除表——不加的話句子會在 C13b 之前就被判成庫存查詢。
+    #   歧義由 C13b 的 _add_ok 把關（安全庫存/加起來等語境不算進貨）。
+    "加",
     # 出貨
     "出貨", "出庫", "賣掉", "賣了", "銷貨", "售出", "出了", "買走", "拿走",
     "提走", "取走", "載走", "銷了", "賣出", "發貨", "發出", "送走", "訂走",
@@ -800,6 +804,12 @@ _RCA_INTENT_WORDS = (
     "有出入", "差好多", "詭異", "蒸發",
     # conv100-r5：跳來跳去/被偷/變少/不太對勁 全退成純庫存查詢
     "跳來跳去", "被偷", "偷了", "變少", "對勁",
+    # r92（user 定調）：「多了/少了」是**盤點差異**語意＝帳對不上，不是進貨指令。
+    #   原本只收「少了」→ 短少查得到、溢出查不到（可能是重複入帳/退貨沒沖銷，
+    #   一樣要追）。⚠️ 不能用裸「多了」——「差不多了」是告別語（corpus 有兩條
+    #   chat|差不多了 謝謝你 / ok瞭解 差不多了）→ 用「怎麼多」「變多」等明確形，
+    #   「多了」則靠下方 _RCA_DIFF_RE 要求前後有數量/帳務語境才算。
+    "怎麼多", "為什麼多", "變多", "多出來", "溢出", "多了",
     # conv100-r6：兜不上/少掉/怎麼回事
     "兜不上", "少掉", "怎麼回事",
     # conv100-r7：對不太起來/縮水/怪異/落差/追查
@@ -817,9 +827,12 @@ _RCA_INTENT_WORDS = (
 def _has_rca_word(t: str) -> bool:
     """RCA 詞比對前先剝「多少」——「電子產品類還有多少貨」的「少貨」、
     「剩多少了」的「少了」是數量問句不是對帳異常（r17，第 1~8 輪
-    「進出多少貨」同根 bug 的通用修法）。"""
+    「進出多少貨」同根 bug 的通用修法）。
+    r92：同理剝「差不多了」——那是告別語（corpus 兩條 chat|差不多了 謝謝你），
+    剝掉後「多了」才能安全當 RCA 裸詞（盤點溢出＝帳對不上，要能追）。"""
     import re as _re_rca
-    return any(w in _re_rca.sub(r"多少", "", t) for w in _RCA_INTENT_WORDS)
+    _t = t.replace("差不多了", "").replace("差不多", "")
+    return any(w in _re_rca.sub(r"多少", "", _t) for w in _RCA_INTENT_WORDS)
 
 # 寫入/複雜工具的「意圖詞閘門」——LLM 對閒聊句常自由發揮輸出 set_alert /
 # generate_po / query_related 這類「不需要商品名就能開卡」的功能（WS 端沒有
@@ -905,6 +918,12 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
         cand = _extract_sku_keyword(user_text)
         # r25：cand 接地（同 search_log 分支，「剛剛那個再查一次」曾 weak-match 啞鈴）
         if _match_solid(cand) and _kw_grounded(cand, user_text):
+            # r92：救成庫存查詢前先看是不是**盤點差異**（帳對不上）。
+            #   「北倉多了五十個滑鼠」LLM 誤投 run_script{盤點}，救援直接回庫存
+            #   數字＝答非所問（user 問的是「為什麼多出來」不是「現在有幾個」）。
+            if _has_rca_word(user_text):
+                log.info(f"[gate-rescue] run_script 實為盤點差異 → search_log kw={cand!r}")
+                return "search_log", {"keyword": cand}
             log.info(f"[gate-rescue] run_script 缺腳本詞但有商品名 → query_inventory kw={cand!r}")
             return "query_inventory", {"keyword": cand}
         # 沒商品名但有進出貨語彙 → 是進出統計（「昨天有出貨嗎」LLM 誤投
@@ -2701,12 +2720,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
     import re as _re13b_single
-    _single_dir_m = _re13b_single.search(r'[進出送補](?=[一-鿿\s0-9.]{0,10}(?:[0-9]+|[零一二兩三四五六七八九十百千萬億半幾來]+)\s*(?:件|個(?!月|星期|禮拜|小時|鐘頭|倉)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞|打))', user_text)
+    # r92：「加」是展場自然講法（「幫我在北倉加五十個滑鼠」），但歧義大——
+    #   守衛有三條會被誤傷：「安全庫存加20」「北倉加15」是改設定（cfg）、
+    #   「三個倉加起來」是查詢（inv）。→ 句中出現這些語境時「加」不算進貨動詞。
+    _add_ok = not _re13b_single.search(r'安全庫存|安全線|加起來|水位', user_text)
+    _dir_chars = '進出送補加' if _add_ok else '進出送補'
+    _single_dir_m = _re13b_single.search(r'[' + _dir_chars + r'](?=[一-鿿\s0-9.]{0,10}(?:[0-9]+|[零一二兩三四五六七八九十百千萬億半幾來]+)\s*(?:件|個(?!月|星期|禮拜|小時|鐘頭|倉)|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片|卷|捲|盞|打))', user_text)
     if _single_dir_m and not _has_movement_word:
         _has_movement_word = True
         # r26：裸「補」+數量=進貨（「供應商補30罐氣泡水到北倉」曾被 config guide 劫走）
-        if _single_dir_m.group(0) in ("進", "送", "補"):
+        if _single_dir_m.group(0) in ("進", "送", "補", "加"):
             # 「送40個防摔殼來南倉」的裸「送」+數量=進貨（送我/送給無數量不會中）
+            # r92：「加」同理（「北倉加五十個滑鼠」）——已由 _add_ok 濾掉
+            # 安全庫存/加起來等非進貨語境
             _movement_in_words = _movement_in_words + (_single_dir_m.group(0),)
         else:
             _movement_out_words = _movement_out_words + ("出",)
@@ -9922,6 +9948,25 @@ async def ws_handler(ws: WebSocket):
                         if _g43_kw:
                             log.info(f"[gate-rescue r43] {func_name} 缺意圖詞但帶商品 → query_inventory kw={_g43_kw!r}")
                             _rescue = ("query_inventory", {"keyword": _g43_kw})
+                    # r92（user 定調「引導」）：講的是**帳對不上**但沒指名商品
+                    #   （「實際比帳面多了五十個」）→ 這是正經的盤點問題，不該
+                    #   當搗蛋拒絕。問清楚是哪個商品，訪客補完就能進 RCA。
+                    if not _rescue and _has_rca_word(user_text):
+                        log.info(f"[gate-rescue r92] 帳務差異缺商品名 → clarify: {user_text!r}")
+                        await push_display({"type": "trace", "stage": "clarify",
+                                            "reason": "rca_no_item"})
+                        # 選項用「動作型」而非寫死商品名——展場資料會變動，
+                        # 且訪客要查的商品未必在任何固定清單裡（同 6150 行風格）。
+                        _rca_ask = {
+                            "ok": True, "view": "clarify",
+                            "summary": "帳對不上要查哪個商品呢？說商品名我幫你追進出紀錄。",
+                            "question": "是哪個商品的帳對不上？",
+                            "options": ["哪些商品有異常", "採購對帳異常", "哪些商品快缺貨"],
+                            "hint": "直接說商品名也可以，例如「滑鼠的帳對不上」",
+                            "data": {},
+                        }
+                        await send({"type": "done", "result": _rca_ask})
+                        continue
                     if _rescue:
                         func_name, func_args = _rescue
                     else:
