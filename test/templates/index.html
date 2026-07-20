@@ -1277,6 +1277,15 @@ function handleMessage(msg) {
     updatePerfBadge(msg);
     return;
   }
+  // 錯字/同音已被後端修好 → 把剛送出的使用者氣泡換成修復後的文字。
+  //   若畫面留著原始錯字，訪客會以為系統沒聽懂；顯示修好的版本，
+  //   「錯字容錯」才看得出來真的在運作（展場賣點）。
+  if (msg.type === 'user_fixed') {
+    const all = messages.querySelectorAll('.msg.user');
+    const last = all[all.length - 1];
+    if (last && msg.text) last.textContent = msg.text;
+    return;
+  }
   if (msg.type === 'token') {
     if (!currentBotMsg) currentBotMsg = appendBot('');
     currentBotMsg.textContent += msg.text;

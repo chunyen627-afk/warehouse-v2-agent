@@ -6275,7 +6275,9 @@ _ASR_UNIT = r"[個件台臺箱包盒支瓶罐組雙頂條捲張片袋]"
 
 _ASR_FIX = [
     # ③ 倉別同音（最高頻錯誤：實測 20 句錯 5 次）——限定方位詞後
-    (_re.compile(r"([北南中東西])[昌蒼槍倉艙](?=[^庫]|$)"), r"\1倉"),
+    #   「藏」是真人聲實測補的（合成音從沒產生過；user 唸「北倉」→「北藏」）。
+    #   守衛/sweep 語料含「藏」皆 0 次 → 安全。
+    (_re.compile(r"([北南中東西])[昌蒼槍倉艙藏](?=[^庫]|$)"), r"\1倉"),
     # ① 進貨動詞——限定「近 + 數字 + 量詞」
     #   ⚠️「最近一個月/近三天」是時間詞不是數量：排除「最近」前綴，且量詞後
     #   不可接時間單位（守衛「最近一個月進貨多少」曾被誤改成「最進一個月」）
@@ -6594,7 +6596,16 @@ async def ws_handler(ws: WebSocket):
             user_text = (data.get("text") or "").strip()
             if not user_text:
                 continue
+            _raw_text = user_text
             user_text = _normalize_typos(user_text)   # 同音錯字正規化（r17，最早套用）
+            # 錯字被修好 → 告訴前端，讓對話氣泡顯示「修復後」的文字。
+            #   展場價值：訪客打錯／ASR 聽錯時，畫面若顯示原始錯字會讓人以為
+            #   系統沒聽懂；顯示修好的版本才看得出「錯字容錯」真的在運作。
+            if user_text != _raw_text:
+                try:
+                    await send({"type": "user_fixed", "text": user_text})
+                except Exception:
+                    pass
 
             # ── 放棄閘門（rewrite / 守門員 之前，r33 統一）──
             #   涵蓋三種情境：流程中放棄、卡片在時放棄、閒置時說放棄。

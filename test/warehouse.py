@@ -37,8 +37,16 @@ import difflib as _difflib
 try:
     from pypinyin import lazy_pinyin as _lazy_pinyin
 
+    # 捲舌／平舌混淆的**音節級**還原：ㄓㄔㄕ vs ㄗㄘㄙ 不分是中文 ASR 與台灣
+    # 國語的系統性難點（真人實測「滑鼠」huashu 被聽成「華族」huazu）。
+    #   ⚠️ 用「音節對應」而非「字元折疊」(sh→s)：字元折疊會把商品名也變模糊，
+    #   實測讓「衛生棉」撞上「衛生紙」(同 0.80) 打壞守衛 noex 條；音節還原是
+    #   把錯字還原回正確音，方向相反 → 華族 0.8333 救得到、衛生棉 0.7826 擋掉。
+    _SYL_FIX = {"zu": "zhu", "su": "shu", "cu": "chu",
+                "zi": "zhi", "si": "shi", "ci": "chi"}
+
     def _py(s: str) -> str:
-        return "".join(_lazy_pinyin(s))
+        return "".join(_SYL_FIX.get(p, p) for p in _lazy_pinyin(s))
     _PHONETIC_ON = True
 except ImportError:
     _PHONETIC_ON = False
@@ -101,7 +109,11 @@ def _phonetic_match(keyword: str, items) -> list[dict]:
             r = max(r, 0.95)
         if r > best_score:
             best_it, best_score = it, r
-    # 門檻 0.82：夠像才救（同音≈1.0、音近≈0.85）；太低會誤配
+    # 門檻 0.82：曾試過放寬到 0.78 想救「華族」(0.80)，但守衛抓到**同分誤配**——
+    #   「衛生棉」→「衛生紙」也是 0.80（衛生棉非主檔商品，誤配會扣錯庫存、
+    #   開出錯誤出貨卡）。兩者同分 ⇒ 純調門檻無法區分，只能維持 0.82。
+    #   ASR 錯字要更進一步救，靠的是 _py() 的精準音節還原（_SYL_FIX），
+    #   不是放寬門檻。
     if best_it and best_score >= 0.82:
         _log.info(f"[phonetic] 字形失敗 → 發音救回「{best_it['name']}」"
                   f"（{kw_py} ≈ {best_score:.2f}）")
