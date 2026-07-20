@@ -6256,6 +6256,49 @@ except Exception:
     _VOICE_CC = None
 
 
+# ── 語音專用：寫入動詞/倉別同音正規化 ────────────────────────────
+#   為何需要：ASR 把「進」聽成「近」、「倉」聽成「昌/蒼/槍」，整句就掉出
+#   寫入路徑 → 訪客以為進貨了其實只是查詢（展場最尷尬的失敗）。實測 12 句
+#   ASR 錯字寫入句只有 1 句能正確開卡。
+#
+#   ⚠️ 只掛在 /api/asr 出口，不碰 warehouse.py —— 打字訪客完全不受影響、
+#   守衛零風險。商品名錯字交給既有發音容錯層（華數→滑鼠已能救）。
+#
+#   ⚠️ 規則從嚴、限定上下文（守衛語料實測邊界）：
+#     ①「近」→「進」只在後接【數字+量詞】時（守衛的「最近一個月/最近有進
+#        什麼貨」是時間詞，不接量詞 → 不誤傷；14+ 條含「最近」的句子安全）
+#     ②「掉」→「調」只在後接【數量 … 給/到 X倉】時（守衛「刪掉排程」「庫存
+#        掉一半」無調撥目標 → 不誤傷）
+#     ③ 昌/蒼/槍 → 倉 只在【北/南/中/東/西 + 該字】時（三字在守衛出現 0 次）
+_ASR_NUM = r"[0-9０-９一二三四五六七八九十百千兩]"
+_ASR_UNIT = r"[個件台臺箱包盒支瓶罐組雙頂條捲張片袋]"
+
+_ASR_FIX = [
+    # ③ 倉別同音（最高頻錯誤：實測 20 句錯 5 次）——限定方位詞後
+    (_re.compile(r"([北南中東西])[昌蒼槍倉艙](?=[^庫]|$)"), r"\1倉"),
+    # ① 進貨動詞——限定「近 + 數字 + 量詞」
+    #   ⚠️「最近一個月/近三天」是時間詞不是數量：排除「最近」前綴，且量詞後
+    #   不可接時間單位（守衛「最近一個月進貨多少」曾被誤改成「最進一個月」）
+    (_re.compile(rf"(?<!最)近(?={_ASR_NUM}+{_ASR_UNIT}(?![月週周日天年季]))"), "進"),
+    # ①b「近了」形（北倉近了五十個）
+    (_re.compile(rf"(?<!最)近(?=了{_ASR_NUM})"), "進"),
+    # ② 調撥動詞——限定後面有「給/到 X倉」
+    (_re.compile(rf"掉(?={_ASR_NUM}+{_ASR_UNIT}?[^，。]{{0,10}}[給到][北南中東西]倉)"), "調"),
+    # ④ 量詞異體字「臺」→「台」——OpenCC s2twp 會把「台」轉成「臺」，但
+    #   server 各處量詞字元類只收「台」→ 語音路徑必踩（實測 w04「二十臺藍牙
+    #   喇叭」開不出卡、「二十台」正常）。只在數字後才換，不動「臺灣/舞臺」。
+    (_re.compile(rf"(?<={_ASR_NUM})臺"), "台"),
+]
+
+
+def _asr_normalize(text: str) -> str:
+    """語音專用同音修正。回修正後文字（沒命中則原樣回傳）。"""
+    out = text
+    for pat, rep in _ASR_FIX:
+        out = pat.sub(rep, out)
+    return out
+
+
 def _voice_ready() -> tuple[bool, str]:
     if not _VOICE_CLI.exists():
         return False, "ASR binary 未安裝"
@@ -6326,8 +6369,13 @@ async def asr_api(req: Request):
         return JSONResponse({"ok": False, "reason": "沒聽出內容"}, headers=NO_CACHE)
 
     text = _VOICE_CC.convert(text).strip(" 。，？！、.,?!~～")
+    _raw = text
+    text = _asr_normalize(text)
     dt = round(_time.time() - t0, 2)
-    log.info(f"[asr] {dt}s → 「{text}」")
+    if text != _raw:
+        log.info(f"[asr] {dt}s → 「{_raw}」→ 同音修正「{text}」")
+    else:
+        log.info(f"[asr] {dt}s → 「{text}」")
     return JSONResponse({"ok": True, "text": text, "sec": dt}, headers=NO_CACHE)
 
 
