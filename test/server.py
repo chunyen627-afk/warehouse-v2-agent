@@ -6238,6 +6238,99 @@ async def reset():
     return JSONResponse({"ok": True, "snapshot": snap}, headers=NO_CACHE)
 
 
+# ── 語音辨識（Fun-ASR-Nano 本地跑，展場離線可用）──────────────────
+#   為何不用瀏覽器 Web Speech API：那會連 Google 雲端，展場沒網路就死。
+#   前端錄音 → POST webm/wav → ffmpeg 轉 16k mono → llama-funasr-cli →
+#   簡體 → OpenCC s2twp 轉繁（順便轉台灣用語）→ 回文字給前端送 WS。
+#   缺任一組件（binary/模型/ffmpeg/opencc）→ 回 ok:false + reason，
+#   前端據此回退到瀏覽器內建辨識，不讓展場整組壞掉。
+_VOICE_DIR = Path.home() / "voice_poc"
+_VOICE_CLI = _VOICE_DIR / "src/runtime/llama.cpp/build/bin/llama-funasr-cli"
+_VOICE_ENC = _VOICE_DIR / "gguf/funasr-encoder-f16.gguf"
+_VOICE_LLM = _VOICE_DIR / "gguf/qwen3-0.6b-q4km.gguf"
+
+try:
+    from opencc import OpenCC as _OpenCC
+    _VOICE_CC = _OpenCC("s2twp")
+except Exception:
+    _VOICE_CC = None
+
+
+def _voice_ready() -> tuple[bool, str]:
+    if not _VOICE_CLI.exists():
+        return False, "ASR binary 未安裝"
+    if not (_VOICE_ENC.exists() and _VOICE_LLM.exists()):
+        return False, "ASR 模型未安裝"
+    if _VOICE_CC is None:
+        return False, "OpenCC 未安裝"
+    return True, ""
+
+
+@app.get("/api/voice_status")
+async def voice_status():
+    """前端啟動時問一次：本地 ASR 能不能用（決定要不要回退瀏覽器辨識）。"""
+    ok, reason = _voice_ready()
+    return JSONResponse({"ok": ok, "reason": reason}, headers=NO_CACHE)
+
+
+@app.post("/api/asr")
+async def asr_api(req: Request):
+    """收前端錄音 → 本地辨識 → 回繁體文字。不直接送 WS（讓前端沿用既有送出路徑）。"""
+    import subprocess
+    import tempfile
+    import time as _time
+
+    ok, reason = _voice_ready()
+    if not ok:
+        return JSONResponse({"ok": False, "reason": reason}, headers=NO_CACHE)
+
+    audio = await req.body()
+    if not audio:
+        return JSONResponse({"ok": False, "reason": "沒收到音訊"}, headers=NO_CACHE)
+
+    t0 = _time.time()
+    with tempfile.TemporaryDirectory() as td:
+        raw = Path(td) / "in.bin"
+        wav = Path(td) / "out.wav"
+        raw.write_bytes(audio)
+        # 瀏覽器給 webm/opus，ASR 只吃 16k mono PCM16 → 一律轉一次
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(raw), "-ar", "16000", "-ac", "1",
+                 "-c:a", "pcm_s16le", str(wav)],
+                capture_output=True, timeout=30,
+            )
+        except Exception as e:
+            return JSONResponse({"ok": False, "reason": f"轉檔失敗：{e}"},
+                                headers=NO_CACHE)
+        if not wav.exists() or wav.stat().st_size < 1000:
+            return JSONResponse({"ok": False, "reason": "音訊太短或格式不支援"},
+                                headers=NO_CACHE)
+
+        try:
+            p = subprocess.run(
+                [str(_VOICE_CLI), "--enc", str(_VOICE_ENC), "-m", str(_VOICE_LLM),
+                 "-a", str(wav)],
+                capture_output=True, text=True, timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            return JSONResponse({"ok": False, "reason": "辨識逾時"}, headers=NO_CACHE)
+
+    # CLI 夾雜載入訊息 → 取最後一行含中文的輸出
+    text = ""
+    for ln in reversed([l.strip() for l in p.stdout.splitlines() if l.strip()]):
+        if _re.search(r"[一-鿿]", ln):
+            text = ln
+            break
+    if not text:
+        return JSONResponse({"ok": False, "reason": "沒聽出內容"}, headers=NO_CACHE)
+
+    text = _VOICE_CC.convert(text).strip(" 。，？！、.,?!~～")
+    dt = round(_time.time() - t0, 2)
+    log.info(f"[asr] {dt}s → 「{text}」")
+    return JSONResponse({"ok": True, "text": text, "sec": dt}, headers=NO_CACHE)
+
+
 @app.post("/api/reset_demo")
 async def reset_demo_data_api(req: Request):
     """展示資料一鍵重置（獨立按鈕觸發，需密碼）。換回 warehouse_data_baseline/ 並清 session state。"""
