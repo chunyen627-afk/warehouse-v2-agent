@@ -1100,8 +1100,9 @@ _REWRITE_RULES: list[tuple] = [
     # ── r77：進出報表/昨天出貨追問 口語 ──
     (_re.compile(r"(進出|出入).{0,4}(出個|產個|拉個|做個|給個|出張)(報表|報告)"),
                                                                     "匯出進出記錄"),
-    # r84：「匯出給我」「幫我匯出」——demo 只有匯出進出記錄一個匯出腳本
-    (_re.compile(r"^(?:幫我|請)?匯出(給我|一下|來|吧|資料|檔案|報表)?$"),
+    # r84/r85：「匯出給我」「順便匯出今天的」——demo 只有匯出進出記錄一個匯出腳本
+    (_re.compile(r"^(?:順便|幫我|請|那就|然後)?\s*匯出"
+                 r"(給我|一下|來|吧|資料|檔案|報表|今天的?|一份)?$"),
                                                                     "匯出進出記錄"),
     # 「昨天那批出貨有成功嗎」改走 WS 直答（rewrite 固定句在 RPI5 期間解析
     # 走鐘＝平台分歧，r77w 抓到）
@@ -6681,13 +6682,17 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[ctx-cfg] 設定追問 → {user_text!r}")
                 # r78：「改完了嗎 現在北倉多少」——config 寫入後的生效驗證追問，
                 # 曾掉「沒有『改完』這個商品」醜 clarify
-                _cfgv78 = _re.search(r"(改完|改好|生效)了?嗎", user_text)
-                if (_cfgv78 and _ctx_for(vid).get("last_func") == "manage_config"
-                        and _ctx_for(vid).get("last_sku")):
-                    _cfgv78_wh = next((f"{z}倉" for z in "北中南"
-                                       if z in user_text), "")
-                    user_text = (f"{_cfgv78_wh}{_ctx_for(vid)['last_sku']}"
-                                 "安全庫存是多少")
+                _cfgv78 = _re.search(r"(改完|改好|生效|改了|設好)(了?嗎|沒|了沒)",
+                                     user_text)
+                if (_cfgv78 and _ctx_for(vid).get("last_func") == "manage_config"):
+                    if _ctx_for(vid).get("last_sku"):
+                        _cfgv78_wh = next((f"{z}倉" for z in "北中南"
+                                           if z in user_text), "")
+                        user_text = (f"{_cfgv78_wh}{_ctx_for(vid)['last_sku']}"
+                                     "安全庫存是多少")
+                    else:
+                        # r85：全倉全商品改後「改完沒」→ 回安全庫存總表
+                        user_text = "安全庫存設定"
                     log.info(f"[ctx-cfg] 生效驗證追問 → {user_text!r}")
                 if (_ctx_for(vid).get("last_func") == "list_expiring_items"
                         and len(user_text) <= 12
