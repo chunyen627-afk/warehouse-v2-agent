@@ -6852,6 +6852,28 @@ async def ws_handler(ws: WebSocket):
                     "ok": True, "view": "guide", "summary": _gr_msg, "data": {}}})
                 continue
 
+            # ── r83：倉別更正句（「欸不是南倉 是北倉啦」）——接在寫入 done 後，
+            #   卡已執行來不及改，誠實說明已記錄+怎麼補救，不誤判成倉庫比較 ──
+            _wc_fix83 = _re.search(r"不是\s*([北中南])(?:區)?倉?\s*[，,]?\s*是?\s*"
+                                   r"([北中南])(?:區)?倉", user_text)
+            if (_wc_fix83 and len(user_text) <= 16
+                    and _ctx_for(vid).get("last_view") in
+                    ("movement_done", "transfer_done")):
+                _wf83_wrong = f"{_wc_fix83.group(1)}區倉"
+                _wf83_right = f"{_wc_fix83.group(2)}區倉"
+                _wf83_sku = _ctx_for(vid).get("last_sku") or "該商品"
+                _wf83_msg = (f"剛剛那筆已經記錄到{_wf83_wrong}了（來不及改）。"
+                             f"要移到{_wf83_right}的話，直接說"
+                             f"「{_wf83_wrong}調到{_wf83_right} {_wf83_sku}」就可以。")
+                log.info(f"[wh-fix-r83] 寫入後倉別更正 → 說明: {user_text!r}")
+                for ch in _wf83_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _wf83_msg,
+                    "data": {"question": _wf83_msg, "options": [], "hint": ""}}})
+                continue
+
             # r57：告別+道謝混雜（「辛苦了88」）也要接——token 聯集全句比對，
             # 有告別詞就走告別回覆，否則道謝回覆
             _FW_BYE_TOK = (r"掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|"
@@ -9063,8 +9085,9 @@ async def ws_handler(ws: WebSocket):
             # 只攔「動詞緊接商品/數量」的真寫入意圖：句首倉別+進出調動詞後
             # 緊跟商品名或數字。「把北倉的傘都調去南倉」的傘查無、且動詞後不是
             # 商品/數字 → 不攔，讓它回 r80 的既有路徑（避免 LLM 亂聯想成拖把）
+            # r83：動詞加「補」（「北倉補50 電動牙刷」曾漏判成查詢 clarify）
             _wc_m81 = _re.search(r"^(?:把|將|幫我)?[北中南][區倉]的?"
-                                 r"([進出調撥挪][^0-9]{0,6}?)(?=[0-9]|$)", user_text)
+                                 r"([進出調撥挪補][^0-9]{0,6}?)(?=[0-9]|$)", user_text)
             _wc_write81 = False
             if (_wc_m81 and not any(w in user_text for w in
                                     ("庫存", "剩", "還有", "幾件", "多少", "價值",
@@ -9072,7 +9095,7 @@ async def ws_handler(ws: WebSocket):
                                      "統計", "警示", "到期"))):
                 # 動詞後的殘詞若比得到真商品、或句帶明確數字 = 真寫入意圖
                 import warehouse as _W_wc81
-                _wc_tail81 = _re.sub(r"^[進出調撥挪]", "", _wc_m81.group(1)).strip("去到過來的都")
+                _wc_tail81 = _re.sub(r"^[進出調撥挪補]", "", _wc_m81.group(1)).strip("去到過來的都")
                 _wc_has_prod = bool(_wc_tail81 and _W_wc81.match_items(_wc_tail81)
                                     and _W_wc81.match_items(_wc_tail81)[0].get("score", 0) >= 3)
                 _wc_has_num = bool(_re.search(r"[進出調撥挪補]\s*[0-9]", user_text))
