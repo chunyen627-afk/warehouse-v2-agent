@@ -254,8 +254,11 @@ def is_meaningful_input(text: str) -> bool:
         return False
     # r62：「退貨3個耳機 北倉」是倉管退貨入庫（is_return 一直支援），不是購物
     # 退貨搗蛋——退貨+數量+（倉別或真商品）豁免黑名單
-    if re.search(r"退[貨回]?\s*\d", s) and (re.search(r"[北中南][倉區]", s)
-                                            or _text_has_item_name(s)):
+    #   r101：`\d` 只認阿拉伯數字 → 「退貨二十個滑鼠」（中文數字）沒被豁免、
+    #   掉進黑名單被 rejected（真人語音實測 #31：ASR 聽對了卻被拒）。
+    #   數量改認阿拉伯＋中文數字。
+    if re.search(r"退[貨回]?\s*(?:\d|[零一二兩三四五六七八九十百千])", s) and \
+            (re.search(r"[北中南][倉區]", s) or _text_has_item_name(s)):
         return True
     # r77：期間退貨統計查詢（「上週退貨總共退了幾件」）也是倉管句
     if re.search(r"(上週|本週|今天|昨天|上個?月|本月).{0,4}退貨"
@@ -1440,6 +1443,9 @@ _TYPO_NORM = (
     # r98 真人聲：「電子類總值」被聽/講成「總價」——倉管語境「總價」＝「總值」
     #   （庫存價值），系統只認「總值」。demo 無其他「總價」語意，安全。
     ("總價", "總值"),
+    # r101 真人聲(#73)：「對帳」被 ASR 出成「對賬」——「賬」是「帳」異體字
+    #   （賬目=帳目），系統一律用「帳」。守衛/語料含「賬」0 次，無條件換安全。
+    ("賬", "帳"),
     ("按全庫存", "安全庫存"), ("按全水位", "安全水位"), ("案全庫存", "安全庫存"),
     # r78：「安全庫存線」正規化（裸「安全線」另在函式尾條件處理——
     # 「補到安全線」是補貨語不能硬換，r78v 曾把 generate_po 句改壞）
@@ -7193,8 +7199,10 @@ async def ws_handler(ws: WebSocket):
             _bl_hit_ws = None if _desc_exempt_ws else next(
                 (b for b in _GATEKEEPER_BLACKLIST if b in user_text.lower()), None)
             # r62：倉管退貨句豁免（同 is_meaningful_input 的豁免，兩處要同步）
+            #   r101：`\d` 只認阿拉伯數字 → 「退貨二十個滑鼠」（中文數字）漏豁免
+            #   被 rejected（真人語音 #31）。改認阿拉伯＋中文數字，與 256 行同步。
             if (_bl_hit_ws in ("退貨", "退換貨")
-                    and _re.search(r"退[貨回]?\s*\d", user_text)
+                    and _re.search(r"退[貨回]?\s*(?:\d|[零一二兩三四五六七八九十百千])", user_text)
                     and (_re.search(r"[北中南][倉區]", user_text)
                          or _has_real_item(user_text))):
                 _bl_hit_ws = None
