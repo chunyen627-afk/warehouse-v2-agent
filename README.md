@@ -9,9 +9,10 @@
 [![OOV v1](https://img.shields.io/badge/OOV_v1-98%25-brightgreen)]()
 [![OOV v2](https://img.shields.io/badge/OOV_v2-97.5%25-brightgreen)]()
 [![intent_clf](https://img.shields.io/badge/intent_clf-489MB_主路由-blue)]()
-[![守衛庫](https://img.shields.io/badge/守衛庫_855句-雙平台100%25-brightgreen)]()
-[![conv100](https://img.shields.io/badge/35輪收斂-危險級持續0-brightgreen)]()
+[![守衛庫](https://img.shields.io/badge/守衛庫_1122句-RPI5_100%25-brightgreen)]()
+[![多輪](https://img.shields.io/badge/多輪劇本_2069情境-斷言失敗0-brightgreen)]()
 [![短句認證](https://img.shields.io/badge/短句全枚舉_953句-雙平台100%25-brightgreen)]()
+[![語音POC](https://img.shields.io/badge/語音輸入-離線ASR全鏈-blueviolet)]()
 
 ---
 
@@ -228,6 +229,60 @@ category 幻覺（真商品被錯類別濾成找不到 → `_drop_ungrounded_cat
 回歸自此五套（守衛 855 ＋ 掃蕩 953 ＋ 多輪劇本 r32-r35 共 102 情境 400+ 輪），
 全部雙平台 100%。工具：`ws_convo.py`（同連線劇本、可重播確認鍵、`>@B` 多訪客
 交錯、`--reset` 防劇本互相污染、握手逾時自動重連）。
+
+---
+
+## 🎙️ 語音輸入（Voice POC，2026-07-20 ～ 07-21）
+
+展場訪客用**講的**查倉管（比打字自然）。ASR 全程跑在 RPI5 CPU，**完全離線**。
+
+### 全鏈架構
+
+```
+訪客講話（前端 Siri 式：點一下 → 講 → 靜音自動結束）
+    │
+    ▼
+[瀏覽器 MediaRecorder 錄音 + AudioContext VAD 靜音偵測]
+    │
+    ▼
+[/api/asr]  ffmpeg 轉 16k mono → Fun-ASR-Nano（GGUF, llama.cpp）
+    │
+    ▼
+[OpenCC s2twp]  簡體 → 繁體（順便轉台灣用語）
+    │
+    ▼
+[同音修正層 _asr_normalize]  倉別/動詞/量詞/異體字（掛 /api/asr 出口，不碰倉管核心）
+    │
+    ▼
+[倉管 WS]  ← 既有守衛庫 + 發音容錯層接手
+```
+
+### 兩大容錯層（真人聲實測磨出來的）
+
+- **發音容錯層**（`warehouse.py`）：ASR 錯字多為「同音字形遠」（滑鼠→華數/華族），
+  字形比對救不到 → **轉拼音比對** + **捲舌音節還原**（zh/z 混淆）。字形優先、發音救底，
+  零回歸。門檻 0.82 防誤配（實測「衛生棉 vs 衛生紙」同分過不了門檻）。
+- **語音同音修正**（`server.py` `_asr_normalize`）：只掛 `/api/asr` 出口、**不碰倉管核心**
+  → 打字訪客零影響、守衛零風險。涵蓋倉別（總/藏/昌→中/倉）、動詞（近→進、谷→補）、
+  量詞（臺→台）、異體字（溼→濕、賬→帳、周→週）等真人聲實測抓到的錯法。
+
+### 三環境噪音測試（同一份真人錄音自動混噪，念一次測三種）
+
+| 環境 | 通過率 | 說明 |
+|------|--------|------|
+| 乾淨（正常音量） | 78% | 系統實際 ~87%（扣除多輪測試架構的假失敗） |
+| light（一般展場 -18dB） | 77% | **噪音幾乎零影響（-1%）** |
+| heavy（尖峰吵雜 -8dB） | 73% | 輕微影響（-5%），純噪音壞的僅 5 句 |
+
+**結論：webcam + 270M + 正常音量＝展場夠用，不需升級模型或麥克風。** 失敗幾乎全是
+ASR 整詞聽錯（訪客看辨識文字重講可解），非系統 bug。關鍵變數是**音量**（小聲時
+摩擦音糊掉），展場正常音量對麥講即可。
+
+### 工具（`voice_poc/`）
+
+`read100.sh`（100 句真人測試 + 即時分貝計 + 存錄音）、`noise_retest.sh`（用存檔自動
+混噪重測）、`test_asr_norm.py`（同音修正護欄，改規則前必跑）、`check_mic.sh`（麥克風
+六項體檢）、`calib_vad.py`（VAD 門檻校準）。
 
 ---
 
