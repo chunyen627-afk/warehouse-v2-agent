@@ -2757,15 +2757,24 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _movement_out_words = _movement_out_words + ("出",)
     # r79 危險邊緣：動詞+裸數字（「北倉出400衛生紙」沒帶量詞）也是進出貨——
     # 曾被查詢直答/庫存卡吞掉。排除日期形（出12月報表），且要求句帶倉名保精度
+    # r99：擴充雙字動詞（入庫/賣掉/銷掉/退貨）——訪客快打常漏量詞，
+    #   「南倉入庫30氣泡水」「賣掉15慢跑鞋」「退貨10行動電源」原被判查詢。
+    #   入庫=進、賣掉/銷掉=出、退貨=return（退貨也是庫存增加，走 in + is_return）。
     if not _has_movement_word:
         _bare_dir_m79 = _re13b_single.search(
-            r'[進出補](?=\s*[0-9]{1,6}(?![0-9]*[月日號點樓年%．\.]))', user_text)
+            r'(入庫|賣掉|銷掉|退貨|[進出補])(?=\s*[0-9]{1,6}(?![0-9]*[月日號點樓年%．\.]))',
+            user_text)
         if _bare_dir_m79 and _re13b_single.search(r'[北中南][區倉]', user_text):
             _has_movement_word = True
-            if _bare_dir_m79.group(0) in ("進", "補"):
-                _movement_in_words = _movement_in_words + (_bare_dir_m79.group(0),)
-            else:
-                _movement_out_words = _movement_out_words + ("出",)
+            _bd = _bare_dir_m79.group(1)
+            if _bd in ("進", "補", "入庫"):
+                _movement_in_words = _movement_in_words + (_bd,)
+            elif _bd == "退貨":
+                # 退貨＝庫存增加，走進貨方向 + return 標記
+                _movement_in_words = _movement_in_words + ("退貨",)
+                _is_return13b = True
+            else:  # 出 / 賣掉 / 銷掉
+                _movement_out_words = _movement_out_words + (_bd,)
     # 數字開頭的反向詞序（r18：「30個耳機進北倉」——方向詞在商品後、倉名前，
     # 上面的 lookahead 只往後看抓不到）：數量+量詞+商品+進/出+倉名 一樣是進出貨
     if not _has_movement_word:
@@ -2816,9 +2825,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if not _qty13b_m:
         _qty13b_m = _re13b_pre.search(r'數量\s*([0-9]+)', user_text)
     # r79：動詞緊跟裸數字（「北倉出400衛生紙」）——量詞省略形，排除日期
+    # r99：雙字動詞同步（「南倉入庫30氣泡水」的 30 緊跟「庫」後）——與上面
+    #   _bare_dir_m79 的動詞集對齊，否則方向認出來但數量抽不到卡在問「幾件」。
     if not _qty13b_m:
         _qty13b_m = _re13b_pre.search(
-            r'[進出補調]\s*([0-9]{1,6})(?![0-9]*[月日號點樓年%．\.])', user_text)
+            r'(?:入庫|賣掉|銷掉|退貨|[進出補調])\s*([0-9]{1,6})(?![0-9]*[月日號點樓年%．\.])',
+            user_text)
     # 中文數字要能真的轉成整數才算數（避免「幾個」的「幾」等非數字被誤收）
     _qty13b_int = _cn_to_int(_qty13b_m.group(1)) if _qty13b_m else None
     # r26：0 件是無效異動量 → 當數量不明追問（「出貨0個耳機」曾先問倉別）
