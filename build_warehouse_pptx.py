@@ -269,7 +269,7 @@ add_text(s, MX, Inches(3.35), Inches(11.8), Inches(0.7),
          "一句自然語言 → 一秒拿到正確答案，全程在一台 Raspberry Pi 上跑",
          size=18, color=GREYBB)
 # 三個亮點膠囊
-caps = [("270M", "邊緣級小模型"), ("42 輪", "品質收斂"), ("100%", "雙平台回歸")]
+caps = [("270M", "邊緣級小模型"), ("100+ 輪", "品質收斂"), ("100%", "雙平台回歸")]
 cw = Inches(2.75); cy = Inches(4.7); gap = Inches(0.3)
 for i, (a, b) in enumerate(caps):
     x = MX + (cw + gap) * i
@@ -284,7 +284,7 @@ add_text(s, MX, Inches(6.85), Inches(11.8), Inches(0.35),
 set_notes(s, "封面。定位：這是晶片團隊的軟體成果——一個能展示邊緣 AI 落地的真實應用。"
              "一句話說清楚產品：自然語言問倉管、一秒回答、跑在便宜的樹莓派上。"
              "三個數字：270M 是模型只有 2.7 億參數（業界主流 3B-8B 的零頭）、"
-             "42 輪是品質收斂的迭代次數、100% 是回歸測試通過率。"
+             "100+ 輪是品質收斂的迭代次數、100% 是回歸測試通過率。"
              "底線一句話點出硬體路線圖：現在純 CPU、下一步接自研晶片加速。")
 pn(s)
 
@@ -585,7 +585,7 @@ set_notes(s, "FastText 是 Facebook 開源的輕量文字分類技術：詞向�
              "「參數是什麼」（抽取）——路由要穩定用分類器，抽取要泛化用 LLM，各用其長。"
              "高信心（conf≥0.8）且不需參數的功能直接跳過 LLM，是「一秒回答」的主要來源。"
              "彩蛋（可講）：這顆分類器曾因 fasttext×numpy2 不相容在展示機上靜默死亡三週，"
-             "期間 42 輪、六套回歸照樣雙平台 100%——LLM+校正層獨自扛住，正是縱深防禦的實證；"
+             "期間 100+ 輪、六套回歸照樣雙平台 100%——LLM+校正層獨自扛住，正是縱深防禦的實證；"
              "修復後展示機過半問題毫秒級回答、路由徽章首次亮起。")
 pn(s)
 
@@ -644,7 +644,7 @@ pn(s)
 s = slide_blank()
 title_bar(s, "SIX TEST SUITES", "六套回歸測試，全部雙平台 100%")
 suites = [
-    ("守衛庫", "882 句", "每次修 bug 都存成守衛，防止回退", "🛡️"),
+    ("守衛庫", "1122 句", "每次修 bug 都存成守衛，防止回退", "🛡️"),
     ("短句全枚舉", "953 句", "60 商品 × 模板全展開，證明短句 100%", "🔬"),
     ("多輪對話全枚舉", "1980 情境", "首句 + 追問，證明「記得上一個商品」", "💬"),
     ("未知商品抗性", "60+ 情境", "新增商品後查、問不存在的、撞名、亂取名", "🧩"),
@@ -761,11 +761,11 @@ print("S9-S10 done")
 
 # ─── S11 收斂軌跡（原生柱狀圖）────────────────────────────
 s = slide_blank()
-title_bar(s, "CONVERGENCE", "42 輪迭代，守衛庫從 138 句長到 882 句")
+title_bar(s, "CONVERGENCE", "100+ 輪迭代，守衛庫從 138 句長到 1122 句")
 # 左：守衛庫成長 折線/柱
 chart_data = CategoryChartData()
-chart_data.categories = ["初期", "conv100\n收斂", "第二戰役\n短句認證", "多輪\n全枚舉"]
-chart_data.add_series("守衛庫句數", (138, 352, 855, 866))
+chart_data.categories = ["初期", "conv100\n收斂", "第二戰役\n短句認證", "多輪\n全枚舉", "語音 POC\n真人聲"]
+chart_data.add_series("守衛庫句數", (138, 352, 855, 978, 1122))
 gx, gy = Inches(0.73), Inches(1.75)
 gcx = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, gx, gy,
                          Inches(6.1), Inches(3.6), chart_data).chart
@@ -901,6 +901,135 @@ set_notes(s, "★硬體路線圖頁（點綴，但對晶片團隊的參展定位
 pn(s)
 
 
+# ═══════════════════════════════════════════════════════════
+# ─── S13a 語音 POC · 全鏈架構 ────────────────────────────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 全離線語音輸入", "訪客用「講的」查倉管，ASR 全程跑在樹莓派")
+add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
+         "打字對展場訪客不夠自然——加一層離線語音輸入，同一套倉管後端不動，語音只是新入口。",
+         size=13.5, color=GREY55)
+# 縱向全鏈流程
+vchain = [
+    ("前端錄音", "Siri 式：點一下 → 講 → 靜音自動結束（瀏覽器 VAD 偵測）", TEAL, "🎙️"),
+    ("Fun-ASR-Nano", "GGUF + llama.cpp，RPi5 CPU 純離線辨識（~2.8s / 句）", TEALDK, "🧠"),
+    ("OpenCC 轉繁", "簡體 → 繁體，順便轉台灣用語（滑鼠 / 藍牙）", NAVY, "🔄"),
+    ("同音修正層", "倉別 / 動詞 / 量詞 / 異體字——只掛 ASR 出口，不碰倉管核心", AMBER, "🔧"),
+    ("倉管 WS", "既有守衛庫 + 發音容錯層接手，回答與打字完全一致", TEALDK, "📦"),
+]
+vy = Inches(2.05)
+for i, (t, d, col, ic) in enumerate(vchain):
+    y = vy + Inches(0.94) * i
+    add_round(s, MX, y, Inches(11.87), Inches(0.76), fill=LIGHT, shadow=True)
+    add_icon_circle(s, MX + Inches(0.28), y + Inches(0.13), Inches(0.5), ic,
+                    circle=col, gcolor=WHITE, gsize=15)
+    add_text(s, MX + Inches(1.05), y + Inches(0.06), Inches(3.0), Inches(0.64),
+             t, size=15, bold=True, color=col, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, MX + Inches(4.05), y + Inches(0.06), Inches(7.6), Inches(0.64),
+             d, size=12.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
+    if i < len(vchain) - 1:
+        add_arrow(s, Inches(6.5), y + Inches(0.78), Inches(0.36), Inches(0.14), fill=GREYBB)
+set_notes(s, "語音 POC 全鏈架構（2026-07 新增）。核心設計：語音只是新入口，倉管後端"
+             "完全不動。前端 Siri 式點一下自動結束；Fun-ASR-Nano 在 RPi5 純 CPU 離線"
+             "辨識（展場無網路也能跑）；OpenCC 轉繁 + 同音修正層清理 ASR 錯字；最後交回"
+             "既有倉管 WS。同音修正層刻意只掛 /api/asr 出口——打字訪客零影響、守衛零風險。")
+pn(s)
+
+
+# ─── S13b 語音 POC · 三環境噪音測試 ─────────────────────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 展場噪音實測", "念一次真人聲，自動測三種環境")
+add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
+         "方法突破：真人念一次乾淨版並存錄音，用同一份錄音自動混入賣場人潮噪音重測——對比最公平。",
+         size=13.5, color=GREY55)
+# KPI：三環境通過率
+kpi_row(s, Inches(2.15), [
+    ("78%", "乾淨（正常音量）"),
+    ("77%", "一般展場 −18dB"),
+    ("73%", "尖峰吵雜 −8dB"),
+], box_h=1.3, num_size=40)
+# 關鍵發現卡片
+finds = [
+    ("噪音幾乎零影響", "一般展場 −1%、尖峰只 −5%；純被噪音壓垮的僅 5 句", TEAL),
+    ("音量才是關鍵", "小聲時摩擦音（ㄕ/ㄘ）糊掉→亂猜；正常音量直接解決大半", AMBER),
+    ("失敗多為 ASR 極限", "整詞聽錯，訪客看辨識文字重講即可，非系統 bug", NAVY),
+]
+fy = Inches(3.85)
+for i, (t, d, col) in enumerate(finds):
+    y = fy + Inches(0.95) * i
+    add_round(s, MX, y, Inches(11.87), Inches(0.8), fill=LIGHT, shadow=True)
+    add_circle(s, MX + Inches(0.32), y + Inches(0.28), Inches(0.24), col)
+    add_text(s, MX + Inches(0.82), y + Inches(0.08), Inches(3.8), Inches(0.66),
+             t, size=15, bold=True, color=col, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, MX + Inches(4.7), y + Inches(0.08), Inches(6.9), Inches(0.66),
+             d, size=12.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
+add_text(s, MX, Inches(6.75), Inches(11.8), Inches(0.5),
+         "結論：webcam + 270M + 正常音量＝展場夠用，不需升級模型或麥克風。",
+         size=14, bold=True, color=TEALDK)
+set_notes(s, "★語音展場可行性的量化證據。三環境通過率 78/77/73%——關鍵訊息是"
+             "「噪音幾乎不影響」（light −1%、heavy −5%）。方法上的巧思：真人只念一次、"
+             "存下錄音，之後自動混噪重測，念一次測三種環境、對比公平。三大發現：噪音不是"
+             "問題、音量才是關鍵變數、失敗幾乎全是 ASR 模型極限（訪客重講可解）。"
+             "最終結論：現有硬體（webcam + 270M）＋正常音量就夠展場用，不用花錢升級。")
+pn(s)
+
+
+# ─── S13c 語音 POC · 兩大容錯層 ─────────────────────────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 容錯設計", "ASR 會聽錯，兩層容錯把它接住")
+add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
+         "270M 小模型辨識不完美（滑鼠→華數/華族）。兩層容錯——真人聲實測一句句磨出來——讓聽錯也答對。",
+         size=13.5, color=GREY55)
+# 左卡：發音容錯層
+lx = MX
+add_round(s, lx, Inches(2.15), Inches(5.75), Inches(3.75), fill=TEALBG, shadow=True)
+add_text(s, lx + Inches(0.35), Inches(2.4), Inches(5.05), Inches(0.4),
+         "① 發音容錯層", size=17, bold=True, color=TEALDK)
+add_text(s, lx + Inches(0.35), Inches(2.85), Inches(5.05), Inches(0.4),
+         "字形救不到 → 轉拼音比對", font=FONT_ZH, size=13, bold=True, color=DARK)
+pfx = [
+    "同音字形遠：滑鼠→華數，字形比對 0 分",
+    "轉拼音比對即中（huashu ≈ huashu）",
+    "捲舌音節還原：ㄕ/ㄗ 混淆也接得住",
+    "門檻 0.82 防誤配（衛生棉≠衛生紙）",
+    "字形優先、發音救底 → 守衛零回歸",
+]
+for i, t in enumerate(pfx):
+    y = Inches(3.4) + Inches(0.46) * i
+    add_text(s, lx + Inches(0.35), y, Inches(0.3), Inches(0.4), "·", size=15,
+             bold=True, color=TEAL)
+    add_text(s, lx + Inches(0.62), y, Inches(4.9), Inches(0.44), t, size=12.5,
+             color=GREY44)
+# 右卡：同音修正層
+rx2 = Inches(7.05)
+add_round(s, rx2, Inches(2.15), Inches(5.55), Inches(3.75), fill=LIGHT, shadow=True)
+add_text(s, rx2 + Inches(0.35), Inches(2.4), Inches(4.85), Inches(0.4),
+         "② 語音同音修正", size=17, bold=True, color=AMBER)
+add_text(s, rx2 + Inches(0.35), Inches(2.85), Inches(4.85), Inches(0.4),
+         "掛 ASR 出口，不碰倉管核心", font=FONT_ZH, size=13, bold=True, color=DARK)
+sfx = [
+    "倉別：總/藏/昌 倉 → 中/北 倉",
+    "動詞：近→進、谷→補（吵雜劣化）",
+    "量詞：臺→台（OpenCC 轉繁差異）",
+    "異體字：溼→濕、賬→帳、周→週",
+    "打字訪客零影響、守衛零風險",
+]
+for i, t in enumerate(sfx):
+    y = Inches(3.4) + Inches(0.46) * i
+    add_text(s, rx2 + Inches(0.35), y, Inches(0.3), Inches(0.4), "·", size=15,
+             bold=True, color=AMBER)
+    add_text(s, rx2 + Inches(0.62), y, Inches(4.7), Inches(0.44), t, size=12.5,
+             color=GREY44)
+add_text(s, MX, Inches(6.35), Inches(11.8), Inches(0.5),
+         "設計原則：每一條容錯規則都有守衛把關，改規則前先跑護欄測試——聽錯可以救，但不能救錯。",
+         size=13, bold=True, color=TEALDK)
+set_notes(s, "語音容錯的兩層設計，都是真人聲實測一句句磨出來的。左＝發音容錯層："
+             "ASR 錯字多是「同音但字形差很遠」（滑鼠→華數），字形比對救不到、轉拼音就中；"
+             "還做了捲舌音節還原（ㄕ/ㄗ 不分）。門檻 0.82 是實測調出來的——太低會把"
+             "「衛生棉」誤配成「衛生紙」。右＝語音同音修正：只掛 ASR 出口，所以打字訪客"
+             "完全不受影響、守衛零風險。關鍵原則：每條規則都有守衛把關，改規則前跑護欄測試。")
+pn(s)
+
+
 # ─── S13 總結（深底）─────────────────────────────────────
 s = slide_blank()
 add_rect(s, 0, 0, SLIDE_W, SLIDE_H, fill=DARK)
@@ -912,12 +1041,13 @@ add_text(s, MX, Inches(1.15), Inches(11.8), Inches(0.7),
 cards = [
     ("價值", "🎯", "自然語言問倉管，一秒回答；手機掃碼、離線可用、硬體成本極低"),
     ("技術", "🧠", "270M 小模型當路由器 + 規則層當決策者，業界邊緣 Agent 的正解"),
-    ("品質", "🛡️", "六套回歸雙平台 100%；多輪全枚舉把「可靠」變成數字，不靠祈禱"),
+    ("品質", "🛡️", "六套回歸雙平台 100%；守衛庫 1122 句把「可靠」變成數字，不靠祈禱"),
+    ("語音", "🎙️", "全離線 ASR 展場可用；三環境噪音實測，現有硬體 + 正常音量就夠"),
 ]
-y0 = Inches(2.25)
+y0 = Inches(1.95)
 for i, (tag, ic, desc) in enumerate(cards):
-    y = y0 + Inches(1.25) * i
-    add_round(s, MX, y, Inches(11.87), Inches(1.05), fill=NAVY)
+    y = y0 + Inches(1.08) * i
+    add_round(s, MX, y, Inches(11.87), Inches(0.92), fill=NAVY)
     add_icon_circle(s, MX + Inches(0.3), y + Inches(0.24), Inches(0.58), tag[0],
                     circle=TEAL, gcolor=DARK, gsize=17)
     add_text(s, MX + Inches(1.15), y + Inches(0.15), Inches(1.6), Inches(0.75),
