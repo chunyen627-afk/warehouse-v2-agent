@@ -6519,6 +6519,15 @@ async def ws_handler(ws: WebSocket):
                 _ctx_absorb(vid, o.get("result") or {})
             except Exception as e:
                 log.warning(f"[ctx-absorb] vid={vid} 失敗（不影響回答）: {e}")
+            # 展場除錯用：把系統回答也記進 journal，與上面的「User vid=X: 輸入」
+            #   配成對（展後 grep 'User vid=\|Answer vid=' 就能看完整問答）。
+            #   只多印一行 log、用現有 journal，不建檔不動前端、零負擔。
+            try:
+                _r = o.get("result") or {}
+                _sm = (_r.get("summary") or "").replace("\n", " ")[:80]
+                log.info(f"Answer vid={vid}: [{_r.get('view') or '-'}] {_sm}")
+            except Exception:
+                pass
         await ws.send_text(json.dumps(o, ensure_ascii=False))
 
     # vid 用全域遞增序號，絕不碰撞（2026-07-09：原 id(ws)%10000 兩個連線會算出
