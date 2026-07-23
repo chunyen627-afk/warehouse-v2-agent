@@ -935,6 +935,66 @@ set_notes(s, "語音 POC 全鏈架構（2026-07 新增）。核心設計：語�
 pn(s)
 
 
+# ─── S13a2 語音 POC · 為何選 Fun-ASR-Nano（選型對照表）★ ──────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 選型", "為什麼是 Fun-ASR-Nano，不是 Whisper")
+add_text(s, MX, Inches(1.38), Inches(11.8), Inches(0.4),
+         "選型鐵律：能在 RPi5 CPU 純離線跑、且能沿用倉管既有的 llama.cpp / GGUF runtime——不必為語音再扛一套框架。",
+         size=13, color=GREY55)
+# 對照表：欄位 = 模型 / 參數 / Runtime / 離線RPi5 / 中文CER / 判定
+col_x = [MX, Inches(3.05), Inches(4.55), Inches(6.75), Inches(8.55), Inches(10.25)]
+col_w = [Inches(2.25), Inches(1.45), Inches(2.15), Inches(1.75), Inches(1.65), Inches(2.35)]
+headers = ["模型", "參數", "Runtime / 部署", "RPi5 離線", "中文 CER", "本專案判定"]
+ty = Inches(1.95); th = Inches(0.5)
+# 表頭
+add_round(s, MX, ty, Inches(11.87), th, fill=DARK)
+for i, hd in enumerate(headers):
+    add_text(s, col_x[i] + Inches(0.12), ty + Inches(0.09), col_w[i] - Inches(0.2), Inches(0.36),
+             hd, size=12, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+rows = [
+    ("Fun-ASR-Nano", "~800M", "llama.cpp / GGUF", "✓ 2.5s/句", "低", "★ 採用", True),
+    ("Whisper small", "244M", "whisper.cpp 另一套", "可但中文弱", "~20%", "中文 CER 高", False),
+    ("Whisper large-v3", "1.55B", "太重 / 需 GPU", "✕ RPi5 跑不動", "~20%", "太大＋雲端傾向", False),
+    ("SenseVoice-Small", "234M", "sherpa-onnx 另整合", "✓ 快", "~8%", "要重整合，展前風險", False),
+    ("Paraformer", "~220M", "sherpa-onnx 另整合", "✓ 輕", "~10%", "同上，備援方案", False),
+]
+ry = ty + th
+rh = Inches(0.68)
+for r, (m, p, rt, off, cer, verd, chosen) in enumerate(rows):
+    y = ry + rh * r
+    bg = TEALBG if chosen else (LIGHT if r % 2 else WHITE)
+    add_rect(s, MX, y, Inches(11.87), rh, fill=bg, line=GREYE6, line_w=0.5)
+    add_text(s, col_x[0] + Inches(0.12), y + Inches(0.1), col_w[0] - Inches(0.2), Inches(0.48),
+             m, size=12.5, bold=chosen, color=(TEALDK if chosen else DARK), anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, col_x[1] + Inches(0.12), y + Inches(0.1), col_w[1] - Inches(0.2), Inches(0.48),
+             p, font=FONT_EN, size=12, bold=chosen, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, col_x[2] + Inches(0.12), y + Inches(0.1), col_w[2] - Inches(0.2), Inches(0.48),
+             rt, size=11, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, col_x[3] + Inches(0.12), y + Inches(0.1), col_w[3] - Inches(0.2), Inches(0.48),
+             off, size=11, color=(TEALDK if chosen else GREY55), bold=chosen, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, col_x[4] + Inches(0.12), y + Inches(0.1), col_w[4] - Inches(0.2), Inches(0.48),
+             cer, font=FONT_EN, size=11.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, col_x[5] + Inches(0.12), y + Inches(0.1), col_w[5] - Inches(0.2), Inches(0.48),
+             verd, size=11.5, bold=chosen, color=(TEALDK if chosen else GREY55), anchor=MSO_ANCHOR.MIDDLE)
+# 底部：關鍵選型理由
+add_round(s, MX, Inches(6.15), Inches(11.87), Inches(0.98), fill=DARK, shadow=True)
+add_rich(s, MX + Inches(0.4), Inches(6.32), Inches(11.1), Inches(0.66),
+         [[{"text": "決勝點  ", "font": FONT_EN, "size": 13, "bold": True, "color": TEAL},
+           {"text": "與倉管 LLM 共用同一套 llama.cpp / GGUF runtime", "size": 13, "bold": True, "color": WHITE},
+           {"text": "——語音不必另裝 sherpa-onnx；GLIBC 不合就在 RPi5 源碼編（4.5 分）；輸出簡體用 OpenCC 完美轉繁。",
+            "size": 12.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★語音選型頁（技術評審向）。選型鐵律：必須能在 RPi5 CPU 純離線跑，且盡量沿用"
+             "倉管既有的 llama.cpp / GGUF runtime。對照四個候選：Whisper small 中文 CER 高（~20%，"
+             "英文強中文弱）；Whisper large-v3 1.55B 太大、RPi5 純 CPU 跑不動、且偏雲端；"
+             "SenseVoice-Small / Paraformer 中文 CER 其實更漂亮（~8%/~10%），但走 sherpa-onnx 生態、"
+             "要重新整合一套框架，展前時間風險高，列為備援方案。Fun-ASR-Nano 決勝點＝跟倉管 LLM 共用"
+             "同一套 llama.cpp / GGUF runtime，語音不用再扛一套框架、部署面最省；官方 arm64 binary 要"
+             "GLIBC 2.38 而 RPi5 是 2.36，直接在機上源碼編 4.5 分鐘解決；輸出簡體用 OpenCC s2twp 完美"
+             "轉繁並順帶轉台灣用語。誠實補一句：SenseVoice 若展後有時間值得回頭評估換裝，CER 更低。")
+pn(s)
+
+
 # ─── S13b 語音 POC · 三環境噪音測試 ─────────────────────────
 s = slide_blank()
 title_bar(s, "VOICE POC · 展場噪音實測", "念一次真人聲，自動測三種環境")
@@ -1027,6 +1087,120 @@ set_notes(s, "語音容錯的兩層設計，都是真人聲實測一句句磨出
              "還做了捲舌音節還原（ㄕ/ㄗ 不分）。門檻 0.82 是實測調出來的——太低會把"
              "「衛生棉」誤配成「衛生紙」。右＝語音同音修正：只掛 ASR 出口，所以打字訪客"
              "完全不受影響、守衛零風險。關鍵原則：每條規則都有守衛把關，改規則前跑護欄測試。")
+pn(s)
+
+
+# ─── S13d 語音 POC · 聽錯→救回 實測範例 ★ ──────────────────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 救回實例", "ASR 聽錯，容錯層照樣答對（真人聲實測）")
+add_text(s, MX, Inches(1.38), Inches(11.8), Inches(0.4),
+         "以下全是 2026-07 真人聲實測（webcam）的原始紀錄：ASR 明明聽錯，經容錯層修正後結果正確。",
+         size=13, color=GREY55)
+# 三欄對照表：原句 / ASR 聽成 / 救回結果
+cx = [MX, Inches(4.55), Inches(8.35)]
+cw = [Inches(3.7), Inches(3.6), Inches(4.05)]
+hd = ["訪客原句", "ASR 聽成（錯）", "容錯層救回 → 答對"]
+ty = Inches(1.95); th = Inches(0.46)
+add_round(s, MX, ty, Inches(11.87), th, fill=DARK)
+for i in range(3):
+    add_text(s, cx[i] + Inches(0.14), ty + Inches(0.07), cw[i] - Inches(0.24), Inches(0.34),
+             hd[i], size=12, bold=True, color=(TEAL if i == 2 else WHITE), anchor=MSO_ANCHOR.MIDDLE)
+save_rows = [
+    ("北倉進五十個滑鼠", "北藏近五十個華族", "藏→倉·近→進·華族→滑鼠"),
+    ("幫我在北倉加五十個滑鼠", "…加五十個花束", "花束→滑鼠（拼音同音）"),
+    ("藍牙耳機庫存", "藍芽耳機庫存", "藍芽→藍牙（OpenCC 用語）"),
+    ("中倉衛生紙還有嗎", "中餐衛生紙還有嗎", "中餐→中倉"),
+    ("運動壓縮臂套庫存", "運動壓縮筆套庫存", "筆套→臂套"),
+    ("精釀啤酒庫存", "儘量啤酒庫存", "儘量→精釀"),
+    ("防蚊液庫存", "防蚊衣庫存", "防蚊衣→防蚊液"),
+    ("衛生紙的帳對不上", "衛生紙的賬對不上", "賬→帳（異體字）"),
+    ("南倉出十五個瑜珈墊", "南倉出十五個瑜伽墊", "瑜伽→瑜珈"),
+]
+ry = ty + th; rh = Inches(0.435)
+for r, (o, wrong, fix) in enumerate(save_rows):
+    y = ry + rh * r
+    add_rect(s, MX, y, Inches(11.87), rh, fill=(LIGHT if r % 2 else WHITE), line=GREYE6, line_w=0.5)
+    add_text(s, cx[0] + Inches(0.14), y + Inches(0.05), cw[0] - Inches(0.24), Inches(0.34),
+             o, size=12, color=DARK, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, cx[1] + Inches(0.14), y + Inches(0.05), cw[1] - Inches(0.24), Inches(0.34),
+             wrong, size=12, color=CORAL, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, cx[2] + Inches(0.14), y + Inches(0.05), cw[2] - Inches(0.24), Inches(0.34),
+             fix, size=12, bold=True, color=TEALDK, anchor=MSO_ANCHOR.MIDDLE)
+# 底部拼音證據
+add_round(s, MX, Inches(6.5), Inches(11.87), Inches(0.72), fill=TEALBG)
+add_rich(s, MX + Inches(0.35), Inches(6.63), Inches(11.2), Inches(0.48),
+         [[{"text": "為何拼音救得到：  ", "size": 12.5, "bold": True, "color": TEALDK},
+           {"text": "華數 huashu = 滑鼠 huashu（完全同音）｜藍雅爾基 lanyaerji = 藍牙耳機 lanyaerji｜到齊 daoqi = 到期 daoqi",
+            "font": FONT_EN, "size": 12, "color": GREY44},
+           {"text": "  → 字形零重疊、拼音一比即中", "size": 12, "color": GREY44}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★聽錯→救回實例頁（技術評審最有感）。強調這些全是真人聲實測原始紀錄、不是虛構："
+             "中欄紅字是 ASR 真的聽錯的字，右欄綠字是容錯層怎麼救回。最漂亮的一句「北倉進五十個滑鼠」"
+             "一次踩三種錯（倉別藏→倉、動詞近→進、商品名華族→滑鼠），三種修正機制同時作用救回、"
+             "真的把 50 件寫進庫存。底部拼音證據解釋原理：ASR 錯字特徵是「音同/音近但字形零重疊」，"
+             "字形比對必敗、轉拼音一比即中——這就是為什麼發音容錯層有效。")
+pn(s)
+
+
+# ─── S13e 語音 POC · 救不回的極限（誠實交代）★ ────────────────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 極限與對策", "救不回的也照實講：270M 的天花板")
+add_text(s, MX, Inches(1.38), Inches(11.8), Inches(0.4),
+         "誠實區分：同音/音近能救；但 ASR 把整詞聽成毫不相干的詞（字形+發音都差），容錯層無能為力。",
+         size=13, color=GREY55)
+# 左：救不回案例表
+add_round(s, MX, Inches(1.95), Inches(7.15), Inches(4.15), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(0.3), Inches(2.13), Inches(6.6), Inches(0.36),
+         "整詞崩壞 → 救不回（FAIL）", size=14.5, bold=True, color=CORAL)
+fail_rows = [
+    ("瑜珈墊有貨嗎", "女藥店有貨嗎"),
+    ("露營帳篷有貨嗎", "女人占房有好嗎"),
+    ("北倉的滑鼠有多少", "北倉的瓦數有多少"),
+    ("有缺的列出來", "有趣的列出來"),
+    ("北倉進三十瓶防蚊液", "…近三十品防瘟疫"),
+    ("南倉收了三十個啤酒", "…收了三十個皮"),
+    ("啞鈴庫存", "10 庫存"),
+]
+fhy = Inches(2.62); fhh = Inches(0.475)
+add_text(s, MX + Inches(0.3), fhy - Inches(0.02), Inches(3.2), Inches(0.3),
+         "原句", size=11, bold=True, color=GREY77)
+add_text(s, MX + Inches(3.75), fhy - Inches(0.02), Inches(3.2), Inches(0.3),
+         "ASR 聽成", size=11, bold=True, color=GREY77)
+for r, (o, w) in enumerate(fail_rows):
+    y = fhy + Inches(0.3) + (fhh) * r
+    add_text(s, MX + Inches(0.3), y, Inches(3.35), Inches(0.4),
+             o, size=12, color=DARK, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, MX + Inches(3.75), y, Inches(3.2), Inches(0.4),
+             "→ " + w, size=12, color=CORAL, anchor=MSO_ANCHOR.MIDDLE)
+# 右：對策
+rx = Inches(8.2)
+add_round(s, rx, Inches(1.95), Inches(4.4), Inches(4.15), fill=DARK, shadow=True)
+add_text(s, rx + Inches(0.32), Inches(2.13), Inches(3.8), Inches(0.36),
+         "對策：人在迴路即容錯", size=14.5, bold=True, color=TEAL)
+cop = [
+    ("🗣️", "前端即時顯示辨識文字", "訪客看到「女藥店」明顯不對，自然會重講一次"),
+    ("🎯", "不硬編同音規則硬猜", "亂編規則救個案，會誤傷別句、風險大於效益"),
+    ("🔊", "音量才是主因", "小聲時摩擦音 ㄕ/ㄘ 糊掉；展場大聲對麥＝多半消失"),
+    ("🔁", "展後回饋閉環", "展場問答入 journal，事後撈真實錯句補規則"),
+]
+for i, (ic, h, d) in enumerate(cop):
+    y = Inches(2.62) + Inches(0.85) * i
+    dot_icon(s, rx + Inches(0.32), y, ic, d=0.4, circle=TEAL, gcolor=DARK, gsize=12)
+    add_text(s, rx + Inches(0.85), y - Inches(0.04), Inches(3.4), Inches(0.32),
+             h, size=12.5, bold=True, color=WHITE)
+    add_text(s, rx + Inches(0.85), y + Inches(0.26), Inches(3.45), Inches(0.5),
+             d, size=11, color=GREYBB, line_spacing=1.1)
+# 底部一句
+add_text(s, MX, Inches(6.35), Inches(11.8), Inches(0.6),
+         "分寸：容錯層只救「聽得出是同一個音」的錯——救得到的自動救、救不到的交給人重講，絕不亂猜幻覺出錯商品。",
+         size=13, bold=True, color=TEALDK, line_spacing=1.2)
+set_notes(s, "★極限與對策頁（誠實加分）。技術評審最怕看到只報喜不報憂——這頁專講救不回的。"
+             "左表：ASR 把整詞聽成毫不相干的詞（瑜珈墊→女藥店、露營帳篷→女人占房、滑鼠→瓦數、"
+             "缺→趣、防蚊液→防瘟疫），字形和發音都對不上，容錯層本來就不該硬救。右邊對策核心＝"
+             "人在迴路：前端即時顯示辨識文字，訪客看到明顯錯字會自然重講——這比硬編同音規則安全得多"
+             "（亂編規則救個案會誤傷別句）。另外三點：音量才是主因（正常音量下大半 FAIL 會消失）、"
+             "展後靠 journal 問答記錄做回饋閉環補規則。分寸金句：救得到的自動救、救不到的交給人重講，"
+             "絕不亂猜幻覺出錯商品——這正是整個系統『寧可反問、不可答錯』哲學在語音上的延伸。")
 pn(s)
 
 
