@@ -1035,58 +1035,129 @@ pn(s)
 
 # ─── S13c 語音 POC · 兩大容錯層 ─────────────────────────────
 s = slide_blank()
-title_bar(s, "VOICE POC · 容錯設計", "ASR 會聽錯，兩層容錯把它接住")
+title_bar(s, "VOICE POC · 容錯設計", "兩層容錯：拼音智慧比對 + 固定規則修正")
 add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
-         "270M 小模型辨識不完美（滑鼠→華數/華族）。兩層容錯——真人聲實測一句句磨出來——讓聽錯也答對。",
+         "270M 辨識不完美（滑鼠→華數/華族）。主角是「拼音容錯層」——把錯字轉拼音智慧比對；再配一層固定規則收尾。",
          size=13.5, color=GREY55)
-# 左卡：發音容錯層
+# 左卡：發音容錯層（拼音，技術主角 → 較寬）
 lx = MX
-add_round(s, lx, Inches(2.15), Inches(5.75), Inches(3.75), fill=TEALBG, shadow=True)
-add_text(s, lx + Inches(0.35), Inches(2.4), Inches(5.05), Inches(0.4),
-         "① 發音容錯層", size=17, bold=True, color=TEALDK)
-add_text(s, lx + Inches(0.35), Inches(2.85), Inches(5.05), Inches(0.4),
-         "字形救不到 → 轉拼音比對", font=FONT_ZH, size=13, bold=True, color=DARK)
+add_round(s, lx, Inches(2.15), Inches(6.35), Inches(3.75), fill=TEALBG, shadow=True)
+add_rich(s, lx + Inches(0.35), Inches(2.38), Inches(5.65), Inches(0.42),
+         [[{"text": "① 拼音容錯層", "size": 17, "bold": True, "color": TEALDK},
+           {"text": "  · 主角 · 智慧比對", "size": 12, "bold": True, "color": TEAL}]])
+add_text(s, lx + Inches(0.35), Inches(2.85), Inches(5.65), Inches(0.4),
+         "字形救不到 → 轉拼音、滑窗比對商品名", font=FONT_ZH, size=12.5, bold=True, color=DARK)
 pfx = [
-    "同音字形遠：滑鼠→華數，字形比對 0 分",
-    "轉拼音比對即中（huashu ≈ huashu）",
-    "捲舌音節還原：ㄕ/ㄗ 混淆也接得住",
+    "同音字形遠：滑鼠 vs 華數，字形 0 分",
+    "轉拼音一比即中：huashu ≈ huashu",
+    "音節還原 zu→zhu／su→shu，救捲舌混淆",
+    "滑窗掃句：核心名拼音是句拼音子串 → 命中",
     "門檻 0.82 防誤配（衛生棉≠衛生紙）",
-    "字形優先、發音救底 → 守衛零回歸",
+    "字形優先、拼音救底 → 打字＋守衛零回歸",
 ]
 for i, t in enumerate(pfx):
-    y = Inches(3.4) + Inches(0.46) * i
+    y = Inches(3.32) + Inches(0.42) * i
     add_text(s, lx + Inches(0.35), y, Inches(0.3), Inches(0.4), "·", size=15,
              bold=True, color=TEAL)
-    add_text(s, lx + Inches(0.62), y, Inches(4.9), Inches(0.44), t, size=12.5,
+    add_text(s, lx + Inches(0.62), y, Inches(5.5), Inches(0.4), t, size=12,
              color=GREY44)
-# 右卡：同音修正層
-rx2 = Inches(7.05)
-add_round(s, rx2, Inches(2.15), Inches(5.55), Inches(3.75), fill=LIGHT, shadow=True)
-add_text(s, rx2 + Inches(0.35), Inches(2.4), Inches(4.85), Inches(0.4),
-         "② 語音同音修正", size=17, bold=True, color=AMBER)
-add_text(s, rx2 + Inches(0.35), Inches(2.85), Inches(4.85), Inches(0.4),
-         "掛 ASR 出口，不碰倉管核心", font=FONT_ZH, size=13, bold=True, color=DARK)
+# 右卡：同音修正層（固定規則 → 較窄）
+rx2 = Inches(7.55)
+rw2 = SLIDE_W - rx2 - MX
+add_round(s, rx2, Inches(2.15), rw2, Inches(3.75), fill=LIGHT, shadow=True)
+add_text(s, rx2 + Inches(0.32), Inches(2.38), rw2 - Inches(0.6), Inches(0.42),
+         "② 固定規則修正", size=17, bold=True, color=AMBER)
+add_text(s, rx2 + Inches(0.32), Inches(2.85), rw2 - Inches(0.6), Inches(0.4),
+         "掛 ASR 出口，不碰倉管核心", font=FONT_ZH, size=12.5, bold=True, color=DARK)
 sfx = [
-    "倉別：總/藏/昌 倉 → 中/北 倉",
-    "動詞：近→進、谷→補（吵雜劣化）",
-    "量詞：臺→台（OpenCC 轉繁差異）",
+    "倉別：總/藏/昌倉 → 中/北倉",
+    "動詞：近→進、谷→補",
+    "量詞：臺→台（OpenCC 差異）",
     "異體字：溼→濕、賬→帳、周→週",
+    "退貨中文數字豁免",
     "打字訪客零影響、守衛零風險",
 ]
 for i, t in enumerate(sfx):
-    y = Inches(3.4) + Inches(0.46) * i
-    add_text(s, rx2 + Inches(0.35), y, Inches(0.3), Inches(0.4), "·", size=15,
+    y = Inches(3.32) + Inches(0.42) * i
+    add_text(s, rx2 + Inches(0.32), y, Inches(0.3), Inches(0.4), "·", size=15,
              bold=True, color=AMBER)
-    add_text(s, rx2 + Inches(0.62), y, Inches(4.7), Inches(0.44), t, size=12.5,
+    add_text(s, rx2 + Inches(0.58), y, Inches(4.0), Inches(0.4), t, size=12,
              color=GREY44)
-add_text(s, MX, Inches(6.35), Inches(11.8), Inches(0.5),
-         "設計原則：每一條容錯規則都有守衛把關，改規則前先跑護欄測試——聽錯可以救，但不能救錯。",
-         size=13, bold=True, color=TEALDK)
-set_notes(s, "語音容錯的兩層設計，都是真人聲實測一句句磨出來的。左＝發音容錯層："
-             "ASR 錯字多是「同音但字形差很遠」（滑鼠→華數），字形比對救不到、轉拼音就中；"
-             "還做了捲舌音節還原（ㄕ/ㄗ 不分）。門檻 0.82 是實測調出來的——太低會把"
-             "「衛生棉」誤配成「衛生紙」。右＝語音同音修正：只掛 ASR 出口，所以打字訪客"
-             "完全不受影響、守衛零風險。關鍵原則：每條規則都有守衛把關，改規則前跑護欄測試。")
+add_text(s, MX, Inches(6.3), Inches(11.8), Inches(0.5),
+         "分工：拼音層救「沒見過的音近錯」（會智慧比對）；規則層收「反覆出現的固定錯」（查表最快最穩）。下一頁看拼音層怎麼一步步救。",
+         size=12.5, bold=True, color=TEALDK)
+set_notes(s, "語音容錯兩層設計，都是真人聲實測一句句磨出來的。刻意分工：左＝拼音容錯層（技術主角）"
+             "——處理「沒見過的音近錯」，靠智慧比對而非查表：ASR 錯字多是「同音但字形差很遠」"
+             "（滑鼠→華數），字形比對救不到、轉拼音就中；做了捲舌平舌音節還原（zu→zhu、su→shu）；"
+             "用滑窗掃整句找商品核心名拼音；門檻 0.82（太低會把衛生棉誤配衛生紙）。右＝固定規則修正"
+             "——處理「反覆出現的固定錯」（倉別/動詞/量詞/異體字），這種錯每次都一樣，直接查表最快最穩，"
+             "不需要智慧比對。兩層都只掛 ASR 出口、不碰 warehouse.py，所以打字訪客零影響、守衛零風險。"
+             "下一頁用流程圖把拼音層的五步決策拆開講。")
+pn(s)
+
+
+# ─── S13c2 語音 POC · 拼音修正流程圖 ★老闆愛看圖 ──────────────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 拼音修正流程", "一個錯字怎麼被救回：字形先試，拼音救底")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.36),
+         "核心：ASR 錯字多是「音同、字形零重疊」——字形比對必敗，轉成拼音一比即中。全程純字串運算，RPi5 零負擔。",
+         size=12.5, color=GREY55)
+# ── 左：直向決策流程（5 步 + 判斷菱形感）──
+fx = MX
+fw = Inches(6.7)
+steps = [
+    ("輸入 keyword", "270M 抽出的商品詞（常髒／殘／錯）", NAVY, "in"),
+    ("① 字形比對優先", "先走 LCS 字形比對，命中就用 → 不進拼音層", TEALDK, "step"),
+    ("② 三道排除閘", "含寫入動詞／倉別／數字 → 不救；>6 字 → 不救", AMBER, "gate"),
+    ("③ 轉拼音 + 音節還原", "lazy_pinyin，捲舌平舌還原（zu→zhu、su→shu）", TEAL, "step"),
+    ("④ 滑窗比對商品拼音", "核心名拼音 vs 句拼音，difflib 取最佳對齊", TEAL, "step"),
+    ("⑤ 門檻 0.82 判定", "≥0.82 救回；否則回空 → 交 clarify 反問", TEALDK, "dec"),
+]
+sy = Inches(1.95); sh = Inches(0.66); sgap = Inches(0.185)
+for i, (name, desc, col, kind) in enumerate(steps):
+    y = sy + (sh + sgap) * i
+    shp = add_round(s, fx, y, fw, sh, fill=(LIGHT if kind != "in" else col), shadow=True)
+    tcol = WHITE if kind == "in" else col
+    add_text(s, fx + Inches(0.28), y + Inches(0.07), Inches(2.75), Inches(0.54),
+             name, size=13.5, bold=True, color=tcol, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, fx + Inches(3.05), y + Inches(0.07), fw - Inches(3.3), Inches(0.54),
+             desc, size=11, color=(GREYBB if kind == "in" else GREY44),
+             anchor=MSO_ANCHOR.MIDDLE)
+    if i < len(steps) - 1:
+        add_text(s, fx + fw / 2 - Inches(0.2), y + sh - Inches(0.03), Inches(0.4),
+                 Inches(0.22), "▼", font=FONT_EN, size=11, color=GREYBB,
+                 align=PP_ALIGN.CENTER)
+# ── 右：具體範例貫穿（同一句一路走下來）──
+rx = MX + Inches(7.05)
+rw = SLIDE_W - rx - MX
+add_round(s, rx, Inches(1.95), rw, Inches(5.15), fill=DARK, shadow=True)
+add_text(s, rx + Inches(0.32), Inches(2.15), rw - Inches(0.64), Inches(0.36),
+         "實例：「北倉的滑鼠有多少」", size=14, bold=True, color=TEAL)
+trace = [
+    ("ASR 聽成", "北倉的華數有多少", CORAL),
+    ("抽 keyword", "華數", GREYBB),
+    ("① 字形比對", "華數 vs 滑鼠 → 0 重疊，失敗", GREYBB),
+    ("② 排除閘", "無寫入詞／無數字／2 字 → 放行", GREYBB),
+    ("③ 轉拼音", "華數 = huashu（su→shu 還原）", WHITE),
+    ("④ 滑窗比對", "滑鼠 huashu ⊂ 句拼音 → 命中", WHITE),
+    ("⑤ 門檻", "0.95 ≥ 0.82 → 救回", TEAL),
+    ("結果", "→ 無線滑鼠 ✓ 答對", TEAL),
+]
+for i, (k, v, col) in enumerate(trace):
+    y = Inches(2.62) + Inches(0.55) * i
+    add_text(s, rx + Inches(0.32), y, Inches(1.5), Inches(0.5),
+             k, size=11.5, bold=True, color=GREYBB, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, rx + Inches(1.9), y, rw - Inches(2.2), Inches(0.5),
+             v, size=12, bold=(col in (TEAL, WHITE)), color=col, anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★拼音修正流程圖（老闆/評審最有感的一頁）。左邊是決策流程，右邊用同一句"
+             "「北倉的滑鼠有多少」一路走到底。核心洞見：ASR 錯字的特徵是「音同、字形零重疊」"
+             "（華數 vs 滑鼠一個字都不重疊），所以字形比對一定失敗、轉成拼音一比即中。"
+             "五步：①字形優先（命中就不進拼音層，零回歸的保證）②三道排除閘（含寫入動詞/倉別/"
+             "數字的句子不救——這是當初打壞 63 條守衛後加的，只救乾淨短查詢詞）③轉拼音時做捲舌"
+             "平舌音節還原（zu→zhu、su→shu，因為台灣國語與 ASR 常把滑鼠 huashu 聽成華族 huazu）"
+             "④滑窗比對商品核心名拼音⑤門檻 0.82。門檻 0.82 是實測血淚調出來的——放寬到 0.78 會把"
+             "「衛生棉」誤配「衛生紙」（同 0.80），所以不靠放門檻、靠精準音節還原來拉開分數。"
+             "全程純字串運算，RPi5 零算力負擔。救不到就回空、交給系統反問，絕不亂猜。")
 pn(s)
 
 
