@@ -976,13 +976,19 @@ for r, (m, p, rt, off, cer, verd, chosen) in enumerate(rows):
              cer, font=FONT_EN, size=11.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
     add_text(s, col_x[5] + Inches(0.12), y + Inches(0.1), col_w[5] - Inches(0.2), Inches(0.48),
              verd, size=11.5, bold=chosen, color=(TEALDK if chosen else GREY55), anchor=MSO_ANCHOR.MIDDLE)
-# 底部：關鍵選型理由
-add_round(s, MX, Inches(6.15), Inches(11.87), Inches(0.98), fill=DARK, shadow=True)
-add_rich(s, MX + Inches(0.4), Inches(6.32), Inches(11.1), Inches(0.66),
+# 底部：關鍵選型理由 + 版本時效性
+add_round(s, MX, Inches(5.98), Inches(11.87), Inches(1.18), fill=DARK, shadow=True)
+add_rich(s, MX + Inches(0.4), Inches(6.12), Inches(11.1), Inches(0.5),
          [[{"text": "決勝點  ", "font": FONT_EN, "size": 13, "bold": True, "color": TEAL},
            {"text": "與倉管 LLM 共用同一套 llama.cpp / GGUF runtime", "size": 13, "bold": True, "color": WHITE},
-           {"text": "——語音不必另裝 sherpa-onnx；GLIBC 不合就在 RPi5 源碼編（4.5 分）；輸出簡體用 OpenCC 完美轉繁。",
-            "size": 12.5, "color": GREYBB}]],
+           {"text": "——不必另裝 sherpa-onnx；GLIBC 不合就在 RPi5 源碼編；輸出簡體用 OpenCC 完美轉繁。",
+            "size": 12, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+add_rich(s, MX + Inches(0.4), Inches(6.63), Inches(11.1), Inches(0.42),
+         [[{"text": "最前沿  ", "font": FONT_EN, "size": 13, "bold": True, "color": AMBER},
+           {"text": "模型權重 2025Q4（Fun-ASR-Nano-2512），llama.cpp GGUF runtime 2026 年 6 月才釋出",
+            "size": 12, "bold": True, "color": WHITE},
+           {"text": "——發布一個多月即導入，非舊模型。", "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 set_notes(s, "★語音選型頁（技術評審向）。選型鐵律：必須能在 RPi5 CPU 純離線跑，且盡量沿用"
              "倉管既有的 llama.cpp / GGUF runtime。對照四個候選：Whisper small 中文 CER 高（~20%，"
@@ -991,7 +997,84 @@ set_notes(s, "★語音選型頁（技術評審向）。選型鐵律：必須能
              "要重新整合一套框架，展前時間風險高，列為備援方案。Fun-ASR-Nano 決勝點＝跟倉管 LLM 共用"
              "同一套 llama.cpp / GGUF runtime，語音不用再扛一套框架、部署面最省；官方 arm64 binary 要"
              "GLIBC 2.38 而 RPi5 是 2.36，直接在機上源碼編 4.5 分鐘解決；輸出簡體用 OpenCC s2twp 完美"
-             "轉繁並順帶轉台灣用語。誠實補一句：SenseVoice 若展後有時間值得回頭評估換裝，CER 更低。")
+             "轉繁並順帶轉台灣用語。誠實補一句：SenseVoice 若展後有時間值得回頭評估換裝，CER 更低。"
+             "版本時效性（加分點）：模型是 Fun-ASR-Nano-2512（2025 年 12 月權重），能跑 llama.cpp GGUF "
+             "的 runtime 是 2026 年 6 月才釋出，我們 7 月就導入——是最前沿的邊緣 ASR 方案，不是拿舊模型湊。"
+             "CER 數字為公開 benchmark 概估、佐證量級，非本專案實測，評審追問據實說明。")
+pn(s)
+
+
+# ─── S13a3 語音 POC · 部署架構（三元件）★ ─────────────────────────
+s = slide_blank()
+title_bar(s, "VOICE POC · 部署架構", "一支語音，其實是三個模型串起來跑")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.36),
+         "「Fun-ASR-Nano」不是單一模型——是 VAD＋Encoder＋LLM 解碼器三件套，由一支 llama.cpp binary 統合，全在 RPi5 CPU 離線跑。",
+         size=12.5, color=GREY55)
+# 三元件卡（橫向三張）
+comp = [
+    ("VAD 語音端點偵測", "fsmn-vad.gguf", "1.6 MB",
+     "抓「何時在講話」：切掉前後靜音與雜音，只把真正的語音段送進辨識", NAVY, "偵"),
+    ("Encoder 聲學編碼器", "funasr-encoder-f16.gguf", "447 MB · F16",
+     "把聲音波形轉成語意特徵向量；精度敏感故不量化，保留半精度 F16", TEALDK, "聲"),
+    ("LLM 解碼器", "qwen3-0.6b-q4km.gguf", "461 MB · Q4_K_M",
+     "Qwen3-0.6B 讀特徵、生成文字；4-bit 量化壓到最小，RPi5 CPU 跑得動", TEAL, "文"),
+]
+cw = Inches(3.83); ch = Inches(2.55); cgap = Inches(0.19)
+cy = Inches(2.0)
+for i, (name, fn, size, desc, col, gl) in enumerate(comp):
+    x = MX + (cw + cgap) * i
+    add_round(s, x, cy, cw, ch, fill=LIGHT, shadow=True)
+    add_icon_circle(s, x + Inches(0.28), cy + Inches(0.24), Inches(0.62), gl,
+                    circle=col, gcolor=WHITE, gsize=18)
+    add_text(s, x + Inches(1.05), cy + Inches(0.26), cw - Inches(1.2), Inches(0.4),
+             name, size=13.5, bold=True, color=col, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, x + Inches(1.05), cy + Inches(0.62), cw - Inches(1.2), Inches(0.3),
+             size, font=FONT_EN, size=10.5, color=GREY77, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, x + Inches(0.3), cy + Inches(1.08), cw - Inches(0.55), Inches(0.34),
+             fn, font=FONT_EN, size=10.5, bold=True, color=DARK)
+    add_text(s, x + Inches(0.3), cy + Inches(1.46), cw - Inches(0.55), Inches(1.0),
+             desc, size=11.5, color=GREY44, line_spacing=1.2)
+    if i < 2:
+        add_text(s, x + cw - Inches(0.02), cy + ch / 2 - Inches(0.18), Inches(0.24),
+                 Inches(0.36), "▶", font=FONT_EN, size=13, color=GREYBB,
+                 align=PP_ALIGN.CENTER)
+# 部署管線（橫向一條 pipeline）
+py = Inches(4.85)
+add_text(s, MX, py - Inches(0.06), Inches(11.8), Inches(0.34),
+         "實際部署管線（POST /api/asr，全程本機、無網路）", size=13, bold=True, color=TEALDK)
+pipe = ["前端錄音\nwebm/opus", "ffmpeg\n轉 16k mono", "llama-funasr-cli\nVAD→Enc→LLM",
+        "OpenCC\n簡→繁", "同音修正\n出口清理", "倉管 WS\n回答"]
+pw = Inches(1.78); ph = Inches(0.82); pgap = Inches(0.19)
+px0 = MX
+for i, step in enumerate(pipe):
+    x = px0 + (pw + pgap) * i
+    isc = (i == 2)  # 三元件那格強調
+    add_round(s, x, py + Inches(0.36), pw, ph, fill=(TEALBG if isc else LIGHT),
+              line=(TEAL if isc else None), line_w=1.2, shadow=True)
+    add_text(s, x + Inches(0.08), py + Inches(0.44), pw - Inches(0.16), ph - Inches(0.16),
+             step, size=10.5, bold=isc, color=(TEALDK if isc else GREY44),
+             align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, line_spacing=1.05)
+    if i < len(pipe) - 1:
+        add_text(s, x + pw - Inches(0.02), py + Inches(0.5), Inches(0.22), Inches(0.5),
+                 "›", font=FONT_EN, size=16, bold=True, color=GREYBB, align=PP_ALIGN.CENTER)
+# 底部部署事實條
+add_round(s, MX, Inches(6.4), Inches(11.87), Inches(0.78), fill=DARK, shadow=True)
+add_rich(s, MX + Inches(0.35), Inches(6.53), Inches(11.2), Inches(0.52),
+         [[{"text": "RPi5 部署  ", "font": FONT_EN, "size": 12.5, "bold": True, "color": TEAL},
+           {"text": "官方 arm64 binary 要 GLIBC 2.38、RPi5 是 2.36 → 在機上源碼編（4.5 分）｜"
+                    "冷啟 15s、熱快取 2.5s/句｜總模型約 910 MB｜純 CPU、零 GPU、零雲端",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」）。核心澄清：使用者以為「Fun-ASR-Nano」"
+             "是一顆模型，其實是三件套串起來跑。① VAD（fsmn-vad，1.6MB）＝語音端點偵測，判斷「何時"
+             "在講話」，切掉前後靜音雜音，只把真語音送進去。② Encoder（funasr-encoder-f16，447MB）"
+             "＝聲學編碼器，把聲音波形轉成語意特徵向量；因為精度敏感所以保留 F16 半精度不量化。"
+             "③ LLM 解碼器（qwen3-0.6b-q4km，461MB）＝Qwen3-0.6B 讀特徵生成文字，用 Q4_K_M 4-bit "
+             "量化壓到最小、RPi5 CPU 才跑得動。這三顆由一支 llama-funasr-cli binary 統合載入。"
+             "部署管線：前端錄 webm → ffmpeg 轉 16k mono → cli 跑三元件 → OpenCC 轉繁 → 同音修正 → "
+             "交倉管 WS，全程本機無網路。RPi5 落地細節：官方 arm64 binary 要 GLIBC 2.38 但 RPi5 是 "
+             "2.36，直接在機上源碼編 4.5 分鐘解決；冷啟 15s、熱快取後 2.5s/句；三顆模型合計約 910MB；"
+             "純 CPU、零 GPU、零雲端。這頁證明語音不是掛個 API，是真的把三個模型部署在邊緣裝置上跑。")
 pn(s)
 
 
