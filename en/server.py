@@ -9707,7 +9707,11 @@ async def ws_handler(ws: WebSocket):
                     log.info(f"[Pre-C-Cmp2] compare args 依原句校準 → {func_args}")
 
                 # ── Clarification：模糊意圖攔截（在校正前）──
-                clarify = _detect_clarify(user_text)
+                # EN build：clf 已高信心（≥0.8）判出意圖並 skip LLM 時，不該再被
+                #   _detect_clarify 推翻成「你想查X的什麼？」——那個判斷靠中文意圖詞，
+                #   英文錯字（stok≠stock）就失效，會把 clf conf=1.00 的正確路由打掉。
+                #   clf 說得準就執行，別再問。
+                clarify = None if _clf_skip_llm_ws else _detect_clarify(user_text)
                 if clarify:
                     log.info(f"[clarify] vid={vid} q={clarify['question']!r}")
                     await send({"type": "done", "result": {
@@ -9772,6 +9776,19 @@ async def ws_handler(ws: WebSocket):
                     pre_kw = _extract_sku_keyword(func_args["keyword"])
                     if pre_kw:
                         func_args = {**func_args, "keyword": pre_kw}
+
+                # ── EN build 防幻覺閘門：LLM 抽的 keyword 必須真的出現在原句裡 ──
+                #   實測 'what came in today' → LLM 吐 keyword='beverage'（句中根本沒有），
+                #   害後面 OOV 找不到 → clarify。原句沒出現的 keyword 一律丟掉，
+                #   讓 tool 走「無 keyword」的正常路徑（全店查詢）。
+                #   比對用小寫且允許逐詞命中（keyword 可能是複合詞的一部分）。
+                if func_args.get("keyword"):
+                    _kw_h = str(func_args["keyword"]).lower().strip()
+                    _txt_h = user_text.lower()
+                    if _kw_h and not any(c in _txt_h for c in (_kw_h,)) \
+                            and not any(w in _txt_h for w in _kw_h.split() if len(w) >= 3):
+                        log.info(f"[anti-hallu] keyword={_kw_h!r} 不在原句 → 丟棄")
+                        func_args.pop("keyword", None)
 
                 # ── OOV 偵測：keyword 不在 SKU 清單時推測候選 ──
                 oov = _detect_oov(func_name, func_args)
