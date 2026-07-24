@@ -1,0 +1,49 @@
+# 英文版評測集 —— 補訓前後對照用（語料裡「沒有的」講法，測泛化）
+# 格式：期望tool | 英文句
+# 用途：補訓前跑一次存基準，補訓後跑一次比對，量化英文能力提升。
+#
+# ── 基本查詢（query_inventory）──
+query_inventory|how many bluetooth earphones are in stock
+query_inventory|got any power banks
+query_inventory|is there any yoga mats left
+query_inventory|check the coffee machine numbers
+query_inventory|running shoes availability
+query_inventory|whats the tent situation
+query_inventory|electronics stock overview
+query_inventory|show all the sports gear we have
+# ── 錯字（探針弱點）──
+query_inventory|bluetooth earphone stok
+query_inventory|powr bank inventory
+query_inventory|how many wireles mouse left
+query_inventory|coffe machine stock
+# ── 模糊/俗稱（探針弱點）──
+query_inventory|the thing that charges my phone
+query_inventory|those wireless ear things
+query_inventory|the mat for yoga
+query_inventory|something to clean teeth
+# ── 進出/movement ──
+query_movement|what came in today
+query_movement|this weeks shipments
+query_movement|how much coffee moved this month
+# ── 缺貨 ──
+list_low_stock|whats about to run out
+list_low_stock|which items need reordering
+# ── 熱銷 ──
+list_hot_items|best sellers this month
+list_hot_items|what isnt selling
+# ── 比較倉庫 ──
+compare_warehouses|which warehouse has more stock north or south
+compare_warehouses|compare central and south by value
+# ── RCA（探針弱點）──
+search_log|why is the toothbrush count off
+search_log|who moved the mouse stock
+search_log|the earphone numbers dont match
+# ── 連帶 ──
+query_related_items|what sells with coffee machine
+query_related_items|what goes with a tent
+# ── 警示 ──
+set_alert|alert me when earphones drop below 30
+# ── 搗蛋/離題（應 reject）──
+rejected|order me a pizza
+rejected|whats the weather today
+rejected|asdfghjkl
