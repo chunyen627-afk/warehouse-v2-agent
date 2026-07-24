@@ -300,9 +300,18 @@ tokenizer.save_pretrained(str(FINAL_MODEL_DIR))
 import re
 
 # 測試案例從共用 test_cases.py 載入（與 test_model.py / test_gguf.py 嚴格一致）
+# EN build：test_cases.py 是**中文**案例、en/ 下沒有 → 找不到就優雅跳過，
+#   不讓訓練最後一步報 ModuleNotFoundError（模型此時已存檔完成）。
+#   英文版評測改用 en/eval_gguf_compare.py（gguf 三方對照）。
 import sys as _sys
 _sys.path.insert(0, str(BASE_DIR))
-from test_cases import CASES as test_cases
+try:
+    from test_cases import CASES as test_cases
+except ModuleNotFoundError:
+    print("\n[EN build] 無 test_cases.py（中文案例），跳過訓練後內建測試。")
+    print(f"[EN build] 模型已存：{FINAL_MODEL_DIR}")
+    print("[EN build] 請用 en/eval_gguf_compare.py 做英文評測。")
+    _sys.exit(0)
 
 # 抓 function name: <start_function_call>call:NAME{...}
 TOOL_RE = re.compile(r"<start_function_call>call:(\w+)\{")
