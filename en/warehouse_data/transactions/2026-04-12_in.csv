@@ -1,0 +1,16 @@
+﻿date,sku_id,warehouse,direction,qty
+2026-04-12,e05,central,in,40
+2026-04-12,a09,north,in,33
+2026-04-12,c01,north,in,47
+2026-04-12,c02,north,in,79
+2026-04-12,e05,north,in,55
+2026-04-12,s06,north,in,58
+2026-04-12,s08,north,in,41
+2026-04-12,a05,south,in,77
+2026-04-12,c06,south,in,30
+2026-04-12,e04,south,in,61
+2026-04-12,f09,south,in,38
+2026-04-12,f09,south,in,76
+2026-04-12,s08,south,in,65
+2026-04-12,s08,south,in,52
+2026-04-12,s09,south,in,26

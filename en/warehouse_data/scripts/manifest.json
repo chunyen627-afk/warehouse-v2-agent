@@ -1,0 +1,29 @@
+{
+  "_comment": "stock_audit",
+  "scripts": [
+    {
+      "id": "stock_audit",
+      "label": "月底盤點",
+      "description": "掃全倉庫存，和安全庫存比較，產出 CSV 報告",
+      "timeout_s": 60,
+      "output_type": "csv",
+      "output_dir": "audit"
+    },
+    {
+      "id": "export_movements",
+      "label": "匯出進出記錄",
+      "description": "合併最近 30 天進出記錄，產出 CSV",
+      "timeout_s": 60,
+      "output_type": "csv",
+      "output_dir": "audit"
+    },
+    {
+      "id": "generate_report",
+      "label": "產出體檢報告",
+      "description": "產出全倉 Markdown 體檢報告（缺貨 + 熱銷 + 總覽）",
+      "timeout_s": 60,
+      "output_type": "markdown",
+      "output_dir": "reports"
+    }
+  ]
+}

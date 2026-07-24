@@ -1,0 +1,32 @@
+{
+  "rules": [
+    {
+      "id": "AL001",
+      "condition": "out_of_stock",
+      "scope": [],
+      "scope_names": [],
+      "created": "2026-06-23T18:40:00",
+      "enabled": true
+    },
+    {
+      "id": "AL002",
+      "condition": "below_safety",
+      "scope": [
+        "d01"
+      ],
+      "scope_names": [
+        "抗菌洗衣精 4kg"
+      ],
+      "created": "2026-06-24T09:15:06",
+      "enabled": true
+    },
+    {
+      "id": "AL003",
+      "condition": "below_safety",
+      "scope": [],
+      "scope_names": [],
+      "created": "2026-06-25T14:19:39",
+      "enabled": true
+    }
+  ]
+}
