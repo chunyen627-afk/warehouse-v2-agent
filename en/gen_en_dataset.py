@@ -123,13 +123,26 @@ for variants, canon in ITEM_KWS:
         add(tpl.format(kw=kw, wh=wh_variant(wh)),
             "query_inventory", {"keyword": canon, "warehouse": wh})
 
-# (b) 錯字變體（探針弱點！earphon / powr bank）——每商品 2 條
+# (a2) 更多口語變體（純英文模型：句型多樣性要夠）
+INV_KW_TPL2 = [
+    "we got any {kw}", "is there {kw} in stock", "how's the {kw} stock looking",
+    "need to know {kw} stock", "tell me the {kw} numbers", "{kw} on hand",
+    "current {kw} stock", "how many units of {kw}", "{kw} availability",
+    "what's left of {kw}", "remaining {kw}", "{kw} still available",
+    "look up {kw}", "find {kw} stock", "{kw} — how many",
+]
 for variants, canon in ITEM_KWS:
-    for _ in range(2):
+    for kw in random.sample(variants, min(2, len(variants))):
+        for tpl in random.sample(INV_KW_TPL2, 4):
+            add(tpl.format(kw=kw), "query_inventory", {"keyword": canon})
+
+# (b) 錯字變體（探針弱點！earphon / powr bank）——每商品 4 條（純英文要更強）
+for variants, canon in ITEM_KWS:
+    for _ in range(4):
         kw = random.choice(variants)
         typo = " ".join(make_typo(w) for w in kw.split())
         if typo != kw:
-            tpl = random.choice(INV_KW_TPL)
+            tpl = random.choice(INV_KW_TPL + INV_KW_TPL2)
             add(tpl.format(kw=typo), "query_inventory", {"keyword": canon})
 
 # (c) 類別查詢 × 模板
@@ -186,7 +199,7 @@ MOVE_KW_TPL = [
     "how many {kw} shipped {p}", "{kw} received {p}",
 ]
 for variants, canon in ITEM_KWS:
-    for _ in range(12):
+    for _ in range(18):
         kw = random.choice(variants)
         pkey = random.choice(list(PERIODS)); pv = random.choice(PERIODS[pkey])
         tpl = random.choice(MOVE_KW_TPL)
@@ -227,7 +240,7 @@ RCA_TPL = [
 ]
 for variants, canon in ITEM_KWS:
     for kw in random.sample(variants, min(2, len(variants))):
-        for tpl in random.sample(RCA_TPL, 5):
+        for tpl in random.sample(RCA_TPL, 7):
             add(tpl.format(kw=kw), "search_log", {"keyword": canon})
 print(f"[3] search_log: {sum(1 for r in _rows if r['tool_name']=='search_log')}")
 
@@ -285,8 +298,8 @@ REL_TPL = [
     "what pairs with {kw}", "customers buying {kw} also get",
 ]
 for variants, canon in ITEM_KWS:
-    for kw in random.sample(variants, min(2, len(variants))):
-        for tpl in random.sample(REL_TPL, 4):
+    for kw in random.sample(variants, min(3, len(variants))):
+        for tpl in random.sample(REL_TPL, 5):
             add(tpl.format(kw=kw), "query_related_items", {"keyword": canon})
 print(f"[5] query_related_items: {sum(1 for r in _rows if r['tool_name']=='query_related_items')}")
 
@@ -330,13 +343,14 @@ LOW_TPL = [
     "what's running out", "which products are short",
 ]
 for tpl in LOW_TPL:
-    add(tpl, "list_low_stock", {})
-    add(tpl, "list_low_stock", {})   # 加權（全店缺貨是高頻）
+    for _ in range(4):                # 加權（全店缺貨是高頻查詢）
+        add(tpl, "list_low_stock", {})
 LOW_CAT_TPL = ["low stock {cat}", "which {cat} are running low",
-               "{cat} that need restocking", "low {cat} items", "short on {cat}"]
+               "{cat} that need restocking", "low {cat} items", "short on {cat}",
+               "{cat} almost out", "restock which {cat}"]
 for cat in CATS:
     for tpl in LOW_CAT_TPL:
-        for _ in range(2):
+        for _ in range(3):
             add(tpl.format(cat=cat_variant(cat)), "list_low_stock", {"category": cat})
 print(f"[7] list_low_stock: {sum(1 for r in _rows if r['tool_name']=='list_low_stock')}")
 

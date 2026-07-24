@@ -235,6 +235,11 @@ def is_meaningful_input(text: str) -> bool:
         return False
     if re.fullmatch(r"\d+", s):
         return False
+    # EN build（純英文模型）：含中文字一律當搗蛋擋掉（純中文、中英夾雜都不受理）。
+    #   user 定調 2026-07-26：英文版模型不留中文，遇中文/中英混雜 → reject。
+    #   商品名/資料已全英文，正常英文查詢不含中文；此規則零誤傷正常英文輸入。
+    if any("一" <= c <= "鿿" for c in s):
+        return False
     # 功能描述句（「裝便當的還有嗎」「放音樂的還剩幾台」）不含傳統倉管詞、
     # 甚至含黑名單詞（便當/音樂 是防閒聊用的），但描述 regex 命中 + 帶查詢
     # 語氣 = 明確查商品意圖，放行讓後續功能描述直達接手。必須在黑名單之前
