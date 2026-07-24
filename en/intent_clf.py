@@ -20,7 +20,18 @@ LABEL_TO_FUNC = {
 
 
 def _char_ngram(text: str) -> str:
-    """jieba 分詞（與訓練時一致）"""
+    """EN build：英文正規化（**必須與 train_intent_clf_en.py 的 norm_en 完全一致**，
+    否則推理/訓練分詞不同會傷準確率）。小寫 + 標點獨立成 token。
+    英文天生以空白分詞，不用 jieba。"""
+    import re as _re_en
+    t = text.strip().lower()
+    t = _re_en.sub(r"([?!,.])", r" \1 ", t)
+    t = _re_en.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _char_ngram_zh_unused(text: str) -> str:
+    """（中文版原邏輯，EN build 不用，保留供對照）"""
     try:
         import jieba
         jieba.setLogLevel(60)
@@ -97,10 +108,11 @@ def predict(text: str) -> tuple[str, float]:
 # 照常運作（每句 fallback LLM），但毫秒級路由與 C18 保護靜默蒸發——曾在 RPI5
 # 上死了多輪沒人發現（fasttext≤0.9.3 × numpy≥2）。金絲雀=固定句必須分對且高
 # 信心，開機與週期各驗一次，死掉就大聲（log CRITICAL + /health 曝光）。
+# EN build：canary 換成英文（clf 是英文語料訓的，中文 canary 必失敗誤報 DEAD）
 _CANARY = [
-    ("欸幫我看哪些快缺貨", "list_low_stock"),
-    ("不好意思幫我查一下藍牙耳機庫存", "query_inventory"),
-    ("這個月熱銷排行", "list_hot_items"),
+    ("show me what's running low", "list_low_stock"),
+    ("check bluetooth earphones stock", "query_inventory"),
+    ("best sellers this month", "list_hot_items"),
 ]
 
 

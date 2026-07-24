@@ -1082,6 +1082,39 @@ _ALL_INTENT_WORDS = (
     # RCA 意圖詞同步加入，避免被 clarify 攔截
     "對帳", "異常", "帳不對", "誰改", "誰動", "查原因", "追原因",
     "採購對帳", "扣帳", "盤點", "不對", "兜不攏",
+
+    # ── EN build：英文意圖詞（原表全中文 → 英文句 has_intent 恆 False，
+    #    被判成「只有商品名沒動作」全部掉進 clarify，即使 clf 已 conf=1.00 判對意圖）──
+    # 查庫存
+    "stock", "inventory", "how many", "how much", "left", "in stock", "available",
+    "availability", "quantity", "count", "on hand", "remaining", "got any", "do we have",
+    "check", "show", "list", "look up", "find", "situation", "overview",
+    # 進出貨
+    "movement", "movements", "came in", "come in", "shipped", "shipment", "shipments",
+    "inbound", "outbound", "received", "goods in", "goods out", "went out", "moved",
+    "transactions", "activity",
+    # 缺貨
+    "running low", "run out", "low stock", "restock", "reorder", "reordering",
+    "shortage", "short on", "almost out", "need", "below safety",
+    # 熱銷
+    "best seller", "best sellers", "top selling", "selling", "sold", "hot items",
+    "ranking", "top 10", "slow mover", "slow movers", "dead stock", "not selling",
+    # 到期
+    "expiry", "expiring", "expire", "expires", "shelf life", "about to expire",
+    # 比較
+    "compare", "versus", " vs ", "which warehouse", "higher", "more stock",
+    # RCA
+    "why is", "why did", "who moved", "doesn't match", "dont match", "don't match",
+    "discrepancy", "mismatch", "reconciliation", "audit", "investigate", "trace",
+    "missing", "wrong", "off", "strange", "shortfall", "numbers",
+    # 連帶
+    "bought with", "goes with", "sells with", "related", "bundle", "cross-sell",
+    "pairs with", "also buy", "also bought",
+    # 警示/設定
+    "alert", "notify", "warn", "remind", "set ", "change ", "update ", "threshold",
+    "safety stock", "reorder point",
+    # 報表/採購單/腳本
+    "report", "export", "purchase order", " po ", "audit", "stocktake", "stock count",
 )
 
 # ── Query Rewriting ───────────────────────────────────────────────────────────
@@ -9417,12 +9450,16 @@ async def ws_handler(ws: WebSocket):
             #   接不住就優雅引導。長句 LLM 自由發揮=亂猜主因，這裡直接歸零。──
             _long_det_only = False
             if not _clf_skip_llm_ws:
-                _eff_len = len(re.sub(r"[\s，。,.!！?？~～、…]", "", user_text))
-                if _eff_len > 30:
+                # EN build：原門檻「30 有效字元」是為中文調的（中文 30 字很長）。
+                #   英文字元數天生是中文的 2-3 倍——'alert me when earphones drop
+                #   below 30' 才 7 個單詞卻有 31 字元 → 會攔截幾乎所有正常英文句。
+                #   英文改用**單詞數**判斷：> 18 詞才算長句（≈中文 30 字的資訊量）。
+                _eff_words = len(re.sub(r"[，。,.!！?？~～、…]", " ", user_text).split())
+                if _eff_words > 18:
                     _long_det_only = True
                     func_name, func_args = "query_inventory", {}
                     raw_call = "long-input(det-only)"
-                    log.info(f"[long-gate] {_eff_len} 字 > 30，跳過 LLM 走確定性層")
+                    log.info(f"[long-gate] {_eff_words} 詞 > 18，跳過 LLM 走確定性層")
                     await push_display({"type": "trace", "stage": "llm_output",
                                          "raw": "[long-gate] 長句只走確定性層"})
 
