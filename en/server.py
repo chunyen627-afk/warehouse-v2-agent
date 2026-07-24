@@ -1511,7 +1511,23 @@ _FW2HW = str.maketrans("０１２３４５６７８９ＡＢＣＤＥＦＧａ�
                         "0123456789ABCDEFGabcdefg.:")
 
 
+# ── 英文版（EN build）：跳過中文導向處理 ──────────────────────────
+#   商品名/資料已英文化。原 _TYPO_NORM/_REWRITE_RULES 是為「中文商品名」磨的，
+#   含大量「英文詞→中文商品名」映射（power bank→行動電源、towel→毛巾…）。商品名
+#   英文化後這些映射變污染源：把英文詞導向已不存在的中文名 → 誤配。
+#   對「以英文為主」的輸入直接跳過中文映射/改寫，讓英文詞 substring 直接對英文商品名，
+#   容錯改靠補訓模型泛化。規則本體保留（不刪）以利與中文版對照、日後參考。
+def _is_mostly_english(s: str) -> bool:
+    cjk = sum(1 for c in s if "一" <= c <= "鿿")
+    ascii_letters = sum(1 for c in s if c.isascii() and c.isalpha())
+    # 有英文字母、且中文字極少（≤1，容忍偶發混一個中文語氣詞）
+    return ascii_letters >= 2 and cjk <= 1
+
+
 def _normalize_typos(user_text: str) -> str:
+    # EN build：以英文為主的輸入跳過中文錯字/注音/中英映射（只保留全半形正規化）
+    if _is_mostly_english(user_text):
+        return user_text.translate(_FW2HW)
     t = user_text.translate(_FW2HW)
     # 自我修正句取後半（OOV-100：「奶瓶刷…不對 電動的牙刷還有嗎」曾抓前半
     # 的奶瓶刷 clarify）——「X…不對/不是 Y」訪客要的是 Y
@@ -1570,6 +1586,9 @@ def _descriptor_hit(user_text: str) -> str | None:
 
 def _rewrite_query(user_text: str) -> str:
     """將口語/模糊輸入改寫成 LLM 訓練時的標準句型。"""
+    # EN build：以英文為主的輸入跳過中文口語改寫（_REWRITE_RULES 全是中文 pattern）
+    if _is_mostly_english(user_text):
+        return user_text.strip()
     t = user_text.strip().translate(_S2T)
     # 亂敲重複詞收斂：「庫存庫存庫存庫存庫存」→「庫存」（conv100-r7b 亂打組）
     _rep_m = _re.fullmatch(r"(.{1,4})\1{2,}", t)

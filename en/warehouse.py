@@ -467,21 +467,29 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
 
     kw_ns = _nospace(keyword)
 
+    # EN build：英文商品名有大小寫（Wireless Bluetooth Earphones），token 常小寫
+    #   → 比對一律用小寫版，否則 'bluetooth' in 'Bluetooth' = False 對不到。
+    #   中文無大小寫，.lower() 不影響中文行為。
+    kw_lc = keyword.lower()
+    kw_ns_lc = kw_ns.lower()
     results = []
     for it in items:
         name = it["name"]
+        name_lc = name.lower()
         name_ns = _nospace(name)
+        name_ns_lc = name_ns.lower()
         score = 0
         for tok in tokens:
-            if tok in name:
+            tok_lc = tok.lower()
+            if tok_lc in name_lc:
                 score += len(tok)
             else:
                 # token 帶空白雜訊時、用去空白版再比一次(半個 token 也給分)
-                tok_ns = _nospace(tok)
-                if tok_ns and tok_ns in name_ns:
+                tok_ns = _nospace(tok).lower()
+                if tok_ns and tok_ns in name_ns_lc:
                     score += len(tok_ns)
         # 整串 keyword 命中(含去空白版)→ bonus
-        if keyword in name or (kw_ns and kw_ns in name_ns):
+        if kw_lc in name_lc or (kw_ns_lc and kw_ns_lc in name_ns_lc):
             score += 5
         # 簡稱 fallback（RPI5 conv100-r2：「無線耳機」比不到「無線藍牙耳機」、
         # 「機械鍵盤」比不到「機械式鍵盤」——中間插字讓子字串失效）。整串都沒
@@ -504,7 +512,11 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
     results.sort(key=lambda r: -r["score"])
     # 發音救底（語音 POC）：字形完全失敗（無結果或最高分 <3）→ 轉拼音比對。
     # 字形優先，只有字形救不到才用發音，零回歸；含 category 過濾也適用。
-    if not results or results[0]["score"] < 3:
+    # ⚠️ EN build：_phonetic_match 是中文拼音，對英文關鍵詞會亂救（yoga mat→咖啡機）
+    #    → 英文為主的 keyword 跳過發音層（英文容錯改靠補訓模型泛化）。
+    _is_en = sum(1 for c in keyword if c.isascii() and c.isalpha()) >= 2 \
+             and sum(1 for c in keyword if "一" <= c <= "鿿") <= 1
+    if (not results or results[0]["score"] < 3) and not _is_en:
         _ph = _phonetic_match(keyword, items)
         if _ph:
             return _ph
