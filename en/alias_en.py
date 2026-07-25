@@ -156,6 +156,12 @@ ALIAS_EN = {
     "trousers":           "Denim Jeans",
     "workout bra":        "Sports Bra",
     "athletic bra":       "Sports Bra",
+    # 'sports bra' 是主檔字面（Elastic Sports Bra），但 match_items 逐 token
+    #   打分時 'sports' 也命中 Electrolyte Sports Drink / Sports Compression
+    #   Arm Sleeve，分數會被稀釋到誤配 → 明確映射到唯一商品
+    "sports bra":         "Sports Bra",
+    "sport bra":          "Sports Bra",
+    "gym bra":            "Sports Bra",
     "quick dry shirt":    "Moisture-wicking Shirt",
     "workout shirt":      "Moisture-wicking Shirt",
     "athletic shirt":     "Moisture-wicking Shirt",

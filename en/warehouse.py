@@ -151,12 +151,14 @@ def _load_seed_dict(data_path: Path) -> dict:
 # ────────────────────────────────────────────────
 
 CATEGORY_LABEL = {
-    "electronics":       "電子產品",
-    "appliance_kitchen": "家電廚具",
-    "food_beverage":     "食品飲料",
-    "daily_goods":       "日用品",
-    "apparel":           "服飾",
-    "sports":            "運動用品",
+    # EN build：類別標籤是全系統共用（庫存概覽分類、報表表格、clarify 選項、
+    #   商品清單），漏翻的話訪客到處看到「電子產品類」殘留
+    "electronics":       "Electronics",
+    "appliance_kitchen": "Appliance & Kitchen",
+    "food_beverage":     "Food & Beverage",
+    "daily_goods":       "Daily Goods",
+    "apparel":           "Apparel",
+    "sports":            "Sports",
 }
 
 WAREHOUSE_LABEL = {
@@ -204,26 +206,40 @@ def _suggest_on_empty(keyword: str, action: str = "庫存") -> dict:
             guessed_label = CATEGORY_LABEL.get(cat, cat)
             break
 
+    # EN build：options 是**送回後端的查詢字串** → 必須是後端聽得懂的英文句
+    #   （中文選項在英文版會被 is_meaningful_input 直接 reject＝訪客一點就壞）
+    _ACT_EN = {"庫存": "stock", "進出貨": "movements", "帳差異": "discrepancies"}
+    _act_en = _ACT_EN.get(action, "stock")
     opts = []
     if guessed_label:
-        opts.append(f"{guessed_label}類 {action}")
-        opts.append(f"{guessed_label}類 缺貨警示")
-        opts.append(f"{guessed_label}類 熱銷排行")
+        opts.append(f"{guessed_label} {_act_en}")
+        opts.append(f"{guessed_label} low stock")
+        opts.append(f"{guessed_label} best sellers")
     else:
         # 注意：這裡不能用「所有商品」開頭——dispatch 有條「所有商品/商品清單」
         # 攔截規則會搶先把整句話判成商品列表顯示，蓋掉後面接的 action 字樣
         # （2026-07-02 實測「所有商品 進出貨紀錄」被誤判成純商品清單抓到）。
-        opts.append(f"全倉{action}")
-        opts.append("哪些商品快缺貨")
-        opts.append("本月熱銷商品")
-    opts.append("查倉管")  # 永遠有個「看功能列表」兜底
+        opts.append(f"all warehouses {_act_en}")
+        opts.append("whats running low")
+        opts.append("best sellers this month")
+    opts.append("help")  # 永遠有個「看功能列表」兜底
 
     # r43：keyword 回顯要過門檻——閒聊/亂打殘渣（「算我便宜一點啦」「。。。」「庫庫 存存」）
     # 曾被原样塞進「沒有『…』這個商品」句，讀起來像壞掉。只有短且乾淨的中文詞才回顯。
     _kw_s = (keyword or "").strip()
-    _echoable = (2 <= len(_kw_s) <= 6 and " " not in _kw_s
-                 and any("一" <= c <= "鿿" for c in _kw_s))
-    hint_kw = f"「{_kw_s}」" if _echoable else ""
+    # EN build：原判準要求「短且乾淨的**中文**詞」→ 英文 keyword 永遠不回顯，
+    #   而 hint_kw 空字串時 question 又走中文分支，湊出
+    #   「We don't carry 「彈性運動內衣」in the warehouse」這種中英混血。
+    #   英文改判：1-3 個英文單詞、無雜訊符號。
+    _is_en_kw = bool(_kw_s) and _kw_s.isascii() and any(c.isalpha() for c in _kw_s)
+    if _is_en_kw:
+        _echoable = (1 <= len(_kw_s.split()) <= 3 and 2 <= len(_kw_s) <= 30
+                     and all(c.isalnum() or c in " -/'" for c in _kw_s))
+        hint_kw = f'"{_kw_s}" ' if _echoable else ""
+    else:
+        _echoable = (2 <= len(_kw_s) <= 6 and " " not in _kw_s
+                     and any("一" <= c <= "鿿" for c in _kw_s))
+        hint_kw = f"「{_kw_s}」" if _echoable else ""
     # user 原則 2026-07-16：查無商品要提醒可新增，措辭不裝傻（舊句「找不到相關
     # 商品」在有近似品時讀起來像系統很笨）。
     question = (f"We don't carry {hint_kw}in the warehouse. You could ask about:" if _echoable

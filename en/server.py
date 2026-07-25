@@ -1827,6 +1827,14 @@ def _normalize_typos(user_text: str) -> str:
 
 def _descriptor_hit(user_text: str) -> str | None:
     """描述句偵測（rewrite 之前呼叫——rewrite 會把描述換掉）。命中回傳商品關鍵字。"""
+    # ── EN build：英文句一律不走中文描述表 ──────────────────────────────
+    #   _DESCRIPTOR_ALIASES 是為中文商品名磨的，回傳值全是**中文商品名**。
+    #   表裡夾雜的英文碎片（bra / t恤的 t / 素色t）會讓英文句命中並拿到
+    #   中文名：'athletic bra stock' → 「彈性運動內衣」→ OOV clarify 印出
+    #   「We don't carry 「彈性運動內衣」」中英混血（守衛第 9 輪抓到）。
+    #   英文的描述句容錯由 alias_en + _en_fuzzy_keyword 負責。
+    if _is_mostly_english(user_text):
+        return None
     t = user_text.strip().translate(_S2T)
     # r75：描述 pattern 命中、但句中已含完整商品名（≥4 字，含新建商品）→
     # 用句內的名字取代別名。「鑄鐵平底鍋庫存」曾被「平底鍋→不沾鍋」別名搶走
@@ -2467,6 +2475,8 @@ def _en_fuzzy_keyword(core: str) -> str:
     except Exception:
         return ""
     # 候選：商品名單詞 → 商品名；alias 鍵（含多詞片語的整串與單詞）→ 目標商品
+    # ⚠️ 一個詞可能出現在多個商品名（bags → Drip Coffee Bags / Trash Bags /
+    #   Laptop Bag），這裡只留**第一個**——下游的歧義判斷依賴一對一映射。
     cand: dict[str, str] = {}
     for it in items:
         for w in _re.split(r"[\s\-/]+", it["name"]):
@@ -2537,9 +2547,13 @@ def _en_fuzzy_keyword(core: str) -> str:
                 hits.append(_sp_hit)
                 _split_ok.add(tok)   # 下面的 OOV 防線要認得它已經命中
                 continue
-        # difflib 先粗篩再用長度比例把關（cutoff 提高到 0.85：0.8 會把
-        #   weather→water、chairs→chair 這種「差一兩字母但語意完全不同」的
-        #   詞救錯；錯字句通常相似度 0.87 以上）
+        # difflib 先粗篩再用長度比例把關。cutoff 0.85 擋掉 weather→water、
+        #   chairs→chair 這種「差一兩字母但語意完全不同」的詞；但實測常見
+        #   錯字落在 0.83（coffue→coffee、filtes→filter、tushirt→shirt），
+        #   剛好卡在門檻外 → 這些句子全退回全店概覽。
+        #   → 主門檻維持 0.85；0.82-0.85 之間的降級候選另存，只有在
+        #     「句中還有別的 token 指向同一商品」時才採用（同商品佐證），
+        #     單獨一個模稜兩可的詞不放行。
         near = difflib.get_close_matches(tok, keys, n=3, cutoff=0.85)
         if not near:
             continue
@@ -2553,6 +2567,11 @@ def _en_fuzzy_keyword(core: str) -> str:
             if r1 >= r0:
                 continue
         hits.append(cand[best])
+    # ⚠️ 曾試過「0.82-0.85 降級候選 + 同商品佐證」想救『兩個 token 都打錯』
+    #   的長尾（traash bags / plaiin tushirt）——只多修 1-2 句，卻因為撞名詞
+    #   （sports/bags/coffee 出現在多個商品名）產生新誤配
+    #   （sports bra → Electrolyte Sports Drink）。誤配比漏抓難看，已回退。
+    #   這類長尾留給模型（補訓語料裡加雙錯字樣本）比規則層硬湊乾淨。
     if not hits:
         return ""
     # OOV 防線：句中有**主檔沒有的修飾詞**時不要硬救。
@@ -3008,9 +3027,23 @@ def _kw_grounded(kw: str, user_text: str) -> bool:
         #   ⚠️ 3-4 字母的詞不做模糊（mop↔map、pan↔can 只差一個字母卻是
         #      完全不同的東西）——短詞只認上面的精確 substring 比對。
         import difflib as _dl
-        return any(_dl.SequenceMatcher(None, _uw, _kwd).ratio() >= 0.84
-                   for _kwd in _kw_words if len(_kwd) >= 5
-                   for _uw in _u_words)
+        if any(_dl.SequenceMatcher(None, _uw, _kwd).ratio() >= 0.84
+               for _kwd in _kw_words if len(_kwd) >= 5
+               for _uw in _u_words):
+            return True
+        # ⚠️ 最後讓模糊層表態：**別名的錯字**（nappues→Baby Diapers、
+        #   traash bags→Heavy-duty Trash Bags）跟商品名字面完全無關，
+        #   上面每一條都比不到 → C1g 判未接地把正解清掉，退回全店概覽。
+        #   _en_fuzzy_keyword 自帶陌生修飾詞防線，OOV 句仍不會誤放行。
+        try:
+            # 用 _extract_sku_keyword（英文快路徑已含剝虛詞 + 別名 + 模糊 +
+            #   不確定不猜）的結果比對；直接傳整句給 _en_fuzzy_keyword 會被
+            #   'on hand' 這種虛詞觸發 OOV 防線（踩過兩次的坑）
+            if _extract_sku_keyword(user_text) == kw:
+                return True
+        except Exception:
+            pass
+        return False
 
     k = (kw or "").replace(" ", "")
     if len(k) < 2:
@@ -9038,11 +9071,11 @@ async def ws_handler(ws: WebSocket):
                                                + _it["unit_price"] * _q)
                 _cv_rank = sorted(_cv_by.items(),
                                   key=lambda kv: kv[1] if _cv_low else -kv[1])[:3]
-                _cv_sum = (("庫存總值最低的是「" if _cv_low else "庫存總值最高的是「")
+                _cv_sum = (("Lowest stock value: " if _cv_low else "Highest stock value: ")
                            + _W_cv.CATEGORY_LABEL.get(_cv_rank[0][0], _cv_rank[0][0])
-                           + f"類」約 NT$ {_cv_rank[0][1]:,}；其次 "
-                           + "、".join(f"{_W_cv.CATEGORY_LABEL.get(c, c)}類 NT$ {v:,}"
-                                       for c, v in _cv_rank[1:]) + "。")
+                           + f" at approx NT$ {_cv_rank[0][1]:,}; followed by "
+                           + ", ".join(f"{_W_cv.CATEGORY_LABEL.get(c, c)} NT$ {v:,}"
+                                       for c, v in _cv_rank[1:]) + ".")
                 log.info(f"[dispatch-ws] 類別總值排行直答: {_cv_rank[0][0]}")
                 for ch in _cv_sum:
                     await send({"type": "token", "text": ch})
