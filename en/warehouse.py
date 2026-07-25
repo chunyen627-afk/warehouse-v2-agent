@@ -657,7 +657,7 @@ def query_inventory(
     # keyword 和 category 都空 → 查全倉概覽（前10筆）
     if not keyword and not category:
         wh_f = warehouse if warehouse in ("north", "central", "south") else "all"
-        wh_label_all = WAREHOUSE_LABEL.get(wh_f, "全部倉")
+        wh_label_all = WAREHOUSE_LABEL.get(wh_f, "All warehouses")
         all_items = state().items
         # r54（user 實測抓到）：舊版取 items[:10] 而主檔前 10 筆全是電子類——
         # 「有哪些商品」變成電子產品專場。改跨類別輪流抽樣（每類 2 筆），
@@ -673,7 +673,7 @@ def query_inventory(
             total, _ = _sku_total_stock(it["sku_id"], wh_f)
             rows.append({"sku_id": it["sku_id"], "name": it["name"],
                          "category": CATEGORY_LABEL.get(it["category"], it["category"]),
-                         "qty": total, "unit": it.get("unit", "件")})
+                         "qty": total, "unit": it.get("unit", "units")})
         # r69：指定倉別時摘要要點名（「只看南倉的」曾回看不出南倉視角的泛話）
         _wh_prefix = f"{wh_label_all} view: " if wh_f != "all" else ""
         return {"ok": True,
@@ -700,7 +700,7 @@ def query_inventory(
             matches = [{"item": it, "score": 5} for it in s.items
                        if any(f in it["name"] for f in _frags)]
     if not matches:
-        return _suggest_on_empty(keyword or category or "", action="庫存查詢")
+        return _suggest_on_empty(keyword or category or "", action="庫存")
 
     # 過濾分數斷層：只因為分享同一個規格 token（如「1L」「男款」）而低分命中的
     # 不相干商品，不該跟真正命中的第一名一起被算進「多筆」而觸發 clarify。
@@ -740,10 +740,10 @@ def query_inventory(
             total, per_wh = _sku_total_stock(it["sku_id"], warehouse)
             rows.append({"sku_id": it["sku_id"], "name": it["name"],
                          "category": CATEGORY_LABEL.get(it["category"], it["category"]),
-                         "qty": total, "unit": it.get("unit", "件"),
+                         "qty": total, "unit": it.get("unit", "units"),
                          "per_warehouse": per_wh})
         cat_label = CATEGORY_LABEL.get(category, category)
-        wh_label_f = WAREHOUSE_LABEL.get(warehouse, "全部倉")
+        wh_label_f = WAREHOUSE_LABEL.get(warehouse, "All warehouses")
         return {"ok": True,
                 "summary": f"{cat_label} ({wh_label_f}): {len(rows)} items, {sum(r['qty'] for r in rows)} units total",
                 "view": "inventory",
@@ -765,7 +765,7 @@ def query_inventory(
             opts.append(f"{it['name']} 庫存")
             rich_rows.append({"sku_id": it["sku_id"], "name": it["name"],
                               "category": CATEGORY_LABEL.get(it["category"], it["category"]),
-                              "qty": _tot, "unit": it.get("unit", "件"),
+                              "qty": _tot, "unit": it.get("unit", "units"),
                               "per_warehouse": _pw})
         # 同類別再給一個「全部庫存」快捷
         if len(set(r["item"]["category"] for r in _cands)) == 1:
@@ -783,7 +783,7 @@ def query_inventory(
                 "question": question,
                 "options":  opts,
                 "candidates": rich_rows,   # 前端可用來顯示每個疑似商品的庫存概況
-                "hint":     "輸入數字選擇，或直接輸入完整商品名稱",
+                "hint":     "Type a number to choose, or type the full item name",
             },
         }
 
@@ -870,7 +870,7 @@ def query_movement(
             if len(matches) == 1:
                 matched_item_label = matches[0]["item"]["name"]
             else:
-                matched_item_label = f"{len(matches)} 筆相關商品"
+                matched_item_label = f"{len(matches)} matching items"
         else:
             # keyword 比對不到任何商品時，不直接 clarify——這個 keyword 常常是
             # LLM 從「今天到現在進了哪些貨」這類句子誤抓的動詞/時間詞雜訊
@@ -1063,7 +1063,7 @@ def compare_warehouses(
                         key=lambda w: _calc3(w[0]), reverse=True)
         def _fmt(v):
             return (f"NT$ {v:,}" if metric == "stock_value"
-                    else f"{v:,} 件" if metric == "item_count" else f"{v:.3f}")
+                    else f"{v:,} units" if metric == "item_count" else f"{v:.3f}")
         lines = [f"三倉{_ml}排名：",
                  *[f"{i}. {lbl}：{_fmt(_calc3(k))}" for i, (k, lbl) in enumerate(ranked, 1)]]
         return {"ok": True, "summary": "\n".join(lines),
@@ -1073,9 +1073,9 @@ def compare_warehouses(
                 "view": "compare_warehouses"}
 
     if warehouse_a not in valid_wh or warehouse_b not in valid_wh:
-        return _err(f"倉庫只支援 north/central/south，請重新指定")
+        return _err("Warehouse must be north / central / south")
     if warehouse_a == warehouse_b:
-        return _err(f"兩個倉相同（{WAREHOUSE_LABEL[warehouse_a]}）、無法比較")
+        return _err(f"Both warehouses are the same ({WAREHOUSE_LABEL[warehouse_a]}) - nothing to compare")
     if metric not in METRIC_LABEL:
         metric = "stock_value"
     metric_label = METRIC_LABEL[metric]
@@ -1219,7 +1219,7 @@ def list_hot_items(
         out_qty[sku] += m["qty"]
 
     if not out_qty:
-        scope = f"{cat_label}類" if cat_label else ""
+        scope = f"{cat_label}" if cat_label else ""
         return {
             "ok": True,
             "summary": f"No shipment records for {period_label} {scope}",
@@ -1381,14 +1381,14 @@ EXPIRY_YELLOW_DAYS = 30   # ≤30 天 黃燈 注意
 def _expiry_level(days_to_expire: int) -> tuple[str, str, str]:
     """回 (level, label, emoji)。level=red/orange/yellow/green/expired"""
     if days_to_expire < 0:
-        return ("expired", "已過期", "❌")
+        return ("expired", "Expired", "❌")
     if days_to_expire <= EXPIRY_RED_DAYS:
-        return ("red", "緊急", "🔴")
+        return ("red", "Critical", "🔴")
     if days_to_expire <= EXPIRY_ORANGE_DAYS:
-        return ("orange", "警示", "🟠")
+        return ("orange", "Warning", "🟠")
     if days_to_expire <= EXPIRY_YELLOW_DAYS:
-        return ("yellow", "注意", "🟡")
-    return ("green", "新鮮", "🟢")
+        return ("yellow", "Watch", "🟡")
+    return ("green", "Fresh", "🟢")
 
 
 def _next_expiring_batch(sku: str) -> dict | None:
@@ -1504,15 +1504,15 @@ def list_expiring_items(
 
     wh_label = WAREHOUSE_LABEL.get(warehouse, warehouse)
     cat_label = CATEGORY_LABEL.get(category, "") if category else ""
-    scope = wh_label + (cat_label + "類" if cat_label else "")
+    scope = wh_label + (" " + cat_label if cat_label else "")
 
     if not rows:
         kw_note = f"「{keyword}」" if keyword else ""
         no_shelf = (kw_skus is not None and kw_skus and
                     not any(s.shelf_life.get(sku) for sku in kw_skus))
-        no_msg = (f"{kw_note}沒有保存期限紀錄，無需追蹤到期日 ✅"
+        no_msg = (f"{kw_note}has no shelf-life records - no expiry tracking needed ✅"
                   if no_shelf else
-                  f"{kw_note}{scope}最近 {within_days} 天內沒有快到期的批次 ✅")
+                  f"No batches expiring within {within_days} days{(' in ' + scope) if scope.strip() else ''} ✅")
         return {
             "ok": True,
             "summary": no_msg,
@@ -1541,10 +1541,12 @@ def list_expiring_items(
     if counts.get("yellow"):   summary_parts.append(f"🟡 {counts['yellow']} batches within 30 days")
 
     summary = (
-        f"⏰ {scope}到期警示({within_days} 天內共 {len(rows)} 批 / 約 NT$ {total_value:,})\n"
+        f"⏰ Expiry alerts{(' - ' + scope) if scope.strip() else ''} "
+        f"({len(rows)} batches within {within_days} days / approx NT$ {total_value:,})\n"
         + " · ".join(summary_parts)
-        + f"\n最急:{top['level_emoji']} {top['name']}({top['warehouse_label']} {top['qty']} 件,"
-        + f"剩 {top['days_to_expire']} 天)"
+        + f"\nMost urgent: {top['level_emoji']} {top['name']} "
+          f"({top['warehouse_label']} {top['qty']} units,"
+        + f" {top['days_to_expire']} days left)"
     )
 
     return {
@@ -1652,7 +1654,10 @@ def _pick_quip(anchor_sku: str, co_sku: str) -> tuple[str, str | None]:
     for scn in common:
         if scn in scn_quips and scn_quips[scn]:
             return _random.choice(scn_quips[scn]), scn
-    return "常常被一起買走", None
+    # EN build：**預設俏皮話**（沒對應到 pair_quips / scenario_quips 時的
+    #   fallback）。make_en_quips.py 只翻了 pair/scenario 兩張表，漏了這句
+    #   寫死在程式裡的預設值 → 低關聯度商品（3.2% occasional）全顯示中文。
+    return "Often bought together", None
 
 
 _OPENING_QUIPS = [
@@ -1843,7 +1848,7 @@ def query_related_items(
 # Dispatch
 # ────────────────────────────────────────────────
 
-def _clarify_passthrough(question: str = "請再說清楚一點，你想查什麼呢？",
+def _clarify_passthrough(question: str = "Could you be more specific - what would you like to check?",
                          options: list | None = None, hint: str = "") -> dict:
     """clarify 偽工具（r43）：校正層要「追問而非執行」時回傳 func_name='clarify'，
     execute() 查表直接組追問卡——不用每個校正點自己拼 done envelope。"""
@@ -1897,7 +1902,7 @@ def execute(name: str, args: dict) -> dict:
     """從 server 呼叫。把 dict 化的 args 解到 function。"""
     fn = FUNCTIONS.get(name)
     if not fn:
-        return _err(f"不支援的 function: {name}")
+        return _err(f"Unsupported function: {name}")
     args = args or {}
     # 270M 偶爾會抽出該工具不接受的參數名（例如 list_files 誤抽 keyword）。
     # 過濾掉函式簽章不認識的 key，避免直接 TypeError，讓函式用預設值繼續跑。
@@ -1914,7 +1919,7 @@ def execute(name: str, args: dict) -> dict:
         return fn(**args)
     except (ValueError, KeyError, TypeError) as e:
         _log.warning(f"[warehouse] {name}({args}) 參數錯誤: {e}")
-        return _err(f"查詢參數有誤：{e}")
+        return _err(f"Invalid query parameter: {e}")
     except Exception as e:
         _log.exception(f"[warehouse] {name}({args}) 執行異常")
-        return _err(f"系統忙碌、請稍候重試")
+        return _err("System busy, please try again shortly")

@@ -4,7 +4,7 @@
 """
 import sys, csv, pathlib, datetime, argparse
 
-WH_LABEL = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
+WH_LABEL = {"north": "North", "central": "Central", "south": "South"}
 
 def main():
     parser = argparse.ArgumentParser()

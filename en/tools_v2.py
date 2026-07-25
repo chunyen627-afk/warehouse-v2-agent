@@ -539,7 +539,8 @@ def manage_config(action: str = "read", key: str = "", value=None,
                     new = max(0, new)
                     preview.append({"sku_id": sku, "name": name, "warehouse": wh, "old": old, "new": new})
             _trace(steps, "reason",
-                   f"預覽：{'全部' if not skus else len(skus)} 商品 × {len(whs)} 倉 → 共 {len(preview)} 項異動")
+                   f"preview: {'all' if not skus else len(skus)} items x {len(whs)} "
+                   f"warehouses -> {len(preview)} changes")
             verb = (f"{'increase' if num >= 0 else 'decrease'} by {abs(num)}"
                     if mode == "delta" else f"set to {num}")
             wh_label = "all warehouses" if warehouse == "all" else \

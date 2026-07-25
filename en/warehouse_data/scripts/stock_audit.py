@@ -38,7 +38,7 @@ def main():
     with open(out_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["SKU", "商品名稱", "類別", "安全庫存",
-                    "北區倉", "中區倉", "南區倉", "總量", "狀態"])
+                    "North", "Central", "South", "Total", "Status"])
         low_count = 0
         for sku_id, item in sorted(items.items()):
             ss    = safety.get(sku_id, 0)
