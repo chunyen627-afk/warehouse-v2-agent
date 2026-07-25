@@ -149,6 +149,20 @@ GATEKEEPER_KEYWORDS = {
     "縮水", "落差", "追查", "怪異", "上調", "下調", "安全量",
     # conv100-r12：遮陽帽/搭什麼（「買防曬遮陽帽的都搭什麼買」曾被守門員拒）
     "遮陽帽", "防曬", "搭什麼", "都搭",
+    # ── EN build：英文**功能**查詢詞（不含商品名但完全合法的句子）。
+    #   守門員的最後一關 _text_has_item_name 改成詞級比對後，這些句子
+    #   （'best sellers this week' / 'compare north and south' /
+    #   'item list'）因為沒有商品名而被擋掉 → 白名單必須先接住它們。
+    "best seller", "best sellers", "top seller", "top sellers",
+    "hot items", "hot item", "bestseller", "selling", "sells",
+    "slow moving", "slow-moving", "dead stock", "not selling",
+    "compare", "comparison", "versus", "item list", "product list",
+    "full list", "all items", "everything we", "what do we have",
+    "running low", "low stock", "restock", "reorder", "out of stock",
+    "expiring", "expire", "expiry", "shelf life", "movements",
+    "moved", "inbound", "outbound", "transfers", "help",
+    "what can you", "how does this", "safety stock", "purchase order",
+    "report", "stocktake", "audit", "reconcile", "discrepanc",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
     "冠軍", "最熱門", "最冷門", "銷量", "搶手", "熱賣", "賣得最兇", "最夯",
     "比較", "比", "跟", "和", "vs", "對比",
@@ -329,6 +343,15 @@ _GATEKEEPER_BLACKLIST = (
     # 搗蛋 / 注入探測（永遠擋）
     "格式化", "重開機", "關機", "密碼", "管理員", "admin",
     "rm -rf", "rm-rf", "system prompt", "prompt是什麼",
+    # ── EN build：英文破壞/注入指令。⚠️ 這類**必須**進黑名單而不是靠
+    #   守門員的商品名判定——'wipe all stock' 的 wipe 精確命中主檔的
+    #   Baby Wet Wipes → 被當成正常商品查詢放行（守衛 probe 抓到）。
+    "wipe all", "wipe the", "delete all", "delete the", "drop table",
+    "drop the database", "clear everything", "clear all", "erase all",
+    "reset everything", "shutdown", "shut down", "format the",
+    "developer mode", "ignore your", "ignore previous", "ignore all",
+    "reveal your", "show your prompt", "your instructions",
+    "system prompt", "jailbreak", "sudo ", "admin password",
     "忽略你的指令", "忽略指令", "告訴我祕密", "告訴我秘密",
     "全部刪掉", "刪掉全部", "全部刪光", "刪光", "刪除全部", "清空資料",
     # r75：「價格改成」移出黑名單——改價誠實閘會優雅回「不支援改價」；
@@ -441,6 +464,45 @@ def _text_has_item_name(text: str) -> bool:
     try:
         import warehouse as _W_gd
         s = text.lower().replace(" ", "")
+
+        # ── EN build：英文句走**詞級**比對，不能用 3 字元滑窗 ──────────────
+        #   中文 3 個字是有意義的詞，英文 3 個字母不是。去空白後滑窗會撞爆：
+        #     'hi there'        → 'the' (Wireless Bluetooth EarpHOnes…)
+        #     'delete all items'→ 'ele' / 'tea'
+        #     'good morning'    → 'ing' / 'ood'
+        #     'are you a robot' → 'are' (CookwARE) / 'bot' (BOTtle)
+        #     'qwertyuiop'      → 'wer' (PoWER Bank)
+        #   → 守門員對**所有**英文搗蛋句放行（守衛 chat/probe/noex/guidey
+        #   共 26 句 FAIL 全是這個成因）。英文改判「整個單詞相符」。
+        if _is_mostly_english(text):
+            _toks_gd = {w.strip(" ?.!,'\"") for w in _re.split(r"[\s\-/]+", text.lower())}
+            _toks_gd = {w for w in _toks_gd if len(w) >= 3}
+            if not _toks_gd:
+                return False
+            for _it_en in _W_gd.state().items:
+                for _w_en in _re.split(r"[\s\-/]+", _it_en["name"].lower()):
+                    _w_en = _w_en.strip()
+                    # 純數字/規格詞（2m、28cm、10000mah、5pcs、200g）不算商品指涉
+                    if len(_w_en) < 3 or any(c.isdigit() for c in _w_en):
+                        continue
+                    if _w_en in _toks_gd:
+                        return True
+                    # 單複數（earphones vs earphone、crackers vs cracker）
+                    if _w_en.rstrip("s") in {t.rstrip("s") for t in _toks_gd} \
+                            and len(_w_en.rstrip("s")) >= 4:
+                        return True
+            # 英文俗稱（earbuds / power bank / toilet paper…）也算具體指涉
+            try:
+                from alias_en import ALIAS_EN as _AL_gd
+                _tl_gd = text.lower()
+                for _k_gd in _AL_gd:
+                    if _re.search(r"(?<![a-z])" + _re.escape(_k_gd.lower())
+                                  + r"(?![a-z])", _tl_gd):
+                        return True
+            except Exception:
+                pass
+            return False
+
         # r43：單字通稱（帽子/鍋子…）也算具體商品指涉——「帽子有哪些」曾被 guide
         # 拒絕，但通稱表能導到毛帽/遮陽帽清單，該讓句子進查詢流程
         if any(_gt in s for _gt in getattr(_W_gd, "_GENERIC_QUERY_FALLBACK", {})):
@@ -481,7 +543,13 @@ def _is_guide_request(text: str) -> bool:
     # （「全部」是 GUIDE_WORDS 曾把 config 意圖吃掉）
     if re.search(r"\d", s) and any(w in s for w in ("改", "設", "調")):
         return False
-    if len(s) > 20:
+    # ⚠️ EN build：門檻「字元數 > 20」是為中文調的（中文 20 字很長）。英文
+    #   字元數是中文 2-3 倍——'best sellers this week' 才 4 詞卻 22 字元、
+    #   'compare north and south' 4 詞 23 字元 → 兩句都掉進長句 fallback，
+    #   而 _long_specific 又幾乎全中文 → 合法功能查詢被判成「碎念」回導覽頁。
+    #   英文改用**單詞數 > 12**（≈中文 20 字的資訊量），與其他長度閘門同款處理。
+    _too_long = (len(s.split()) > 12) if _is_mostly_english(s) else (len(s) > 20)
+    if _too_long:
         # 長句碎念 fallback（第17輪）：展場訪客的長句閒聊（「逛展逛了一整天
         # 腳好痠…過來看看」）夾帶守門員字誤入功能路由。長句若無任何具體
         # 查詢線索（SPECIFIC 詞/數字）→ 給引導頁，比亂路由好。
@@ -491,7 +559,14 @@ def _is_guide_request(text: str) -> bool:
                           "報告", "警示", "排程", "採購", "盤點", "安全", "倉",
                           "買", "賣", "多少", "剩", "紀錄", "記錄", "明細",
                           "比較", "通知", "提醒", "月報", "報表", "體檢",
-                          "對帳", "少了", "怪", "coffee", "stock", "buy")
+                          "對帳", "少了", "怪", "coffee", "stock", "buy",
+                          # EN build：英文具體查詢線索
+                          "sell", "seller", "compare", "warehouse", "north",
+                          "central", "south", "inventory", "left", "how many",
+                          "expiring", "expire", "low", "restock", "reorder",
+                          "moved", "movement", "transfer", "received",
+                          "shipped", "alert", "notify", "safety", "report",
+                          "list", "count", "why", "who", "match", "record")
         if (not any(w in s for w in _long_specific)
                 and not re.search(r"\d", s)
                 and not _text_has_item_name(s)):
@@ -4532,6 +4607,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         kw = _extract_sku_keyword(user_text) or func_args.get("keyword", "")
         if kw and not _kw_grounded(kw, user_text):
             kw = ""  # fuzzy 亂中的全名不可信（conv100-r8）
+        # EN build：C1g-oov 已判定「句中有陌生修飾詞＝庫裡沒有的商品」
+        #   （printer paper / office chairs），這裡不可再用 match_items
+        #   把近似商品撿回來（C1s 踩過同一個坑）
+        if _en_oov_cleared:
+            kw = ""
         # 概覽詞不是商品名（r18：「給我全部庫存的總表」fallback 撿回 LLM 的
         # 「全部庫存」kw → clarify 找不到）→ 清掉查概覽
         if kw and any(w in kw for w in ("總表", "種商品", "全部庫存", "總庫存",
@@ -8028,9 +8108,16 @@ async def ws_handler(ws: WebSocket):
 
             # ── 列出所有商品（優先於引導）──
             # 含設定關鍵字時不攔（「中倉全部商品安全庫存改成六十」是 config 句）
-            if (any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱",
+            # EN build：英文觸發詞。⚠️「item list」是**英文版回答自己教訪客
+            #   打的字**（概覽卡寫 say "item list" for the full list），不收
+            #   的話訪客照著打會落到 GUIDE_KEYWORDS 的 "list" 回導覽頁。
+            if ((any(w in user_text for w in ("所有商品", "商品列表", "商品清單", "全部商品", "列出商品", "商品名稱",
                                               # r29：「全部倉一共幾項商品」
                                               "幾項商品", "幾種商品"))
+                 or any(w in user_text.lower() for w in
+                        ("item list", "items list", "product list", "full list",
+                         "list of items", "list all items", "list the items",
+                         "list everything", "all item names", "show all items")))
                     # r30：「全部商品裡最貴的前五名」讓給價格直答
                     and not any(w in user_text for w in ("最貴", "最便宜", "前三", "前五", "前十"))
                     and not any(w in user_text for w in _CONFIG_KEY_WORDS)
@@ -8048,9 +8135,13 @@ async def ws_handler(ws: WebSocket):
                 snap = _W_list_ws.state()
                 # r28：「全部商品總共幾件」是問總量不是要 60 項全清單
                 if any(w in user_text for w in ("幾件", "多少件", "總件", "總數", "總共幾",
-                                                 "幾項", "幾種", "一共幾")):
+                                                 "幾項", "幾種", "一共幾")) \
+                        or any(w in user_text.lower() for w in
+                               ("how many items", "how many products", "total units",
+                                "total stock", "how many in total")):
                     _tot_qty = sum(q for wh in snap.stock.values() for q in wh.values())
-                    _tot_sum = f"全部商品共 {len(snap.items)} 項、三倉總庫存 {_tot_qty:,} 件。"
+                    _tot_sum = (f"{len(snap.items)} items in total, "
+                                f"{_tot_qty:,} units across all 3 warehouses.")
                     for ch in _tot_sum:
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(_TK_DELAY.get())
@@ -8058,7 +8149,7 @@ async def ws_handler(ws: WebSocket):
                                 "summary": _tot_sum, "data": {"total_qty": _tot_qty}}})
                     continue
                 rows = [f"{it['sku_id']} {it['name']} ({_W_list_ws.CATEGORY_LABEL.get(it['category'], it['category'])}) NT${it['unit_price']}" for it in snap.items]
-                summary = f"共 {len(rows)} 項商品：\n" + "\n".join(f"  {r}" for r in rows)
+                summary = f"{len(rows)} items in total:\n" + "\n".join(f"  {r}" for r in rows)
                 for ch in summary:
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.003)
@@ -10451,6 +10542,74 @@ async def ws_handler(ws: WebSocket):
                         if _kw_n != _kw_o:
                             func_args["keyword"] = _kw_n
                             log.info(f"[alias-en] keyword {_kw_o!r} → {_kw_n!r}")
+                    except Exception:
+                        pass
+
+                # ── EN build OOV-noname：英文查詢句「指名了某個東西，但那個
+                #   東西不在庫」→ 誠實說沒有，不要回全店概覽。
+                #   'microwave stock' / 'toothpaste inventory' / 'bicycle
+                #   inventory' 含 stock/inventory 白名單詞（確實是倉管句、
+                #   守門員該放行），但抽不到 keyword → 退概覽＝答非所問
+                #   （守衛 noex 類期望 clarify/rejected）。
+                #   判準：句中有「非虛詞的實詞」，且該實詞既不是主檔用字、
+                #   也模糊比不到 → 那是庫裡沒有的商品名。
+                if (func_name == "query_inventory" and not func_args.get("keyword")
+                        and not func_args.get("category")
+                        and _is_mostly_english(user_text)):
+                    _NOEX_STOP = {
+                        "how", "many", "much", "whats", "what", "have", "has",
+                        "there", "some", "any", "show", "tell", "give", "list",
+                        "check", "look", "looking", "left", "stock", "stocks",
+                        "inventory", "count", "counts", "hand", "with", "from",
+                        "that", "this", "them", "they", "your", "does", "did",
+                        "still", "right", "available", "availability", "status",
+                        "please", "quantity", "units", "unit", "level", "levels",
+                        "number", "warehouse", "north", "central", "south",
+                        "total", "currently", "remaining", "remain", "about",
+                        "need", "want", "know", "the", "and", "for", "are",
+                        "you", "got", "all", "our", "get", "see", "now", "item",
+                        "items", "product", "products", "thing", "things",
+                    }
+                    try:
+                        import warehouse as _Wnx
+                        import difflib as _dlnx
+                        _nx_words = set()
+                        for _itx in _Wnx.state().items:
+                            for _wx in _re.split(r"[\s\-/]+", _itx["name"].lower()):
+                                if len(_wx) >= 3 and not any(c.isdigit() for c in _wx):
+                                    _nx_words.add(_wx)
+                        try:
+                            from alias_en import ALIAS_EN as _ALnx
+                            for _kx in _ALnx:
+                                for _wx in _kx.lower().split():
+                                    if len(_wx) >= 3:
+                                        _nx_words.add(_wx)
+                        except Exception:
+                            pass
+                        _nx_keys = list(_nx_words)
+                        _unknown = []
+                        for _tx in _re.split(r"[\s\-/]+", user_text.lower()):
+                            _tx = _tx.strip(" ?.!,'\"")
+                            if len(_tx) < 3 or _tx in _NOEX_STOP or any(c.isdigit() for c in _tx):
+                                continue
+                            if _tx in _nx_words or _tx.rstrip("s") in _nx_words:
+                                continue
+                            if _dlnx.get_close_matches(_tx, _nx_keys, n=1, cutoff=0.85):
+                                continue
+                            _unknown.append(_tx)
+                        if _unknown:
+                            _nx_name = " ".join(_unknown)
+                            log.info(f"[oov:noex] vid={vid} 庫中無此商品 {_nx_name!r} → 誠實回覆")
+                            await send({"type": "done", "result": {
+                                "ok": True, "view": "clarify",
+                                "summary": (f'No item matching "{_nx_name}" is in '
+                                            'the warehouse. Please check the name, '
+                                            'or say "item list" to see everything '
+                                            'we carry.'),
+                                "data": {"question": f'"{_nx_name}" not found',
+                                         "options": [], "hint": ""},
+                            }})
+                            continue
                     except Exception:
                         pass
 
