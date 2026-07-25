@@ -98,7 +98,7 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
     dd = _data_dir()
     tx_dir = dd / "transactions"
     if not tx_dir.exists():
-        return W._err("找不到交易紀錄檔目錄")
+        return W._err("Transaction log directory not found")
 
     # keyword → 目標 SKU（可能多個；空 keyword = 全部）
     #   先剝掉 RCA 雜訊詞（模型常把「XX帳對不上」整句當 keyword）再 match。
@@ -117,7 +117,7 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
     if not skus:
         po_dir      = dd / "orders" / "PO"
         rec_dir     = dd / "receipts"
-        _trace(steps, "glob", "未指定商品 → 全域掃描所有採購單")
+        _trace(steps, "glob", "no item specified → scanning all purchase orders")
         all_disc = []
         po_count = 0
         for pj in sorted(po_dir.glob("*.json")):
@@ -141,13 +141,14 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
                         "order_qty": order_qty, "received_qty": recv_qty, "gap": gap,
                     })
         _trace(steps, "read",
-               f"掃完 {po_count} 張採購單，JOIN 收貨記錄（receipts）計算應收 vs 實收")
+               f"scanned {po_count} purchase orders, JOINed receipts to compare "
+               "ordered vs received")
         if all_disc:
             all_disc.sort(key=lambda d: d["gap"], reverse=True)
             _trace(steps, "reason",
                    f"found {len(all_disc)} short-received records, largest: {all_disc[0]['name']} "
-                   f"（{all_disc[0]['po_id']}）應收 {all_disc[0]['order_qty']} / "
-                   f"實收 {all_disc[0]['received_qty']} → 差 {all_disc[0]['gap']} 件")
+                   f"({all_disc[0]['po_id']}) ordered {all_disc[0]['order_qty']} / "
+                   f"received {all_disc[0]['received_qty']} → short {all_disc[0]['gap']} units")
             total_gap = sum(d["gap"] for d in all_disc)
             summary = (f"{len(all_disc)} purchase reconciliation issues found (PO mismatch), {total_gap} units short in total. "
                        f"Largest: {all_disc[0]['name']} short {all_disc[0]['gap']} units on {all_disc[0]['po_id']}.")
@@ -170,8 +171,8 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
         if source and source not in stem:   # source 走 keyword 子字串比對（不 enum）
             continue
         files.append(fp)
-    _trace(steps, "glob", f"掃 transactions/ → 命中 {len(files)}/{len(all_files)} 個交易檔",
-           matched=len(files), total=len(all_files), time_range=time_range or "全部")
+    _trace(steps, "glob", f"scanned transactions/ → {len(files)}/{len(all_files)} log files matched",
+           matched=len(files), total=len(all_files), time_range=time_range or "all")
 
     # ② Grep：逐檔找命中 SKU 的進出筆
     rows = []
@@ -186,8 +187,8 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
     truncated = len(rows) > MAX_ROWS
     shown = rows[:MAX_ROWS]
     kw_disp = keyword or "all items"
-    _trace(steps, "grep", f"在交易檔中比對「{kw_disp}」→ 找到 {len(rows)} 筆"
-           + (f"（截斷顯示前 {MAX_ROWS}）" if truncated else ""),
+    _trace(steps, "grep", f'matched "{kw_disp}" in transaction logs → {len(rows)} records'
+           + (f" (showing first {MAX_ROWS})" if truncated else ""),
            hits=len(rows), truncated=truncated)
 
     # ③ RCA：3 大步驟 + sub_lines（PO 明細），不逐筆 _trace
@@ -207,10 +208,10 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
             if any(ln["sku_id"] in sku_ids for ln in po["lines"]):
                 relevant_pos.append(po)
         _trace(steps, "glob",
-               f"掃採購單（orders/PO）→ 找到 {len(relevant_pos)} 張含「{sku_label}」的 PO",
+               f'scanned purchase orders (orders/PO) → {len(relevant_pos)} POs contain "{sku_label}"',
                sub_lines=[f"{p['po_id']}  {p['date']}  {p['warehouse']}  {p['supplier']}"
                           for p in relevant_pos[:4]]
-               + ([f"…另有 {len(relevant_pos)-4} 張"] if len(relevant_pos) > 4 else []))
+               + ([f"…and {len(relevant_pos)-4} more"] if len(relevant_pos) > 4 else []))
 
         # ── Step B：逐張比對收貨記錄 ──
         compare_lines = []
@@ -231,13 +232,14 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
                 recv_qty  = recv_by_sku.get(sku, 0)
                 gap       = order_qty - recv_qty
                 batches   = recv_batches.get(sku, [])
-                batch_str = "、".join(
-                    f"{b['receipt_date']} 收 {b['received_qty']} 件" for b in batches
-                ) or "（無收貨記錄）"
+                batch_str = ", ".join(
+                    f"{b['receipt_date']} received {b['received_qty']}" for b in batches
+                ) or "(no receipt records)"
                 if gap > 0:
                     compare_lines.append(
-                        f"⚠  {po['po_id']}  應收 {order_qty} / 實收 {recv_qty} → 短收 {gap} 件"
-                        f"\n   收貨批次：{batch_str}"
+                        f"⚠  {po['po_id']}  ordered {order_qty} / received {recv_qty} "
+                        f"→ short {gap} units"
+                        f"\n   Receipt batches: {batch_str}"
                     )
                     discrepancies.append({
                         "po_id": po["po_id"], "date": po["date"],
@@ -253,11 +255,11 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
         ok_count     = normal_count
         display_lines = warn_lines[:6]
         if len(warn_lines) > 6:
-            display_lines.append(f"…另有 {len(warn_lines)-6} 筆短收")
+            display_lines.append(f"…and {len(warn_lines)-6} more shortfalls")
         if ok_count:
-            display_lines.append(f"✓  其餘 {ok_count} 張正常")
+            display_lines.append(f"✓  {ok_count} other POs are fine")
         _trace(steps, "read",
-               f"逐張比對收貨記錄（receipts）→ 查完 {len(relevant_pos)} 張",
+               f"compared receipts PO by PO → {len(relevant_pos)} checked",
                sub_lines=display_lines)
 
     # ④ Reason：產出結論
@@ -275,17 +277,20 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
             sl = sup_by_id.get(d["supplier"], d["supplier"])
             lines_out.append(
                 f"📋 {d['po_id']} ({d['date']}, {wl}, {sl})\n"
-                f"   應收 {d['order_qty']} 件 / 實收 {d['received_qty']} 件 → 短收 {d['gap']} 件 ⚠"
+                f"   ordered {d['order_qty']} / received {d['received_qty']} "
+                f"→ short {d['gap']} units ⚠"
             )
         if len(discrepancies) > 3:
-            lines_out.append(f"   …另有 {len(discrepancies)-3} 筆短收")
+            lines_out.append(f"   …and {len(discrepancies)-3} more shortfalls")
         lines_out.append(
-            f"✅ 結論：共 {len(discrepancies)} 筆短收，合計差 "
-            f"{sum(d['gap'] for d in discrepancies)} 件，建議聯絡供應商確認。"
+            f"✅ Conclusion: {len(discrepancies)} shortfalls totalling "
+            f"{sum(d['gap'] for d in discrepancies)} units. "
+            "Suggest contacting the supplier to confirm."
         )
         summary = "\n".join(lines_out)
         _trace(steps, "reason",
-               f"確認短收：{len(discrepancies)} 筆，最大 {d0['po_id']} 差 {d0['gap']} 件")
+               f"confirmed {len(discrepancies)} shortfalls, largest {d0['po_id']} "
+               f"short {d0['gap']} units")
         cause_found = True
     else:
         if rows:
@@ -301,7 +306,8 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
                            f"💡 Type a specific item name to trace shortfall causes")
         else:
             summary = f"No movement records found for \"{kw_disp}\" in the given range."
-        _trace(steps, "reason", "未發現短收（已查PO）" if sku_ids else "泛查無PO對帳")
+        _trace(steps, "reason", "no shortfall found (POs checked)" if sku_ids
+               else "broad search, no PO reconciliation")
         cause_found = False
 
     # 補充現存量 + 安全庫存，供第二輪 LLM 推理建議行動
@@ -440,7 +446,7 @@ def manage_config(action: str = "read", key: str = "", value=None,
 
     # ── read ──
     if action == "read":
-        _trace(steps, "read", f"讀取設定 master/config.json → {canon}")
+        _trace(steps, "read", f"read settings master/config.json → {canon}")
         if canon == "safety_stock":
             base = cfg.get("safety_stock_base", {})
             ov = cfg.get("safety_stock_override", {})
@@ -647,16 +653,23 @@ def run_script(script_name: str = "", **_kw) -> dict:
         script_name = str(list(_kw.values())[0])
     steps: list[dict] = []
     sc = _match_script(script_name)
-    _trace(steps, "read", f"比對白名單 manifest.json → 「{script_name}」")
+    _trace(steps, "read", f'matched against whitelist manifest.json → "{script_name}"')
     if not sc:
-        avail = "、".join(s["label"] for s in _load_manifest().get("scripts", []))
+        _scripts = _load_manifest().get("scripts", [])
+        avail = ", ".join(s["label"] for s in _scripts)
         return {"ok": True, "view": "clarify",
-                "summary": f"「{script_name}」不在可執行白名單內。可用：{avail}",
-                "data": {"question": f"「{script_name}」不在可執行白名單內，想跑哪一個？",
-                         "options": ["月底盤點", "匯出進出記錄", "產出體檢報告"], "hint": ""}}
+                "summary": f'"{script_name}" is not on the whitelist. '
+                           f'Available: {avail}',
+                "data": {"question": f'"{script_name}" is not on the whitelist. '
+                                     'Which one do you want to run?',
+                         # options 送回後端當查詢字串 → 直接用 manifest 的
+                         #   label（已英文化），不能寫死中文
+                         "options": [f"run {s['label']}" for s in _scripts],
+                         "hint": ""}}
 
     # 安全護欄：只回「待確認」，不直接 subprocess（執行交給 server confirm 後）
-    _trace(steps, "confirm", f"命中白名單腳本：{sc['label']}（逾時上限 {sc['timeout_s']}s）")
+    _trace(steps, "confirm", f"whitelisted script matched: {sc['label']} "
+                             f"(timeout {sc['timeout_s']}s)")
     summary = f"About to run whitelisted script [{sc['label']}]: {sc.get('description', sc.get('desc', ''))}. Please confirm."
     return {"ok": True, "summary": summary, "view": "script_confirm",
             "data": {"pending": True, "script_id": sc["id"], "label": sc["label"],
@@ -678,10 +691,10 @@ def commit_run_script(script_id: str, actor: str = "user_confirmed",
                       trace_id: str | None = None) -> dict:
     sc = next((s for s in _load_manifest().get("scripts", []) if s["id"] == script_id), None)
     if not sc:
-        return W._err("腳本不存在")
+        return W._err("Script not found")
     spec = _SCRIPT_CMD.get(script_id)
     if not spec:
-        return W._err(f"腳本 {script_id} 未綁定指令")
+        return W._err(f"Script {script_id} has no command bound")
     fname, extra = spec
     script_path = _data_dir() / "scripts" / fname
     extra = ["--data-dir", str(_data_dir()), *extra]
@@ -690,7 +703,7 @@ def commit_run_script(script_id: str, actor: str = "user_confirmed",
     trace_id = trace_id or f"run-{ts}"
 
     if not script_path.exists():
-        return W._err(f"找不到腳本檔：{script_path.name}")
+        return W._err(f"Script file not found: {script_path.name}")
 
     try:
         import os as _os
@@ -705,9 +718,9 @@ def commit_run_script(script_id: str, actor: str = "user_confirmed",
         ok = proc.returncode == 0
         tail = (proc.stdout or "")[-500:]
     except subprocess.TimeoutExpired:
-        ok, tail = False, f"逾時（>{sc['timeout_s']}s）已中止"
+        ok, tail = False, f"Timed out (>{sc['timeout_s']}s), aborted"
     except Exception as e:
-        ok, tail = False, f"執行失敗：{e}"
+        ok, tail = False, f"Execution failed: {e}"
 
     # audit
     snap = W.state().snapshot_date or ts[:10]
@@ -715,7 +728,8 @@ def commit_run_script(script_id: str, actor: str = "user_confirmed",
         f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
                             "action": "run_script", "script_id": script_id, "ok": ok},
                            ensure_ascii=False) + "\n")
-    return {"ok": ok, "summary": f"腳本【{sc['label']}】執行{'完成' if ok else '失敗'}。",
+    return {"ok": ok, "summary": f"Script [{sc['label']}] "
+                                 f"{'completed' if ok else 'failed'}.",
             "view": "script_done", "data": {"script_id": script_id, "ok": ok,
                                             "output_tail": tail, "trace_id": trace_id}}
 
@@ -765,40 +779,47 @@ def generate_report(report_type: str = "full", actor: str = "agent_auto",
     ts = datetime.now().isoformat(timespec="seconds")
     trace_id = trace_id or f"rpt-{ts}"
 
-    _trace(steps, "glob", f"掃全倉 {len(s.warehouses)} 倉 / {len(s.items)} SKU 收集報告素材")
+    _trace(steps, "glob", f"scanned {len(s.warehouses)} warehouses / {len(s.items)} SKUs "
+                          "to collect report data")
 
-    md = [f"# 倉儲報告 — {('全倉體檢' if rt=='full' else rt)}",
-          f"\n> 產生時間：{ts}　資料快照：{snap}　產生者：{actor}（trace {trace_id}）\n"]
+    _RT_TITLE = {"full": "Full Health Check", "low_stock": "Low Stock",
+                 "expiring": "Expiring Items", "rca": "Reconciliation"}
+    md = [f"# Warehouse Report — {_RT_TITLE.get(rt, rt)}",
+          f"\n> Generated: {ts} | Data snapshot: {snap} | By: {actor} "
+          f"(trace {trace_id})\n"]
 
     # ── 庫存總覽 ──
     if rt in ("full",):
         ds = W.dashboard_snapshot()
-        _trace(steps, "reason", "彙整庫存總覽")
+        _trace(steps, "reason", "compiling stock overview")
         rows = [[w["label"], f"{w['item_count']:,}", f"NT$ {w['stock_value']:,}"]
                 for w in ds["warehouse_summary"]]
-        md.append("## 一、庫存總覽")
-        md.append(_md_table(["倉別", "總件數", "庫存市值"], rows))
-        md.append(f"\n- SKU 總數：{ds['sku_count']}　- 低於安全庫存品項：{ds['low_stock_count']}\n")
+        md.append("## 1. Stock Overview")
+        md.append(_md_table(["Warehouse", "Total Units", "Stock Value"], rows))
+        md.append(f"\n- Total SKUs: {ds['sku_count']}　"
+                  f"- Below safety stock: {ds['low_stock_count']}\n")
 
     # ── 缺貨警示 ──
     if rt in ("full", "low_stock"):
         r = W.execute("list_low_stock", {})
         warns = r.get("data", {}).get("warnings", []) if isinstance(r.get("data"), dict) else []
-        _trace(steps, "read", f"讀缺貨警示 → {len(warns)} 項")
-        md.append("## 二、缺貨警示（撐天 / 建議補）")
+        _trace(steps, "read", f"read low-stock alerts → {len(warns)} items")
+        md.append("## 2. Low Stock Alerts (days left / suggested reorder)")
         rows = [[w.get("name", ""), w.get("warehouse_label", ""), w.get("qty", ""),
                  w.get("days_left", ""), w.get("suggest_qty", "")] for w in warns[:30]]
-        md.append(_md_table(["商品", "倉", "現量", "撐天", "建議補"], rows) if rows else "（無）")
+        md.append(_md_table(["Item", "Warehouse", "On Hand", "Days Left", "Suggest"],
+                            rows) if rows else "(none)")
 
     # ── 到期警示 ──
     if rt in ("full", "expiring"):
         r = W.execute("list_expiring_items", {})
         items = r.get("data", {}).get("rows", []) if isinstance(r.get("data"), dict) else []
-        _trace(steps, "read", f"讀到期批次 → {len(items)} 項")
-        md.append("## 三、保存期限警示")
+        _trace(steps, "read", f"read expiring batches → {len(items)} items")
+        md.append("## 3. Expiry Alerts")
         rows = [[f"{it.get('level_emoji','')} {it.get('name','')}", it.get("warehouse_label", ""),
                  it.get("days_to_expire", ""), it.get("qty", "")] for it in items[:30]]
-        md.append(_md_table(["商品", "倉", "剩餘天數", "數量"], rows) if rows else "（無）")
+        md.append(_md_table(["Item", "Warehouse", "Days Left", "Qty"], rows)
+                  if rows else "(none)")
 
     # ── RCA 異常彙整（掃所有 PO 短收）──
     if rt in ("full", "rca"):
@@ -812,10 +833,12 @@ def generate_report(report_type: str = "full", actor: str = "agent_auto",
                     discs.append([po["po_id"], po["date"], po["warehouse"], nm,
                                   ln["order_qty"], ln["received_qty"],
                                   ln["order_qty"] - ln["received_qty"]])
-        _trace(steps, "reason", f"掃採購單比對應收/實收 → 發現 {len(discs)} 筆短收")
-        md.append("## 四、採購對帳異常（PO 短收）")
-        md.append(_md_table(["採購單", "日期", "倉", "商品", "應收", "實收", "短收"], discs)
-                  if discs else "（無異常）")
+        _trace(steps, "reason", f"compared ordered vs received across POs → "
+                                f"{len(discs)} shortfalls found")
+        md.append("## 4. Purchase Reconciliation Issues (PO shortfalls)")
+        md.append(_md_table(["PO", "Date", "Warehouse", "Item", "Ordered",
+                             "Received", "Short"], discs)
+                  if discs else "(no issues)")
 
     # ── 報告圖表（matplotlib PNG）：full 報告嵌一張庫存市值長條圖 ──
     chart_file = None
@@ -824,17 +847,17 @@ def generate_report(report_type: str = "full", actor: str = "agent_auto",
             chart_file = _render_report_chart(rt, ts, reports_dir)
             if chart_file:
                 md.insert(2, f"\n![chart](./{chart_file})\n")
-                _trace(steps, "act", f"產生圖表 → reports/{chart_file}")
+                _trace(steps, "act", f"rendered chart → reports/{chart_file}")
         except Exception as e:
-            _trace(steps, "reason", f"圖表略過：{e}")
+            _trace(steps, "reason", f"chart skipped: {e}")
 
-    md.append(f"\n---\n*本報告由倉管 Agent 自動產生 · {trace_id}*")
+    md.append(f"\n---\n*Generated automatically by the Warehouse Agent · {trace_id}*")
     content = "\n".join(md)
 
     fname = f"{snap}_{rt}_report_{ts[11:19].replace(':', '')}.md"
     fpath = reports_dir / fname
     fpath.write_text(content, encoding="utf-8")
-    _trace(steps, "act", f"寫出報告 → reports/{fname}（{len(content)} 字）")
+    _trace(steps, "act", f"wrote report → reports/{fname} ({len(content)} chars)")
 
     # audit（actor=agent_auto，記錄自動產出）
     with open(dd / "audit" / f"{snap}_changes.log", "a", encoding="utf-8") as f:
@@ -843,8 +866,8 @@ def generate_report(report_type: str = "full", actor: str = "agent_auto",
                             "file": fname}, ensure_ascii=False) + "\n")
 
     return {"ok": True,
-            "summary": f"已產出{('全倉體檢' if rt=='full' else rt)}報告：reports/{fname}"
-                       + ("（含圖表）" if chart_file else ""),
+            "summary": f"{_RT_TITLE.get(rt, rt)} report generated: reports/{fname}"
+                       + (" (with chart)" if chart_file else ""),
             "view": "report_done",
             "data": {"report_type": rt, "file": fname, "path": str(fpath),
                      "chart": chart_file, "preview": content[:1200], "trace": steps}}
@@ -855,7 +878,9 @@ def _render_report_chart(rt: str, ts: str, reports_dir: Path) -> str | None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    matplotlib.rcParams["font.sans-serif"] = ["Microsoft JhengHei", "SimHei", "Arial Unicode MS"]
+    # EN build：圖表標籤已全英文 → 先找 Latin 字型（RPI5 沒中文字型時
+    #   原設定會 fallback 到 DejaVu 並噴一堆 missing glyph warning）
+    matplotlib.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Liberation Sans"]
     matplotlib.rcParams["axes.unicode_minus"] = False
     s = W.state()
 
@@ -865,10 +890,12 @@ def _render_report_chart(rt: str, ts: str, reports_dir: Path) -> str | None:
     labels = [w["label"] for w in ds["warehouse_summary"]]
     vals = [w["stock_value"] for w in ds["warehouse_summary"]]
     axes[0].bar(labels, vals, color=["#4a90d9", "#5cb85c", "#e8a33d"])
-    axes[0].set_title("各倉庫存市值 (NT$)")
+    axes[0].set_title("Stock Value by Warehouse (NT$)")
     axes[0].ticklabel_format(axis="y", style="plain")
     for i, v in enumerate(vals):
-        axes[0].text(i, v, f"{v/10000:.0f}萬", ha="center", va="bottom", fontsize=9)
+        # 「萬」是中文計數單位 → 英文版用 K/M
+        _lbl = f"{v/1e6:.1f}M" if v >= 1e6 else f"{v/1e3:.0f}K"
+        axes[0].text(i, v, _lbl, ha="center", va="bottom", fontsize=9)
 
     # 右：缺貨 Top10 撐天
     r = W.execute("list_low_stock", {})
@@ -876,14 +903,16 @@ def _render_report_chart(rt: str, ts: str, reports_dir: Path) -> str | None:
     warns = sorted([w for w in warns if w.get("days_left") is not None],
                    key=lambda w: w["days_left"])[:10]
     if warns:
-        names = [w["name"][:6] for w in warns]
+        # 名稱截斷放寬到 18 字元——英文商品名比中文長，6 字元只剩 "Wirel"
+        names = [w["name"][:18] for w in warns]
         days = [w["days_left"] for w in warns]
         colors = ["#d9534f" if d <= 7 else "#e8a33d" if d <= 14 else "#5bc0de" for d in days]
         axes[1].barh(names[::-1], days[::-1], color=colors[::-1])
-        axes[1].set_title("最快斷貨 Top10 (撐天)")
-        axes[1].set_xlabel("天")
+        axes[1].set_title("Top 10 Running Out (days left)")
+        axes[1].set_xlabel("days")
+        axes[1].tick_params(axis="y", labelsize=7)
     else:
-        axes[1].text(0.5, 0.5, "無缺貨", ha="center")
+        axes[1].text(0.5, 0.5, "No low stock", ha="center")
     plt.tight_layout()
 
     fname = f"chart_{rt}_{ts[11:19].replace(':', '')}.png"
@@ -897,12 +926,22 @@ def _render_report_chart(rt: str, ts: str, reports_dir: Path) -> str | None:
 #    限定在 warehouse_data/ 沙盒內，不能跳出去（路徑穿越防護）。
 # ════════════════════════════════════════════════════════════
 _LISTABLE = {
-    "transactions": "交易紀錄（按日切檔）",
-    "orders": "採購單/銷售單",
-    "master": "主檔（商品/供應商/設定/庫存）",
-    "audit": "異動留底",
-    "reports": "已產生的報告",
-    "scripts": "可執行腳本白名單",
+    "transactions": "Transaction logs (split by date)",
+    "orders": "Purchase / sales orders",
+    "master": "Master data (items / suppliers / settings / stock)",
+    "audit": "Change audit trail",
+    "reports": "Generated reports",
+    "scripts": "Whitelisted scripts",
+}
+# area 比對用的英文同義詞（label 已英文化，原本靠中文 label 拆字比對失效）
+_LISTABLE_ALIAS = {
+    "transactions": ("transaction", "movement", "log", "logs", "history"),
+    "orders": ("order", "orders", "purchase", "po", "sales"),
+    "master": ("master", "item", "items", "supplier", "suppliers",
+               "setting", "settings", "config", "stock"),
+    "audit": ("audit", "trail", "change", "changes"),
+    "reports": ("report", "reports"),
+    "scripts": ("script", "scripts", "whitelist"),
 }
 
 
@@ -915,33 +954,36 @@ def list_files(area: str = "") -> dict:
     target = None
     if area:
         a = area.replace(" ", "").lower()
+        _a_words = set(area.lower().split())
         for k, label in _LISTABLE.items():
-            if k in a or any(w in area for w in label.split("（")[0]):
+            if k in a or (_a_words & set(_LISTABLE_ALIAS.get(k, ()))):
                 target = k
                 break
 
     if target is None:
         # 沒指定 → 回各區概覽（檔數）
-        _trace(steps, "glob", "掃 warehouse_data/ → 列出可讀區域")
+        _trace(steps, "glob", "scanned warehouse_data/ → listing readable areas")
         rows = []
         for k, label in _LISTABLE.items():
             d = dd / k
             if d.exists():
                 n = sum(1 for _ in d.rglob("*") if _.is_file())
                 rows.append({"area": k, "label": label, "file_count": n})
-        return {"ok": True, "summary": f"warehouse_data/ 共 {len(rows)} 個可讀區域。",
+        return {"ok": True,
+                "summary": f"warehouse_data/ has {len(rows)} readable areas.",
                 "view": "file_list", "data": {"area": None, "rows": rows, "trace": steps}}
 
     # 指定區 → 列檔（路徑穿越防護：只允許 _LISTABLE 內的區）
     base = (dd / target).resolve()
     if not str(base).startswith(str(dd.resolve())):
-        return W._err("不允許存取沙盒外的路徑")
-    _trace(steps, "glob", f"列 {target}/ 下的檔案")
+        return W._err("Access outside the sandbox is not allowed")
+    _trace(steps, "glob", f"listing files under {target}/")
     files = sorted(p for p in base.rglob("*") if p.is_file())
     MAX = 60
     rows = [{"name": str(p.relative_to(base)), "size": p.stat().st_size} for p in files[:MAX]]
     return {"ok": True,
-            "summary": f"{target}/ 下有 {len(files)} 個檔" + (f"（顯示前 {MAX}）" if len(files) > MAX else ""),
+            "summary": f"{target}/ contains {len(files)} files"
+                       + (f" (showing first {MAX})" if len(files) > MAX else ""),
             "view": "file_list",
             "data": {"area": target, "label": _LISTABLE[target], "rows": rows,
                      "total": len(files), "trace": steps}}
@@ -1021,20 +1063,24 @@ def generate_po(source: str = "low_stock") -> dict:
     """根據缺貨清單 / PO 短收，自動產一張採購單草稿（待確認）。"""
     steps: list[dict] = []
     s = W.state()
-    src = "shortfall" if any(w in source for w in ("短收", "對不上", "shortfall", "rca")) else "low_stock"
+    src = ("shortfall" if any(w in str(source).lower() for w in
+                              ("短收", "對不上", "shortfall", "rca", "short",
+                               "discrepanc", "mismatch", "reconcil"))
+           else "low_stock")
 
     lines = []
     if src == "low_stock":
         r = W.execute("list_low_stock", {})
         warns = r.get("data", {}).get("warnings", []) if isinstance(r.get("data"), dict) else []
-        _trace(steps, "read", f"讀缺貨清單 → {len(warns)} 項")
+        _trace(steps, "read", f"read low-stock list → {len(warns)} items")
         # 取建議補貨量 > 0 的，按最急（撐天少）排
         cand = [w for w in warns if w.get("suggest_qty", 0) > 0]
         cand.sort(key=lambda w: w.get("days_left", 999))
         for w in cand[:20]:
             lines.append({"sku_id": w["sku_id"], "name": w["name"],
                           "warehouse": w["warehouse"], "order_qty": w["suggest_qty"],
-                          "reason": f"撐 {w.get('days_left')} 天、建議補 {w['suggest_qty']}"})
+                          "reason": f"{w.get('days_left')} days left, "
+                                    f"suggest ordering {w['suggest_qty']}"})
     else:
         # 短收補單：掃 PO 找 short_received
         dd = _data_dir() / "orders" / "PO"
@@ -1045,11 +1091,14 @@ def generate_po(source: str = "low_stock") -> dict:
                     gap = ln["order_qty"] - ln["received_qty"]
                     nm = s._items_by_sku.get(ln["sku_id"], {}).get("name", ln["sku_id"])
                     lines.append({"sku_id": ln["sku_id"], "name": nm, "warehouse": po["warehouse"],
-                                  "order_qty": gap, "reason": f"{po['po_id']} 短收 {gap} 件補單"})
-        _trace(steps, "read", f"掃採購單短收 → {len(lines)} 項待補")
+                                  "order_qty": gap,
+                                  "reason": f"{po['po_id']} short {gap} units, reorder"})
+        _trace(steps, "read", f"scanned POs for shortfalls → {len(lines)} to reorder")
 
     if not lines:
-        return {"ok": True, "summary": "目前沒有需要補貨的品項，不需產採購單。",
+        return {"ok": True,
+                "summary": "Nothing needs reordering right now — "
+                           "no purchase order required.",
                 "view": "po_confirm", "data": {"lines": [], "trace": steps}}
 
     # 對應供應商 + 算金額
@@ -1064,11 +1113,14 @@ def generate_po(source: str = "low_stock") -> dict:
         ln["amount"] = ln["unit_price"] * ln["order_qty"]
         ln["supplier"] = cat_sup.get(it.get("category", ""), "—")
         total += ln["amount"]
-    _trace(steps, "reason", f"組採購草稿：{len(lines)} 項、總額 NT$ {total:,}")
+    _trace(steps, "reason", f"assembled PO draft: {len(lines)} lines, "
+                            f"total NT$ {total:,}")
 
     return {"ok": True,
-            "summary": f"已根據{'缺貨清單' if src=='low_stock' else '短收紀錄'}產出採購單草稿："
-                       f"{len(lines)} 項、預估 NT$ {total:,}。請確認後送出。",
+            "summary": ("Purchase order draft generated from the "
+                        f"{'low-stock list' if src == 'low_stock' else 'shortfall records'}: "
+                        f"{len(lines)} lines, estimated NT$ {total:,}. "
+                        "Please confirm to submit."),
             "view": "po_confirm",
             "data": {"pending": True, "source": src, "lines": lines, "total": total, "trace": steps}}
 
@@ -1090,7 +1142,8 @@ def commit_po(pending: dict, actor: str = "user_confirmed", trace_id: str | None
                             "action": "generate_po", "po_id": po_id,
                             "lines": len(doc["lines"]), "total": doc["total"]},
                            ensure_ascii=False) + "\n")
-    return {"ok": True, "summary": f"採購單草稿 {po_id} 已建立（{len(doc['lines'])} 項、NT$ {doc['total']:,}），存到 PO_draft/。",
+    return {"ok": True, "summary": f"Purchase order draft {po_id} created ({len(doc['lines'])} lines, "
+                                   f"NT$ {doc['total']:,}), saved to PO_draft/.",
             "view": "po_done", "data": {"po_id": po_id, "trace_id": trace_id, "lines": len(doc["lines"])}}
 
 
@@ -1214,7 +1267,7 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
     sc = _match_script(script_name or "")
     if not sc:
         labels = "、".join(s["label"] for s in _load_manifest().get("scripts", []))
-        return W._err(f"找不到腳本「{script_name}」，可用：{labels}")
+        return W._err(f'Script "{script_name}" not found. Available: {labels}')
 
     dd = _data_dir()
     jobs_path = dd / "schedule_jobs.json"
@@ -1233,11 +1286,14 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
                        if sc["id"] == "stock_audit"
                        and any(w in (raw_text or "") for w in ("警示", "缺貨")) else "")
         return {"ok": True, "view": "clarify",
-                "summary": f"已經有一個一樣的排程囉：{sc['label']} {freq} {existing['time_str']}（ID: {existing['id']}）{_alias_note}，不用重複設定。",
-                "data": {"question": f"已經有排程「{sc['label']}」（{freq} {existing['time_str']}）在跑囉，需要改時間或取消再跟我說。",
+                "summary": f"A matching schedule already exists: {sc['label']} {freq} "
+                           f"{existing['time_str']} (ID: {existing['id']}){_alias_note}. "
+                           "No need to set it up again.",
+                "data": {"question": f'Schedule "{sc["label"]}" ({freq} {existing["time_str"]}) is already '
+                                     "running. Tell me if you want to change the time or cancel it.",
                          "options": [], "hint": ""}}
 
-    _freq_labels = {"daily": "每天", "weekly": "每週", "monthly": "每月"}
+    _freq_labels = {"daily": "daily", "weekly": "weekly", "monthly": "monthly"}
     freq_label = _freq_labels.get(freq, freq)
     job_id = f"SCH{len(jobs)+1:03d}"
 
@@ -1270,7 +1326,8 @@ def commit_schedule_set(pending: dict, actor: str = "user", trace_id: str = "") 
     jobs.append(new_job)
     jobs_path.write_text(json.dumps({"jobs": jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True,
-            "summary": f"排程已建立：{pending['freq_label']} {pending['time_str']} 自動執行【{pending['script_label']}】",
+            "summary": f"Schedule created: [{pending['script_label']}] will run "
+                                   f"{pending['freq_label']} at {pending['time_str']}",
             "view": "schedule_done", "data": {"job": new_job}}
 
 
@@ -1279,7 +1336,7 @@ def list_schedules() -> dict:
     dd = _data_dir()
     jobs_path = dd / "schedule_jobs.json"
     if not jobs_path.exists():
-        return {"ok": True, "summary": "目前沒有定時排程。", "view": "schedule_list",
+        return {"ok": True, "summary": "No scheduled jobs right now.", "view": "schedule_list",
                 "data": {"jobs": []}}
     jobs = json.loads(jobs_path.read_text("utf-8")).get("jobs", [])
     active = [j for j in jobs if j.get("enabled", True)]
@@ -1290,18 +1347,19 @@ def list_schedules() -> dict:
 def delete_schedule(job_id: str = "") -> dict:
     """刪除指定排程（HITL：先回確認卡，commit_delete_schedule() 才真正刪）。"""
     if not job_id:
-        return W._err("請指定排程 ID（例如 SCH001）")
+        return W._err("Please specify a schedule ID (e.g. SCH001)")
     dd = _data_dir()
     jobs_path = dd / "schedule_jobs.json"
     if not jobs_path.exists():
-        return W._err("找不到排程檔")
+        return W._err("Schedule file not found")
     data = json.loads(jobs_path.read_text("utf-8"))
     jobs = data.get("jobs", [])
     job = next((j for j in jobs if j["id"] == job_id), None)
     if not job:
-        return W._err(f"找不到排程 {job_id}")
+        return W._err(f"Schedule {job_id} not found")
     return {"ok": True,
-            "summary": f"確認刪除排程 {job_id}【{job.get('script_label', '')}】？此動作無法復原。",
+            "summary": f"Delete schedule {job_id} [{job.get('script_label', '')}]? "
+                       "This cannot be undone.",
             "view": "schedule_delete_confirm",
             "data": {"job_id": job_id, "job": job}}
 
@@ -1324,7 +1382,7 @@ def commit_delete_schedule(job_id: str = "", actor: str = "user_confirmed", trac
         f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
                             "action": "delete_schedule", "job_id": job_id},
                            ensure_ascii=False) + "\n")
-    return {"ok": True, "summary": f"排程 {job_id} 已刪除。",
+    return {"ok": True, "summary": f"Schedule {job_id} deleted.",
             "view": "schedule_deleted", "data": {"job_id": job_id}}
 
 
@@ -1333,7 +1391,7 @@ def list_alerts() -> dict:
     dd = _data_dir()
     rules_path = dd / "alert_rules.json"
     if not rules_path.exists():
-        return {"ok": True, "summary": "目前沒有任何警示規則。", "view": "alert_list",
+        return {"ok": True, "summary": "No alert rules set up right now.", "view": "alert_list",
                 "data": {"rules": []}}
     rules = json.load(open(rules_path, encoding="utf-8")).get("rules", [])
     active = [r for r in rules if r.get("enabled", True)]
@@ -1349,21 +1407,21 @@ def list_alerts() -> dict:
 def delete_alert(rule_id: str = "") -> dict:
     """刪除指定 ID 的警示規則（HITL：先回確認卡，commit_delete_alert() 才真正刪）。"""
     if not rule_id:
-        return W._err("請指定要刪除的規則 ID（例如 AL001）")
+        return W._err("Please specify the rule ID to delete (e.g. AL001)")
     dd = _data_dir()
     rules_path = dd / "alert_rules.json"
     if not rules_path.exists():
-        return W._err("找不到警示規則檔")
+        return W._err("Alert rules file not found")
     data = json.load(open(rules_path, encoding="utf-8"))
     rules = data.get("rules", [])
     rule = next((r for r in rules if r["id"] == rule_id), None)
     if not rule:
-        return W._err(f"找不到規則 {rule_id}")
+        return W._err(f"Rule {rule_id} not found")
     _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
                     "expiring": "快到期", "below_threshold": "低於指定數量"}
     cond_label = _cond_labels.get(rule.get("condition"), rule.get("condition", ""))
     return {"ok": True,
-            "summary": f"確認刪除警示規則 {rule_id}【{cond_label}】？此動作無法復原。",
+            "summary": f"Delete alert rule {rule_id} [{cond_label}]? This cannot be undone.",
             "view": "alert_delete_confirm",
             "data": {"rule_id": rule_id, "rule": rule, "condition_label": cond_label}}
 
@@ -1387,7 +1445,7 @@ def commit_delete_alert(rule_id: str = "", actor: str = "user_confirmed", trace_
         f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
                             "action": "delete_alert", "rule_id": rule_id},
                            ensure_ascii=False) + "\n")
-    return {"ok": True, "summary": f"警示規則 {rule_id} 已刪除。", "view": "alert_deleted",
+    return {"ok": True, "summary": f"Alert rule {rule_id} deleted.", "view": "alert_deleted",
             "data": {"rule_id": rule_id}}
 
 
@@ -1406,7 +1464,8 @@ def compare_periods(metric: str = "out") -> dict:
     today = _d.fromisoformat(s.snapshot_date or "2026-05-26")
     this_start = today - _td(days=30)
     last_start = today - _td(days=60)
-    _trace(steps, "glob", f"切兩期：本期 {this_start}~{today} / 上期 {last_start}~{this_start}")
+    _trace(steps, "glob", f"split into two periods: current {this_start}~{today} / "
+                          f"previous {last_start}~{this_start}")
 
     this_p = defaultdict(int)
     last_p = defaultdict(int)
@@ -1430,17 +1489,21 @@ def compare_periods(metric: str = "out") -> dict:
         rows.append({"sku_id": sku, "name": nm, "last": a, "this": b,
                      "delta": delta, "pct": round(pct, 1)})
     rows.sort(key=lambda r: abs(r["delta"]), reverse=True)
-    _trace(steps, "reason", f"算 {len(rows)} 個 SKU 的變化，取變化最大前 15")
+    _trace(steps, "reason", f"computed change for {len(rows)} SKUs, "
+                            "taking the 15 largest swings")
 
     top = rows[:15]
     up = [r for r in top if r["delta"] > 0][:3]
     down = [r for r in top if r["delta"] < 0][:3]
     parts = []
     if up:
-        parts.append("成長最多：" + "、".join(f"{r['name']}(+{r['delta']})" for r in up))
+        parts.append("Biggest growth: "
+                     + ", ".join(f"{r['name']} (+{r['delta']})" for r in up))
     if down:
-        parts.append("衰退最多：" + "、".join(f"{r['name']}({r['delta']})" for r in down))
-    summary = "近兩個月出庫變化 — " + "；".join(parts) if parts else "兩期出庫無明顯變化。"
+        parts.append("Biggest decline: "
+                     + ", ".join(f"{r['name']} ({r['delta']})" for r in down))
+    summary = ("Outbound change over the last two months — " + "; ".join(parts)
+               if parts else "No significant change between the two periods.")
     return {"ok": True, "summary": summary, "view": "period_compare",
             "data": {"rows": top, "trace": steps}}
 
@@ -1471,9 +1534,10 @@ def create_item_start() -> dict:
     """觸發新增商品流程，回第一步問題"""
     return {
         "ok": True,
-        "summary": "好的！第一步：商品叫什麼名字？（任何名稱都可以，例如『環保吸管』）",
+        "summary": "Sure! Step 1: what is the item called? "
+                   '(any name works, e.g. "Reusable Straw")',
         "view": "item_create_step1",
-        "data": {"step": 1, "total_steps": 4, "prompt": "請輸入商品名稱"},
+        "data": {"step": 1, "total_steps": 4, "prompt": "Enter the item name"},
     }
 
 
@@ -1502,7 +1566,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         if _name and _found_cat:
             # 防呆：檢查同名
             if any(it["name"] == _name for it in W.state().items):
-                return {"ok": True, "summary": f"⚠️ 商品「{_name}」已存在，請改用其他名稱。",
+                return {"ok": True, "summary": f'⚠️ Item "{_name}" already exists. Please use a different name.',
                         "view": "item_create_step1", "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
             new_sku = _next_sku(_found_cat)
             pending = {
@@ -1515,7 +1579,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 "stock_south": int(_south_m.group(1)) if _south_m else 0,
                 "sku": new_sku,
             }
-            return {"ok": True, "summary": "已解析商品資訊，請確認", "view": "item_confirm",
+            return {"ok": True, "summary": "Item details parsed — please confirm", "view": "item_confirm",
                     "data": {"pending": True, "item": pending}}
         # r75：只給了名稱沒給類別（「新增商品 保溫杯」）→ 名稱接進分步流程，
         # 從第二步問類別（過去靜默丟掉名稱、空名前進）
@@ -1531,12 +1595,17 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         # 防呆：檢查是否已有同名商品
         existing = [it for it in W.state().items if it["name"] == name]
         if existing:
-            return {"ok": True, "summary": f"⚠️ 商品「{name}」已存在（SKU: {existing[0]['sku_id']}），請改用其他名稱。",
+            return {"ok": True, "summary": f'⚠️ Item "{name}" already exists (SKU: {existing[0]["sku_id"]}). '
+                           "Please use a different name.",
                     "view": "item_create_step1",
                     "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
-        return {"ok": True, "summary": f"已記錄商品名稱：「{name}」\n第二步：屬於哪一類？（輸入「取消」可退出）",
+        return {"ok": True,
+                "summary": f'Name recorded: "{name}"\n'
+                           "Step 2: which category? electronics / appliance & "
+                           "kitchen / food & beverage / daily goods / apparel / "
+                           'sports (say "cancel" to exit)',
                 "view": "item_create_step2",
-                "data": {"step": 2, "name": name, "prompt": "請選擇類別（或輸入「取消」退出）"}}
+                "data": {"step": 2, "name": name, "prompt": 'Choose a category (or say "cancel" to exit)'}}
     elif step == 2:
         # r75：類別欄要驗證＋正規化成主檔 key——「陶瓷馬克杯」曾被當類別吸收
         # 造成整條流程欄位錯位；中文原字入檔會生出幻影類別（SKU 也拿到 x 前綴）
@@ -1552,15 +1621,18 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             _cat_key = category
         if not _cat_key:
             return {"ok": True,
-                    "summary": (f"「{category}」不是類別喔。請從：電子產品／家電廚具／"
-                                "食品飲料／日用品／服飾／運動用品 選一個（輸入「取消」可退出）"),
+                    "summary": (f'"{category}" is not a category. Please pick one of: '
+                                "electronics / appliance & kitchen / food & beverage / "
+                                'daily goods / apparel / sports (say "cancel" to exit)'),
                     "view": "item_create_step2",
                     "data": {"step": 2, "name": name,
                              "prompt": "請選擇類別（或輸入「取消」退出）"}}
         category = _cat_key
         _cat_lbl2 = W.CATEGORY_LABEL.get(category, category)
         return {"ok": True,
-                "summary": f"已記錄：「{name}」→ {_cat_lbl2}\n第三步：單價多少？安全庫存幾件？\n例如：150 100（輸入「取消」可退出）",
+                "summary": f'Recorded: "{name}" → {_cat_lbl2}\n'
+                           "Step 3: unit price and safety stock?\n"
+                           'e.g. "150 100" (say "cancel" to exit)',
                 "view": "item_create_step3",
                 "data": {"step": 3, "name": name, "category": category,
                          "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
@@ -1577,22 +1649,29 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 price_val = nums[0] if len(nums) >= 1 else 0
                 safety_val = nums[1] if len(nums) >= 2 else 0
         except (ValueError, IndexError):
-            return W._err(f"價格或安全庫存格式錯誤：{price} / {safety}")
+            return W._err(f"Invalid price or safety stock: {price} / {safety}")
         # r75：輸入裡沒有數字（「廚具」曾被吸成單價0/安全0 靜默過關）→ 留在
         # 第三步重問，不帶 0 值前進
         if price_val <= 0:
             return {"ok": True,
-                    "summary": ("第三步需要數字喔：單價多少？安全庫存幾件？\n"
-                                "例如：150 100（輸入「取消」可退出）"),
+                    "summary": ("Step 3 needs numbers: unit price and safety stock?\n"
+                                'e.g. "150 100" (say "cancel" to exit)'),
                     "view": "item_create_step3",
                     "data": {"step": 3, "name": name, "category": category,
-                             "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
+                             "prompt": 'Format: price safety_stock '
+                                       '(e.g. "150 100", or say "cancel")'}}
         return {"ok": True,
-                "summary": f"已記錄：單價 {price_val} 元，安全庫存 {safety_val} 件\n第四步（可選）：設定初始庫存？\n直接輸入三個數字（北 中 南），例如：50 30 20\n或輸入『跳過』全部設為 0",
+                "summary": f"Recorded: unit price {price_val}, "
+                           f"safety stock {safety_val}\n"
+                           "Step 4 (optional): set initial stock?\n"
+                           'Enter three numbers (north central south), '
+                           'e.g. "50 30 20"\n'
+                           'or say "skip" to set all to 0',
                 "view": "item_create_step4",
                 "data": {"step": 4, "name": name, "category": category,
                          "price": price_val, "safety": safety_val,
-                         "prompt": "格式：北 中 南（例如 50 30 20）或輸入跳過"}}
+                         "prompt": 'Format: north central south '
+                                   '(e.g. "50 30 20") or say "skip"'}}
     elif step == 4:
         # 支援 positional 格式：10 20 30 → 北10 中20 南30
         raw_stock = str(stock_north) if stock_north else ""
@@ -1616,13 +1695,13 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             "stock_north": sn, "stock_central": sc, "stock_south": ss,
             "sku": new_sku,
         }
-        stock_summary = f"北{sn} 中{sc} 南{ss}" if (sn+sc+ss) > 0 else "全部為 0"
+        stock_summary = f"North {sn}, Central {sc}, South {ss}" if (sn+sc+ss) > 0 else "all 0"
         return {"ok": True,
                 "summary": f"📦 準備新增「{name}」\n類別：{pending['category_label']} | 單價：{pending['price']}元 | 安全庫存：{pending['safety']}件\n初始庫存：{stock_summary}",
                 "view": "item_confirm",
                 "data": {"pending": True, "item": pending}}
 
-    return W._err(f"未知的步驟：{step}")
+    return W._err(f"Unknown step: {step}")
 
 
 def commit_create_item(pending: dict, actor: str = "user_confirmed",
@@ -1635,7 +1714,7 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
     item = pending["item"] if "item" in pending else pending
     # r75 危險級縱深防禦：名稱空白的商品絕不落地（曾建出商品「」污染主檔）
     if not str(item.get("name", "")).strip():
-        return W._err("商品名稱是空的，無法新增。請重新從「新增商品」開始。")
+        return W._err('Item name is empty, cannot add. Please start over with "add item".')
 
     # 1. 寫入 items.csv
     items_path = dd / "master" / "items.csv"
@@ -1716,7 +1795,7 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
             w = csv.DictWriter(f, fieldnames=["warehouse","sku_id","qty"])
             w.writeheader(); w.writerows(updated.values())
 
-    return {"ok": True, "summary": f"✅ 已新增商品「{item['name']}」（SKU: {item['sku']}）",
+    return {"ok": True, "summary": f'✅ Item "{item["name"]}" added (SKU: {item["sku"]})',
             "view": "item_done", "data": {"item": item, "trace_id": trace_id}}
 
 
@@ -2202,7 +2281,7 @@ def commit_reset_demo_data(password: str = "", actor: str = "user_confirmed",
                             trace_id: str | None = None) -> dict:
     """密碼驗證通過後，把 warehouse_data/ 整個換回 warehouse_data_baseline/ 並重新載入 State。"""
     if password != _RESET_PASSWORD:
-        return W._err("密碼錯誤，無法重置")
+        return W._err("Wrong password, cannot reset")
 
     import shutil
     ts = datetime.now().isoformat(timespec="seconds")
@@ -2211,7 +2290,7 @@ def commit_reset_demo_data(password: str = "", actor: str = "user_confirmed",
     baseline = root / "warehouse_data_baseline"
     current = root / "warehouse_data"
     if not baseline.exists():
-        return W._err("找不到基準快照 warehouse_data_baseline/，無法重置")
+        return W._err("Baseline snapshot warehouse_data_baseline/ not found, cannot reset")
 
     shutil.rmtree(current)
     shutil.copytree(baseline, current)
@@ -2219,7 +2298,7 @@ def commit_reset_demo_data(password: str = "", actor: str = "user_confirmed",
     # 重新載入 State（跟開機 init() 用同一份 seed_path）
     W.reset()
 
-    return {"ok": True, "summary": "✅ 展示資料已重置回初始狀態。",
+    return {"ok": True, "summary": "✅ Demo data has been reset to its initial state.",
             "view": "reset_done", "data": {"trace_id": trace_id}}
 
 
@@ -2234,22 +2313,22 @@ _PROTECTED_SKUS = {
 def delete_item_start(keyword: str = "") -> dict:
     """觸發刪除流程：找商品 → HITL 確認 → 軟刪除"""
     if not keyword:
-        return W._err("請指定要刪除的商品名稱或 SKU")
+        return W._err("Please specify the item name or SKU to delete")
     matches = W.match_items(keyword)
     if not matches:
-        return W._err(f"找不到「{keyword}」相關商品")
+        return W._err(f'No items found matching "{keyword}"')
     items = [m["item"] for m in matches[:5]]
     # 過濾受保護商品
     deletable = [it for it in items if it["sku_id"] not in _PROTECTED_SKUS]
     protected = [it for it in items if it["sku_id"] in _PROTECTED_SKUS]
     if not deletable:
-        return {"ok": True, "summary": f"「{keyword}」是系統預設商品，無法刪除。",
+        return {"ok": True, "summary": f'"{keyword}" is a built-in demo item and cannot be deleted.',
                 "view": "item_delete_denied",
                 "data": {"protected": [it["name"] for it in protected]}}
     rows = [{"sku": it["sku_id"], "name": it["name"], "protected": False} for it in deletable]
     if protected:
         rows += [{"sku": it["sku_id"], "name": it["name"] + " 🔒", "protected": True} for it in protected]
-    summary = f"找到 {len(items)} 筆相關商品（{len(deletable)} 筆可刪除）：\n"
+    summary = f"Found {len(items)} matching items ({len(deletable)} deletable):\n"
     summary += "\n".join(f"  {'🔒 ' if it['sku_id'] in _PROTECTED_SKUS else '🗑 '}{it['sku_id']} {it['name']}" for it in items[:10])
     return {"ok": True, "summary": summary, "view": "item_delete_confirm" if deletable else "item_delete_denied",
             "data": {"keyword": keyword, "items": rows, "deletable_count": len(deletable),
@@ -2268,7 +2347,7 @@ def commit_delete_item(pending: dict, actor: str = "user_confirmed",
     matches = W.match_items(keyword)
     deletable = [m["item"] for m in matches if m["item"]["sku_id"] not in _PROTECTED_SKUS]
     if not deletable:
-        return W._err("沒有可刪除的商品")
+        return W._err("No deletable items")
 
     skus_to_delete = {it["sku_id"] for it in deletable}
     deleted_names = ", ".join(it["name"] for it in deletable)
@@ -2302,5 +2381,5 @@ def commit_delete_item(pending: dict, actor: str = "user_confirmed",
     import warehouse as W_mod
     W_mod.init(Path(__file__).parent / "warehouse_data")
 
-    return {"ok": True, "summary": f"✅ 已刪除：{deleted_names}（共 {len(deletable)} 項）",
+    return {"ok": True, "summary": f"✅ Deleted: {deleted_names} ({len(deletable)} items)",
             "view": "item_done", "data": {"deleted": deleted_names, "trace_id": trace_id}}

@@ -163,6 +163,16 @@ GATEKEEPER_KEYWORDS = {
     "moved", "inbound", "outbound", "transfers", "help",
     "what can you", "how does this", "safety stock", "purchase order",
     "report", "stocktake", "audit", "reconcile", "discrepanc",
+    # Agent Tools 的功能句（RCA/檔案/排程/警示/報表/期間比較）——
+    #   這些不含商品名，守門員收嚴後會被擋，但都是合法功能查詢
+    "purchase record", "transaction log", "transaction record",
+    "movement log", "movement record", "audit trail", "change log",
+    "what files", "which files", "read files", "data files",
+    "schedule", "schedules", "scheduled", "recurring", "every day",
+    "every week", "every month", "alert rule", "alert rules",
+    "my alerts", "set alert", "notify me", "remind me",
+    "last two months", "past two months", "month over month",
+    "period compare", "trend", "growth", "decline",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
     "冠軍", "最熱門", "最冷門", "銷量", "搶手", "熱賣", "賣得最兇", "最夯",
     "比較", "比", "跟", "和", "vs", "對比",
@@ -499,6 +509,29 @@ def _text_has_item_name(text: str) -> bool:
                     if _re.search(r"(?<![a-z])" + _re.escape(_k_gd.lower())
                                   + r"(?![a-z])", _tl_gd):
                         return True
+            except Exception:
+                pass
+            # ⚠️ 最後讓**錯字模糊層**表態——否則守門員與錯字容錯互相打架：
+            #   'keyyboard on hand' / 'cordles mose' / 'sprkling wateer'
+            #   的詞當然不會精確等於商品名單詞 → 被守門員擋在門外 rejected，
+            #   上一輪剛修好的錯字句全部回歸（守衛 inv 41→52 就是這樣來的）。
+            #   ⚠️ 要傳**剝過虛詞的核心詞**：直接傳整句的話 'on hand' 這種
+            #   虛詞會觸發 _en_fuzzy_keyword 的陌生修飾詞防線而回空
+            #   （anti-hallu 那條踩過同一個坑）。
+            #   OOV 句（microwave/bicycle）剝完仍是陌生詞，防線照樣擋住。
+            try:
+                _gd_core = _re.sub(
+                    r"\b(?:how|many|much|whats|what|is|are|the|a|an|of|do|does|"
+                    r"we|i|you|got|have|has|any|some|there|show|me|tell|give|"
+                    r"list|check|look|looking|see|find|get|left|remain|remaining|"
+                    r"stock|stocks|inventory|count|counts|on|hand|in|at|for|to|"
+                    r"from|with|now|currently|available|availability|status|"
+                    r"please|pls|quantity|qty|units?|level|levels|number|"
+                    r"warehouse|wh|north|central|south|total|still|right|"
+                    r"hows|its|it)\b", " ", text, flags=_re.I)
+                _gd_core = _re.sub(r"\s+", " ", _gd_core).strip(" ?.!,")
+                if _gd_core and _en_fuzzy_keyword(_gd_core):
+                    return True
             except Exception:
                 pass
             return False
@@ -1015,7 +1048,11 @@ _TOOL_INTENT_GUARD = {
                          # EN build：英文進出貨詞
                          "movements", "shipment", "shipments", "shipped", "ship",
                          "received", "receive", "came in", "come in", "went out",
-                         "moved", "transactions", "activity", "goods"),
+                         "moved", "transactions", "activity", "goods",
+                         # 'show me the transaction logs' 的單數形（原本只有
+                         #   複數 transactions）＋紀錄類同義詞
+                         "transaction", "log", "logs", "record", "records",
+                         "history", "ledger", "audit trail", "traffic"),
 }
 
 
@@ -2011,8 +2048,21 @@ def _detect_clarify(user_text: str) -> dict | None:
                   "開單採購", "開單補貨", "開單",
                   # 「開進採購單」「擬一張採購草稿」「轉採購單」（第11輪測試補）
                   "開進採購", "擬一張", "擬張", "擬採購", "轉採購", "開張採購")
-    has_po_intent = any(w in user_text for w in _po_kw)
+    # ⚠️ EN build：「po」是 substring 比對 → 英文句裡到處都中
+    #   （re**po**rt / ex**po**rt / **po**rtable / trans**po**rt），
+    #   'generate a full report' 因此被判成採購意圖、回 PO clarify。
+    #   英文的 po/order 要求**詞界**，中文詞不受影響。
+    _po_zh = {w for w in _po_kw if any("一" <= c <= "鿿" for c in w)}
+    has_po_intent = (any(w in user_text for w in _po_zh)
+                     or bool(_re.search(r"\b(?:po|pos|purchase orders?|"
+                                        r"orders?)\b", t.lower())))
     has_po_direct = any(w in user_text for w in _po_direct)
+    # EN build：英文的**明確開單動詞**（_po_direct 全中文 → 英文開單句
+    #   命中 has_po_intent 卻沒被放行，全被 PO clarify 攔住）
+    if _re.search(r"\b(?:create|generate|make|draft|raise|issue|open|"
+                  r"give me|prepare|build)\b[^.]{0,30}?"
+                  r"\b(?:po|purchase orders?|orders?)\b", t.lower()):
+        has_po_direct = True
     # 系統性防漏：跟 C-PO 同一組判斷——「採購單/採購草稿/補貨單 + 開單動詞」
     # 一律當明確開單意圖直接放行，不再逐字追 _po_direct 同義詞
     # （出一張/開單採購/擬一張/給我一張…已經漏了三輪，第13輪定案）
@@ -2027,21 +2077,23 @@ def _detect_clarify(user_text: str) -> dict | None:
             sku_kw in nm for nm in [it["name"] for it in W.state().items]
         ))
         if not has_sku:
+            # EN build：options/actions 是**會送回後端的查詢字串**，
+            #   中文的話英文版後端直接 reject（訪客一點就壞）
             return {
-                "question": "你想查的是哪一種短少/採購問題？",
+                "question": "Which purchasing / shortfall question do you mean?",
                 "options": [
-                    "查所有短收的採購單（全倉掃描）",
-                    "查哪些商品目前缺貨",
-                    "幫我產採購單補貨",
-                    "查特定商品採購異常",
+                    "Check all short-received POs (scan all warehouses)",
+                    "Check which items are low on stock",
+                    "Generate a purchase order to restock",
+                    "Check purchasing issues for a specific item",
                 ],
                 "actions": [
-                    "查全倉所有採購短收異常",
-                    "哪些商品缺貨",
-                    "幫我把缺貨的產採購單",
-                    "查採購對帳異常",
+                    "check all purchase shortfalls",
+                    "whats running low",
+                    "create a purchase order for low stock",
+                    "any stock discrepancies",
                 ],
-                "hint": "點選其中一項，或直接說出商品名稱"
+                "hint": "Tap one of the options, or just say the item name"
             }
 
     # ④ 類別詞 + 無動作 → 問查什麼（優先於商品名 match，避免把類別詞誤當商品名）
@@ -2427,6 +2479,7 @@ def _en_fuzzy_keyword(core: str) -> str:
     }
 
     hits: list[str] = []
+    _split_ok: set[str] = set()   # 靠合成詞拆解命中的 token（powerbank）
     for tok in _re.split(r"[\s\-/]+", core.lower()):
         tok = tok.strip(" ?.!,'\"")
         if len(tok) < 4 or any(c.isdigit() for c in tok):
@@ -2436,6 +2489,22 @@ def _en_fuzzy_keyword(core: str) -> str:
         if tok in cand:                      # 精確詞本來就中，不需模糊
             hits.append(cand[tok])
             continue
+        # 合成詞（powerbank / powerbanks / usbcable）：訪客把兩個字黏在一起
+        #   打，整串跟商品名任一單詞都不夠像 → 拆成兩段各自比對。
+        #   兩段都要命中**同一個**商品才算，避免亂拆亂配。
+        if len(tok) >= 7:
+            _sp_hit = None
+            for _cut in range(3, len(tok) - 2):
+                _a, _b = tok[:_cut], tok[_cut:]
+                _ah = cand.get(_a) or cand.get(_a.rstrip("s"))
+                _bh = cand.get(_b) or cand.get(_b.rstrip("s"))
+                if _ah and _bh and _ah == _bh:
+                    _sp_hit = _ah
+                    break
+            if _sp_hit:
+                hits.append(_sp_hit)
+                _split_ok.add(tok)   # 下面的 OOV 防線要認得它已經命中
+                continue
         # difflib 先粗篩再用長度比例把關（cutoff 提高到 0.85：0.8 會把
         #   weather→water、chairs→chair 這種「差一兩字母但語意完全不同」的
         #   詞救錯；錯字句通常相似度 0.87 以上）
@@ -2472,7 +2541,7 @@ def _en_fuzzy_keyword(core: str) -> str:
     #      （token 長度 ≥5，或句中有第二個 token 也指向同一商品）。
     _unknown_tok = False
     for t in _core_toks:
-        if t in _FUZZY_BLOCK or t in cand:
+        if t in _FUZZY_BLOCK or t in cand or t in _split_ok:
             continue
         if not difflib.get_close_matches(t, keys, n=1, cutoff=0.85):
             _unknown_tok = True
@@ -2481,7 +2550,7 @@ def _en_fuzzy_keyword(core: str) -> str:
         return ""
     # 單一短詞（≤4 字母）靠模糊硬中 → 證據不足（hair→chair、mose→mouse
     #   前者是 OOV 後者是錯字，長度是唯一可靠的區分訊號）
-    _fuzzy_only = [t for t in _core_toks if t not in cand]
+    _fuzzy_only = [t for t in _core_toks if t not in cand and t not in _split_ok]
     if len(_core_toks) == 1 and _fuzzy_only and len(_core_toks[0]) <= 4:
         return ""
     # 多個 token 指向同一商品（Wireeless Bluetouth Earpones）→ 該商品；
@@ -4381,7 +4450,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          "status", "please", "quantity", "units", "unit",
                          "level", "levels", "number", "warehouse", "north",
                          "central", "south", "total", "currently", "remaining",
-                         "remain", "looking", "about", "need", "want", "know"}
+                         "remain", "looking", "about", "need", "want", "know",
+                         # 功能詞（同 oov:noex 的 _NOEX_STOP，兩處要同步）
+                         "schedule", "schedules", "scheduled", "alert", "alerts",
+                         "rule", "rules", "report", "reports", "log", "logs",
+                         "record", "records", "file", "files", "compare",
+                         "comparison", "last", "past", "two", "months", "month",
+                         "week", "weeks", "day", "days", "trend", "growth",
+                         "decline", "audit", "trail", "history", "purchase",
+                         "order", "orders", "movement", "movements", "transfer",
+                         "transfers", "setting", "settings", "config", "safety",
+                         "everything", "anything", "something", "help"}
             try:
                 import warehouse as _Woov
                 _oov_words = set()
@@ -4400,8 +4479,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     _t = _t.strip(" ?.!,'\"")
                     if len(_t) < 4 or _t in _oov_stop or any(c.isdigit() for c in _t):
                         continue
-                    if _t in _oov_words:
+                    if _t in _oov_words or _t.rstrip("s") in _oov_words:
                         continue
+                    # 模糊層（合成詞/錯字）認得的不算陌生修飾詞
+                    try:
+                        if _en_fuzzy_keyword(_t):
+                            continue
+                    except Exception:
+                        pass
                     if not _dloov.get_close_matches(_t, _oov_keys, n=1, cutoff=0.85):
                         log.info(f"[校正 C1g-oov] 陌生修飾詞 {_t!r} → 清除 kw "
                                  f"{func_args['keyword']!r}")
@@ -4967,7 +5052,21 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          "進步最多", "退步最多", "進步得最多", "誰進步", "誰退步",
                          # r78：週對週比較後「差最多的是哪個」曾 rejected
                          "差最多", "掉最多", "差距最大", "落差最大")
-    if func_name != "compare_periods" and any(w in user_text for w in _cmp_period_words):
+    # ── EN build：英文跨期比較（原詞表全中文 → 英文句掉到
+    #    compare_warehouses/庫存查詢。⚠️ 要**排除倉庫比較**：
+    #    'compare north and south' 是比倉不是比期間）──
+    _cmp_period_en = bool(
+        _re.search(r"\b(?:last|past|previous)\s+(?:two|2|few)?\s*"
+                   r"(?:months?|weeks?|periods?)\b", text_low)
+        or _re.search(r"\b(?:this|current)\s+month\b.{0,20}\b(?:last|previous)\s+month\b",
+                      text_low)
+        or _re.search(r"\bmonth[- ]over[- ]month\b|\bperiod\s+compar|"
+                      r"\btrend(?:ing)?\b|\bbiggest\s+(?:growth|drop|decline|change)\b|"
+                      r"\bgrew\s+the\s+most\b|\bdropped\s+the\s+most\b", text_low))
+    if _cmp_period_en and any(w in text_low for w in ("north", "central", "south")):
+        _cmp_period_en = False   # 提到倉名＝比倉，讓給 compare_warehouses
+    if func_name != "compare_periods" and (
+            any(w in user_text for w in _cmp_period_words) or _cmp_period_en):
         log.info(f"[校正 C16] 跨期比較 → compare_periods（原 {func_name}）")
         return "compare_periods", {"metric": "out"}, True
 
@@ -6467,7 +6566,7 @@ async def api_query(req: Request):
             elif len(parts) == 1: kwargs["price"] = parts[0]
             else: kwargs["price"] = user_text
         elif st["step"] == 4:
-            if "跳過" in user_text:
+            if "跳過" in user_text or any(_sk in user_text.lower() for _sk in ("skip", "none", "zero", "no stock", "leave it")):
                 kwargs["stock_north"] = kwargs["stock_central"] = kwargs["stock_south"] = "0"
             elif not any(kw in user_text for kw in ("北", "中", "南")):
                 parts = user_text.replace(",", " ").split()
@@ -6599,16 +6698,31 @@ async def api_query(req: Request):
             func_args = {**func_args, "keyword": pre_kw}
 
     # ── Pre-C-Schedule（HTTP 版）──
-    _list_alert_kws_h = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示")
+    _list_alert_kws_h = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示",
+                         # EN build：英文查警示規則清單
+                         "my alerts", "show alerts", "list alerts", "view alerts",
+                         "what alerts", "which alerts", "existing alerts",
+                         "current alerts", "alert rules", "active alerts")
     _list_alert_rule_kw = "警示規則"  # 單獨處理，避免「新增警示規則」誤走 list
-    _list_sched_kws_h = ("查看排程", "查排程", "看排程", "有哪些排程", "排程列表", "目前排程")
-    _is_alert_set = any(w in user_text for w in ("新增", "設定", "加入", "建立", "通知我", "提醒我"))
+    _list_sched_kws_h = ("查看排程", "查排程", "看排程", "有哪些排程", "排程列表", "目前排程",
+                         # EN build：英文查排程清單
+                         "my schedules", "show schedules", "list schedules",
+                         "view schedules", "what schedules", "which schedules",
+                         "existing schedules", "current schedules",
+                         "scheduled jobs", "scheduled tasks", "my schedule")
+    # ⚠️ 英文比對要小寫化（詞表英文全小寫，訪客可能大寫開頭）
+    user_text_l_h = user_text.lower()
+    _is_alert_set = any(w in user_text for w in ("新增", "設定", "加入", "建立", "通知我", "提醒我")) \
+        or any(w in user_text_l_h for w in ("add ", "set ", "create ", "notify me",
+                                            "remind me", "alert me"))
     if (not _is_alert_set and
             (any(w in user_text for w in _list_alert_kws_h) or
+             any(w in user_text_l_h for w in _list_alert_kws_h) or
              (_list_alert_rule_kw in user_text and not _is_alert_set))):
         func_name = "list_alerts"
         func_args = {}
-    elif any(w in user_text for w in _list_sched_kws_h):
+    elif (any(w in user_text for w in _list_sched_kws_h)
+          or any(w in user_text_l_h for w in _list_sched_kws_h)):
         func_name = "list_schedules"
         func_args = {}
     else:
@@ -6831,7 +6945,7 @@ async def api_query(req: Request):
             else:
                 kwargs["price"] = user_text
         elif st["step"] == 4:
-            if "跳過" in user_text:
+            if "跳過" in user_text or any(_sk in user_text.lower() for _sk in ("skip", "none", "zero", "no stock", "leave it")):
                 kwargs["stock_north"] = kwargs["stock_central"] = kwargs["stock_south"] = "0"
             else:
                 for part in user_text.replace("，", ",").split(","):
@@ -9466,7 +9580,7 @@ async def ws_handler(ws: WebSocket):
                     elif len(parts) == 1: kwargs2["price"] = parts[0]
                     else: kwargs2["price"] = user_text
                 elif st2["step"] == 4:
-                    if "跳過" in user_text:
+                    if "跳過" in user_text or any(_sk in user_text.lower() for _sk in ("skip", "none", "zero", "no stock", "leave it")):
                         kwargs2["stock_north"] = kwargs2["stock_central"] = kwargs2["stock_south"] = "0"
                     elif not any(kw in user_text for kw in ("北", "中", "南")):
                         parts = user_text.replace(",", " ").split()
@@ -10129,6 +10243,33 @@ async def ws_handler(ws: WebSocket):
                 log.info(f"[write-gate-r81] 寫入意圖不降級 → 交校正層: {user_text!r}")
                 _clf_func_ws = None   # 清掉 clf 判斷，強制走 LLM+校正
 
+            # ── EN build：英文 Agent 管理句直達（排程/警示清單、可讀檔案）。
+            #   FastText 語料裡沒有這些英文句 → clf 一律吐 query_inventory
+            #   conf=1.00 並 skip LLM，全店概覽答非所問（'show my schedules'）。
+            #   詞組夠獨特（schedules/alert rules/what files），直接指定工具。
+            _en_admin = None
+            if _is_mostly_english(user_text):
+                _ul_adm = user_text.lower()
+                if _re.search(r"\b(?:my|the|any|current|existing|active|which|what)\b"
+                              r"[^.]{0,20}\bschedules?\b|\bscheduled\s+(?:jobs?|tasks?)\b",
+                              _ul_adm) and not _re.search(
+                                  r"\b(?:create|set|add|new|make|every)\b", _ul_adm):
+                    _en_admin = "list_schedules"
+                elif _re.search(r"\b(?:my|the|any|current|existing|active|which|what)\b"
+                                r"[^.]{0,20}\balert\s+rules?\b|\b(?:my|show|list|view)\s+alerts\b",
+                                _ul_adm) and not _re.search(
+                                    r"\b(?:create|set|add|new|notify me|remind me|"
+                                    r"alert me|below|under|drops?)\b", _ul_adm):
+                    _en_admin = "list_alerts"
+                elif _re.search(r"\bwhat\s+files\b|\bwhich\s+files\b|"
+                                r"\b(?:list|show)\s+(?:the\s+)?files\b|"
+                                r"\bwhat\s+(?:data\s+)?can\s+you\s+read\b", _ul_adm):
+                    _en_admin = "list_files"
+            if _en_admin:
+                log.info(f"[en-admin] {user_text!r} → {_en_admin}")
+                _clf_func_ws = _en_admin
+                _clf_conf_ws = 1.0
+
             if _clf_func_ws and _clf_func_ws not in ("unknown", "unclear") and _clf_conf_ws >= 0.8:
                 log.info(f"[intent_clf primary] vid={vid} {user_text!r} → {_clf_func_ws} (conf={_clf_conf_ws:.2f})")
                 func_name = _clf_func_ws
@@ -10569,6 +10710,17 @@ async def ws_handler(ws: WebSocket):
                         "need", "want", "know", "the", "and", "for", "are",
                         "you", "got", "all", "our", "get", "see", "now", "item",
                         "items", "product", "products", "thing", "things",
+                        # 功能詞（不是商品名）——沒收的話 'show my schedules'
+                        #   會把 schedules 當成「庫裡沒有的商品」誠實回沒有
+                        "schedule", "schedules", "scheduled", "alert", "alerts",
+                        "rule", "rules", "report", "reports", "log", "logs",
+                        "record", "records", "file", "files", "compare",
+                        "comparison", "last", "past", "two", "months", "month",
+                        "week", "weeks", "day", "days", "trend", "growth",
+                        "decline", "audit", "trail", "history", "purchase",
+                        "order", "orders", "movement", "movements", "transfer",
+                        "transfers", "setting", "settings", "config", "safety",
+                        "everything", "anything", "something", "help",
                     }
                     try:
                         import warehouse as _Wnx
@@ -10596,6 +10748,13 @@ async def ws_handler(ws: WebSocket):
                                 continue
                             if _dlnx.get_close_matches(_tx, _nx_keys, n=1, cutoff=0.85):
                                 continue
+                            # 模糊層（含合成詞拆解 powerbank→Power Bank、
+                            #   錯字 keyyboard→Keyboard）認得的就不是陌生詞
+                            try:
+                                if _en_fuzzy_keyword(_tx):
+                                    continue
+                            except Exception:
+                                pass
                             _unknown.append(_tx)
                         if _unknown:
                             _nx_name = " ".join(_unknown)
@@ -10791,7 +10950,7 @@ async def ws_handler(ws: WebSocket):
                         if len(parts) >= 2: kwargs2["price"] = parts[0].strip(); kwargs2["safety"] = parts[1].strip()
                         else: kwargs2["price"] = user_text
                     elif st2["step"] == 4:
-                        if "跳過" in user_text: kwargs2["stock_north"] = kwargs2["stock_central"] = kwargs2["stock_south"] = "0"
+                        if "跳過" in user_text or any(_sk in user_text.lower() for _sk in ("skip", "none", "zero", "no stock", "leave it")): kwargs2["stock_north"] = kwargs2["stock_central"] = kwargs2["stock_south"] = "0"
                         else:
                             for part in user_text.replace("，", ",").split(","):
                                 p = part.strip()
