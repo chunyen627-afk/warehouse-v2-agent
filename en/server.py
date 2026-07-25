@@ -853,6 +853,18 @@ _RCA_INTENT_WORDS = (
     "shortfall", "short", "reconcil", "audit", "investigate", "look into",
     "went missing", "disappear", "strange", "weird", "odd", "unusual",
     "doesn't add up", "dont add up", "don't add up", "add up",
+    # ── EN build 第二批（守衛 rca 14 句全 FAIL，逐句追 log 補）──
+    #   複數形沒收（discrepancy 有、discrepancies 沒有）、「發生什麼事」
+    #   句型、採購對帳問法全缺 → 這些句子連 RCA 判定的門都進不去
+    "discrepancies", "anomaly", "anomalies", "irregular", "irregularity",
+    "what happened to", "what happened with", "whats up with",
+    "what's up with", "whats going on with", "something wrong",
+    "purchase record", "purchase records", "po record", "po records",
+    "receiving record", "receipt record", "check the purchase",
+    "under-received", "under received", "short-received", "short received",
+    "over-received", "over received", "count is strange", "count is off",
+    "figures look wrong", "numbers look wrong", "numbers dont match",
+    "stock doesnt add up", "doesnt add up",
 )
 
 
@@ -864,7 +876,11 @@ def _has_rca_word(t: str) -> bool:
     剝掉後「多了」才能安全當 RCA 裸詞（盤點溢出＝帳對不上，要能追）。"""
     import re as _re_rca
     _t = t.replace("差不多了", "").replace("差不多", "")
-    return any(w in _re_rca.sub(r"多少", "", _t) for w in _RCA_INTENT_WORDS)
+    _t = _re_rca.sub(r"多少", "", _t)
+    # EN build：英文詞表全小寫，原句可能有大寫（'Sparkling Water 500ml stock
+    #   doesnt add up'）→ 一併比對小寫版。中文無大小寫不受影響。
+    return any(w in _t for w in _RCA_INTENT_WORDS) \
+        or any(w in _t.lower() for w in _RCA_INTENT_WORDS)
 
 # 寫入/複雜工具的「意圖詞閘門」——LLM 對閒聊句常自由發揮輸出 set_alert /
 # generate_po / query_related 這類「不需要商品名就能開卡」的功能（WS 端沒有
@@ -2787,8 +2803,11 @@ def _kw_grounded(kw: str, user_text: str) -> bool:
         _ul = user_text.lower()
         if not _kl:
             return False
+        # 門檻 3 不是 4——mop / pan / fan / bag 都是合法商品核心詞，
+        #   排掉它們會讓 'mop on hand' 判成未接地（Electric Mop 只剩
+        #   electric 可比，原句沒有）→ 清 kw 回全店概覽
         _kw_words = [w for w in _re.split(r"[\s\-/]+", _kl)
-                     if len(w) >= 4 and not any(c.isdigit() for c in w)]
+                     if len(w) >= 3 and not any(c.isdigit() for c in w)]
         if not _kw_words:
             return _kl in _ul
         _u_words = [w.strip(" ?.!,'\"") for w in _re.split(r"[\s\-/]+", _ul)]
@@ -2810,9 +2829,12 @@ def _kw_grounded(kw: str, user_text: str) -> bool:
         #   ⚠️ 這一層只負責「kw 是不是憑空冒出來的」；「chairs for the
         #   office 該不該回露營椅」是 OOV 判斷，由 _en_fuzzy_keyword 的
         #   陌生修飾詞防線處理，不在這裡兼管（職責分開才不會互相拉扯）。
+        #   ⚠️ 3-4 字母的詞不做模糊（mop↔map、pan↔can 只差一個字母卻是
+        #      完全不同的東西）——短詞只認上面的精確 substring 比對。
         import difflib as _dl
         return any(_dl.SequenceMatcher(None, _uw, _kwd).ratio() >= 0.84
-                   for _kwd in _kw_words for _uw in _u_words)
+                   for _kwd in _kw_words if len(_kwd) >= 5
+                   for _uw in _u_words)
 
     k = (kw or "").replace(" ", "")
     if len(k) < 2:
@@ -3305,6 +3327,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # ——放在所有動詞/結構判定之後，才不會被 _single_dir/_rev_dir 重新點亮
     if any(w in user_text for w in ("送我", "送給我", "請我喝", "請我吃", "招待",
                                      "試用品", "試吃", "免費", "白送", "送你")):
+        _has_movement_word = False
+    # ── EN build：RCA 語境不開進出貨流程。'charger cable stock doesnt add up'
+    #   的 'stock' 被當成進貨動詞 → C13c 追問「要異動哪個倉」（守衛 rca 類
+    #   4 句 FAIL 都是這個成因）。對帳句在問「為什麼對不上」，不是要寫入。
+    #   ⚠️ 只在**沒有明確數量**時讓路——'north received 50 X, numbers look
+    #   wrong' 這種帶數量的仍是寫入句。
+    if (_is_mostly_english(user_text) and _has_rca_word(user_text)
+            and not _re13b_single.search(r'\b[0-9]{1,6}\b', user_text)):
         _has_movement_word = False
     # 量詞放寬：件/個/條/支/台/箱/包/瓶/罐/組/雙/套/盒；數字可能是阿拉伯或中文
     #   （「三箱」「十個」這種口語，2026-07-02 實測「剛剛入庫三箱衛生紙」抓到：
@@ -5019,8 +5049,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         final_kw = _extract_sku_keyword(model_kw) if model_kw else ""
         if not final_kw:
             final_kw = _extract_sku_keyword(_clean_user)
+        # EN build：英文句抽不到商品名時**留空**，不要把整句當 keyword。
+        #   'check the purchase records' 沒指名商品＝要看全域對帳，整句當
+        #   keyword 會讓 tool 去 fuzzy 撈出兩個不相干商品開 clarify
+        #   （守衛 rca：'"check the purchase records" matches 2 items'）。
+        #   留空 → search_log 走全域掃描，正是這句要的。
+        _fallback_kw = ("" if _is_mostly_english(user_text)
+                        else (_clean_user or user_text))
         func_args = {
-            "keyword":    final_kw or model_kw or _clean_user or user_text,
+            "keyword":    final_kw or model_kw or _fallback_kw,
             "time_range": func_args.get("time_range", func_args.get("period")),
         }
         if func_args["time_range"] is None:
