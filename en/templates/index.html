@@ -1017,6 +1017,11 @@ function appendBot(text, klass) {
   div.className = 'msg bot' + (klass ? ' ' + klass : '');
   div.textContent = text || '';
   messages.appendChild(div);
+  // ⚠️ 新訊息泡出現 = 上一輪的錨點作廢。不重設的話 showSuggestions 會把
+  //   按鈕插到**舊錨點**後面（也就是這顆新泡泡的前面）→ 訪客先看到選項、
+  //   說明文字反而在下面（點 In/Out 等快捷選單時會踩到：那條路徑是純前端，
+  //   不經過 WS onmessage 裡那次 lastBotAnchor 更新）。
+  lastBotAnchor = div;
   scrollBottom();
   return div;
 }
@@ -1119,7 +1124,10 @@ function suggestFromAnomalies() {
       q = 'give me a full warehouse report';
       hint = 'I spotted some anomalies - shall I produce a full warehouse report?';
     }
-    const cb = appendBot('💡 ' + hint);
+    // ⚠️ 要設 currentBotMsg——showSuggestions 開頭是 `if (!currentBotMsg) return;`，
+    //   原本只把 appendBot 的結果存進區域變數 cb，導致這兩顆鉤子按鈕
+    //   **從來沒顯示過**（靜默失效，不會報錯）。
+    currentBotMsg = appendBot('💡 ' + hint);
     showSuggestions([
       { label: '👉 ' + q, query: q },
       { label: '📄 Full warehouse report', query: 'give me a full warehouse report' },
