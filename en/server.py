@@ -1159,6 +1159,14 @@ _ALL_INTENT_WORDS = (
     "safety stock", "reorder point",
     # 報表/採購單/腳本
     "report", "export", "purchase order", " po ", "audit", "stocktake", "stock count",
+    # 寫入（進出貨/調撥/退貨）——沒收的話 _detect_clarify 會判成「只有商品名
+    #   沒動作」把寫入句攔成 clarify，根本進不到 C13b 開卡（守衛 mv 抓到）
+    "add ", "added", "put ", "received", "receive", "came in", "arrived",
+    "restock ", "restocked", "delivered", "supplier sent", "got ",
+    "shipped", "ship ", "sent out", "sold", "sell ", "dispatched",
+    "picked up", "took out", "take ", "removed", "scrapped", "damaged",
+    "returned", "return of", "sent back",
+    "transfer", "move ", "moved to", "send ",
 )
 
 # ── Query Rewriting ───────────────────────────────────────────────────────────
@@ -2859,8 +2867,24 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                            "取貨",
                            # r19：「北倉報廢5個保鮮盒」報廢/耗損=庫存減少
                            "報廢", "耗損", "損毀", "丟棄")
-    _is_return13b = any(w in user_text for w in _movement_return_words)
-    _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words)
+    # ── EN build：英文進出貨動詞（原動詞庫全中文 → 英文寫入句一句都判不到，
+    #    守衛 mv 類 72 句全 FAIL。英文用小寫比對，且多為片語以降低誤傷）──
+    _EN_RETURN_W = ("returned", "customer returned", "return of", "sent back",
+                    "gave back", "brought back")
+    _EN_IN_W = ("received", "receive", "came in", "come in", "arrived",
+                "add ", "added", "adding", "put ", "restocked", "restock ",
+                "stocked", "delivered", "delivery of", "got ", "inbound",
+                "supplier sent", "brought in", "topped up", "top up") + _EN_RETURN_W
+    _EN_OUT_W = ("shipped", "ship ", "shipping", "sent out", "sent ", "send ",
+                 "sold", "sell ", "dispatched", "picked up", "took out",
+                 "take ", "taken", "removed", "remove ", "issued", "outbound",
+                 "delivered to customer", "gone out", "went out", "scrapped",
+                 "damaged", "discarded", "wrote off", "write off")
+    _ut13b = user_text.lower()
+    _is_return13b = any(w in user_text for w in _movement_return_words) \
+        or any(w in _ut13b for w in _EN_RETURN_W)
+    _has_movement_word = any(w in user_text for w in _movement_in_words + _movement_out_words) \
+        or any(w in _ut13b for w in _EN_IN_W + _EN_OUT_W)
     # 單獨「進」「出」風險較高（「進去看看」也含「進」），只在句子裡緊接著數字+量詞
     # 時才承認為進出貨動詞（「南區進登山杖100盒」的「進」緊挨著商品名跟數量）。
     import re as _re13b_single
@@ -2963,6 +2987,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _qty13b_m = _re13b_pre.search(
             r'(?:入庫|賣掉|銷掉|退貨|[進出補調])\s*([0-9]{1,6})(?![0-9]*[月日號點樓年%．\.])',
             user_text)
+    # ── EN build：英文數量（原正則要求「數字＋中文量詞」，英文 'received 50 power
+    #    banks' 抽不到 → 掉進 C13c「數量不明」永遠追問幾件，mv 守衛全 FAIL）──
+    #    形式：數字後接英文字（50 power banks / 50 units / 50 boxes of）。
+    #    排除日期時間百分比（3 days / 9am / 50%）避免誤收。
+    if not _qty13b_m:
+        _qty13b_m = _re13b_pre.search(
+            r'\b([0-9]{1,6})\s+(?!%|percent\b|am\b|pm\b|days?\b|weeks?\b|months?\b|'
+            r'years?\b|hours?\b|minutes?\b|oclock\b)[A-Za-z]',
+            user_text)
     # 中文數字要能真的轉成整數才算數（避免「幾個」的「幾」等非數字被誤收）
     _qty13b_int = _cn_to_int(_qty13b_m.group(1)) if _qty13b_m else None
     # r26：0 件是無效異動量 → 當數量不明追問（「出貨0個耳機」曾先問倉別）
@@ -2994,8 +3027,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 既有的「倉別不明 → clarify」分支接手，請使用者拆成一句一倉分別描述。
         _wh_mentions13b = [w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
                                         "南倉", "南區倉", "南區") if w in user_text]
+        # EN build：倉別也認英文（原只認中文 → 英文寫入句抽不到倉別，
+        #   會落到「倉別不明 → clarify」永遠開不了卡）
+        if not _wh_mentions13b:
+            for _en_w, _zh_w in (("north", "北倉"), ("central", "中倉"), ("south", "南倉")):
+                if _en_w in _ut13b:
+                    _wh_mentions13b.append(_zh_w)
         _wh_keys13b = {w[0] for w in _wh_mentions13b}  # 北/中/南 去重
-        _dir13b = "in" if any(w in user_text for w in _movement_in_words) else "out"
+        # EN build：方向判定也要認英文動詞（原只認中文 → 英文寫入句一律被判成
+        #   "out"，'add 100 earphones' 會變成出貨扣庫存＝寫錯資料方向）
+        _dir13b = ("in" if (any(w in user_text for w in _movement_in_words)
+                            or any(w in _ut13b for w in _EN_IN_W))
+                   else "out")
         _wh13b = _wh_mentions13b[0] if len(_wh_keys13b) <= 1 and _wh_mentions13b else ""
         _qty13b = str(_qty13b_int)  # 統一成阿拉伯數字（中文數字已轉整數）
         # 退貨用 in 的算法，但下面 return 帶 is_return 讓工具函式標「退貨」
@@ -3076,9 +3119,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _kw13c = _extract_sku_keyword(_c13c_src) or _extract_sku_keyword(user_text)
         _m13c = _W13c.match_items(_kw13c) if _kw13c else []
         if _m13c and _m13c[0].get("score", 0) >= 3:
-            _dir13c = "in" if any(w in user_text for w in _movement_in_words) else "out"
+            # EN build：方向/倉別同樣要認英文（同 C13b）
+            _dir13c = ("in" if (any(w in user_text for w in _movement_in_words)
+                                or any(w in _ut13b for w in _EN_IN_W))
+                       else "out")
             _wh13c_l = [w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
                                      "南倉", "南區倉", "南區") if w in user_text]
+            if not _wh13c_l:
+                for _e13c, _z13c in (("north", "北倉"), ("central", "中倉"), ("south", "南倉")):
+                    if _e13c in _ut13b:
+                        _wh13c_l.append(_z13c)
             log.info(f"[校正 C13c] 進出貨意圖但數量不明 → 追問 kw={_kw13c!r}")
             return "create_movement", {"keyword": _kw13c,
                                        "warehouse": _wh13c_l[0] if _wh13c_l else "",
@@ -3246,10 +3296,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # ── C3: 缺貨意圖詞 → list_low_stock（最高優先、bypass 其他校正）──
     #   排除：句中含設定項詞（安全庫存/前置天數）時讓給 C9；含報表/報告詞時讓給 C12。
     # 「天數」入列：「中倉補貨天數縮短成3天」的「補貨」曾把 config 句搶成缺貨清單（conv100-r5）
+    # EN build：設定關鍵詞補英文。「safety stock」同時在 _LOW_STOCK_INTENT_WORDS
+    #   裡（"whats below safety stock" 是查缺貨），所以**設定句必須靠這裡讓路**，
+    #   否則 'set X safety stock to 80' / 'whats the X safety stock' 會被 C3
+    #   搶成缺貨清單（守衛 cfg 類 35 句全 FAIL，2026-07-25）。
     _cfg_key_in_text = any(w in user_text for w in
                            ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置", "前置時間",
-                            "天數", "警戒值", "庫存底線", "存量底線"))
-    _report_in_text = any(w in user_text for w in ("報表", "報告", "體檢", "健檢"))
+                            "天數", "警戒值", "庫存底線", "存量底線")) \
+        or any(w in text_low for w in
+               ("safety stock", "safety level", "reorder point", "restock target",
+                "lead time", "safety threshold"))
+    _report_in_text = any(w in user_text for w in ("報表", "報告", "體檢", "健檢")) \
+        or any(w in text_low for w in ("report", "summary"))
     # 「告訴我」收斂成「就告訴我」：「見底的貨順便告訴我要補幾個」不是警示設定，
     # 曾被這裡排除掉落到 C6 亂轉 related（conv100-r5）
     _alert_in_text = any(w in user_text for w in ("通知", "提醒", "警示我", "就通知", "就提醒", "就告訴我",
