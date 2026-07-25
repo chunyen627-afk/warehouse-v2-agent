@@ -16,6 +16,7 @@ tools_v2.py — v2 Agent 進階工具（search_log / manage_config / run_script�
 """
 import csv
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -1840,6 +1841,22 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
     if len(scored) > 1:
         top_score = scored[0]["score"]
         scored = [m for m in scored if m["score"] * 2 >= top_score]
+        # EN build：再濾一層「只靠**共用修飾詞**命中」的候選。
+        #   'Electric Mop'(16) 會把只沾到 Electric 的 'Electric Toothbrush'(8)
+        #   留下（8*2>=16）→ 誤報「matches 2 items」（主檔只有一個 Mop）。
+        #   判準：查詢詞裡有某個 token 只出現在第一名、不在候選名裡 → 候選
+        #   不是訪客要的。⚠️ 真歧義（coffee → 5 個咖啡商品）每個都含 coffee，
+        #   不會被這條濾掉，仍正常反問。
+        if len(scored) > 1 and keyword:
+            _q_toks = [t for t in re.split(r"[\s\-/]+", str(keyword).lower())
+                       if len(t) >= 3 and t.isascii()]
+            if _q_toks:
+                _top_nm = scored[0]["item"]["name"].lower()
+                _disc = [t for t in _q_toks if t in _top_nm]
+                if _disc:
+                    scored = [m for m in scored
+                              if m is scored[0]
+                              or all(t in m["item"]["name"].lower() for t in _disc)]
     matches = [m["item"] for m in scored]
     if len(matches) > 1:
         opts = [it["name"] for it in matches[:5]]
@@ -2098,6 +2115,22 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
     if len(scored) > 1:
         top_score = scored[0]["score"]
         scored = [m for m in scored if m["score"] * 2 >= top_score]
+        # EN build：再濾一層「只靠**共用修飾詞**命中」的候選。
+        #   'Electric Mop'(16) 會把只沾到 Electric 的 'Electric Toothbrush'(8)
+        #   留下（8*2>=16）→ 誤報「matches 2 items」（主檔只有一個 Mop）。
+        #   判準：查詢詞裡有某個 token 只出現在第一名、不在候選名裡 → 候選
+        #   不是訪客要的。⚠️ 真歧義（coffee → 5 個咖啡商品）每個都含 coffee，
+        #   不會被這條濾掉，仍正常反問。
+        if len(scored) > 1 and keyword:
+            _q_toks = [t for t in re.split(r"[\s\-/]+", str(keyword).lower())
+                       if len(t) >= 3 and t.isascii()]
+            if _q_toks:
+                _top_nm = scored[0]["item"]["name"].lower()
+                _disc = [t for t in _q_toks if t in _top_nm]
+                if _disc:
+                    scored = [m for m in scored
+                              if m is scored[0]
+                              or all(t in m["item"]["name"].lower() for t in _disc)]
     matches = [m["item"] for m in scored]
     if len(matches) > 1:
         opts = [it["name"] for it in matches[:5]]

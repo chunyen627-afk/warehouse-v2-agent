@@ -558,7 +558,7 @@ mv|add 50 soup jar to north
 mv|record 20 electric iron inbound at north
 mv|50 iron came in at central
 mv|50 Ceramic Non-stick Pan 28cm came in at south
-mv|south shipped 50 ceramic pan
+mv|south shipped 20 ceramic pan
 mv|10 Electric Toothbrush came in at south
 mv|record 50 toothbrush inbound at central
 mv|take 5 mini blender out of north
@@ -570,7 +570,7 @@ mv|add 10 pour over coffee set to north
 mv|5 cookware set came in at central
 mv|north sent out 20 cookware set
 mv|record 5 glass box inbound at north
-mv|south shipped 100 lunch box
+mv|south shipped 30 lunch box
 mv|north sent out 100 electric mop
 mv|put 100 mop into south
 mv|20 Sparkling Water 500ml came in at north

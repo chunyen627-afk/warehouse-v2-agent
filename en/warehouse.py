@@ -708,6 +708,21 @@ def query_inventory(
     if len(matches) > 1:
         top_score = matches[0]["score"]
         matches = [m for m in matches if m["score"] * 2 >= top_score]
+        # EN build：再濾「只靠共用修飾詞命中」的候選（同 tools_v2 兩處）。
+        #   'electric mop' 會把只沾到 electric 的 Electric Toothbrush 留下
+        #   → 誤報多筆。真歧義（coffee → 5 個咖啡商品）每個都含 coffee，
+        #   不受影響。
+        _kw_g = (keyword or "")
+        if len(matches) > 1 and any(c.isascii() and c.isalpha() for c in _kw_g):
+            import re as _re_g
+            _qt = [t for t in _re_g.split(r"[\s\-/]+", _kw_g.lower())
+                   if len(t) >= 3 and t.isascii()]
+            _top_nm = matches[0]["item"]["name"].lower()
+            _disc = [t for t in _qt if t in _top_nm]
+            if _disc:
+                matches = [m for m in matches
+                           if m is matches[0]
+                           or all(t in m["item"]["name"].lower() for t in _disc)]
 
     # 精確命中優先：keyword 完全等於某商品名 → 直接採它，不進 clarify。
     #   （新增「露營燈罩」後查「露營燈罩」，會跟既有「LED 露營燈」一起被列成 2 筆

@@ -433,7 +433,11 @@ _GATEKEEPER_BLACKLIST = (
     "算零元", "算我的",
     # ── EN build：英文閒聊/離題詞（原黑名單全中文 → 'order me a pizza'
     #    這類英文閒聊沒被擋、掉進 clarify 而不是婉拒）──
-    "pizza", "lunch", "dinner", "breakfast", "coffee for me", "order me",
+    # ⚠️ "lunch" 移除——英文版 'lunch box' 是 Glass Food Containers 的合法
+    #   別名（'south shipped 100 lunch box' 被黑名單擋成 rejected）。
+    #   防閒聊改用更明確的片語（見下方 lunch break / for lunch）。
+    "pizza", "dinner", "breakfast", "coffee for me", "order me",
+    "lunch break", "for lunch", "eat lunch", "having lunch", "lunch time",
     "weather", "joke", "song", "music", "movie", "game", "translate",
     "who are you", "your name", "how are you", "stock market", "bitcoin",
     "recipe", "restaurant", "taxi", "flight", "hotel",
@@ -2527,14 +2531,36 @@ def _en_fuzzy_keyword(core: str) -> str:
             _kl = _k.lower()
             if len(_kl) >= 4:
                 cand.setdefault(_kl, _v)
-            for _w in _kl.split():
-                if len(_w) >= 4:
-                    cand.setdefault(_w, _v)
+            # ⚠️ 多詞別名**不拆單詞**：修飾詞單獨拆出來必然歧義
+            #   （cordless 同時屬於 cordless mouse / cordless mop，
+            #    workout 屬於 workout bra / mat / shirt / towel），
+            #   先建立者贏 → 'cordless mop' 誤配 Wireless Mouse。
+            #   單詞別名（earbuds/nappies）在上面那行已經收了。
     except Exception:
         pass
     if not cand:
         return ""
     keys = list(cand)
+
+    # ── 多詞 alias **整串**優先（守衛第 11 輪的誤配根因）────────────────
+    #   上面把多詞別名拆成單詞放進 cand，先建立者贏：
+    #     cordless → Wireless Mouse（來自 "cordless mouse"）
+    #     workout  → Sports Bra    （來自 "workout bra"）
+    #   於是 'cordless mop' 被逐詞比對成 Wireless Mouse、'workout mat'
+    #   成 Sports Bra——**連正確拼字都誤配**，比漏抓嚴重得多。
+    #   → 先拿整串（含錯字）跟多詞別名比對，中了就直接用。
+    try:
+        from alias_en import ALIAS_EN as _AL2
+        _multi = {k.lower(): v for k, v in _AL2.items() if " " in k}
+        if _multi:
+            _core_l = " ".join(core.lower().split())
+            if _core_l in _multi:
+                return _multi[_core_l]
+            _near_m = difflib.get_close_matches(_core_l, list(_multi), n=1, cutoff=0.85)
+            if _near_m:
+                return _multi[_near_m[0]]
+    except Exception:
+        pass
 
     def _max_dist(n: int) -> int:
         return 1 if n <= 7 else 2
@@ -3372,8 +3398,20 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # C-alert-exp（r47）：到期提醒訴求（「快過期前三天提醒」）曾開出「低於安全庫存」
     # 條件卡＝卡片內容與訴求不符。警示引擎只支援庫存條件 → 誠實說明＋指路。
     # 要有「主動通知」意圖詞才算設警示——「南倉的到期警示」是查詢，讓給 C7 轉到期清單
-    if func_name == "set_alert" and any(w in user_text for w in ("過期", "到期", "效期")) \
-            and any(w in user_text for w in ("提醒", "通知", "叫我", "跟我說", "告訴我")):
+    if (func_name == "set_alert"
+            and (any(w in user_text for w in ("過期", "到期", "效期"))
+                 or _re.search(r"\bexpir(?:y|ing|es?|ation)\b|\bshelf\s*life\b", text_low))
+            and (any(w in user_text for w in ("提醒", "通知", "叫我", "跟我說", "告訴我"))
+                 or _re.search(r"\b(?:remind|notify|alert|tell)\s+me\b|\blet me know\b",
+                               text_low))):
+        if _is_mostly_english(user_text):
+            return "clarify", {
+                "question": 'Alerts currently support "below safety stock" and '
+                            '"below a set quantity". For expiry info, just ask '
+                            '"whats expiring soon" and I will list it right away.',
+                # options 送回後端 → 英文句
+                "options": ["whats expiring soon", "whats running low"],
+                "hint": ""}, True
         return "clarify", {
             "question": "警示目前支援「低於安全庫存／低於指定數量」；到期資訊可以直接問"
                         "「哪些快過期」，我馬上列給你。",
@@ -3696,6 +3734,29 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 ' ', _pre_clean, flags=_re13b_pre.I)
             _pre_clean = _re13b_pre.sub(r'\s+', ' ', _pre_clean).strip()
         _kw13b = _extract_sku_keyword(_pre_clean) or _extract_sku_keyword(user_text) or ""
+        # EN build：剝乾淨後只剩**短商品詞**（mop / pan / fan / bag）時，
+        #   _extract_sku_keyword 的英文快路徑有 score>=4 與短詞不模糊的門檻，
+        #   會回空 → 'put 100 mop into south' 開不了卡（回「請說明要異動
+        #   哪個商品」）。這裡直接拿剝乾淨的殘詞比對，扎實就用。
+        if not _kw13b and _is_mostly_english(user_text):
+            # 從**原句**剝掉數字與寫入/方位虛詞，剩下的就是商品詞
+            #   （_pre_clean 已被前面的中文剝詞迴圈動過，不能直接用）
+            _short13b = _re13b_pre.sub(
+                r"\b(?:put|puts|add|added|adding|received|receive|got|take|took|"
+                r"taken|remove|removed|ship|shipped|send|sent|sold|sell|"
+                r"returned|return|into|to|from|in|at|out|of|the|a|an|and|"
+                r"north|central|south|warehouse|wh|today|yesterday|"
+                r"units?|pcs|pieces?|record|inbound|outbound)\b|\b[0-9]+\b",
+                " ", user_text, flags=_re13b_pre.I)
+            _short13b = _re13b_pre.sub(r"\s+", " ", _short13b).strip(" ?.!,")
+            if _short13b and len(_short13b.split()) <= 2:
+                import warehouse as _W13b_s
+                _m13b_s = _W13b_s.match_items(_short13b)
+                if _m13b_s and _m13b_s[0].get("score", 0) >= 3 and (
+                        len(_m13b_s) == 1
+                        or _m13b_s[1].get("score", 0) < _m13b_s[0].get("score", 0)):
+                    _kw13b = _m13b_s[0]["item"]["name"]
+                    log.info(f"[校正 C13b-short] 短商品詞 {_short13b!r} → {_kw13b!r}")
         # 尾巴殘留介系詞（「空氣清淨機到」，conv100-r6）
         _kw13b = _kw13b.rstrip("到去往")
         # fuzzy 錯商品開卡防呆（conv100-r7：「衛生棉」被 extractor 換成
