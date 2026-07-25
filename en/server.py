@@ -6631,8 +6631,8 @@ async def _check_alert_rules():
                     hits = warns
                 if hits:
                     triggered = True
-                    names = "、".join(w["name"] for w in hits[:3])
-                    detail = f"{names} 等 {len(hits)} 項低於安全庫存"
+                    names = ", ".join(w["name"] for w in hits[:3])
+                    detail = f"{names} and {len(hits)} items below safety stock"
             elif cond == "expiring":
                 exp_result = finance.execute("list_expiring_items", {"days": 14})
                 exp_items = exp_result.get("data", {}).get("items", []) if isinstance(exp_result.get("data"), dict) else []
@@ -7424,8 +7424,8 @@ async def get_alerts():
         if not rules_path.exists():
             return JSONResponse({"rules": []})
         rules = _json.loads(rules_path.read_text("utf-8")).get("rules", [])
-        _cond_labels = {"below_safety": "低於安全庫存", "out_of_stock": "缺貨/斷貨",
-                        "expiring": "快到期", "below_threshold": "低於指定數量"}
+        _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
+                        "expiring": "expiring soon", "below_threshold": "below a set quantity"}
         for r in rules:
             r["condition_label"] = _cond_labels.get(r["condition"], r["condition"])
             r["scope_txt"] = "all items" if not r.get("scope_names") else ", ".join(r["scope_names"][:3])
@@ -10969,13 +10969,18 @@ async def ws_handler(ws: WebSocket):
                     "create_movement":    ["解析商品與數量", "比對倉庫與庫存", "產生確認卡"],
                 }
                 plan_steps = _TASK_PLANS.get(func_name, ["分析請求", "執行查詢", "回傳結果"])
-                # search_log 有自己的 trace UI，不需要 task_plan
-                if func_name != "search_log":
-                    try:
-                        await send({"type": "task_plan", "steps": plan_steps})
-                        await asyncio.sleep(0.1)
-                    except RuntimeError:
-                        pass
+                # EN build：**不送 task_plan**（user 2026-07-25 決定移除）。
+                #   理由：三個泛泛步驟（解析→比對→產生）每次都差不多、對訪客
+                #   沒有資訊量，而且跟下面真正有內容的 Agent trace 重複。
+                #   plan_steps 保留——下面的 task_tick 打勾節奏用它的長度算，
+                #   前端沒有 task_plan 元素時 tick 會自己 return，不影響。
+                #   （要恢復就把下面這段 send 解除註解）
+                # if func_name != "search_log":
+                #     try:
+                #         await send({"type": "task_plan", "steps": plan_steps})
+                #         await asyncio.sleep(0.1)
+                #     except RuntimeError:
+                #         pass
 
                 # search_log keyword 在 OOV 前先用 _extract_sku_keyword 預清理，
                 # 避免模型帶入雜詞（例如「抗菌洗衣精帳」）降低 fuzzy 分

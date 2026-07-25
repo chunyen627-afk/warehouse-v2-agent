@@ -64,8 +64,8 @@ def _detect_po_short(s) -> list[dict]:
                 out.append({
                     "key": f"po_short:{po['po_id']}:{ln['sku_id']}",
                     "level": "critical", "type": "po_short",
-                    "title": f"採購對帳異常：{nm} 短收 {gap} 件",
-                    "detail": f"{po['po_id']}（{po['warehouse']}）應收 {ln['order_qty']}、實收 {ln['received_qty']}",
+                    "title": f"PO discrepancy: {nm} short {gap} units",
+                    "detail": f"{po['po_id']} ({po['warehouse']}) ordered {ln['order_qty']}, received {ln['received_qty']}",
                     "data": {"po_id": po["po_id"], "sku_id": ln["sku_id"], "name": nm,
                              "gap": gap, "warehouse": po["warehouse"]},
                 })
@@ -87,12 +87,12 @@ def _detect_low_stock(s) -> list[dict]:
             level = "warning"
         else:
             level = "info"   # 已低於安全線、但短期不會斷貨 → 注意級
-        verb = "快斷貨" if level != "info" else "低於安全線"
+        verb = "Running out" if level != "info" else "Below safety stock"
         out.append({
             "key": f"low:{w['sku_id']}:{w['warehouse']}",
             "level": level, "type": "low_stock",
-            "title": f"{verb}：{w['name']} 撐 {dleft} 天",
-            "detail": f"{w.get('warehouse_label','')} 現量 {w.get('qty')}、安全 {w.get('safety_stock')}、建議補 {w.get('suggest_qty')}",
+            "title": f"{verb}: {w['name']} - {dleft} days left",
+            "detail": f"{w.get('warehouse_label','')} on hand {w.get('qty')}, safety {w.get('safety_stock')}, suggest {w.get('suggest_qty')}",
             "data": {"sku_id": w["sku_id"], "name": w["name"], "warehouse": w["warehouse"],
                      "days_left": dleft, "suggest_qty": w.get("suggest_qty")},
         })
@@ -123,12 +123,12 @@ def _detect_burst(s) -> list[dict]:
             z = (q - mean) / sd
             if abs(z) >= AnomalyConfig.burst_sigma:
                 nm = s._items_by_sku.get(sku, {}).get("name", sku)
-                direction = "暴增" if z > 0 else "暴跌"
+                direction = "spike" if z > 0 else "drop"
                 out.append({
                     "key": f"burst:{sku}:{d}",
                     "level": "warning", "type": "burst",
-                    "title": f"出庫{direction}：{nm} 在 {d} 出 {q} 件",
-                    "detail": f"日均 {mean:.0f}、偏離 {z:+.1f}σ（可能刷單/失竊/系統錯）",
+                    "title": f"Outbound {direction}: {nm} shipped {q} units on {d}",
+                    "detail": f"daily avg {mean:.0f}, deviation {z:+.1f}σ (possible fraud / theft / system error)",
                     "data": {"sku_id": sku, "name": nm, "date": d, "qty": q,
                              "mean": round(mean, 1), "z": round(z, 2)},
                 })
@@ -150,8 +150,8 @@ def _detect_expiry(s) -> list[dict]:
             out.append({
                 "key": f"expiry:{b['sku_id']}:{b['warehouse']}:{b['expire_date']}",
                 "level": "warning", "type": "expiry",
-                "title": f"快到期囤貨：{nm} 剩 {dleft} 天還有 {b['qty']} 件",
-                "detail": f"{b['warehouse']} 效期 {b['expire_date']}（恐報廢損失）",
+                "title": f"Expiring with stock: {nm} has {b['qty']} units, {dleft} days left",
+                "detail": f"{b['warehouse']} expires {b['expire_date']} (write-off risk)",
                 "data": {"sku_id": b["sku_id"], "name": nm, "warehouse": b["warehouse"],
                          "days_left": dleft, "qty": b["qty"]},
             })
@@ -179,8 +179,8 @@ def _detect_dormant(s) -> list[dict]:
             out.append({
                 "key": f"dormant:{sku}",
                 "level": "info", "type": "dormant",
-                "title": f"呆滯品：{it['name']} 逾 {AnomalyConfig.dormant_days} 天零出庫",
-                "detail": f"庫存 {total} 件、積壓市值 NT$ {value:,}" + (f"、最後出庫 {lo}" if lo else "、無出庫紀錄"),
+                "title": f"Dormant: {it['name']} no outbound for {AnomalyConfig.dormant_days}+ days",
+                "detail": f"{total} units, tied-up value NT$ {value:,}" + (f", last outbound {lo}" if lo else ", no outbound records"),
                 "data": {"sku_id": sku, "name": it["name"], "qty": total, "value": value, "last_out": lo},
             })
     return out
@@ -209,7 +209,7 @@ class AlertManager:
             except Exception as e:
                 # 單一偵測器失敗不影響其他（業界 pipeline 韌性）
                 alerts.append({"key": f"detector_err:{det.__name__}", "level": "info",
-                               "type": "detector_error", "title": f"偵測器 {det.__name__} 出錯",
+                               "type": "detector_error", "title": f"Detector {det.__name__} failed",
                                "detail": str(e)[:100], "data": {}})
         # ── 套用 set_alert 設的訂閱規則：被使用者「關注」的商品異常 → 升級 ──
         alerts = self._apply_subscriptions(s, alerts)
@@ -342,7 +342,7 @@ def _notify_email(alert: dict):
         import smtplib
         from email.mime.text import MIMEText
         msg = MIMEText(f"{alert['title']}\n\n{alert['detail']}", _charset="utf-8")
-        msg["Subject"] = f"[倉儲告警-{alert['level']}] {alert['title']}"
+        msg["Subject"] = f"[Warehouse alert - {alert['level']}] {alert['title']}"
         msg["From"] = _os.getenv("SMTP_USER", "")
         msg["To"] = _os.getenv("ALERT_TO", "")
         with smtplib.SMTP(host, int(_os.getenv("SMTP_PORT", "587"))) as srv:

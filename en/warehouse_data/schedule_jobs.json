@@ -3,14 +3,14 @@
     {
       "id": "SCH001",
       "script_id": "stock_audit",
-      "script_label": "月底盤點",
+      "script_label": "Month-end Stocktake",
       "freq": "daily",
-      "freq_label": "每天",
+      "freq_label": "Daily",
       "time_str": "09:00",
       "enabled": true,
       "created": "2026-06-25T16:24:21",
       "actor": "user_confirmed",
-      "last_run": "2026-07-24T09:00:27"
+      "last_run": "2026-07-25T09:00:09"
     }
   ]
 }

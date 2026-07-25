@@ -1040,8 +1040,8 @@ def set_alert(condition: str = "", target: str = "",
     rule_id = f"AL{len(rules) + 1:03d}"
 
     _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
-                    "expiring": "快到期",
-                    "below_threshold": f"低於 {threshold} 個" if threshold else "低於指定數量"}
+                    "expiring": "expiring soon",
+                    "below_threshold": f"below {threshold} units" if threshold else "below a set quantity"}
     cond_label = _cond_labels.get(cond, cond)
     scope_txt = "all items" if not scope else ", ".join(scope_names[:3])
     _trace(steps, "reason", f"creating alert rule {rule_id}: {scope_txt} -> {cond_label}")
@@ -1397,7 +1397,7 @@ def list_alerts() -> dict:
     rules = json.load(open(rules_path, encoding="utf-8")).get("rules", [])
     active = [r for r in rules if r.get("enabled", True)]
     _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
-                    "expiring": "快到期", "below_threshold": "低於指定數量"}
+                    "expiring": "expiring soon", "below_threshold": "below a set quantity"}
     for r in active:
         r["condition_label"] = _cond_labels.get(r["condition"], r["condition"])
         r["scope_txt"] = "all items" if not r.get("scope_names") else ", ".join(r["scope_names"][:3])
@@ -1419,7 +1419,7 @@ def delete_alert(rule_id: str = "") -> dict:
     if not rule:
         return W._err(f"Rule {rule_id} not found")
     _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
-                    "expiring": "快到期", "below_threshold": "低於指定數量"}
+                    "expiring": "expiring soon", "below_threshold": "below a set quantity"}
     cond_label = _cond_labels.get(rule.get("condition"), rule.get("condition", ""))
     return {"ok": True,
             "summary": f"Delete alert rule {rule_id} [{cond_label}]? This cannot be undone.",
