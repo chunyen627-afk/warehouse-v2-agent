@@ -173,6 +173,27 @@ GATEKEEPER_KEYWORDS = {
     "my alerts", "set alert", "notify me", "remind me",
     "last two months", "past two months", "month over month",
     "period compare", "trend", "growth", "decline",
+    # ── 守衛第 8 輪：上一輪把守門員收嚴後，這些「沒有商品名但完全合法」
+    #    的功能句被擋成 rejected（low/hot/rca/mv 共 11 句）。守門員的
+    #    最後一關要求句中有商品名，功能句得靠白名單接住。
+    "almost out", "running out", "about to run out", "nearly out",
+    "shortage", "shortages", "short list", "restock list", "reorder list",
+    "below safety", "under safety", "need to order", "should i order",
+    "what to order", "order anything", "getting low", "runs out",
+    "which products", "which items", "what items", "what products",
+    "sales ranking", "ranking", "rank", "popular", "least popular",
+    "top selling", "worst selling", "moving fast", "moving slow",
+    "expiry", "expiry alert", "expiry alerts", "expiring stock",
+    "going bad", "past date", "use by", "best before",
+    "reconciliation", "reconciliation issues", "anomalies", "anomaly",
+    "doesnt add up", "does not add up", "add up",
+    "in and out", "ins and outs", "recommend", "recommendation",
+    "goes well with", "pairs with", "bundle with",
+    "warehouse doing", "how are we doing", "stock value", "total value",
+    "inventory value", "stock overview", "inventory overview",
+    # ⚠️ 不放 status/summary/dashboard/overview 這種泛詞——'is this offline'
+    #    'how big is the warehouse' 這類搗蛋句會跟著放行（guidey 類回歸）
+    "powerbank", "lunch box", "lunchbox",
     "賣最好", "賣最差", "熱銷", "暢銷", "滯銷", "排行", "排名", "top",
     "冠軍", "最熱門", "最冷門", "銷量", "搶手", "熱賣", "賣得最兇", "最夯",
     "比較", "比", "跟", "和", "vs", "對比",
@@ -637,6 +658,16 @@ def _is_guide_request(text: str) -> bool:
         "連帶", "也買", "一起買", "搭配", "帶動", "好夥伴",
         "到期", "過期", "保存期限", "效期", "保鮮", "賞味", "即期",
         "壞掉", "快壞", "快爛", "快過期",
+        # ── EN build：英文具體查詢線索。GUIDE_KEYWORDS 含 "list"，
+        #    'shortage list' / 'restock list please' / 'expiring stock list'
+        #    因此被搶成導覽頁 → 這些功能詞在場就不是要看總覽。
+        "stock", "inventory", "shortage", "restock", "reorder", "low",
+        "expiring", "expiry", "expire", "movement", "movements", "moved",
+        "best seller", "bestseller", "selling", "ranking", "popular",
+        "hot", "slow", "compare", "transfer", "received", "shipped",
+        "safety", "alert", "schedule", "report", "audit", "reconcil",
+        "discrepanc", "anomal", "short", "supplier", "purchase", "order",
+        "value", "worth", "count", "left", "remaining", "how many",
     )
     for h in SPECIFIC:
         if h in s:
@@ -2027,14 +2058,15 @@ def _detect_clarify(user_text: str) -> dict | None:
         _has_product = bool(_extract_sku_keyword(t))
     if matched_wh and len(matched_whs) < 2 and not has_intent and not _cat_hint and not _has_product:
         return {
-            "question": f"你想查「{matched_wh}」的哪個項目？",
+            "question": f'What do you want to check for "{matched_wh}"?',
+            # EN build：options 是送回後端的查詢字串 → 必須是後端聽得懂的英文句
             "options": [
-                f"{matched_wh} 庫存警示",
-                f"{matched_wh} 近期進出貨",
-                f"{matched_wh} 快到期商品",
-                f"{matched_wh} 庫存總值",
+                f"{matched_wh} low stock",
+                f"{matched_wh} recent movements",
+                f"{matched_wh} expiring items",
+                f"{matched_wh} stock value",
             ],
-            "hint": "點選其中一項，或直接輸入更完整的問題"
+            "hint": "Tap one of the options, or type a more complete question"
         }
 
     # ② 採購/短少/PO 意圖 + 無 SKU keyword → 推工具選項
@@ -2113,14 +2145,14 @@ def _detect_clarify(user_text: str) -> dict | None:
             matched_cat = None
     if matched_cat and not has_intent:
         return {
-            "question": f"你想查「{matched_cat}」類的什麼？",
+            "question": f'What do you want to check for the "{matched_cat}" category?',
             "options": [
-                f"{matched_cat}類 庫存警示",
-                f"{matched_cat}類 熱銷商品",
-                f"{matched_cat}類 快到期商品",
-                f"{matched_cat}類 進出貨紀錄",
+                f"{matched_cat} low stock",
+                f"{matched_cat} best sellers",
+                f"{matched_cat} expiring items",
+                f"{matched_cat} movements",
             ],
-            "hint": "點選其中一項，或直接輸入更完整的問題"
+            "hint": "Tap one of the options, or type a more complete question"
         }
 
     # ⑤ 只有商品名、沒有任何動作詞 → 問要做什麼（用 t_clean 剝掉填充詞再 match）
@@ -2129,14 +2161,14 @@ def _detect_clarify(user_text: str) -> dict | None:
         item = matched[0]
         name = item["item"]["name"] if isinstance(item, dict) and "item" in item else item.get("name", t)
         return {
-            "question": f"你想查「{name}」的什麼？",
+            "question": f'What do you want to know about "{name}"?',
             "options": [
-                f"{name} 庫存還剩多少",
-                f"{name} 進出貨紀錄",
-                f"{name} 帳對不上",
-                f"{name} 快到期了嗎",
+                f"how many {name} left",
+                f"{name} movements",
+                f"{name} stock doesnt add up",
+                f"is {name} expiring soon",
             ],
-            "hint": "點選其中一項，或直接輸入更完整的問題"
+            "hint": "Tap one of the options, or type a more complete question"
         }
 
     # ⑥ 純模糊短句（查/看/確認等）— 用 t_clean 或 t 都檢查，剝掉填充詞後剩「查」也算
@@ -3831,9 +3863,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _cfg_key_in_text = any(w in user_text for w in
                            ("安全庫存", "安全存量", "安全水位", "前置天數", "補貨前置", "前置時間",
                             "天數", "警戒值", "庫存底線", "存量底線")) \
-        or any(w in text_low for w in
-               ("safety stock", "safety level", "reorder point", "restock target",
-                "lead time", "safety threshold"))
+        or (any(w in text_low for w in
+                ("safety stock", "safety level", "reorder point", "restock target",
+                 "lead time", "safety threshold"))
+            # ⚠️ 「低於安全庫存的有哪些」是**查缺貨**不是查/改設定——
+            #   'items below safety stock' 原本讓路給 C9 回設定表（答非所問）。
+            #   有比較詞（below/under/less than）或清單詞＝查缺貨，不讓路。
+            and not _re.search(r"\b(?:below|under|less than|lower than|beneath|"
+                               r"short of|not enough|running low|almost out)\b",
+                               text_low))
     _report_in_text = any(w in user_text for w in ("報表", "報告", "體檢", "健檢")) \
         or any(w in text_low for w in ("report", "summary"))
     # 「告訴我」收斂成「就告訴我」：「見底的貨順便告訴我要補幾個」不是警示設定，
@@ -3856,10 +3894,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _po_in_text = any(w in user_text for w in ("採購單", "下單", "產採購", "補貨單"))
     # 「XX最近有補貨嗎」是問進貨紀錄不是缺貨清單 → 讓給 C7b movement（conv100-r13）
     _mv_q_in_text = any(w in user_text for w in ("有補貨", "有進貨", "補過貨", "進過貨"))
+    # EN build：到期詞在場讓給 list_expiring_items——'expiry alerts' 的
+    #   'alert' 命中缺貨詞表被 C3 搶成缺貨清單（到期跟缺貨是兩件事）
+    _expiry_in_text = bool(_re.search(
+        r"\bexpir(?:y|ing|es?|ation)\b|\bshelf\s*life\b|\bbest\s*before\b|"
+        r"\buse\s*by\b|\bgoing\s+bad\b|\bpast\s+(?:its\s+)?date\b", text_low))
     if (any(kw in user_text for kw in _LOW_STOCK_INTENT_WORDS) or
         any(kw in text_low for kw in _LOW_STOCK_INTENT_WORDS)) \
        and not _cfg_key_in_text and not _report_in_text \
-       and not _alert_in_text and not _po_in_text and not _mv_q_in_text:
+       and not _alert_in_text and not _po_in_text and not _mv_q_in_text \
+       and not _expiry_in_text:
         # category 幻覺防呆：LLM 常憑空抽 category（「哪些品項低於警戒線」給
         # food_beverage 只回 4 項，conv100-r5）→ 句中沒類別詞就丟棄
         _c3_cat_words = {"electronics": ("電子", "3c"), "appliance_kitchen": ("家電", "廚具", "廚房"),
@@ -6013,7 +6057,17 @@ def _abort_intent(text: str) -> bool:
         if len(t.split()) > 4:
             return False
         _tl = t.lower()
-        return any(w in _tl for w in _ABORT_WORDS)
+        # ⚠️ 英文放棄詞必須要求**詞界**，不能用 substring：
+        #   'mos**quit**o spray inventory' 會命中 quit、
+        #   'clear the **stop**page' 會命中 stop → 正常查詢被當成放棄句，
+        #   回「目前沒有進行中的操作」（而且是中文的，展場直接露餡）。
+        #   同一類問題已在 _po_kw 的裸 "po" 上踩過（report/export 誤中）。
+        _abort_en = [w for w in _ABORT_WORDS if w.isascii()]
+        if any(_re.search(r"(?<![a-z])" + _re.escape(w) + r"(?![a-z])", _tl)
+               for w in _abort_en):
+            return True
+        # 中文放棄詞在英文句裡不會出現，但保留比對以防中英混雜殘句
+        return any(w in _tl for w in _ABORT_WORDS if not w.isascii())
     if len(t) > 8:
         return False
     return any(w in t for w in _ABORT_WORDS)
@@ -7585,15 +7639,17 @@ async def ws_handler(ws: WebSocket):
                 if _in_flow or _had_card:
                     # r55 收官批：取消不能空回答（畫面曾只剩一行「已取消新增商品」，
                     # 取消的是出貨/調貨卡時文字還是錯的）。給通用取消文，前端優先顯示。
-                    _ab_ok = "好的，這筆操作已取消，沒有寫入任何資料。"
+                    _ab_ok = "OK, that operation is cancelled — nothing was saved."
                     for ch in _ab_ok:
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(_TK_DELAY.get())
                     await send({"type": "done", "result": {
                         "ok": True, "view": "item_cancelled", "summary": _ab_ok, "data": {}}})
                 else:
-                    _ab_msg = ("沒問題，目前沒有進行中的操作。請直接說完整需求，"
-                               "例如「南倉藍牙耳機庫存」「北倉進50個滑鼠」。")
+                    _ab_msg = ("No problem — there is no operation in progress. "
+                               "Just tell me what you need, e.g. "
+                               '"south bluetooth earphones stock" or '
+                               '"north received 50 wireless mouse".')
                     for ch in _ab_msg:
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(_TK_DELAY.get())
@@ -8333,8 +8389,10 @@ async def ws_handler(ws: WebSocket):
                     #   吃掉（流程劫持，展場必爆）。
                     _item_create_state_ws.pop(vid, None)
                     _item_delete_state.pop(vid, None)
-                    _meta_msg = ("沒問題，目前沒有進行中的操作。"
-                                 "請直接說完整需求，例如「南倉藍牙耳機庫存」「北倉進50個滑鼠」。")
+                    _meta_msg = ("No problem — there is no operation in progress. "
+                                 "Just tell me what you need, e.g. "
+                                 '"south bluetooth earphones stock" or '
+                                 '"north received 50 wireless mouse".')
                     log.info(f"[meta-gate] 後設/取消句 → clarify（已清流程狀態）: {user_text!r}")
                     for ch in _meta_msg:
                         await send({"type": "token", "text": ch})
