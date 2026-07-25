@@ -749,6 +749,13 @@ _LOW_STOCK_INTENT_WORDS = (
     "almost out", "nearly out", "out of stock", "short on", "shortage",
     "below safety", "safety stock", "need to order", "needs ordering",
     "what's low", "whats low", "replenish",
+    # 守衛第 10 輪：這些常見講法沒收 → 落到商品比對/RCA
+    "getting low", "gets low", "getting short", "running short",
+    "should i order", "should we order", "what to order",
+    "order anything", "need anything", "anything to order",
+    "are short", "is short", "short of stock", "low stock list",
+    "shortage list", "restock list", "reorder list", "need topping up",
+    "top up", "topping up", "needs more", "need more stock",
 )
 
 # 熱銷意圖詞（C4 用）
@@ -1053,7 +1060,14 @@ _TOOL_INTENT_GUARD = {
                             "goes with", "go with", "pairs with", "pair with",
                             "related", "bundle", "cross-sell", "cross sell",
                             "also buy", "also bought", "also get", "along with",
-                            "combo", "together with", "what else"),
+                            "combo", "together with", "what else",
+                            # 守衛第 10 輪：'recommend items for X' 沒收 →
+                            #   gate-rescue 降級成庫存查詢
+                            "recommend", "recommendation", "suggest items",
+                            "what goes", "frequently bought", "often bought",
+                            "customers also", "people also", "similar to",
+                            "similar items", "matching items", "add-on",
+                            "upsell", "complement"),
     "search_log":       _RCA_INTENT_WORDS,
     "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料",
                          "file", "files", "folder", "directory", "what data"),
@@ -2042,9 +2056,32 @@ def _detect_clarify(user_text: str) -> dict | None:
     for f in _FILLER:
         t_clean = t_clean.replace(f, "")
     t_clean = t_clean.strip()
+    # EN build：英文句也要剝虛詞/意圖動名詞，否則下面 ⑤ 的 match_items 會
+    #   靠虛詞亂中（'whats running out at north' → Running Shoes Men's →
+    #   反問「你想知道 Running Shoes 的什麼」，守衛第 10 輪抓到）
+    if _is_mostly_english(t):
+        t_clean = _re.sub(
+            r"\b(?:running|getting|going|runs|gets)\s+(?:out|low|short|down)\b",
+            " ", t_clean, flags=_re.I)
+        t_clean = _re.sub(
+            r"\b(?:whats|what|hows|how|is|are|the|a|an|of|do|does|did|we|i|you|"
+            r"got|have|has|any|some|there|show|me|tell|give|list|check|look|"
+            r"see|find|get|left|remain|remaining|on|hand|in|at|for|to|from|"
+            r"with|now|currently|available|please|pls|still|right|it|its|"
+            r"should|need|want|know|about|anything|something)\b",
+            " ", t_clean, flags=_re.I)
+        t_clean = _re.sub(r"\s+", " ", t_clean).strip(" ?.!,")
 
     # ⓪ 剝完後 t_clean 為空 → 純意圖動詞，直接給通用選單
     if not t_clean and not has_intent:
+        if _is_mostly_english(t):
+            return {
+                "question": "What would you like to check?",
+                # options 送回後端 → 用後端聽得懂的英文句
+                "options": ["whats running low", "whats expiring soon",
+                            "best sellers this month", "any stock discrepancies"],
+                "hint": "Tap an option or type an item name",
+            }
         return {
             "question": "你想查什麼？",
             "options": ["哪些商品快缺貨", "哪些商品快到期", "本月熱銷商品", "採購對帳異常"],
@@ -2654,7 +2691,13 @@ def _extract_sku_keyword(text: str) -> str:
                    r"please|pls|quantity|qty|units?|level|levels|number|"
                    r"warehouse|wh|north|central|south|total|still|right|"
                    r"hows|how's|what's|whats|its|it)\b")
-        _en_core = _re.sub(_q_stop, " ", text, flags=_re.I)
+        # 意圖動名詞：'whats running out at north' 的 running 會比到
+        #   Running Shoes（守衛第 10 輪）。但 'running shoes stock' 的
+        #   running 是商品名的一部分 → 只在**後面接意圖介副詞**時才剝。
+        _q_stop_intent = (r"\b(?:running|getting|going|runs|gets)\s+"
+                          r"(?:out|low|short|down|empty)\b")
+        _en_core = _re.sub(_q_stop_intent, " ", text, flags=_re.I)
+        _en_core = _re.sub(_q_stop, " ", _en_core, flags=_re.I)
         _en_core = _re.sub(r"\s+", " ", _en_core).strip(" ?.!,")
         try:
             # 先用剝乾淨的核心詞比對；剝到空（整句都是虛詞）才退回整句
@@ -3805,8 +3848,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _has_alert = any(w in user_text for w in ("通知", "提醒", "就通知", "就提醒", "警示我"))
     # 「系統壞掉了啦」的「壞掉」是抱怨系統不是問效期（conv100-r9）→ 排除機器語境
     _c7_sys_ctx = any(w in user_text for w in ("系統", "當機", "網站", "機器", "程式", "app"))
+    # EN build：'expiry alerts' / 'expiry alert list' 的 alert 讓 _has_alert
+    #   成立而被排除 → 落回全店概覽。到期詞緊鄰 alert 時＝要看到期清單，
+    #   不是要**設定**警示（設定句會有 me/when/below 等）。
+    _c7_expiry_alert = bool(_re.search(
+        r"\bexpir(?:y|ing|ation)\s+(?:alerts?|warnings?|list)\b", text_low)
+        and not _re.search(r"\b(?:alert|notify|warn|remind)\s+me\b|\bwhen\b|"
+                           r"\bbelow\b|\bunder\b|\bdrops?\b", text_low))
     if (any(kw in user_text for kw in _EXPIRING_INTENT_WORDS) or
-        any(kw in text_low for kw in _EXPIRING_INTENT_WORDS)) and not _has_report and not _has_alert \
+        any(kw in text_low for kw in _EXPIRING_INTENT_WORDS)) and not _has_report \
+            and (not _has_alert or _c7_expiry_alert) \
             and not _c7_sys_ctx:
         # category 幻覺防呆：句中沒類別詞就丟棄（「到期壓力最大的是哪批貨」被 LLM
         # 塞 apparel 回「服飾類沒有快到期」漏報全局，conv100-r6）
@@ -10339,6 +10390,7 @@ async def ws_handler(ws: WebSocket):
             #   conf=1.00 並 skip LLM，全店概覽答非所問（'show my schedules'）。
             #   詞組夠獨特（schedules/alert rules/what files），直接指定工具。
             _en_admin = None
+            _en_admin_hard = False
             if _is_mostly_english(user_text):
                 _ul_adm = user_text.lower()
                 if _re.search(r"\b(?:my|the|any|current|existing|active|which|what)\b"
@@ -10356,10 +10408,22 @@ async def ws_handler(ws: WebSocket):
                                 r"\b(?:list|show)\s+(?:the\s+)?files\b|"
                                 r"\bwhat\s+(?:data\s+)?can\s+you\s+read\b", _ul_adm):
                     _en_admin = "list_files"
+                # 'expiry alerts' / 'expiry warnings'：clf 判 query_inventory
+                #   conf=1.00 skip LLM → 根本進不到 C7 的到期規則
+                elif _re.search(r"\bexpir(?:y|ing|ation)\s+(?:alerts?|warnings?|list)\b",
+                                _ul_adm) and not _re.search(
+                                    r"\b(?:alert|notify|warn|remind)\s+me\b|\bwhen\b|"
+                                    r"\bbelow\b|\bunder\b|\bdrops?\b", _ul_adm):
+                    _en_admin = "list_expiring_items"
             if _en_admin:
                 log.info(f"[en-admin] {user_text!r} → {_en_admin}")
                 _clf_func_ws = _en_admin
                 _clf_conf_ws = 1.0
+                # ⚠️ 要標 hard，否則 C18（clf vs model 仲裁）會拿 clf 的原判斷
+                #   把它蓋回去——'expiry alerts' 的 clf 是 query_inventory
+                #   conf=1.00，en-admin 改成 list_expiring_items 後又被 C18
+                #   改回全店概覽（守衛第 10 輪抓到）
+                _en_admin_hard = True
 
             if _clf_func_ws and _clf_func_ws not in ("unknown", "unclear") and _clf_conf_ws >= 0.8:
                 log.info(f"[intent_clf primary] vid={vid} {user_text!r} → {_clf_func_ws} (conf={_clf_conf_ws:.2f})")
@@ -10812,6 +10876,14 @@ async def ws_handler(ws: WebSocket):
                         "order", "orders", "movement", "movements", "transfer",
                         "transfers", "setting", "settings", "config", "safety",
                         "everything", "anything", "something", "help",
+                        # 守衛第 10 輪：這些形容詞/動名詞被當成「庫裡沒有的
+                        #   商品」誠實回沒有（'whats getting low' → 說沒有
+                        #   getting low 這個商品）
+                        "getting", "going", "running", "doing", "coming",
+                        "expiry", "expire", "expires", "expiring", "value",
+                        "values", "worth", "amount", "price", "prices",
+                        "cost", "costs", "low", "high", "short", "out",
+                        "empty", "full", "fine", "okay", "good", "bad",
                     }
                     try:
                         import warehouse as _Wnx
@@ -10894,7 +10966,7 @@ async def ws_handler(ws: WebSocket):
 
                 # ── C18：clf mismatch 檢查（hard_corrected 時不蓋過）──
                 mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
-                if mismatch and not _hard and clf_intent != "unknown":
+                if mismatch and not _hard and not _en_admin_hard and clf_intent != "unknown":
                     log.info(f"[C18] clf={clf_intent}({clf_conf:.2f}) vs model={func_name} → 校正")
                     func_name = intent_clf.LABEL_TO_FUNC.get(clf_intent, clf_intent)
                     # C18 改了 func_name 後，舊 func_args 是照舊 func_name 的參數格式
