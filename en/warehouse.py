@@ -160,19 +160,19 @@ CATEGORY_LABEL = {
 }
 
 WAREHOUSE_LABEL = {
-    "north":   "北區倉",
-    "central": "中區倉",
-    "south":   "南區倉",
-    "all":     "全部倉",
+    "north":   "North",
+    "central": "Central",
+    "south":   "South",
+    "all":     "All warehouses",
 }
 
 PERIOD_LABEL = {
-    "today":      "今天",
-    "yesterday":  "昨天",
-    "day_before_yesterday": "前天",
-    "this_week":  "本週",
-    "last_week":  "上週",
-    "this_month": "本月",
+    "today":      "Today",
+    "yesterday":  "Yesterday",
+    "day_before_yesterday": "The day before yesterday",
+    "this_week":  "This week",
+    "last_week":  "Last week",
+    "this_month": "This month",
 }
 
 _KW_TO_CAT = {
@@ -226,8 +226,8 @@ def _suggest_on_empty(keyword: str, action: str = "庫存") -> dict:
     hint_kw = f"「{_kw_s}」" if _echoable else ""
     # user 原則 2026-07-16：查無商品要提醒可新增，措辭不裝傻（舊句「找不到相關
     # 商品」在有近似品時讀起來像系統很笨）。
-    question = (f"倉庫目前沒有 {hint_kw}這個商品喔，你可以查：" if _echoable
-                else "請問你想查哪個商品？你可以查：")
+    question = (f"We don't carry {hint_kw}in the warehouse. You could ask about:" if _echoable
+                else "Which item would you like to check? You could ask about:")
 
     return {
         "ok": True,
@@ -236,26 +236,26 @@ def _suggest_on_empty(keyword: str, action: str = "庫存") -> dict:
         "data": {
             "question": question,
             "options":  opts,
-            "hint":     "點選項目或輸入完整商品名稱；如果是新商品，可以說「新增商品」建立",
+            "hint":     "Tap an option or type the full item name; for a new item, say \"add item\"",
         },
     }
 
 
 DIRECTION_LABEL = {
-    "in":   "進貨",
-    "out":  "出貨",
-    "both": "進出",
+    "in":   "inbound",
+    "out":  "outbound",
+    "both": "in/out",
 }
 
 METRIC_LABEL = {
-    "stock_value": "庫存價值",
-    "item_count":  "商品數量",
-    "turnover":    "週轉率",
+    "stock_value": "stock value",
+    "item_count":  "item count",
+    "turnover":    "turnover rate",
 }
 
 RANK_LABEL = {
-    "hot":  "熱銷",
-    "slow": "滯銷",
+    "hot":  "best selling",
+    "slow": "slow moving",
 }
 
 
@@ -627,10 +627,11 @@ def query_inventory(
                          "category": CATEGORY_LABEL.get(it["category"], it["category"]),
                          "qty": total, "unit": it.get("unit", "件")})
         # r69：指定倉別時摘要要點名（「只看南倉的」曾回看不出南倉視角的泛話）
-        _wh_prefix = f"{wh_label_all}視角：" if wh_f != "all" else ""
+        _wh_prefix = f"{wh_label_all} view: " if wh_f != "all" else ""
         return {"ok": True,
-                "summary": f"{_wh_prefix}目前共 {len(all_items)} 項商品，以下為各類別代表 {len(rows)} 筆"
-                           "（想看完整清單可以說「商品清單」）",
+                "summary": f"{_wh_prefix}{len(all_items)} items in total, showing {len(rows)} "
+                           "representative items by category "
+                           "(say \"item list\" for the full list)",
                 "view": "inventory",
                 "data": {"warehouse": wh_f, "warehouse_label": wh_label_all,
                          "keyword": "", "category": None,
@@ -681,7 +682,7 @@ def query_inventory(
         cat_label = CATEGORY_LABEL.get(category, category)
         wh_label_f = WAREHOUSE_LABEL.get(warehouse, "全部倉")
         return {"ok": True,
-                "summary": f"{cat_label}類別（{wh_label_f}）：共 {len(rows)} 項，總庫存 {sum(r['qty'] for r in rows)} 件",
+                "summary": f"{cat_label} ({wh_label_f}): {len(rows)} items, {sum(r['qty'] for r in rows)} units total",
                 "view": "inventory",
                 "data": {"category": category, "category_label": cat_label,
                          "warehouse": warehouse, "warehouse_label": wh_label_f,
@@ -709,8 +710,8 @@ def query_inventory(
             opts.append(f"{_cl}類 全部庫存")
         else:
             opts.append("全部商品庫存")
-        question = (f"「{scope}」對應到 {len(_cands)} 個商品，"
-                    f"你要查哪一個？（點下方商品，或直接說完整名稱）")
+        question = (f"\"{scope}\" matches {len(_cands)} items. "
+                    f"Which one? (tap an item below, or say the full name)")
         return {
             "ok": True,
             "summary": question,
@@ -730,27 +731,27 @@ def query_inventory(
     is_low = total < it["safety_stock"] and warehouse == "all"
 
     if warehouse == "all":
-        per_wh_text = "、".join(
+        per_wh_text = ", ".join(
             f"{WAREHOUSE_LABEL[k]} {v}" for k, v in per_wh.items()
         )
         summary = (
-            f"{it['name']}：三倉共 {total} 件（{per_wh_text}），"
-            f"價值約 NT$ {value:,}"
+            f"{it['name']}: {total} units across 3 warehouses ({per_wh_text}), "
+            f"value approx NT$ {value:,}"
         )
         if is_low:
-            summary += f"\n⚠️ 低於安全庫存（{it['safety_stock']}）"
+            summary += f"\n⚠️ Below safety stock ({it['safety_stock']})"
     else:
         summary = (
-            f"{it['name']} 在{wh_label}:{per_wh.get(warehouse, 0)} 件，"
-            f"價值約 NT$ {value:,}"
+            f"{it['name']} in {wh_label}: {per_wh.get(warehouse, 0)} units, "
+            f"value approx NT$ {value:,}"
         )
 
     # 到期警示(若該品有保存期限、找最快到期的批)
     next_exp = _next_expiring_batch(it["sku_id"])
     if next_exp and next_exp["level"] in ("red", "orange", "yellow"):
         summary += (
-            f"\n{next_exp['level_emoji']} {next_exp['warehouse_label']}有一批"
-            f"{next_exp['qty']} 件、{next_exp['days_to_expire']} 天到期"
+            f"\n{next_exp['level_emoji']} {next_exp['warehouse_label']} has a batch of "
+            f"{next_exp['qty']} units expiring in {next_exp['days_to_expire']} days"
         )
 
     return {
@@ -822,22 +823,22 @@ def query_movement(
         warehouse_filter=warehouse,
     )
 
-    scope = matched_item_label or "全部商品"
+    scope = matched_item_label or "all items"
     # 倉別 filter 有生效但 summary 沒標（r17：「昨天南倉的出貨」回「昨天全部
     # 商品出貨 48 件」讓人以為是三倉總量）→ 標明倉別
     if warehouse != "all":
-        scope = f"{WAREHOUSE_LABEL.get(warehouse, warehouse)}{scope}"
+        scope = f"{WAREHOUSE_LABEL.get(warehouse, warehouse)} {scope}"
     in_qty, out_qty = agg["in_qty"], agg["out_qty"]
     delta = in_qty - out_qty
 
     if direction == "in":
-        summary = f"{period_label}{scope}進貨 {in_qty:,} 件"
+        summary = f"{period_label} {scope}: {in_qty:,} units received"
     elif direction == "out":
-        summary = f"{period_label}{scope}出貨 {out_qty:,} 件"
+        summary = f"{period_label} {scope}: {out_qty:,} units shipped"
     else:
         summary = (
-            f"{period_label}{scope}:進貨 {in_qty:,} 件、出貨 {out_qty:,} 件"
-            f"（淨變動 {delta:+,}）"
+            f"{period_label} {scope}: {in_qty:,} in, {out_qty:,} out"
+            f" (net {delta:+,})"
         )
 
     return {
@@ -922,14 +923,14 @@ def list_low_stock(
     # 排序:撐天數少的(最急)排前面、平手用缺口 %
     warnings.sort(key=lambda w: (w["days_left"], -w["shortage_pct"]))
 
-    scope_text = f"{wh_label}"
+    scope_text = f"{wh_label}: "
     if cat_label:
-        scope_text += f"{cat_label}類"
+        scope_text += f"{cat_label} "
 
     if not warnings:
         return {
             "ok": True,
-            "summary": f"{scope_text}目前沒有低於安全庫存的商品 ✅",
+            "summary": f"{scope_text}No items below safety stock right now ✅",
             "data": {
                 "warehouse": warehouse,
                 "category":  category,
@@ -941,12 +942,14 @@ def list_low_stock(
     top = warnings[0]
     # 撐幾天提示:< 60 天顯示具體,>=60 天標示「庫存撐得住」
     if top["days_left"] < 60:
-        urgent_text = f"剩 {top['qty']} 件、再 {top['days_left']} 天斷貨、建議補 {top['suggest_qty']} 件"
+        urgent_text = (f"{top['qty']} left, out of stock in {top['days_left']} days, "
+                       f"suggest ordering {top['suggest_qty']}")
     else:
-        urgent_text = f"剩 {top['qty']} 件、缺口 {top['shortage_pct']:.0f}%、建議補 {top['suggest_qty']} 件"
+        urgent_text = (f"{top['qty']} left, {top['shortage_pct']:.0f}% short, "
+                       f"suggest ordering {top['suggest_qty']}")
     summary = (
-        f"⚠️ {scope_text}有 {len(warnings)} 項商品低於安全庫存\n"
-        f"最緊急:{top['name']}({top['warehouse_label']}, {urgent_text})"
+        f"⚠️ {scope_text}{len(warnings)} items are below safety stock\n"
+        f"Most urgent: {top['name']} ({top['warehouse_label']}, {urgent_text})"
     )
     return {
         "ok": True,
@@ -993,7 +996,7 @@ def compare_warehouses(
     # 三倉排名（「哪個倉東西最多」「三個倉哪個最空」「各倉分布」）
     if warehouse_a == "all" or warehouse_b == "all":
         _ml = METRIC_LABEL[metric]
-        ranked = sorted((("north", "北區倉"), ("central", "中區倉"), ("south", "南區倉")),
+        ranked = sorted((("north", "North"), ("central", "Central"), ("south", "South")),
                         key=lambda w: _calc3(w[0]), reverse=True)
         def _fmt(v):
             return (f"NT$ {v:,}" if metric == "stock_value"
@@ -1052,21 +1055,21 @@ def compare_warehouses(
         b_text = f"NT$ {val_b:,}"
         gap_text = f"NT$ {gap:,}"
     elif metric == "item_count":
-        a_text = f"{val_a:,} 件"
-        b_text = f"{val_b:,} 件"
-        gap_text = f"{gap:,} 件"
+        a_text = f"{val_a:,} units"
+        b_text = f"{val_b:,} units"
+        gap_text = f"{gap:,} units"
     else:
         a_text = f"{val_a:.3f}"
         b_text = f"{val_b:.3f}"
         gap_text = f"{gap:.3f}"
 
     if winner == "平手":
-        summary = f"{a_label} vs {b_label} {metric_label}相同（{a_text}）"
+        summary = f"{a_label} vs {b_label}: same {metric_label} ({a_text})"
     else:
         summary = (
-            f"{a_label} {metric_label} {a_text}、"
-            f"{b_label} {metric_label} {b_text}\n"
-            f"{winner}領先 {gap_text}"
+            f"{a_label} {metric_label}: {a_text}, "
+            f"{b_label} {metric_label}: {b_text}\n"
+            f"{winner} leads by {gap_text}"
         )
 
     return {
@@ -1114,15 +1117,15 @@ def list_hot_items(
         rankings.sort(key=lambda r: -r["stock_qty"])
         top = rankings[:10]
         if top:
-            scope = f"{cat_label}類" if cat_label else "全類別"
+            scope = f"{cat_label}" if cat_label else "all categories"
             top_item = top[0]
-            summary = (f"📦 {scope}庫存排行 TOP {len(top)}\n"
-                       f"第 1 名: {top_item['name']}（庫存 {top_item['stock_qty']:,} 件，"
-                       f"價值 NT$ {top_item['stock_value']:,}）")
+            summary = (f"📦 {scope} stock ranking TOP {len(top)}\n"
+                       f"#1: {top_item['name']} ({top_item['stock_qty']:,} units, "
+                       f"value NT$ {top_item['stock_value']:,})")
         else:
-            summary = "目前沒有庫存資料"
+            summary = "No stock data available"
         return {"ok": True, "summary": summary, "view": "hot_items",
-                "data": {"rank_type": "stock", "rank_label": "庫存排行",
+                "data": {"rank_type": "stock", "rank_label": "stock ranking",
                          "category": category, "rankings": top}}
 
     if rank_type not in ("hot", "slow"):
@@ -1156,7 +1159,7 @@ def list_hot_items(
         scope = f"{cat_label}類" if cat_label else ""
         return {
             "ok": True,
-            "summary": f"{period_label}{scope}沒有出貨記錄",
+            "summary": f"No shipment records for {period_label} {scope}",
             "data": {
                 "rank_type": rank_type,
                 "period":    period,
@@ -1183,12 +1186,12 @@ def list_hot_items(
             "revenue":        qty * it["unit_price"],
         })
 
-    scope = f"{cat_label}類" if cat_label else "全類別"
+    scope = f"{cat_label}" if cat_label else "all categories"
     top_item = rankings[0]
     summary = (
-        f"{period_label}{scope}{rank_label} TOP {len(rankings)}\n"
-        f"第 1 名:{top_item['name']}（出 {top_item['out_qty']:,} 件，"
-        f"營收約 NT$ {top_item['revenue']:,}）"
+        f"{period_label} {scope} {rank_label} TOP {len(rankings)}\n"
+        f"#1: {top_item['name']} ({top_item['out_qty']:,} shipped, "
+        f"revenue approx NT$ {top_item['revenue']:,})"
     )
 
     return {
@@ -1390,7 +1393,7 @@ def list_expiring_items(
         if not kw_skus:
             return {
                 "ok": True,
-                "summary": f"倉庫目前沒有「{keyword}」這個商品喔，無法查它的到期狀況。"
+                "summary": f"We do not carry \"{keyword}\", so there is no expiry info."
                            "想看全部的話可以說「快過期的有哪些」。",
                 "data": {"within_days": within_days, "warehouse": warehouse,
                          "category": category, "keyword": keyword,
@@ -1469,10 +1472,10 @@ def list_expiring_items(
 
     top = rows[0]
     summary_parts = []
-    if counts.get("expired"):  summary_parts.append(f"❌ 已過期 {counts['expired']} 批")
-    if counts.get("red"):      summary_parts.append(f"🔴 7 天內 {counts['red']} 批")
-    if counts.get("orange"):   summary_parts.append(f"🟠 14 天內 {counts['orange']} 批")
-    if counts.get("yellow"):   summary_parts.append(f"🟡 30 天內 {counts['yellow']} 批")
+    if counts.get("expired"):  summary_parts.append(f"❌ {counts['expired']} batches expired")
+    if counts.get("red"):      summary_parts.append(f"🔴 {counts['red']} batches within 7 days")
+    if counts.get("orange"):   summary_parts.append(f"🟠 {counts['orange']} batches within 14 days")
+    if counts.get("yellow"):   summary_parts.append(f"🟡 {counts['yellow']} batches within 30 days")
 
     summary = (
         f"⏰ {scope}到期警示({within_days} 天內共 {len(rows)} 批 / 約 NT$ {total_value:,})\n"
@@ -1560,14 +1563,14 @@ import random as _random
 def _confidence_label(conf: float) -> dict:
     """回 {label, level, emoji}。level 給前端上色。"""
     if conf >= 60:
-        return {"label": "黃金組合", "level": "gold",   "emoji": "🔥"}
+        return {"label": "perfect match", "level": "gold",   "emoji": "🔥"}
     if conf >= 45:
-        return {"label": "高度連帶", "level": "high",   "emoji": "💪"}
+        return {"label": "strongly linked", "level": "high",   "emoji": "💪"}
     if conf >= 30:
-        return {"label": "常一起買", "level": "good",   "emoji": "👍"}
+        return {"label": "often bought together", "level": "good",   "emoji": "👍"}
     if conf >= 15:
-        return {"label": "偶爾搭配", "level": "mid",    "emoji": "🤝"}
-    return {"label": "偶然同框", "level": "low",    "emoji": ""}
+        return {"label": "sometimes paired", "level": "mid",    "emoji": "🤝"}
+    return {"label": "occasional", "level": "low",    "emoji": ""}
 
 
 def _pick_quip(anchor_sku: str, co_sku: str) -> tuple[str, str | None]:
@@ -1590,11 +1593,11 @@ def _pick_quip(anchor_sku: str, co_sku: str) -> tuple[str, str | None]:
 
 
 _OPENING_QUIPS = [
-    "買「{a}」的人,通常還順手帶了:",
-    "買「{a}」的人,八成也扛了這些走:",
-    "數據顯示,買「{a}」的人購物車裡還有:",
-    "買「{a}」的人,十之八九也買了:",
-    "跟「{a}」最麻吉的好夥伴是:",
+    "People who buy \"{a}\" usually grab these too:",
+    "Shoppers picking up \"{a}\" often walk out with:",
+    "Data shows carts with \"{a}\" also contain:",
+    "Nine out of ten \"{a}\" buyers also bought:",
+    "The best companions for \"{a}\" are:",
 ]
 
 
@@ -1623,7 +1626,7 @@ def query_related_items(
     if not matches:
         return {
             "ok": True,
-            "summary": f"找不到「{keyword}」相關商品,無法分析連帶購買",
+            "summary": f"No item matches \"{keyword}\", cannot analyse related purchases",
             "data": {"keyword": keyword, "related": []},
             "view": "related_empty",
         }
@@ -1637,7 +1640,7 @@ def query_related_items(
     if anchor_orders == 0 or not co_map:
         return {
             "ok": True,
-            "summary": f"{anchor['name']} 訂單樣本不足,還算不出穩定的連帶關係",
+            "summary": f"Not enough order samples for {anchor['name']} to compute reliable associations",
             "data": {
                 "anchor_sku":  anchor_sku,
                 "anchor_name": anchor["name"],
@@ -1716,23 +1719,24 @@ def query_related_items(
     opening = _random.choice(_OPENING_QUIPS).format(a=anchor["name"])
     summary = (
         f"{opening}\n"
-        f"🔗 {top['name']}（同捆率 {top['confidence']:.0f}% · {top['conf_emoji']}{top['conf_label']}）{top['trend_arrow']}\n"
-        f"　「{top['quip']}」"
+        f"🔗 {top['name']} ({top['confidence']:.0f}% co-purchase · {top['conf_emoji']}{top['conf_label']}) {top['trend_arrow']}\n"
+        f"   {top['quip']}"
     )
     if len(related) >= 2:
         summary += (
-            f"\n🔗 {related[1]['name']}（{related[1]['confidence']:.0f}% · "
-            f"{related[1]['conf_emoji']}{related[1]['conf_label']}）{related[1]['trend_arrow']}"
+            f"\n🔗 {related[1]['name']} ({related[1]['confidence']:.0f}% · "
+            f"{related[1]['conf_emoji']}{related[1]['conf_label']}) {related[1]['trend_arrow']}"
         )
     # 基準說明(讓訪客知道數字怎麼看)
-    summary += "\n📊 註:隨機商品同單約 5%、越高代表關係越強"
+    summary += "\n📊 Note: random pairs co-occur ~5%; higher means a stronger link"
 
     if anchor_is_hot and restock_alerts:
         first = restock_alerts[0]
         if first["suggest_after_days"] <= 1:
-            when = "建議今天就補"
+            when = "suggest restocking today"
         else:
-            when = f"建議 {first['suggest_after_days']} 天內補（{first['suggest_date']} 前）"
+            when = (f"suggest restocking within {first['suggest_after_days']} days "
+                    f"(before {first['suggest_date']})")
         # 缺貨狀態描述:列出低於安全線的倉 vs 還能撐幾天
         if first["is_low_stock"]:
             # 找出哪些倉低
@@ -1740,15 +1744,16 @@ def query_related_items(
             safety_one = first["safety_stock"]
             low_whs = [WAREHOUSE_LABEL[k] for k, q in per_wh.items() if q < safety_one]
             if low_whs:
-                state_text = f"{'、'.join(low_whs)}已低於安全線({safety_one})"
+                state_text = f"{', '.join(low_whs)} below safety level ({safety_one})"
             else:
-                state_text = f"庫存 {first['total_stock']} 件已低於安全水位"
+                state_text = f"stock {first['total_stock']} is below the safety level"
         else:
-            state_text = f"只撐 {first['days_left']} 天"
-        qty_text = f"、建議補 {first['suggest_qty']} 件" if first.get("suggest_qty") else ""
+            state_text = f"only {first['days_left']} days of cover left"
+        qty_text = (f", suggest ordering {first['suggest_qty']}"
+                    if first.get("suggest_qty") else "")
         summary += (
-            f"\n⚠️ {anchor['name']} 出貨量高{anchor_trend['arrow']},"
-            f"連帶品「{first['name']}」{state_text},{when}{qty_text}"
+            f"\n⚠️ {anchor['name']} is shipping fast{anchor_trend['arrow']}, "
+            f"linked item \"{first['name']}\" {state_text}, {when}{qty_text}"
         )
 
     return {

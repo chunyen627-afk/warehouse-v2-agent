@@ -1,7 +1,7 @@
 {
   "scenarios": {
     "home_fitness": {
-      "label": "居家健身",
+      "label": "Home Fitness",
       "emoji": "💪",
       "skus": [
         "s01",
@@ -11,10 +11,11 @@
         "f08",
         "c05",
         "e05"
-      ]
+      ],
+      "label_zh": "居家健身"
     },
     "gadget": {
-      "label": "3C 開箱",
+      "label": "Gadget Unboxing",
       "emoji": "🎧",
       "skus": [
         "e01",
@@ -22,10 +23,11 @@
         "e03",
         "e06",
         "e04"
-      ]
+      ],
+      "label_zh": "3C 開箱"
     },
     "summer_out": {
-      "label": "夏日外出",
+      "label": "Summer Outing",
       "emoji": "🌞",
       "skus": [
         "c10",
@@ -34,20 +36,22 @@
         "s02",
         "f07",
         "f03"
-      ]
+      ],
+      "label_zh": "夏日外出"
     },
     "newborn": {
-      "label": "新手爸媽",
+      "label": "New Parents",
       "emoji": "👶",
       "skus": [
         "d06",
         "d07",
         "c08",
         "f06"
-      ]
+      ],
+      "label_zh": "新手爸媽"
     },
     "coffee": {
-      "label": "居家手沖咖啡",
+      "label": "Home Coffee Brewing",
       "emoji": "☕",
       "skus": [
         "a06",
@@ -56,10 +60,11 @@
         "s09",
         "a07",
         "f10"
-      ]
+      ],
+      "label_zh": "居家手沖咖啡"
     },
     "running": {
-      "label": "路跑運動",
+      "label": "Running",
       "emoji": "🏃",
       "skus": [
         "s08",
@@ -69,10 +74,11 @@
         "f07",
         "c10",
         "e05"
-      ]
+      ],
+      "label_zh": "路跑運動"
     },
     "daily_buy": {
-      "label": "日常採買",
+      "label": "Everyday Shopping",
       "emoji": "🧺",
       "skus": [
         "d02",
@@ -80,10 +86,11 @@
         "d04",
         "a02",
         "a04"
-      ]
+      ],
+      "label_zh": "日常採買"
     },
     "camping": {
-      "label": "露營野炊",
+      "label": "Camping & Cookout",
       "emoji": "🏕️",
       "skus": [
         "s06",
@@ -95,10 +102,11 @@
         "s10",
         "s09",
         "f05"
-      ]
+      ],
+      "label_zh": "露營野炊"
     },
     "cleaning": {
-      "label": "居家大掃除",
+      "label": "Spring Cleaning",
       "emoji": "🧹",
       "skus": [
         "d01",
@@ -106,10 +114,11 @@
         "d05",
         "d09",
         "a10"
-      ]
+      ],
+      "label_zh": "居家大掃除"
     },
     "winter": {
-      "label": "冬季保暖",
+      "label": "Winter Warmth",
       "emoji": "❄️",
       "skus": [
         "c03",
@@ -117,10 +126,11 @@
         "c04",
         "c09",
         "f09"
-      ]
+      ],
+      "label_zh": "冬季保暖"
     },
     "home_office": {
-      "label": "居家辦公",
+      "label": "Home Office",
       "emoji": "💻",
       "skus": [
         "e07",
@@ -130,10 +140,11 @@
         "f04",
         "f10",
         "f05"
-      ]
+      ],
+      "label_zh": "居家辦公"
     },
     "kitchen_cook": {
-      "label": "廚房料理",
+      "label": "Kitchen Cooking",
       "emoji": "🍳",
       "skus": [
         "a03",
@@ -141,220 +152,221 @@
         "a09",
         "a01",
         "f01"
-      ]
+      ],
+      "label_zh": "廚房料理"
     },
     "basic_wear": {
-      "label": "基本服飾",
+      "label": "Basics Wardrobe",
       "emoji": "👕",
       "skus": [
         "c01",
         "c04",
         "a02",
         "c09"
-      ]
+      ],
+      "label_zh": "基本服飾"
     }
   },
   "pair_quips": {
     "d06|f06": [
-      "顧小孩的爸爸也需要喘口氣(這是真實案例喔)",
-      "換完十片尿布,沒啤酒撐不下去",
-      "半夜泡奶的爸爸:這罐是續命水",
-      "聽起來很瞎,但大數據真的這麼說",
-      "尿布配啤酒,當年也嚇到一票人",
-      "育兒辛苦,啤酒慰勞,合情合理"
+      "Dad on diaper duty needs a cold one (yes, the textbook case)",
+      "Baby finally asleep - time for a well-earned beer",
+      "The most famous pair in retail analytics",
+      "Sounds odd, but the data swears by it",
+      "Night shift supplies: one for baby, one for dad"
     ],
     "e01|e03": [
-      "線永遠少一條,你家也是吧",
-      "買耳機不買線,像買車不加油",
-      "快充線是消耗品界的衛生紙",
-      "今天不補,明天就在抽屜翻舊線",
-      "沒線的耳機只能當裝飾品"
+      "Earphones die, cable saves the day",
+      "Buy the earphones, buy the cable - simple maths",
+      "A charging cable is the vitamin of every gadget",
+      "Two-day battery means daily cable hunting",
+      "No cable, no music. Enough said"
     ],
     "e01|e02": [
-      "耳機沒電,比分手還痛苦",
-      "出門沒電,寸步難行",
-      "電量焦慮的救星",
-      "一沒電就想起它的好",
-      "現代人離不開的小磚頭"
+      "Music all day needs a battery that lasts",
+      "Earphones plus power bank: the commuter combo",
+      "Nothing kills a playlist like 1% battery",
+      "Both wireless, both hungry for charge",
+      "The out-and-about survival kit"
     ],
     "a06|f02": [
-      "有機器沒豆子,只能煮白開水",
-      "咖啡機餓了要餵豆子",
-      "買機器不買豆,是要泡空氣?",
-      "機器是鍋,豆子是米",
-      "沒豆子的咖啡機,貴重擺飾一個"
+      "A machine with no beans just makes hot water",
+      "Beans are the fuel; the machine is only the engine",
+      "Buy the machine, then buy beans forever",
+      "The machine lasts years, the beans last a fortnight",
+      "No beans, no aroma - the maths is simple"
     ],
     "a06|d10": [
-      "濾紙是消耗品,永遠在缺",
-      "沒濾紙,咖啡渣喝好喝滿",
-      "便宜但少了它整組卡關",
-      "濾紙界的衛生紙,用超快",
-      "忘了買它,明早乾瞪眼"
+      "Filters are the consumable nobody remembers until it's too late",
+      "Cheap to buy, painful to run out of",
+      "One filter per cup, they vanish fast",
+      "The machine is the star; filters are the crew",
+      "Run out of filters and the machine is just decor"
     ],
     "a08|s06": [
-      "帳篷搭好總要吃飯吧",
-      "露營不開伙,叫去山上睡覺",
-      "沒鍋只能啃乾糧",
-      "帳篷管睡,鍋管吃",
-      "野炊才是露營的靈魂"
+      "Tent for sleeping, cookware for eating - camping in a nutshell",
+      "Nobody drives to the mountains to eat cold bread",
+      "Shelter and supper, bought in the same trip",
+      "The two heaviest things in every car boot",
+      "Set up camp, then start cooking"
     ],
     "d08|s06": [
-      "不擦它你就是蚊子的吃到飽",
-      "山上蚊子比人還熱情",
-      "防蚊液就是保命符",
-      "少了它整夜在抓癢",
-      "蚊子:歡迎光臨"
+      "The mountain has mosquitoes. Lots of them",
+      "Forget repellent and you'll remember all night",
+      "Tent keeps the rain out, repellent keeps the bites out",
+      "Cheapest insurance in the whole camping kit",
+      "One spray, a night of peace"
     ],
     "s01|s03": [
-      "在家練全靠這兩樣",
-      "墊子鋪好,環就該上場",
-      "一起買才有運動的藉口",
-      "練腿神器,缺不得",
-      "居家健身房成形"
+      "Mat for the floor work, ring for the burn",
+      "The living-room gym starter pack",
+      "Both fold away, both get used at 11pm",
+      "Stretch first, squeeze second",
+      "Small kit, surprisingly sore the next day"
     ],
     "c06|s08": [
-      "跑步穿棉T,濕黏到懷疑人生",
-      "跑者的第二層皮膚",
-      "排汗才跑得舒服",
-      "穿錯衣服跑步像泡水",
-      "跟慢跑鞋是一組的"
+      "Shoes for the road, shirt for the sweat",
+      "Cotton on a 10K run is a rookie mistake",
+      "Feet dry, back dry - that's the whole idea",
+      "The runner's uniform, bought together",
+      "New shoes deserve a proper shirt"
     ],
     "f07|s08": [
-      "流汗到虛脫,喝它就對了",
-      "跑完的續命水",
-      "白開水補不回的它能",
-      "跑者背包必備",
-      "沒它跑長距離會掛"
+      "Run first, rehydrate immediately after",
+      "Sweat takes salts with it - put them back",
+      "The finish-line reward that's actually useful",
+      "Shoes get you there, electrolytes get you home",
+      "Every runner's boot has one rolling around"
     ],
     "c02|c03": [
-      "外套暖上身,襪子暖腳",
-      "腳冷整個人都冷",
-      "保暖不能只顧上半身",
-      "冬天的腳需要它",
-      "一套配下來才完整"
+      "Cold feet ruin a warm coat",
+      "Layer the body, don't forget the toes",
+      "Winter's two most underrated purchases",
+      "The jacket gets the credit, the socks do the work",
+      "Bought on the same cold morning"
     ],
     "c03|f09": [
-      "冷天來一杯,幸福加倍",
-      "外套暖外面,可可暖裡面",
-      "冬天的小確幸",
-      "捧著喝整個人都融化",
-      "配冷天一流"
+      "Warm coat outside, warm cocoa inside",
+      "Winter's full comfort package",
+      "Come in from the cold, put the kettle on",
+      "One warms the body, one warms the mood",
+      "The classic cold-snap basket"
     ],
     "d01|d05": [
-      "打掃完一堆垃圾要裝哪?",
-      "掃除三寶之一",
-      "永遠不嫌多的東西",
-      "沒袋子,垃圾堆成山",
-      "便宜又天天要用"
+      "Wash the clothes, bin the rest - cleaning day staples",
+      "Both bought by the armful, both run out quietly",
+      "The unglamorous heroes of the household",
+      "Nobody buys just one of these",
+      "Restock day essentials"
     ],
     "d01|d09": [
-      "徒手碰清潔劑,手會哭",
-      "保護雙手第一線",
-      "洗碗刷廁所都靠它",
-      "沒手套,做家事像受刑",
-      "媽媽的隱形盔甲"
+      "Detergent for the clothes, gloves for your hands",
+      "Strong cleaner deserves proper protection",
+      "The pair that survives every deep clean",
+      "Hands say thank you later",
+      "Cleaning kit, complete"
     ],
     "d06|d07": [
-      "尿布的最佳拍檔",
-      "換尿布沒它,場面很慘",
-      "一片接一片,缺不得",
-      "擦屁屁擦手都靠它",
-      "育兒消耗第一名"
+      "Diapers and wipes: never buy one without the other",
+      "The two things you always need at 3am",
+      "Bought in bulk, gone in a week",
+      "New-parent maths: always buy more",
+      "The nappy bag's inseparable duo"
     ]
   },
   "scenario_quips": {
     "coffee": [
-      "在家喝咖啡這套要備齊,缺一樣就卡關",
-      "想當家庭咖啡師,這些是基本配備",
-      "咖啡魂上身的人都會一起帶",
-      "少了它,在家喝咖啡的儀式感就斷了",
-      "懂咖啡的人購物車都長這樣",
-      "一起買才湊得出一杯像樣的咖啡"
+      "Serious about home brewing? Missing one piece ruins it",
+      "Building a home cafe - these are the basics",
+      "Coffee people buy these as a set",
+      "One missing item and the morning ritual falls apart",
+      "The home barista's shopping list",
+      "Buy them together, brew a proper cup"
     ],
     "camping": [
-      "都是露營要扛上山的東西",
-      "少帶一樣,露營體驗直接打折",
-      "露營老手的車廂都塞這些",
-      "山上沒便利商店,沒帶就只能後悔",
-      "一車裝好裝滿才叫露營",
-      "露營要快樂,這些缺不得"
+      "All the things you carry up the mountain",
+      "Pack these and you won't be borrowing from neighbours",
+      "The gear that separates fun trips from long nights",
+      "Forget one and you'll regret it after dark",
+      "One trip, one full kit",
+      "Camping is fun - as long as nothing's missing"
     ],
     "home_fitness": [
-      "在家練全靠這幾樣",
-      "想動起來,這些是入門配備",
-      "居家健身房就是這樣湊出來的",
-      "練的人購物車都這個調調",
-      "一起買才有運動的藉口"
+      "The living room becomes the gym",
+      "No commute, no queue, no excuses",
+      "Small kit, real sweat",
+      "Everything folds under the sofa",
+      "The at-home training starter set"
     ],
     "newborn": [
-      "新手爸媽的購物車標配",
-      "有了寶寶,這些天天都在消耗",
-      "顧小孩的人都懂這些缺不得",
-      "育兒消耗品,缺一個就崩潰",
-      "爸媽半夜衝超商就為了這些"
+      "New-parent survival supplies",
+      "Bought by the box, gone in days",
+      "The 3am essentials",
+      "Stock up now, thank yourself later",
+      "Everything the nappy bag needs"
     ],
     "cleaning": [
-      "大掃除三寶,缺一不可",
-      "打掃日這些一起出動",
-      "想把家弄乾淨,這些是基本盤",
-      "認真掃除的人都這樣備貨",
-      "少一樣,掃到一半就要跑賣場"
+      "Deep-clean day, full arsenal",
+      "One pass through the house needs all of these",
+      "The weekend reset kit",
+      "Cleaning is easier with the right supplies",
+      "Buy together, clean once"
     ],
     "gadget": [
-      "3C 控的購物車都長這樣",
-      "買了主機,配件當然一起帶",
-      "少了它,新玩具威力減半",
-      "開箱要爽,配件不能省",
-      "科技宅都是整套帶走的"
+      "Unboxing day essentials",
+      "The accessories that make the gadget usable",
+      "New device, new cables, new case",
+      "Tech people buy these in one go",
+      "Protect it, power it, enjoy it"
     ],
     "running": [
-      "跑者的標準裝備就這些",
-      "認真跑步的人都會一起買",
-      "少一樣,跑起來就不對勁",
-      "想跑得舒服,這些缺不得",
-      "跑步咖購物車的固定班底"
+      "Road-running kit, head to toe",
+      "Shoes, shirt, hydration - the holy trinity",
+      "Everything you need before the 6am alarm",
+      "Runners rarely buy just one of these",
+      "Train properly, recover properly"
     ],
     "winter": [
-      "冬天保暖這套要配齊",
-      "天冷了大家都這樣買",
-      "少一樣,寒流來就後悔",
-      "保暖不能只顧一個地方",
-      "冬季出門的標準打扮"
+      "Cold-snap shopping list",
+      "Layer up, warm up",
+      "The gear that makes winter bearable",
+      "Bought the week the temperature drops",
+      "Warm outside, warm inside"
     ],
     "home_office": [
-      "在家上班的人桌上都這些",
-      "WFH 必備,少一樣效率掉一半",
-      "居家辦公的固定採購清單",
-      "想在家做事順手,這些要備好",
-      "遠端工作者的購物車日常"
+      "Working from home, properly equipped",
+      "Desk setup plus the snacks that survive deadlines",
+      "The remote-work starter pack",
+      "Comfortable desk, productive day",
+      "Everything within arm's reach of the keyboard"
     ],
     "kitchen_cook": [
-      "愛下廚的人廚房都這些",
-      "想做頓飯,這些是基本工具",
-      "料理魂上身就會一起買",
-      "廚房沒這些,巧婦難為",
-      "認真煮飯的人都這樣備"
+      "Cooking at home needs the right tools",
+      "Pan, containers, and something to drink",
+      "The kitchen basics that get used daily",
+      "Cook once, store the rest",
+      "Everything for a proper home-cooked meal"
     ],
     "summer_out": [
-      "夏天出門這套要帶齊",
-      "天熱外出大家都這樣買",
-      "少一樣,曬到中暑別怪我",
-      "夏日防曬補水的標配",
-      "出去玩前都會掃這些"
+      "Sun's out - here's the survival kit",
+      "Hat, repellent, and something cold",
+      "Everything for a day outdoors",
+      "Beat the heat, dodge the bites",
+      "Summer outings need supplies"
     ],
     "daily_buy": [
-      "日常採買的固定班底",
-      "家裡會用完的就這些",
-      "逛賣場順手都會帶",
-      "生活消耗品,缺了就麻煩",
-      "每次採買都少不了它們"
+      "The everyday restock run",
+      "Nothing exciting, everything necessary",
+      "The basket that repeats every fortnight",
+      "Household staples, bought on autopilot",
+      "Run out of these and you notice immediately"
     ],
     "basic_wear": [
-      "衣櫃基本款都這幾樣",
-      "穿搭打底就靠這些",
-      "百搭不退流行的基本盤",
-      "買衣服的人都會一起帶",
-      "衣櫃裡的萬年班底"
+      "Wardrobe basics, always in rotation",
+      "Nothing flashy, everything worn",
+      "The pieces that go with anything",
+      "Restocked every season",
+      "Simple, reliable, always needed"
     ]
   },
   "sku_scenarios": {

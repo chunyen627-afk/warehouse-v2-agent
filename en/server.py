@@ -284,10 +284,11 @@ def is_meaningful_input(text: str) -> bool:
 
 
 GATEKEEPER_REJECT_MSG = (
-    "這個 demo 是倉管助理、可以幫你查庫存 / 進出貨 / 缺貨警示。\n"
-    "試試這樣問：\n"
-    "「藍牙耳機庫存」「庫存警示」「本月熱銷排行」「北倉跟南倉比較」\n"
-    "或輸入「查倉管」看完整功能列表！"
+    "This demo is a warehouse assistant — I can check stock, movements and low-stock alerts.\n"
+    "Try asking:\n"
+    "\"bluetooth earphones stock\"  \"what's running low\"  \"best sellers this month\"  "
+    "\"compare north and south\"\n"
+    "Or type \"help\" to see everything I can do!"
 )
 
 # 明顯非倉管領域的黑名單（股市/天氣/電影…）— 就算含「查」也不放行
@@ -2070,7 +2071,7 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
             _tied = [r["item"]["name"] for r in _oov_m
                      if r["score"] * 2 >= _top_s][:8]
             return {"auto_fix": False,
-                    "question": f"「{keyword}」對應到 {len(_tied)} 個商品，你是指哪一個？",
+                    "question": f"\"{keyword}\" matches {len(_tied)} items. Which one do you mean?",
                     "options": _tied,
                     "hint": "點選其中一項，或直接輸入完整商品名稱",
                     "oov": True, "original_keyword": keyword}
@@ -5552,7 +5553,7 @@ async def _check_alert_rules():
             scope = rule.get("scope", [])  # [] = 全部
             cond_label = rule.get("condition_label", cond)
             scope_names = rule.get("scope_names", [])
-            scope_txt = "全部商品" if not scope_names else "、".join(scope_names[:3])
+            scope_txt = "all items" if not scope_names else ", ".join(scope_names[:3])
 
             triggered = False
             detail = ""
@@ -6345,7 +6346,7 @@ async def get_alerts():
                         "expiring": "快到期", "below_threshold": "低於指定數量"}
         for r in rules:
             r["condition_label"] = _cond_labels.get(r["condition"], r["condition"])
-            r["scope_txt"] = "全部商品" if not r.get("scope_names") else "、".join(r["scope_names"][:3])
+            r["scope_txt"] = "all items" if not r.get("scope_names") else ", ".join(r["scope_names"][:3])
         return JSONResponse({"rules": rules}, headers=NO_CACHE)
     except Exception as e:
         return JSONResponse({"rules": [], "error": str(e)})
@@ -9869,7 +9870,7 @@ async def ws_handler(ws: WebSocket):
                         # 把修復提示帶入後續 result，由工具回傳後前端顯示
                         # （fixed_keyword 為空時不加提示——「昨天進了什麼貨」的
                         # 雜訊 kw 被修成空字串曾顯示「已自動對應至「」」）
-                        _oov_hint = (f"（已自動對應至「{oov['fixed_keyword']}」）"
+                        _oov_hint = (f"(auto-matched to \"{oov['fixed_keyword']}\") "
                                      if oov.get("fixed_keyword") else "")
                     else:
                         # 給選單：回傳 clarify，等使用者選

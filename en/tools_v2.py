@@ -145,15 +145,15 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
         if all_disc:
             all_disc.sort(key=lambda d: d["gap"], reverse=True)
             _trace(steps, "reason",
-                   f"發現 {len(all_disc)} 筆短收，最大：{all_disc[0]['name']} "
+                   f"found {len(all_disc)} short-received records, largest: {all_disc[0]['name']} "
                    f"（{all_disc[0]['po_id']}）應收 {all_disc[0]['order_qty']} / "
                    f"實收 {all_disc[0]['received_qty']} → 差 {all_disc[0]['gap']} 件")
             total_gap = sum(d["gap"] for d in all_disc)
-            summary = (f"全倉共 {len(all_disc)} 筆採購對帳異常（PO 對不上），合計短收 {total_gap} 件。"
-                       f"最大筆：{all_disc[0]['name']} 在 {all_disc[0]['po_id']} 短收 {all_disc[0]['gap']} 件。")
+            summary = (f"{len(all_disc)} purchase reconciliation issues found (PO mismatch), {total_gap} units short in total. "
+                       f"Largest: {all_disc[0]['name']} short {all_disc[0]['gap']} units on {all_disc[0]['po_id']}.")
         else:
-            _trace(steps, "reason", f"掃完 {po_count} 張採購單，未發現短收")
-            summary = "全域掃描完成，目前無採購短收異常。"
+            _trace(steps, "reason", f"scanned {po_count} purchase orders, no shortfall found")
+            summary = "Scan complete: no purchase shortfall issues found."
         return {"ok": True, "summary": summary, "view": "agent_rca",
                 "data": {"keyword": keyword, "rows": [], "row_count": 0, "truncated": False,
                          "discrepancies": all_disc, "cause_found": bool(all_disc), "trace": steps}}
@@ -185,7 +185,7 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
     MAX_ROWS = 200
     truncated = len(rows) > MAX_ROWS
     shown = rows[:MAX_ROWS]
-    kw_disp = keyword or "全部商品"
+    kw_disp = keyword or "all items"
     _trace(steps, "grep", f"在交易檔中比對「{kw_disp}」→ 找到 {len(rows)} 筆"
            + (f"（截斷顯示前 {MAX_ROWS}）" if truncated else ""),
            hits=len(rows), truncated=truncated)
@@ -262,13 +262,13 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
 
     # ④ Reason：產出結論
     sup_by_id = {s["supplier_id"]: s["name"] for s in W.state().v2_suppliers}
-    WH_LABEL = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
+    WH_LABEL = {"north": "North", "central": "Central", "south": "South"}
     if discrepancies:
         d0 = discrepancies[0]
         sup_name = sup_by_id.get(d0["supplier"], d0["supplier"])
         wh_label = WH_LABEL.get(d0["warehouse"], d0["warehouse"])
         # 推理摘要：每步一行，最後是結論
-        lines_out = [f"🔍 鎖定商品：{d0['name']}"]
+        lines_out = [f"🔍 Item: {d0['name']}"]
         # 列出每張短收 PO（最多 3 筆）
         for d in discrepancies[:3]:
             wl = WH_LABEL.get(d["warehouse"], d["warehouse"])
@@ -292,15 +292,15 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
             tin  = sum(r["qty"] for r in rows if r["direction"] == "in")
             tout = sum(r["qty"] for r in rows if r["direction"] == "out")
             if sku_ids:
-                summary = (f"🔍 鎖定商品：{kw_disp}\n"
-                           f"📋 查完所有相關 PO，未發現短收\n"
-                           f"✅ 結論：進貨 {tin} 件、出貨 {tout} 件，帳目正常。")
+                summary = (f"🔍 Item: {kw_disp}\n"
+                           f"📋 Checked all related POs, no shortfall found\n"
+                           f"✅ Conclusion: {tin} in, {tout} out - records are consistent.")
             else:
-                summary = (f"🔍 泛查「{kw_disp}」：共 {len(rows)} 筆異動\n"
-                           f"   進貨 {tin} 件、出貨 {tout} 件\n"
-                           f"💡 輸入具體商品名稱可追查短收原因")
+                summary = (f"🔍 Broad search \"{kw_disp}\": {len(rows)} movements\n"
+                           f"   {tin} in, {tout} out\n"
+                           f"💡 Type a specific item name to trace shortfall causes")
         else:
-            summary = f"查無「{kw_disp}」在指定範圍的異動紀錄。"
+            summary = f"No movement records found for \"{kw_disp}\" in the given range."
         _trace(steps, "reason", "未發現短收（已查PO）" if sku_ids else "泛查無PO對帳")
         cause_found = False
 
@@ -437,7 +437,7 @@ def manage_config(action: str = "read", key: str = "", value=None,
             # 指名商品時把實際數值講出來（r24：「露營馬克杯的安全庫存設多少」
             # 曾只回「基準值寫在 config」的空話）；沒指名才回整體說明。
             if skus:
-                _wh_lbl = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
+                _wh_lbl = {"north": "North", "central": "Central", "south": "South"}
                 parts = []
                 for r in rows[:3]:
                     vals = set(r["by_warehouse"].values())
@@ -449,8 +449,8 @@ def manage_config(action: str = "read", key: str = "", value=None,
                 summary = "目前安全庫存：" + "；".join(parts) + "。"
             else:
                 # r59：指定倉別時摘要要講出來（「只看南倉的」曾回不含倉別的泛話）
-                _sc_lbl = {"north": "北區倉", "central": "中區倉",
-                           "south": "南區倉"}.get(warehouse, "")
+                _sc_lbl = {"north": "North", "central": "Central",
+                           "south": "South"}.get(warehouse, "")
                 summary = (f"目前{_sc_lbl}安全庫存設定（{len(rows)} 項，含分倉覆寫值）如下表。"
                            if _sc_lbl else
                            f"目前安全庫存設定（{len(rows)} 項）：基準值寫在 config，可分倉覆寫。")
@@ -460,7 +460,7 @@ def manage_config(action: str = "read", key: str = "", value=None,
             cur = cfg.get(canon)
             label = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
                      "restock_target_days": "補貨目標天數"}.get(canon, canon)
-            summary = f"目前「{label}」設定為：{cur}。"
+            summary = f"\"{label}\" is currently set to {cur}."
             return {"ok": True, "summary": summary, "view": "config_read",
                     "data": {"canon": canon, "current": cur, "label": label, "trace": steps}}
 
@@ -509,8 +509,8 @@ def manage_config(action: str = "read", key: str = "", value=None,
                    f"預覽：{'全部' if not skus else len(skus)} 商品 × {len(whs)} 倉 → 共 {len(preview)} 項異動")
             verb = f"{'增加' if num >= 0 else '減少'} {abs(num)}" if mode == "delta" else f"設為 {num}"
             wh_label = "全部倉" if warehouse == "all" else \
-                       {"north": "北區倉", "central": "中區倉", "south": "南區倉"}.get(warehouse, warehouse)
-            scope = "全部商品" if not skus else "、".join(it["name"] for it in skus[:3])
+                       {"north": "North", "central": "Central", "south": "South"}.get(warehouse, warehouse)
+            scope = "all items" if not skus else ", ".join(it["name"] for it in skus[:3])
             summary = (f"準備把【{wh_label}】的【{scope}】安全庫存{verb}，"
                        f"共影響 {len(preview)} 項。請確認後才會寫入。")
             return {
@@ -526,7 +526,7 @@ def manage_config(action: str = "read", key: str = "", value=None,
             new = (old + num) if mode == "delta" else num
             label = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
                      "restock_target_days": "補貨目標天數"}.get(canon, canon)
-            summary = f"準備把「{label}」從 {old} 改為 {new}。請確認後才會寫入。"
+            summary = f"About to change \"{label}\" from {old} to {new}. Please confirm to apply."
             return {"ok": True, "summary": summary, "view": "config_confirm",
                     "data": {"pending": True, "canon": canon, "old": old, "new": new,
                              "label": label, "trace": steps}}
@@ -629,7 +629,7 @@ def run_script(script_name: str = "", **_kw) -> dict:
 
     # 安全護欄：只回「待確認」，不直接 subprocess（執行交給 server confirm 後）
     _trace(steps, "confirm", f"命中白名單腳本：{sc['label']}（逾時上限 {sc['timeout_s']}s）")
-    summary = f"準備執行白名單腳本【{sc['label']}】：{sc.get('description', sc.get('desc', ''))}。請確認後執行。"
+    summary = f"About to run whitelisted script [{sc['label']}]: {sc.get('description', sc.get('desc', ''))}. Please confirm."
     return {"ok": True, "summary": summary, "view": "script_confirm",
             "data": {"pending": True, "script_id": sc["id"], "label": sc["label"],
                      "desc": sc.get("description", sc.get("desc", "")), "timeout_s": sc["timeout_s"], "trace": steps}}
@@ -968,15 +968,15 @@ def set_alert(condition: str = "", target: str = "",
         rules = json.load(open(rules_path, encoding="utf-8")).get("rules", [])
     rule_id = f"AL{len(rules) + 1:03d}"
 
-    _cond_labels = {"below_safety": "低於安全庫存", "out_of_stock": "缺貨/斷貨",
+    _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
                     "expiring": "快到期",
                     "below_threshold": f"低於 {threshold} 個" if threshold else "低於指定數量"}
     cond_label = _cond_labels.get(cond, cond)
-    scope_txt = "全部商品" if not scope else "、".join(scope_names[:3])
-    _trace(steps, "reason", f"準備建立警示規則 {rule_id}：{scope_txt} → {cond_label}")
+    scope_txt = "all items" if not scope else ", ".join(scope_names[:3])
+    _trace(steps, "reason", f"creating alert rule {rule_id}: {scope_txt} -> {cond_label}")
 
     # HITL：先回傳草稿讓使用者確認，commit_alert_set() 才真正寫入
-    summary = f"確認後將設定警示：當【{scope_txt}】發生「{cond_label}」時主動通知"
+    summary = f"On confirm, an alert will be set: notify when [{scope_txt}] hits \"{cond_label}\""
     return {"ok": True, "summary": summary, "view": "alert_confirm",
             "data": {"rule_id": rule_id, "condition": cond, "condition_label": cond_label,
                      "scope": scope, "scope_names": scope_names,
@@ -1090,9 +1090,9 @@ def commit_alert_set(pending: dict, actor: str = "user_confirmed", trace_id: str
 
     cond_label = pending.get("condition_label", pending["condition"])
     scope_names = pending.get("scope_names", [])
-    scope_txt = "全部商品" if not scope_names else "、".join(scope_names[:3])
+    scope_txt = "all items" if not scope_names else ", ".join(scope_names[:3])
     return {"ok": True,
-            "summary": f"警示規則 {pending['rule_id']} 已啟用：當【{scope_txt}】發生「{cond_label}」時主動通知。",
+            "summary": f"Alert rule {pending['rule_id']} is now active: notify when [{scope_txt}] hits \"{cond_label}\".",
             "view": "alert_done",
             "data": {"rule_id": pending["rule_id"], "condition": pending["condition"],
                      "condition_label": cond_label, "scope_names": scope_names, "trace_id": trace_id}}
@@ -1213,7 +1213,7 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
     freq_label = _freq_labels.get(freq, freq)
     job_id = f"SCH{len(jobs)+1:03d}"
 
-    summary = f"確認後將設定排程：{freq_label} {time_str} 自動執行【{sc['label']}】"
+    summary = f"On confirm, a schedule will be set: run [{sc['label']}] automatically {freq_label} at {time_str}"
     return {"ok": True, "summary": summary, "view": "schedule_confirm",
             "data": {"job_id": job_id, "script_id": sc["id"], "script_label": sc["label"],
                      "freq": freq, "freq_label": freq_label, "time_str": time_str}}
@@ -1255,7 +1255,7 @@ def list_schedules() -> dict:
                 "data": {"jobs": []}}
     jobs = json.loads(jobs_path.read_text("utf-8")).get("jobs", [])
     active = [j for j in jobs if j.get("enabled", True)]
-    summary = f"目前有 {len(active)} 個排程啟用中。"
+    summary = f"{len(active)} scheduled jobs are active."
     return {"ok": True, "summary": summary, "view": "schedule_list", "data": {"jobs": active}}
 
 
@@ -1309,12 +1309,12 @@ def list_alerts() -> dict:
                 "data": {"rules": []}}
     rules = json.load(open(rules_path, encoding="utf-8")).get("rules", [])
     active = [r for r in rules if r.get("enabled", True)]
-    _cond_labels = {"below_safety": "低於安全庫存", "out_of_stock": "缺貨/斷貨",
+    _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
                     "expiring": "快到期", "below_threshold": "低於指定數量"}
     for r in active:
         r["condition_label"] = _cond_labels.get(r["condition"], r["condition"])
-        r["scope_txt"] = "全部商品" if not r.get("scope_names") else "、".join(r["scope_names"][:3])
-    summary = f"目前有 {len(active)} 條警示規則啟用中。"
+        r["scope_txt"] = "all items" if not r.get("scope_names") else ", ".join(r["scope_names"][:3])
+    summary = f"{len(active)} alert rules are active."
     return {"ok": True, "summary": summary, "view": "alert_list", "data": {"rules": active}}
 
 
@@ -1331,7 +1331,7 @@ def delete_alert(rule_id: str = "") -> dict:
     rule = next((r for r in rules if r["id"] == rule_id), None)
     if not rule:
         return W._err(f"找不到規則 {rule_id}")
-    _cond_labels = {"below_safety": "低於安全庫存", "out_of_stock": "缺貨/斷貨",
+    _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
                     "expiring": "快到期", "below_threshold": "低於指定數量"}
     cond_label = _cond_labels.get(rule.get("condition"), rule.get("condition", ""))
     return {"ok": True,
@@ -1754,9 +1754,9 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                          "options": [], "hint": ""}}
 
     wh = (warehouse or "").strip()
-    _WH_ALIASES = {"north": "north", "北": "north", "北倉": "north", "北區倉": "north", "北區": "north",
-                   "central": "central", "中": "central", "中倉": "central", "中區倉": "central", "中區": "central",
-                   "south": "south", "南": "south", "南倉": "south", "南區倉": "south", "南區": "south"}
+    _WH_ALIASES = {"north": "north", "北": "north", "北倉": "north", "North": "north", "北區": "north",
+                   "central": "central", "中": "central", "中倉": "central", "Central": "central", "中區": "central",
+                   "south": "south", "南": "south", "南倉": "south", "South": "south", "南區": "south"}
     wh_key = _WH_ALIASES.get(wh, "")
     if not wh_key:
         _dir_label_zh = _movement_dir_label(direction)
@@ -1838,7 +1838,7 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                      "is_return": is_return}}
 
 
-WH_LABEL_MAP = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
+WH_LABEL_MAP = {"north": "North", "central": "Central", "south": "South"}
 
 
 def commit_movement(pending: dict, actor: str = "user_confirmed",
@@ -1929,9 +1929,9 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
 #    來源倉不足擋下，交易紀錄拆成「來源倉 out + 目標倉 in」兩筆（跟現有
 #    transactions 格式一致，RCA/報表完全不用改）。2026-07-02 新增。
 # ════════════════════════════════════════════════════════════
-_WH_ALIASES_TF = {"north": "north", "北": "north", "北倉": "north", "北區倉": "north", "北區": "north",
-                  "central": "central", "中": "central", "中倉": "central", "中區倉": "central", "中區": "central",
-                  "south": "south", "南": "south", "南倉": "south", "南區倉": "south", "南區": "south"}
+_WH_ALIASES_TF = {"north": "north", "北": "north", "北倉": "north", "North": "north", "北區": "north",
+                  "central": "central", "中": "central", "中倉": "central", "Central": "central", "中區": "central",
+                  "south": "south", "南": "south", "南倉": "south", "South": "south", "南區": "south"}
 
 
 def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
