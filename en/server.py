@@ -10969,11 +10969,18 @@ async def ws_handler(ws: WebSocket):
                     "create_movement":    ["解析商品與數量", "比對倉庫與庫存", "產生確認卡"],
                 }
                 plan_steps = _TASK_PLANS.get(func_name, ["分析請求", "執行查詢", "回傳結果"])
-                # EN build：**不送 task_plan**（user 2026-07-25 決定移除）。
-                #   理由：三個泛泛步驟（解析→比對→產生）每次都差不多、對訪客
-                #   沒有資訊量，而且跟下面真正有內容的 Agent trace 重複。
-                #   plan_steps 保留——下面的 task_tick 打勾節奏用它的長度算，
-                #   前端沒有 task_plan 元素時 tick 會自己 return，不影響。
+                # **不送 task_plan**（user 2026-07-25 決定移除，中英同步）。
+                #   原意是給 Agent 一個 checklist 視覺效果，但下面的 Agent
+                #   trace 已經在做同一件事、而且說的是**真的做了什麼**：
+                #     task_plan：解析商品與數量 / 比對倉庫與庫存 / 產生確認卡
+                #                （寫死，每次都一樣）
+                #     trace    ：scanned transactions/ → 180/180 log files
+                #                matched "Electric Toothbrush" → 86 records
+                #                scanned POs → 22 contain it（帶真實數字）
+                #   trace 同樣逐步展開、task_tick 打勾也還在送，所以視覺效果
+                #   沒少，反而少了一塊寫死的內容弱化 demo 說服力。
+                #   plan_steps 保留——下面 task_tick 的節奏用它的長度算，
+                #   前端沒有 task_plan 元素時 tick 會自己 return。
                 #   （要恢復就把下面這段 send 解除註解）
                 # if func_name != "search_log":
                 #     try:

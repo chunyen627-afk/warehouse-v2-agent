@@ -9697,13 +9697,23 @@ async def ws_handler(ws: WebSocket):
                     "create_movement":    ["解析商品與數量", "比對倉庫與庫存", "產生確認卡"],
                 }
                 plan_steps = _TASK_PLANS.get(func_name, ["分析請求", "執行查詢", "回傳結果"])
-                # search_log 有自己的 trace UI，不需要 task_plan
-                if func_name != "search_log":
-                    try:
-                        await send({"type": "task_plan", "steps": plan_steps})
-                        await asyncio.sleep(0.1)
-                    except RuntimeError:
-                        pass
+                # **不送 task_plan**（user 2026-07-25 決定移除，中英同步）。
+                #   原意是給 Agent 一個 checklist 視覺效果，但下面的 Agent
+                #   trace 已經在做同一件事、而且說的是**真的做了什麼**：
+                #     task_plan：解析商品與數量 / 比對倉庫與庫存 / 產生確認卡
+                #                （寫死，每次都一樣）
+                #     trace    ：掃 transactions/ → 命中 180/180 個交易檔
+                #                比對「電動牙刷」→ 找到 86 筆
+                #                掃採購單 → 22 張含該商品（帶真實數字）
+                #   trace 同樣逐步展開、task_tick 打勾也還在送，所以視覺效果
+                #   沒少，反而少了一塊寫死的內容弱化 demo 說服力。
+                #   （要恢復就把下面這段解除註解）
+                # if func_name != "search_log":
+                #     try:
+                #         await send({"type": "task_plan", "steps": plan_steps})
+                #         await asyncio.sleep(0.1)
+                #     except RuntimeError:
+                #         pass
 
                 # search_log keyword 在 OOV 前先用 _extract_sku_keyword 預清理，
                 # 避免模型帶入雜詞（例如「抗菌洗衣精帳」）降低 fuzzy 分
