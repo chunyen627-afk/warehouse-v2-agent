@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>倉管助理 Demo</title>
+<title>管助理 Demo</title>
 <style>
   /* 關閉按鈕 */
   #close-btn {
@@ -29,7 +29,7 @@
     --bg:        #f5f7fa;
     --card:      #ffffff;
     --primary:   #2c5282;   /* 深藍 */
-    --primary-2: #4299e1;   /* 中藍 */
+    --primary-2: #4299e1;   /* Central藍 */
     --accent:    #ed8936;   /* 出貨橘 */
     --success:   #38a169;   /* 進貨綠 */
     --warning:   #e53e3e;   /* 缺貨紅 */
@@ -137,7 +137,7 @@
   .view-card .label.agent-label { font-size: 13px; font-weight: 600; color: var(--text); }
   .view-card .sub-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
-  /* 三倉橫條 */
+  /* 三橫條 */
   .wh-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
   .wh-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .wh-bar .wh-name { width: 60px; color: var(--muted); }
@@ -471,7 +471,7 @@
     border-radius: 6px; font-size: 13px; line-height: 1.7;
     animation: traceIn .4s ease forwards;
   }
-  /* ── HITL 確認框 ── */
+  /* ── HITL Confirm框 ── */
   .clarify-opts { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 8px; }
   /* 選項做成大按鈕：min-height 48px 是手機/平板可靠的觸控目標下限，
      整行可點 + 明顯邊框 + 按壓回饋，避免展場小螢幕難點 */
@@ -685,30 +685,30 @@ body.compact-top .ab-b { font-size: 11px; padding: 2px 7px; }
 
 <header>
   <span class="icon">📦</span>
-  <h1>倉管助理</h1>
-  <span class="sub" id="snap-date">載入中...</span>
-  <button id="alert-panel-btn" title="警示規則" onclick="toggleAlertPanel()">
+  <h1>Warehouse Assistant</h1>
+  <span class="sub" id="snap-date">Loading...</span>
+  <button id="alert-panel-btn" title="Alert rules" onclick="toggleAlertPanel()">
     🔔 <span id="alert-badge" class="alert-badge" style="display:none">0</span>
   </button>
-  <button id="reset-demo-btn" title="重置展示資料（需密碼）" onclick="resetDemoData()">♻</button>
-  <button id="close-btn" title="關閉頁面" onclick="closePage()">✕</button>
+  <button id="reset-demo-btn" title="Reset demo data (password required)" onclick="resetDemoData()">♻</button>
+  <button id="close-btn" title="Close page" onclick="closePage()">✕</button>
 </header>
 
 <!-- 右側警示規則 Panel -->
 <div id="alert-panel" class="alert-panel">
   <div class="alert-panel-header">
-    <span>🔔 警示 &amp; 排程</span>
+    <span>🔔 Alerts &amp; Schedules</span>
     <button onclick="toggleAlertPanel()" class="alert-panel-close">✕</button>
   </div>
   <div class="alert-panel-tabs">
-    <button class="apt active" id="tab-alerts" onclick="switchPanelTab('alerts')">⚡ 警示規則</button>
-    <button class="apt" id="tab-schedules" onclick="switchPanelTab('schedules')">⏰ 定時排程</button>
+    <button class="apt active" id="tab-alerts" onclick="switchPanelTab('alerts')">⚡ Alert Rules</button>
+    <button class="apt" id="tab-schedules" onclick="switchPanelTab('schedules')">⏰ Schedules</button>
   </div>
   <div class="alert-panel-body" id="alert-panel-body">
-    <div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">載入中...</div>
+    <div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Loading...</div>
   </div>
   <div class="alert-panel-footer" id="alert-panel-footer">
-    <button onclick="triggerAlertCheck()" class="alert-check-btn">⚡ 立即掃描警示</button>
+    <button onclick="triggerAlertCheck()" class="alert-check-btn">⚡ Scan alerts now</button>
   </div>
 </div>
 <div id="alert-panel-overlay" class="alert-panel-overlay" onclick="toggleAlertPanel()"></div>
@@ -716,15 +716,15 @@ body.compact-top .ab-b { font-size: 11px; padding: 2px 7px; }
 <div id="chips-bar">
   <!-- 鉤子入口(隨機輪播、勾起好奇)由 JS 動態插入到這 -->
   <!-- 主打:會「改動庫存數字」的操作(進出貨/調貨/退貨)—— demo 訪客最直覺想玩的 -->
-  <button class="chip primary" data-action="show-inventory-menu">📦 庫存查詢</button>
-  <button class="chip" data-action="movement-menu" style="border-color:#2b6cb0;color:#fff;background:linear-gradient(135deg,#2b6cb0,#3182ce);font-weight:700">📥 進出貨</button>
-  <button class="chip" data-action="transfer-menu" style="border-color:#0987a0;color:#fff;background:linear-gradient(135deg,#0987a0,#38b2ac);font-weight:700">🔄 調貨</button>
-  <button class="chip" data-action="return-menu" style="border-color:#b7791f;color:#fff;background:linear-gradient(135deg,#b7791f,#d69e2e);font-weight:700">↩️ 退貨</button>
-  <button class="chip warning" data-action="low-stock-direct">🚨 缺貨警示</button>
-  <button class="chip gold"    data-action="hot-items">🔥 熱銷排行</button>
-  <button class="chip" data-action="expiring-direct" style="border-color:#dd6b20;color:#c05621">⏰ 到期警示</button>
-  <button class="chip" data-action="show-related-menu" style="border-color:#805ad5;color:#6b46c1">🔗 連帶備貨</button>
-  <button class="chip" data-action="agent-menu" style="border-color:#3182ce;color:#fff;background:linear-gradient(135deg,#3182ce,#5a67d8);font-weight:700">🤖 智慧管家</button>
+  <button class="chip primary" data-action="show-inventory-menu">📦 Stock</button>
+  <button class="chip" data-action="movement-menu" style="border-color:#2b6cb0;color:#fff;background:linear-gradient(135deg,#2b6cb0,#3182ce);font-weight:700">📥 In / Out</button>
+  <button class="chip" data-action="transfer-menu" style="border-color:#0987a0;color:#fff;background:linear-gradient(135deg,#0987a0,#38b2ac);font-weight:700">🔄 Transfer</button>
+  <button class="chip" data-action="return-menu" style="border-color:#b7791f;color:#fff;background:linear-gradient(135deg,#b7791f,#d69e2e);font-weight:700">↩️ Returns</button>
+  <button class="chip warning" data-action="low-stock-direct">🚨 Low Stock</button>
+  <button class="chip gold"    data-action="hot-items">🔥 Best Sellers</button>
+  <button class="chip" data-action="expiring-direct" style="border-color:#dd6b20;color:#c05621">⏰ Expiring</button>
+  <button class="chip" data-action="show-related-menu" style="border-color:#805ad5;color:#6b46c1">🔗 Related</button>
+  <button class="chip" data-action="agent-menu" style="border-color:#3182ce;color:#fff;background:linear-gradient(135deg,#3182ce,#5a67d8);font-weight:700">🤖 Agent</button>
 </div>
 
 <div id="messages"></div>
@@ -737,22 +737,22 @@ body.compact-top .ab-b { font-size: 11px; padding: 2px 7px; }
 <div class="mic-status" id="mic-status"></div>
 
 <div id="input-bar">
-  <textarea id="input-text" placeholder="試試：藍牙耳機庫存 / 庫存警示 / 本月熱銷..." rows="1"></textarea>
-  <button id="mic-btn" class="mic-btn" title="點擊開始語音輸入" aria-label="語音輸入">
+  <textarea id="input-text" placeholder="Try: bluetooth earphones stock / what's running low / best sellers..." rows="1"></textarea>
+  <button id="mic-btn" class="mic-btn" title="Tap to start voice input" aria-label="Voice input">
     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/>
     </svg>
   </button>
   <button id="send-btn">▶</button>
 </div>
-<div class="send-status" id="send-status">⏳ 處理中，請稍候…</div>
+<div class="send-status" id="send-status">⏳ 處理Central，請稍候…</div>
 
 <script>
 // ── 重置展示資料（需密碼，防止展場被玩爛回不去）──
 async function resetDemoData() {
-  const pwd = prompt('重置展示資料需要密碼（此動作將清除所有新增商品、進出貨紀錄、警示、排程，無法復原）：');
-  if (pwd === null) return;  // 取消
-  if (!confirm('再次確認：真的要重置展示資料嗎？')) return;
+  const pwd = prompt('重置展示資料需要密碼（此動作將清除all added items, movements、警示、排程，無法復原）：');
+  if (pwd === null) return;  // Cancel
+  if (!confirm('Confirm again: really reset the demo data?')) return;
   try {
     const r = await fetch('/api/reset_demo', {
       method: 'POST',
@@ -761,23 +761,23 @@ async function resetDemoData() {
     });
     const data = await r.json();
     if (data.ok) {
-      alert('展示資料已重置，頁面將重新載入');
+      alert('Demo data reset - reloading the page');
       location.reload();
     } else {
-      alert('重置失敗：' + (data.summary || data.error || '未知錯誤'));
+      alert('Reset failed: ' + (data.summary || data.error || 'Unknown error'));
     }
   } catch (e) {
-    alert('重置失敗：' + e);
+    alert('Reset failed: ' + e);
   }
 }
 
 // ── 關閉頁面（防誤觸）──
 function closePage() {
-  if (confirm('確定要關閉倉管助理嗎？')) {
+  if (confirm('Close the Warehouse Assistant?')) {
     window.close();
     // fallback: 如果 window.close() 無效（非 script 開啟的視窗），顯示提示
     setTimeout(() => {
-      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:20px;color:#666">頁面已關閉，請手動關閉此分頁（Ctrl+W 或 Alt+F4）</div>';
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:20px;color:#666">Page closed - please close this tab manually (Ctrl+W or Alt+F4)</div>';
     }, 300);
   }
 }
@@ -798,13 +798,13 @@ function toggleAlertPanel() {
 
 async function loadAlertPanel() {
   const body = $('alert-panel-body');
-  body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">載入中...</div>';
+  body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Loading...</div>';
   try {
     const r = await fetch('/api/alerts');
     const data = await r.json();
     renderAlertPanel(data.rules || []);
   } catch(e) {
-    body.innerHTML = '<div style="color:#e53e3e;font-size:13px;padding:12px">載入失敗</div>';
+    body.innerHTML = '<div style="color:#e53e3e;font-size:13px;padding:12px">Failed to load</div>';
   }
 }
 
@@ -816,27 +816,27 @@ function renderAlertPanel(rules) {
   badge.style.display = active.length > 0 ? 'block' : 'none';
 
   if (active.length === 0) {
-    body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0">目前沒有警示規則<br><br>試試：「當洗衣精低於安全庫存時通知我」</div>';
+    body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0">No alert rules yet<br><br>Try: "alert me when laundry detergent drops below safety stock"</div>';
     return;
   }
   body.innerHTML = active.map(r => `
     <div class="alert-rule-card" id="arc-${r.id}">
-      <button class="alert-rule-del" onclick="deleteAlert('${r.id}')" title="刪除">✕</button>
+      <button class="alert-rule-del" onclick="deleteAlert('${r.id}')" title="Delete">✕</button>
       <div class="alert-rule-id">${r.id}</div>
       <div class="alert-rule-cond">⚡ ${r.condition_label || r.condition}</div>
-      <div class="alert-rule-scope">📦 ${r.scope_txt || '全部商品'}</div>
-      <div class="alert-rule-time">建立：${(r.created || '').slice(0,16).replace('T',' ')}</div>
+      <div class="alert-rule-scope">📦 ${r.scope_txt || 'all items'}</div>
+      <div class="alert-rule-time">Created: ${(r.created || '').slice(0,16).replace('T',' ')}</div>
     </div>
   `).join('');
 }
 
 async function deleteAlert(ruleId) {
-  if (!confirm(`確定刪除警示規則 ${ruleId}？`)) return;
+  if (!confirm(`Delete alert rule ${ruleId}?`)) return;
   try {
     const r = await fetch(`/api/alerts/${ruleId}`, {method: 'DELETE'});
     if (r.ok) loadAlertPanel();
-    else alert('刪除失敗');
-  } catch(e) { alert('刪除失敗：' + e); }
+    else alert('Delete failed');
+  } catch(e) { alert('Delete failed: ' + e); }
 }
 
 let _currentPanelTab = 'alerts';
@@ -847,23 +847,23 @@ function switchPanelTab(tab) {
   $('tab-' + tab).classList.add('active');
   const footer = $('alert-panel-footer');
   if (tab === 'alerts') {
-    footer.innerHTML = '<button onclick="triggerAlertCheck()" class="alert-check-btn">⚡ 立即掃描警示</button>';
+    footer.innerHTML = '<button onclick="triggerAlertCheck()" class="alert-check-btn">⚡ Scan alerts now</button>';
     loadAlertPanel();
   } else {
-    footer.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:4px 0">輸入「每天早上9點幫我跑盤點」設定排程</div>';
+    footer.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:4px 0">Try "run a stock count every day at 9am" to add a schedule</div>';
     loadSchedulePanel();
   }
 }
 
 async function loadSchedulePanel() {
   const body = $('alert-panel-body');
-  body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">載入中...</div>';
+  body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Loading...</div>';
   try {
     const r = await fetch('/api/schedules');
     const data = await r.json();
     renderSchedulePanel(data.jobs || []);
   } catch(e) {
-    body.innerHTML = '<div style="color:#e53e3e;font-size:13px;padding:12px">載入失敗</div>';
+    body.innerHTML = '<div style="color:#e53e3e;font-size:13px;padding:12px">Failed to load</div>';
   }
 }
 
@@ -871,51 +871,51 @@ function renderSchedulePanel(jobs) {
   const body = $('alert-panel-body');
   const active = jobs.filter(j => j.enabled !== false);
   if (active.length === 0) {
-    body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0">目前沒有定時排程<br><br>輸入「每天早上9點幫我跑盤點」來設定</div>';
+    body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0">No schedules yet<br><br>Try: "run a stock count every day at 9am"</div>';
     return;
   }
   body.innerHTML = active.map(j => {
-    const lastRun = j.last_run ? j.last_run.slice(0,16).replace('T',' ') : '尚未執行';
+    const lastRun = j.last_run ? j.last_run.slice(0,16).replace('T',' ') : 'Not run yet';
     return `
     <div class="schedule-card" id="sc-${j.id}">
-      <button class="schedule-card-del" onclick="deleteSchedule('${j.id}')" title="刪除">✕</button>
+      <button class="schedule-card-del" onclick="deleteSchedule('${j.id}')" title="Delete">✕</button>
       <div class="schedule-card-id">${j.id}</div>
       <div class="schedule-card-label">⏰ ${j.script_label}</div>
-      <div class="schedule-card-time">${j.freq_label} ${j.time_str} 自動執行</div>
+      <div class="schedule-card-time">${j.freq_label} ${j.time_str} auto-run </div>
       <div class="schedule-card-next">上次執行：${lastRun}</div>
     </div>`;
   }).join('');
 }
 
 async function deleteSchedule(jobId) {
-  if (!confirm(`確定刪除排程 ${jobId}？`)) return;
+  if (!confirm(`Delete schedule ${jobId}?`)) return;
   try {
     const r = await fetch(`/api/schedules/${jobId}`, {method: 'DELETE'});
     if (r.ok) loadSchedulePanel();
-    else alert('刪除失敗');
-  } catch(e) { alert('刪除失敗：' + e); }
+    else alert('Delete failed');
+  } catch(e) { alert('Delete failed: ' + e); }
 }
 
 async function triggerAlertCheck() {
   const btn = document.querySelector('.alert-check-btn');
-  btn.textContent = '⚡ 掃描中...';
+  btn.textContent = '⚡ Scanning...';
   btn.disabled = true;
   try {
     await fetch('/api/alerts/check', {method: 'POST'});
-    btn.textContent = '✓ 掃描完成';
-    setTimeout(() => { btn.textContent = '⚡ 立即掃描'; btn.disabled = false; }, 2000);
+    btn.textContent = '✓ Scan complete';
+    setTimeout(() => { btn.textContent = '⚡ Scan now'; btn.disabled = false; }, 2000);
   } catch(e) {
-    btn.textContent = '⚡ 立即掃描'; btn.disabled = false;
+    btn.textContent = '⚡ Scan now'; btn.disabled = false;
   }
 }
 
 const CATEGORY_LABEL = {
-  electronics: '電子產品', appliance_kitchen: '家電廚具',
-  food_beverage: '食品飲料', daily_goods: '日用品',
-  apparel: '服飾', sports: '運動用品',
+  electronics: 'Electronics', appliance_kitchen: 'Kitchen Appliances',
+  food_beverage: 'Food & Beverage', daily_goods: 'Daily Goods',
+  apparel: 'Apparel', sports: 'Sports & Outdoors',
 };
 const WAREHOUSE_LABEL = {
-  north: '北區倉', central: '中區倉', south: '南區倉', all: '全部倉',
+  north: 'North', central: 'Central', south: 'South', all: 'All warehouses',
 };
 
 let ws = null;
@@ -924,14 +924,14 @@ let isSending = false;
 let currentBotMsg = null;
 let lastBotAnchor = null;   // 最後插入在訊息泡後的元素(卡片)、follow-up 鈕接在它後面
 
-// 統一管理送出中狀態：按鈕轉圈 + 文字提示，避免使用者以為卡住而重複操作
+// 統一管理送出Central狀態：按鈕轉圈 + 文字提示，避免使用者以為卡住而重複操作
 function setSending(sending) {
   isSending = sending;
   const btn = $('send-btn');
   btn.disabled = sending;
   btn.classList.toggle('sending', sending);
   btn.textContent = sending ? '⟳' : '▶';
-  // 底部「處理中」文字讓位給右下角效能徽章：只保留送出鈕轉圈，狀態改在對話氣泡呈現
+  // 底部「處理Central」文字讓位給右下角效能徽章：只保留送出鈕轉圈，狀態改在對話氣泡呈現
 }
 
 function connectWS() {
@@ -993,9 +993,9 @@ function renderAnomalyBanner(data) {
     <div class="ab-head" onclick="this.parentNode.classList.toggle('open')">
       <b>⚠ 主動偵測到 ${crit + warn} 項需注意異常</b>
       <span class="ab-badges">
-        ${crit ? `<span class="ab-b crit">${crit} 嚴重</span>` : ''}
-        ${warn ? `<span class="ab-b warn">${warn} 警告</span>` : ''}
-        ${info ? `<span class="ab-b info">${info} 注意</span>` : ''}
+        ${crit ? `<span class="ab-b crit">${crit} critical</span>` : ''}
+        ${warn ? `<span class="ab-b warn">${warn} warning</span>` : ''}
+        ${info ? `<span class="ab-b info">${info} info</span>` : ''}
       </span>
       <span class="ab-toggle">展開 ▼</span>
     </div>
@@ -1004,7 +1004,7 @@ function renderAnomalyBanner(data) {
         <span class="ab-dot"></span>
         <span><b>${a.title}</b><br><span class="ab-detail">${a.detail || ''}</span></span>
       </div>`).join('')}
-      ${all.filter(a=>a.level!=='info').length > 5 ? `<div class="ab-more">…還有 ${all.filter(a=>a.level!=='info').length - 5} 項</div>` : ''}
+      ${all.filter(a=>a.level!=='info').length > 5 ? `<div class="ab-more">… and ${all.filter(a=>a.level!=='info').length - 5}  more</div>` : ''}
     </div>`;
 }
 function pullAnomalies() {
@@ -1070,14 +1070,14 @@ function showSuggestions(items) {
 
 // ── 能力地圖：明白告訴使用者「我會這幾類事」，每類給可點範例 ──
 const CAPABILITIES = [
-  { icon:'📦', name:'查庫存', egs:['藍牙耳機庫存', '行動電源還有多少', '看一下悶燒罐'] },
-  { icon:'📥', name:'進貨 / 出貨', egs:['北倉進了藍牙耳機50件', '南倉出貨行動電源20個', '中倉進三箱衛生紙'] },
-  { icon:'🔄', name:'調貨（倉間調撥）', egs:['北倉調30個藍牙耳機給南倉', '中倉搬20台藍牙喇叭到北倉'] },
-  { icon:'↩️', name:'退貨（客人退、庫存加回）', egs:['北倉客人退了3個藍牙耳機', '中倉被退5個智慧手環'] },
-  { icon:'🚨', name:'缺貨 / 到期 / 熱銷', egs:['缺貨的有哪些', '快到期的有哪些', '這週哪些賣最好'] },
-  { icon:'🔍', name:'追查「帳對不上」', egs:['智慧手環怎麼少這麼多', '行動電源帳對不上'] },
-  { icon:'📄', name:'產生報告 / 採購單', egs:['幫我出個全倉體檢報告', '幫我把缺貨的產採購單'] },
-  { icon:'⚙️', name:'改設定 / 管商品（要你確認）', egs:['南倉安全庫存全部加30', '新增商品', '刪除商品'] },
+  { icon:'📦', name:'check stock', egs:['bluetooth earphones stock', 'how many power banks left', 'check the thermal food jar'] },
+  { icon:'📥', name:'Inbound / Outbound', egs:['north received 50 bluetooth earphones', 'south shipped 20 power banks', 'central received 3 boxes of facial tissue'] },
+  { icon:'🔄', name:'Transfer (between warehouses)', egs:['transfer 30 bluetooth earphones from north to south', 'move 20 bluetooth speakers from central to north'] },
+  { icon:'↩️', name:'Returns (customer returns, stock added back)', egs:['customer returned 3 bluetooth earphones at north', '5 smart bands returned at central'] },
+  { icon:'🚨', name:'Low stock / Expiring / Best sellers', egs:['whats running low', 'whats expiring soon', 'what sold best this week'] },
+  { icon:'🔍', name:'trace a mismatch', egs:['why are smart bands down so much', 'power bank numbers dont match'] },
+  { icon:'📄', name:'Reports / Purchase orders', egs:['give me a full warehouse report', 'create a purchase order for low stock items'] },
+  { icon:'⚙️', name:'Settings / Items (needs your confirmation)', egs:['increase safety stock by 30 in south', 'add item', 'delete item'] },
 ];
 function renderCapabilityMap() {
   if (!currentBotMsg) return;
@@ -1107,22 +1107,22 @@ function suggestFromAnomalies() {
     const a = alerts[0];
     let q = '', hint = '';
     if (a.type === 'po_short') {
-      q = `${a.data.name}怎麼少這麼多`;
-      hint = `我發現「${a.data.name}」帳對不上，要不要點我幫你追原因？`;
+      q = `why is ${a.data.name} down so much`;
+      hint = `I found a mismatch on "${a.data.name}" - shall I trace the cause?`;
     } else if (a.type === 'low_stock') {
-      q = `${a.data.name}的安全庫存是多少`;
-      hint = `「${a.data.name}」快斷貨了（撐 ${a.data.days_left} 天），想看設定嗎？`;
+      q = `whats the safety stock for ${a.data.name}`;
+      hint = `"${a.data.name}" is running out (${a.data.days_left} days left) - view settings?`;
     } else if (a.type === 'expiry') {
-      q = '快到期的有哪些';
-      hint = `有商品快到期了，要不要看完整到期清單？`;
+      q = 'whats expiring soon';
+      hint = `Some items are expiring soon - see the full list?`;
     } else {
-      q = '幫我出個全倉體檢報告';
-      hint = '掃到一些異常，要不要我出一份全倉體檢報告？';
+      q = 'give me a full warehouse report';
+      hint = 'I spotted some anomalies - shall I produce a full warehouse report?';
     }
     const cb = appendBot('💡 ' + hint);
     showSuggestions([
       { label: '👉 ' + q, query: q },
-      { label: '📄 出全倉體檢報告', query: '幫我出個全倉體檢報告' },
+      { label: '📄 Full warehouse report', query: 'give me a full warehouse report' },
     ]);
     currentBotMsg = null;
   }).catch(() => {});
@@ -1140,7 +1140,7 @@ function renderTaskPlan(steps) {
     'font-size:12px;display:flex;flex-direction:column;gap:5px;animation:traceIn .2s ease';
   const title = document.createElement('div');
   title.style.cssText = 'font-weight:700;color:var(--accent);margin-bottom:2px;font-size:11px;letter-spacing:.05em';
-  title.textContent = '▸ 任務規劃';
+  title.textContent = '▸ Task plan';
   _taskPlanEl.appendChild(title);
   steps.forEach((s, i) => {
     const row = document.createElement('div');
@@ -1168,13 +1168,13 @@ function tickTaskStep(index) {
 }
 
 const TRACE_KIND = {
-  glob:    { icon: '📂', label: '掃描目錄', color: '#7c9cbf' },
-  grep:    { icon: '🔍', label: '比對關鍵字', color: '#7c9cbf' },
-  read:    { icon: '📄', label: '讀取檔案', color: '#7c9cbf' },
-  reason:  { icon: '🧠', label: '分析結論', color: '#a08c5a' },
-  act:     { icon: '⚙️', label: '執行動作', color: '#5a8c6a' },
-  confirm: { icon: '✅', label: '確認', color: '#5a8c6a' },
-  verify:  { icon: '🔎', label: '驗證', color: '#7c9cbf' },
+  glob:    { icon: '📂', label: 'Scan directory', color: '#7c9cbf' },
+  grep:    { icon: '🔍', label: 'Match keyword', color: '#7c9cbf' },
+  read:    { icon: '📄', label: 'Read file', color: '#7c9cbf' },
+  reason:  { icon: '🧠', label: 'Analyse', color: '#a08c5a' },
+  act:     { icon: '⚙️', label: 'Execute', color: '#5a8c6a' },
+  confirm: { icon: '✅', label: 'Confirm', color: '#5a8c6a' },
+  verify:  { icon: '🔎', label: 'Verify', color: '#7c9cbf' },
 };
 
 let _traceContainer = null;  // 目前訊息泡的 trace 容器
@@ -1215,7 +1215,7 @@ function handleMessage(msg) {
     // 背景排程掃到警示觸發 → 推一張通知 card
     const banner = document.createElement('div');
     banner.className = 'alert-triggered-banner';
-    banner.innerHTML = `🔔 <b>警示觸發</b>（${msg.rule_id}）${msg.ts || ''}<br>
+    banner.innerHTML = `🔔 <b>Alert triggered</b>（${msg.rule_id}）${msg.ts || ''}<br>
       <span style="color:var(--muted)">${msg.scope_txt}：${msg.condition_label}</span><br>
       ${msg.detail || ''}`;
     messages.appendChild(banner);
@@ -1236,8 +1236,8 @@ function handleMessage(msg) {
   if (msg.type === 'schedule_triggered') {
     const banner = document.createElement('div');
     banner.className = 'schedule-triggered-banner';
-    banner.innerHTML = `⏰ <b>排程自動執行</b>（${msg.job_id}）${msg.ts || ''}<br>
-      <span style="color:var(--muted)">正在執行：${msg.script_label}</span>`;
+    banner.innerHTML = `⏰ <b>Schedule ran</b>（${msg.job_id}）${msg.ts || ''}<br>
+      <span style="color:var(--muted)">Running: ${msg.script_label}</span>`;
     messages.appendChild(banner);
     scrollBottom();
     return;
@@ -1246,7 +1246,7 @@ function handleMessage(msg) {
     const banner = document.createElement('div');
     banner.className = 'schedule-triggered-banner';
     const icon = msg.ok ? '✅' : '❌';
-    banner.innerHTML = `${icon} <b>${msg.script_label}</b> 執行${msg.ok ? '完成' : '失敗'}<br>
+    banner.innerHTML = `${icon} <b>${msg.script_label}</b> 執行${msg.ok ? 'done' : 'failed'}<br>
       <span style="color:var(--muted)">${msg.output_tail || msg.summary || ''}</span>`;
     messages.appendChild(banner);
     scrollBottom();
@@ -1271,7 +1271,7 @@ function handleMessage(msg) {
       if (existCard) {
         const row = document.createElement('div');
         row.style.cssText = 'margin:4px 0;padding:5px 8px;background:rgba(160,140,90,.12);border-radius:4px;font-size:12px;color:var(--text-secondary)';
-        row.textContent = '[分析] ' + (msg.step.detail || '');
+        row.textContent = '[analysis] ' + (msg.step.detail || '');
         // 插到 suggest 之前（tool_calls 之後）
         const suggestEl = existCard.querySelector('[id^=\"rca-suggest-\"]');
         if (suggestEl && suggestEl.parentNode) {
@@ -1335,7 +1335,7 @@ function handleMessage(msg) {
     const _rcaCard2 = _rcaCardId ? document.getElementById(_rcaCardId) : null;
     const suggestEl = _rcaCard2 ? _rcaCard2.querySelector('[id^="rca-suggest-"]') : null;
     if (suggestEl) {
-      suggestEl.innerHTML = '<span style="color:var(--muted);font-size:13px">💡 Agent 推理建議行動 </span><span class="loading-dots"><span></span><span></span><span></span></span>';
+      suggestEl.innerHTML = '<span style="color:var(--muted);font-size:13px">💡 Agent suggested action </span><span class="loading-dots"><span></span><span></span><span></span></span>';
       suggestEl.style.display = '';
     }
     return;
@@ -1349,7 +1349,7 @@ function handleMessage(msg) {
         create_po:        'var(--danger)',
         monitor:          'var(--accent)',
       }[msg.suggestion_action] || 'var(--accent)';
-      suggestEl.innerHTML = `<span style="font-weight:600;color:${actionColor}">💡 Agent 建議</span><br>${msg.suggestion.replace(/</g,'&lt;')}`;
+      suggestEl.innerHTML = `<span style="font-weight:600;color:${actionColor}">💡 Agent suggestion</span><br>${msg.suggestion.replace(/</g,'&lt;')}`;
     } else if (suggestEl) {
       suggestEl.style.display = 'none';
     }
@@ -1361,13 +1361,13 @@ function handleMessage(msg) {
     const result = msg.result || {};
     const view = result.view;
     const data = result.data || {};
-    // HITL 確認送出後，doConfirm() 把按鈕列換成「執行中…」，但原本的確認卡沒有
-    // 隨著新結果卡一起被清掉，導致「執行中…」永久卡著（2026-07-02 實測抓到）。
-    // done 必然緊接在確認動作之後送達，此時清掉所有殘留的執行中提示是安全的。
+    // HITL Confirm送出後，doConfirm() 把按鈕列換成「Running…」，但原本的Confirm卡沒有
+    // 隨著新結果卡一起被清掉，導致「Running…」永久卡著（2026-07-02 實測抓到）。
+    // done 必然緊接在Confirm動作之後送達，此時清掉所有殘留的Running提示是安全的。
     document.querySelectorAll('.hitl-btns').forEach(el => {
-      if (el.textContent.includes('執行中')) el.remove();
+      if (el.textContent.includes('Running')) el.remove();
     });
-    // 若 loading-dots 還在（例如取消直接跳 done，沒有 token），清空文字但保留節點，
+    // 若 loading-dots 還在（例如Cancel直接跳 done，沒有 token），清空文字但保留節點，
     // 讓 renderViewCard 仍有掛載點可插入卡片（先前整個 remove()+null 會導致卡片沒渲染出來）
     if (currentBotMsg && currentBotMsg.querySelector('.loading-dots')) {
       currentBotMsg.innerHTML = '';
@@ -1402,12 +1402,12 @@ function renderViewCard(view, data, topSummary) {
     const isLow = data.is_low_stock;
     const nx = data.next_expiring;
     const expBadge = (nx && ['red','orange','yellow'].includes(nx.level))
-      ? `<span class="exp-badge ${nx.level}" style="margin-left:6px">${nx.level_emoji} ${nx.warehouse_label} ${nx.qty} 件 · ${nx.days_to_expire} 天到期</span>`
+      ? `<span class="exp-badge ${nx.level}" style="margin-left:6px">${nx.level_emoji} ${nx.warehouse_label} ${nx.qty} units · ${nx.days_to_expire}  days to expiry</span>`
       : '';
     card.innerHTML = `
       <div class="label">${data.name} (${data.category_label})</div>
-      <div class="kpi ${isLow ? 'warning' : ''}">${data.total_qty.toLocaleString()} 件</div>
-      <div class="sub-label">總價值 NT$ ${data.value.toLocaleString()} ${isLow ? ' · ⚠️ 低於安全庫存' : ''} ${expBadge}</div>
+      <div class="kpi ${isLow ? 'warning' : ''}">${data.total_qty.toLocaleString()} units</div>
+      <div class="sub-label">Total value NT$ ${data.value.toLocaleString()} ${isLow ? ' · ⚠️ below safety stock' : ''} ${expBadge}</div>
       <div class="wh-bars">
         ${Object.entries(per).map(([k, v]) => `
           <div class="wh-bar">
@@ -1422,35 +1422,35 @@ function renderViewCard(view, data, topSummary) {
     // r54 視圖覆蓋審計補：警示規則列表曾只有「目前有 N 條」一句話、明細沒卡可看
     const alRules = data.rules || [];
     card.innerHTML = alRules.length === 0
-      ? `<div style="text-align:center;color:var(--muted)">目前沒有警示規則</div>`
+      ? `<div style="text-align:center;color:var(--muted)">No alert rules</div>`
       : `<div class="label">🔔 警示規則（${alRules.length} 條）</div>
          <table class="exp-table"><tr><th>ID</th><th>條件</th><th>範圍</th><th>狀態</th></tr>
          ${alRules.map(r => `<tr><td>${r.id}</td><td>${r.condition_label || r.condition}</td>
-           <td style="font-size:12px">${(r.scope_names || []).join('、') || '全部商品'}</td>
+           <td style="font-size:12px">${(r.scope_names || []).join('、') || 'all items'}</td>
            <td>${r.enabled ? '✅' : '⏸'}</td></tr>`).join('')}
          </table>
-         <div class="rel-baseline-note">想刪除可以說「刪掉 ${alRules[0]?.id || 'AL001'}」</div>`;
+         <div class="rel-baseline-note">To remove, say "delete ${alRules[0]?.id || 'AL001'}」</div>`;
   } else if (view === 'schedule_list') {
     const scJobs = data.jobs || [];
     card.innerHTML = scJobs.length === 0
-      ? `<div style="text-align:center;color:var(--muted)">目前沒有排程</div>`
+      ? `<div style="text-align:center;color:var(--muted)">No schedules</div>`
       : `<div class="label">⏰ 排程（${scJobs.length} 個）</div>
          <table class="exp-table"><tr><th>ID</th><th>內容</th><th>頻率</th><th>狀態</th></tr>
          ${scJobs.map(j => `<tr><td>${j.id}</td><td>${j.script_label || j.script_id}</td>
            <td>${j.freq_label || j.freq} ${j.time_str || ''}</td>
            <td>${j.enabled ? '✅' : '⏸'}</td></tr>`).join('')}
          </table>
-         <div class="rel-baseline-note">想取消可以說「刪掉 ${scJobs[0]?.id || 'SCH001'}」</div>`;
+         <div class="rel-baseline-note">To cancel, say "delete ${scJobs[0]?.id || 'SCH001'}」</div>`;
   } else if (view === 'inventory') {
     // r54 修復（user 實測抓到）：「有哪些商品/類別庫存」的概覽清單 server 回
     // view=inventory + rows，前端一直沒有這個 view 的渲染器 → 只顯示一句
     // 「以下為前 10 筆」但表格從沒畫出來。複用 exp-table 樣式列出。
     const invRows = data.rows || [];
-    const invCapt = data.category_label ? `${data.category_label}類`
-                   : (data.warehouse_label && data.warehouse_label !== '全部倉' ? data.warehouse_label : '全部商品');
+    const invCapt = data.category_label ? `${data.category_label}`
+                   : (data.warehouse_label && data.warehouse_label !== 'All warehouses' ? data.warehouse_label : 'all items');
     const invTotal = data.total_items ?? invRows.length;
     card.innerHTML = `
-      <div class="label">📦 ${invCapt} 庫存清單（共 ${invTotal} 項${invRows.length < invTotal ? `，顯示前 ${invRows.length} 筆` : ''}）</div>
+      <div class="label">📦 ${invCapt} stock list (${invTotal} 項${invRows.length < invTotal ? `，顯示前 ${invRows.length} 筆` : ''}）</div>
       <table class="exp-table">
         <tr><th>商品</th><th>類別</th><th>庫存</th></tr>
         ${invRows.map(r => `
@@ -1478,12 +1478,12 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'low_stock') {
     const warns = data.warnings || [];
     if (warns.length === 0) {
-      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">所有商品庫存充足</div>`;
+      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">All items are well stocked</div>`;
     } else {
       card.innerHTML = `
         <div class="label">缺貨警示 (${warns.length} 項) — 按「撐幾天」排序</div>
         <table class="alert-table">
-          <tr><th>商品</th><th>倉庫</th><th>現量</th><th>撐天</th><th>建議補</th></tr>
+          <tr><th>商品</th><th>庫</th><th>現量</th><th>撐天</th><th>建議補</th></tr>
           ${warns.slice(0, 50).map(w => {
             const days = w.days_left;
             const daysCls = days <= 3 ? 'critical' : '';
@@ -1494,7 +1494,7 @@ function renderViewCard(view, data, topSummary) {
               <td>${w.warehouse_label}</td>
               <td><b>${w.qty}</b><div style="font-size:11px;color:var(--muted)">/ 安全 ${w.safety_stock}</div></td>
               <td><b style="color:${days <= 7 ? 'var(--warning)' : (days <= 14 ? '#c05621' : 'var(--text)')}">${daysTxt}</b></td>
-              <td><b>${w.suggest_qty}</b> 件</td>
+              <td><b>${w.suggest_qty}</b> units</td>
             </tr>`;
           }).join('')}
         </table>
@@ -1505,9 +1505,9 @@ function renderViewCard(view, data, topSummary) {
     const maxQty = Math.max(...daily.flatMap(d => [d.in, d.out]), 1);
     card.innerHTML = `
       <div style="display:flex;gap:16px">
-        <div><div class="label">進貨</div><div class="kpi success">${data.in_qty.toLocaleString()}</div></div>
-        <div><div class="label">出貨</div><div class="kpi" style="color:var(--accent)">${data.out_qty.toLocaleString()}</div></div>
-        <div><div class="label">淨變動</div><div class="kpi">${data.delta >= 0 ? '+' : ''}${data.delta.toLocaleString()}</div></div>
+        <div><div class="label">Inbound</div><div class="kpi success">${data.in_qty.toLocaleString()}</div></div>
+        <div><div class="label">Outbound</div><div class="kpi" style="color:var(--accent)">${data.out_qty.toLocaleString()}</div></div>
+        <div><div class="label">Net change</div><div class="kpi">${data.delta >= 0 ? '+' : ''}${data.delta.toLocaleString()}</div></div>
       </div>
       <div class="mov-legend">
         <span><span class="dot" style="background:var(--success)"></span>進貨</span>
@@ -1535,7 +1535,7 @@ function renderViewCard(view, data, topSummary) {
           <div class="lbl">${data.warehouse_a_label}</div>
           <div class="val">${formatMetric(data.metric, data.value_a)}</div>
         </div>
-        <div class="cmp-col ${!a_winner && winner !== '平手' ? 'winner' : ''}">
+        <div class="cmp-col ${!a_winner && winner !== 'tie' ? 'winner' : ''}">
           <div class="lbl">${data.warehouse_b_label}</div>
           <div class="val">${formatMetric(data.metric, data.value_b)}</div>
         </div>
@@ -1544,7 +1544,7 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'hot_items') {
     const rks = data.rankings || [];
     card.innerHTML = `
-      <div class="label">${data.period_label} ${data.category_label || '全類別'} ${data.rank_label} TOP ${rks.length}</div>
+      <div class="label">${data.period_label} ${data.category_label || 'all categories'} ${data.rank_label} TOP ${rks.length}</div>
       <div class="rank-list">
         ${rks.map((r, i) => `
           <div class="rank-row">
@@ -1558,7 +1558,7 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'related') {
     const rels = data.related || [];
     if (rels.length === 0) {
-      card.innerHTML = `<div style="text-align:center;color:var(--muted)">${data.anchor_name || ''} 樣本不足、暫無連帶資料</div>`;
+      card.innerHTML = `<div style="text-align:center;color:var(--muted)">${data.anchor_name || ''}  - not enough samples for association data</div>`;
     } else {
       const anchorName = data.anchor_name || '';
       card.innerHTML = `
@@ -1566,16 +1566,16 @@ function renderViewCard(view, data, topSummary) {
         ${rels.map((r, i) => {
           const trendCls = r.trend_dir === 'up' ? 'rel-trend-up' : (r.trend_dir === 'down' ? 'rel-trend-down' : '');
           const stockBits = [];
-          // 庫存合計 + 若有倉低於安全線、加精簡警示(細節去點單品查)
+          // 庫存合計 + 若有 low於安全線、加精簡警示(細節去點單品查)
           const pw = r.per_warehouse || {};
           const safety = r.safety_stock || 0;
           const lowWhs = Object.entries(pw).filter(([k, v]) => v < safety);
           if (lowWhs.length > 0) {
-            const whShort = { north: '北', central: '中', south: '南' };
+            const whShort = { north: 'North', central: 'Central', south: 'South' };
             const lowNames = lowWhs.map(([k]) => whShort[k] || k).join('/');
-            stockBits.push(`庫存 ${r.total_stock} <span style="color:var(--warning);font-weight:600">⚠️ ${lowNames}倉低</span>`);
+            stockBits.push(`stock ${r.total_stock} <span style="color:var(--warning);font-weight:600">⚠️ ${lowNames} low</span>`);
           } else {
-            stockBits.push(`庫存 ${r.total_stock} 件`);
+            stockBits.push(`stock ${r.total_stock} units`);
           }
           // 「撐X天」可點 → 彈出預測算式
           if (r.days_left < 60) {
@@ -1585,21 +1585,21 @@ function renderViewCard(view, data, topSummary) {
               ` data-days="${r.days_left}" data-trend="${r.trend_dir}" data-safety="${r.safety_stock}"` +
               ` data-suggest="${r.suggest_qty}" data-target="${r.target_days}" data-bname="${r.name}"` +
               ` data-pw="${pwJson}"` +
-              ` data-reorder="${r.need_reorder ? 1 : 0}" onclick="showForecast(this)">⏳ 撐 ${r.days_left} 天 <span class="tap-hint">▸怎麼算</span></span>`
+              ` data-reorder="${r.need_reorder ? 1 : 0}" onclick="showForecast(this)">⏳ cover ${r.days_left} days <span class="tap-hint">▸how?</span></span>`
             );
           }
-          // 該補貨 → 顯示建議補多少 + 分倉
+          // 該補貨 → 顯示建議補多少 + 分
           if (r.need_reorder && r.suggest_qty > 0) {
             const pw = r.per_warehouse_restock || [];
             const whBreak = pw.length
-              ? '（' + pw.map(x => `${x.label.replace('區倉','倉')}+${x.suggest_qty}`).join(' ') + '）'
+              ? '（' + pw.map(x => `${x.label.replace('','')}+${x.suggest_qty}`).join(' ') + '）'
               : '';
-            stockBits.push(`<span class="restock">📦 建議補 ${r.suggest_qty} 件${whBreak}</span>`);
+            stockBits.push(`<span class="restock">📦 suggest ordering ${r.suggest_qty} units${whBreak}</span>`);
           }
-          // 連帶品的「下批 X 天到期」徽章(食品/嬰幼類才會有)
+          // 連帶品的「next batch X days到期」徽章(食品/嬰幼類才會有)
           const nx = r.next_expiring;
           if (nx && ['red','orange','yellow'].includes(nx.level)) {
-            stockBits.push(`<span class="exp-badge ${nx.level}">${nx.level_emoji} 下批 ${nx.days_to_expire} 天到期</span>`);
+            stockBits.push(`<span class="exp-badge ${nx.level}">${nx.level_emoji} next batch ${nx.days_to_expire}  days to expiry</span>`);
           }
           // 把算式素材塞進 data-* 給彈卡片用
           return `
@@ -1612,7 +1612,7 @@ function renderViewCard(view, data, topSummary) {
                   data-aname="${anchorName}" data-bname="${r.name}"
                   onclick="showCalc(this)">
                   ${r.confidence}% · ${r.conf_emoji}${r.conf_label}
-                  <span class="tap-hint">▸怎麼算</span>
+                  <span class="tap-hint">▸how?</span>
                 </span>
                 <span class="${trendCls}" style="font-weight:700">${r.trend_arrow}</span>
               </div>
@@ -1624,7 +1624,7 @@ function renderViewCard(view, data, topSummary) {
         ${data.restock_alerts && data.restock_alerts.length ? `
           <div class="rel-restock-banner">
             ⚠️ <b>${anchorName}</b> 近期出貨量高,連帶品「${data.restock_alerts[0].name}」庫存吃緊,
-            ${data.restock_alerts[0].suggest_after_days <= 1 ? '建議今天就補' : `建議 ${data.restock_alerts[0].suggest_after_days} 天內補`},別等缺了才補。
+            ${data.restock_alerts[0].suggest_after_days <= 1 ? 'restock today' : `restock within ${data.restock_alerts[0].suggest_after_days} days`},別等缺了才補。
           </div>` : ''}
         <div class="rel-baseline-note">📊 點同捆率看「這數字怎麼算出來的」· 隨機商品同單僅約 ${data.random_baseline}%</div>
       `;
@@ -1632,25 +1632,25 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'expiring') {
     const rows = data.rows || [];
     if (rows.length === 0) {
-      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">${data.warehouse_label || ''}最近 ${data.within_days} 天內沒有快到期的批次</div>`;
+      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">${data.warehouse_label || ''}no batches expiring within ${data.within_days} days</div>`;
     } else {
       const c = data.counts || {};
       const totalValue = data.total_value || 0;
       card.innerHTML = `
-        <div class="label">⏰ 到期警示 — ${data.warehouse_label || '全部倉'} 最近 ${data.within_days} 天內共 ${rows.length} 批 · 約 NT$ ${totalValue.toLocaleString()}</div>
+        <div class="label">⏰ Expiry alerts — ${data.warehouse_label || 'All warehouses'} 最近 ${data.within_days} days內共 ${rows.length} 批 · 約 NT$ ${totalValue.toLocaleString()}</div>
         <div class="exp-counts">
-          ${c.red    ? `<span class="cnt red">🔴 7 天內 ${c.red} 批</span>` : ''}
-          ${c.orange ? `<span class="cnt orange">🟠 14 天內 ${c.orange} 批</span>` : ''}
-          ${c.yellow ? `<span class="cnt yellow">🟡 30 天內 ${c.yellow} 批</span>` : ''}
+          ${c.red    ? `<span class="cnt red">🔴 within 7 days: ${c.red} </span>` : ''}
+          ${c.orange ? `<span class="cnt orange">🟠 within 14 days: ${c.orange} </span>` : ''}
+          ${c.yellow ? `<span class="cnt yellow">🟡 within 30 days: ${c.yellow} </span>` : ''}
         </div>
         <table class="exp-table">
-          <tr><th>商品</th><th>倉庫</th><th>剩餘</th><th>數量</th></tr>
+          <tr><th>商品</th><th>庫</th><th>剩餘</th><th>數量</th></tr>
           ${rows.map(r => `
             <tr class="lvl-${r.level}">
               <td>${r.name}<div style="font-size:11px;color:var(--muted)">${r.category_label}</div></td>
               <td>${r.warehouse_label}</td>
-              <td><span class="days ${r.level}">${r.days_to_expire} 天</span></td>
-              <td><b>${r.qty}</b> 件</td>
+              <td><span class="days ${r.level}">${r.days_to_expire} days</span></td>
+              <td><b>${r.qty}</b> units</td>
             </tr>
           `).join('')}
         </table>
@@ -1664,8 +1664,8 @@ function renderViewCard(view, data, topSummary) {
     const trace = data.trace || [];
     const disc  = data.discrepancies || [];
     const ICON  = {glob:'🔍', grep:'📋', read:'📂', reason:'🧠'};
-    const KIND  = {glob:'掃採購單', grep:'比對收貨', read:'比對收貨', reason:'推論結論'};
-    const WH    = {north:'北區倉', central:'中區倉', south:'南區倉'};
+    const KIND  = {glob:'Scan POs', grep:'match receipts', read:'match receipts', reason:'Conclusion'};
+    const WH    = {north:'North', central:'Central', south:'South'};
     const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
     // 結果表格 HTML（先隱藏，最後一步後顯示）
@@ -1675,7 +1675,7 @@ function renderViewCard(view, data, topSummary) {
           ⚠️ 發現 ${disc.length} 筆短收異常
         </div>
         <table class="exp-table">
-          <tr><th>採購單</th><th>商品</th><th>倉庫</th><th>應收</th><th>實收</th><th>短收</th></tr>
+          <tr><th>採購單</th><th>商品</th><th>庫</th><th>應收</th><th>實收</th><th>短收</th></tr>
           ${disc.map(d=>`<tr class="lvl-red">
             <td>${escHtml(d.po_id)}<div style="font-size:11px;color:var(--muted)">${d.date}</div></td>
             <td>${escHtml(d.name)}</td>
@@ -1685,7 +1685,7 @@ function renderViewCard(view, data, topSummary) {
             <td><b style="color:var(--danger)">${d.gap}</b></td>
           </tr>`).join('')}
         </table>
-      </div>` : (data.cause_found===false ? '<div style="padding:8px;color:var(--muted);font-size:13px">✅ 未發現短收異常</div>' : '');
+      </div>` : (data.cause_found===false ? '<div style="padding:8px;color:var(--muted);font-size:13px">✅ No shortfall found</div>' : '');
 
     // summary 區塊（trace 結束後才出現，放在 card 底部）
     const _rcaSummaryText = topSummary || data.summary || '';
@@ -1694,7 +1694,7 @@ function renderViewCard(view, data, topSummary) {
       : '';
 
     card.innerHTML = `
-      <div class="label agent-label">🤖 Agent 追查 — <span id="rca-status-${card.id}" style="color:var(--muted)">分析中…</span></div>
+      <div class="label agent-label">🤖 Agent investigation — <span id="rca-status-${card.id}" style="color:var(--muted)">分析Central…</span></div>
       <div class="agent-trace" id="rca-trace-${card.id}"></div>
       <div id="rca-result-${card.id}" style="display:none">${tableHtml}</div>
       ${summaryHtml}
@@ -1730,7 +1730,7 @@ function renderViewCard(view, data, topSummary) {
         // 最後一步後：顯示結果表格 + summary（都在 card 內）
         if (i === trace.length - 1) {
           setTimeout(() => {
-            statusEl.textContent = data.cause_found ? '✅ 已追到原因' : '掃描完成';
+            statusEl.textContent = data.cause_found ? '✅ Cause found' : 'Scan complete';
             statusEl.style.color = data.cause_found ? 'var(--danger)' : 'var(--text)';
             resultEl.style.display = '';
             if (summaryEl) summaryEl.style.display = '';
@@ -1741,7 +1741,7 @@ function renderViewCard(view, data, topSummary) {
                 create_po:        'var(--danger)',
                 monitor:          'var(--accent)',
               }[data.suggestion_action] || 'var(--accent)';
-              suggestEl.innerHTML = `<span style="font-weight:600;color:${actionColor}">💡 Agent 建議</span><br>${escHtml(data.suggestion)}`;
+              suggestEl.innerHTML = `<span style="font-weight:600;color:${actionColor}">💡 Agent suggestion</span><br>${escHtml(data.suggestion)}`;
               suggestEl.style.display = '';
             }
           }, DELAY);
@@ -1751,33 +1751,33 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'config_read') {
     if (data.rows) {
       card.innerHTML = `<div class="label">⚙️ 安全庫存設定（${data.rows.length} 項）</div>
-        <table class="exp-table"><tr><th>商品</th><th>基準</th><th>分倉</th></tr>
+        <table class="exp-table"><tr><th>商品</th><th>基準</th><th>分</th></tr>
         ${data.rows.map(r => `<tr><td>${r.name}</td><td>${r.base}</td>
           <td style="font-size:12px">${Object.entries(r.by_warehouse).map(([w,v])=>`${w}:${v}`).join(' / ')}</td></tr>`).join('')}
         </table>`;
     } else {
       card.innerHTML = `<div class="label">⚙️ 設定查詢</div>
-        <div style="font-size:18px;padding:8px">「${data.label}」目前設定為 <b style="color:var(--accent)">${data.current}</b></div>`;
+        <div style="font-size:18px;padding:8px">「${data.label}」is currently set to <b style="color:var(--accent)">${data.current}</b></div>`;
     }
   } else if (view === 'item_confirm') {
     const it = data.item || {};
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header warn">📦 新增商品 — 請確認</div>
+        <div class="hitl-header warn">📦 add item — 請Confirm</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
             <tr><td>名稱</td><td><b>${it.name}</b></td></tr>
             <tr><td>SKU</td><td>${it.sku}（自動產生）</td></tr>
             <tr><td>類別</td><td>${it.category}</td></tr>
             <tr><td>單價</td><td>NT$ ${it.price}</td></tr>
-            <tr><td>安全庫存</td><td>${it.safety} 件</td></tr>
-            <tr><td>初始庫存</td><td>北${it.stock_north||0} 中${it.stock_central||0} 南${it.stock_south||0}</td></tr>
+            <tr><td>安全庫存</td><td>${it.safety} units</td></tr>
+            <tr><td>初始庫存</td><td>North${it.stock_north||0} Central${it.stock_central||0} South${it.stock_south||0}</td></tr>
           </table>
-          <div class="hitl-meta">確認後將寫入 items.csv 並自動重生種子資料。</div>
+          <div class="hitl-meta">Confirm後將寫入 items.csv 並自動重生種子資料。</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_create" data-payload='${JSON.stringify({pending:data})}'>✅ 確認新增</button>
-          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_create" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm新增</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'movement_confirm') {
@@ -1785,73 +1785,73 @@ function renderViewCard(view, data, topSummary) {
     const dirIcon = data.direction === 'in' ? '📥' : '📤';
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header warn">${dirIcon} 確認${data.direction_label} — 請確認</div>
+        <div class="hitl-header warn">${dirIcon} Confirm${data.direction_label} — 請Confirm</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
             <tr><td>商品</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
-            <tr><td>倉別</td><td>${data.warehouse_label}</td></tr>
-            <tr><td>數量</td><td style="color:${dirColor};font-weight:600">${data.direction === 'in' ? '+' : '-'}${data.qty} 件</td></tr>
-            <tr><td>庫存變化</td><td>${data.before_qty} 件 → <b>${data.after_qty}</b> 件</td></tr>
+            <tr><td>別</td><td>${data.warehouse_label}</td></tr>
+            <tr><td>數量</td><td style="color:${dirColor};font-weight:600">${data.direction === 'in' ? '+' : '-'}${data.qty} units</td></tr>
+            <tr><td>庫存變化</td><td>${data.before_qty} units → <b>${data.after_qty}</b> units</td></tr>
           </table>
-          <div class="hitl-meta">確認後將直接寫入庫存資料，重開伺服器或重整頁面不會消失。</div>
+          <div class="hitl-meta">Confirm後將直接寫入庫存資料，重開伺服器或重整頁面不會消失。</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_movement" data-payload='${JSON.stringify({pending:data})}'>✅ 確認${data.direction_label}</button>
-          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_movement" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm${data.direction_label}</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'movement_done') {
-    card.innerHTML = `<div class="label">✅ ${data.direction_label}完成</div>
-      <div style="padding:8px;font-size:14px">${data.name} ${data.warehouse_label} 現有 <b>${data.after_qty}</b> 件</div>`;
+    card.innerHTML = `<div class="label">✅ ${data.direction_label}Done</div>
+      <div style="padding:8px;font-size:14px">${data.name} ${data.warehouse_label} now has <b>${data.after_qty}</b> units</div>`;
   } else if (view === 'transfer_confirm') {
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header warn">🔄 確認調貨 — 請確認</div>
+        <div class="hitl-header warn">🔄 Confirm調貨 — 請Confirm</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
             <tr><td>商品</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
-            <tr><td>調貨數量</td><td style="font-weight:600">${data.qty} 件</td></tr>
-            <tr><td>${data.from_label}</td><td style="color:var(--accent)">${data.from_before} 件 → <b>${data.from_after}</b> 件</td></tr>
-            <tr><td>${data.to_label}</td><td style="color:var(--success)">${data.to_before} 件 → <b>${data.to_after}</b> 件</td></tr>
+            <tr><td>調貨數量</td><td style="font-weight:600">${data.qty} units</td></tr>
+            <tr><td>${data.from_label}</td><td style="color:var(--accent)">${data.from_before} units → <b>${data.from_after}</b> units</td></tr>
+            <tr><td>${data.to_label}</td><td style="color:var(--success)">${data.to_before} units → <b>${data.to_after}</b> units</td></tr>
           </table>
-          <div class="hitl-meta">確認後 ${data.from_label} 扣 ${data.qty} 件、${data.to_label} 加 ${data.qty} 件，總量不變。重開伺服器或重整頁面不會消失。</div>
+          <div class="hitl-meta">Confirm後 ${data.from_label} 扣 ${data.qty} units、${data.to_label} 加 ${data.qty} units，總量不變。重開伺服器或重整頁面不會消失。</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_transfer" data-payload='${JSON.stringify({pending:data})}'>✅ 確認調貨</button>
-          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_transfer" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm調貨</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'transfer_done') {
-    card.innerHTML = `<div class="label">✅ 調貨完成</div>
-      <div style="padding:8px;font-size:14px">${data.name} ${data.qty} 件：${data.from_label} 現有 <b>${data.from_after}</b> 件、${data.to_label} 現有 <b>${data.to_after}</b> 件</div>`;
+    card.innerHTML = `<div class="label">✅ 調貨Done</div>
+      <div style="padding:8px;font-size:14px">${data.name} ${data.qty} units：${data.from_label} now has <b>${data.from_after}</b> units、${data.to_label} now has <b>${data.to_after}</b> units</div>`;
   } else if (view === 'item_done') {
-    // 新增/刪除商品後即時更新狀態列和異常橫幅
+    // 新增/delete item後即時更新狀態列和異常橫幅
     refreshSnapshot();
     pullAnomalies();
     const it = data.item;
     const del = data.deleted;
     if (del) {
-      card.innerHTML = `<div class="label">✅ 已刪除商品</div><div style="padding:8px;font-size:14px">${del}</div>`;
+      card.innerHTML = `<div class="label">✅ Item deleted</div><div style="padding:8px;font-size:14px">${del}</div>`;
     } else if (it) {
-      card.innerHTML = `<div class="label">✅ 已新增商品</div><div style="padding:8px;font-size:14px">「${it.name||''}」 — SKU: ${it.sku||''}</div>`;
+      card.innerHTML = `<div class="label">✅ Item added</div><div style="padding:8px;font-size:14px">「${it.name||''}」 — SKU: ${it.sku||''}</div>`;
     } else {
-      card.innerHTML = `<div class="label">✅ 完成</div>`;
+      card.innerHTML = `<div class="label">✅ Done</div>`;
     }
   } else if (view === 'item_cancelled') {
-    // r55：取消對象不一定是新增商品（出貨/調貨/設定卡都走這個 view）——有 summary 用 summary
-    card.innerHTML = `<div class="label" style="color:var(--muted)">🚫 ${data.summary || topSummary || '已取消這筆操作'}</div>`;
+    // r55：Cancel對象不一定是add item（出貨/調貨/設定卡都走這個 view）——有 summary 用 summary
+    card.innerHTML = `<div class="label" style="color:var(--muted)">🚫 ${data.summary || topSummary || 'Operation cancelled'}</div>`;
   } else if (view === 'item_create_step1' || view === 'item_create_step2' || view === 'item_create_step3' || view === 'item_create_step4') {
     const stepData = data;
     card.innerHTML = `
-      <div class="label">📦 新增商品 — 步驟 ${stepData.step}/4</div>
+      <div class="label">📦 add item — 步驟 ${stepData.step}/4</div>
       <div style="padding:8px;color:var(--accent);font-size:14px">${data.summary || data.prompt}</div>
       <div style="text-align:right;margin-top:6px">
-        <button onclick="sendQuery('取消')" style="background:none;border:1px solid #ccc;border-radius:4px;padding:4px 12px;font-size:12px;color:#888;cursor:pointer">取消新增</button>
+        <button onclick="sendQuery('Cancel')" style="background:none;border:1px solid #ccc;border-radius:4px;padding:4px 12px;font-size:12px;color:#888;cursor:pointer">Cancel新增</button>
       </div>`;
     if (view === 'item_create_step2') {
       const cats = ['electronics','appliance_kitchen','food_beverage','daily_goods','apparel','sports'];
-      const labels = {electronics:'電子產品',appliance_kitchen:'家電廚具',food_beverage:'食品飲料',daily_goods:'日用品',apparel:'服飾',sports:'運動用品'};
-      showSuggestions(cats.map(c => ({label: labels[c], query: `類別${c}`})));
+      const labels = {electronics:'Electronics',appliance_kitchen:'Kitchen Appliances',food_beverage:'Food & Beverage',daily_goods:'Daily Goods',apparel:'Apparel',sports:'Sports & Outdoors'};
+      showSuggestions(cats.map(c => ({label: labels[c], query: `category ${c}`})));
       window._itemCreateState = {name: stepData.name, step: 2};
     }
   } else if (view === 'item_delete_confirm') {
@@ -1859,61 +1859,61 @@ function renderViewCard(view, data, topSummary) {
     const deletable = items.filter(it => !it.protected);
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header danger">🗑 刪除商品 — 請確認</div>
+        <div class="hitl-header danger">🗑 delete item — 請Confirm</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>SKU</th><th>商品</th><th>狀態</th></tr>
-            ${items.map(it => `<tr><td>${it.sku}</td><td>${it.name}</td><td>${it.protected ? '🔒 系統保護' : '可刪除'}</td></tr>`).join('')}
+            ${items.map(it => `<tr><td>${it.sku}</td><td>${it.name}</td><td>${it.protected ? '🔒 System protected' : 'can be deleted'}</td></tr>`).join('')}
           </table>
-          <div class="hitl-meta">⚠ 系統預設的 60 項商品不可刪除。刪除後將從 items.csv 移除並重生種子資料。</div>
+          <div class="hitl-meta">⚠ 系統預設的 60 項商品不can be deleted。Delete後將從 items.csv 移除並重生種子資料。</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_delete" data-payload='${JSON.stringify({pending:data})}'>✅ 確認刪除 (${deletable.length}項)</button>
-          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_delete" data-payload='${JSON.stringify({pending:data})}'>✅ ConfirmDelete (${deletable.length}項)</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'item_delete_denied') {
-    card.innerHTML = `<div class="label">🔒 無法刪除</div><div style="padding:8px">${data.summary || '此商品受系統保護，不可刪除。'}</div>`;
+    card.innerHTML = `<div class="label">🔒 cannot be deleted</div><div style="padding:8px">${data.summary || 'This item is system protected，不can be deleted。'}</div>`;
   } else if (view === 'schedule_delete_confirm') {
     const j = data.job || {};
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header danger">🗑 刪除排程 — 請確認</div>
+        <div class="hitl-header danger">🗑 Delete排程 — 請Confirm</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
             <tr><td>ID</td><td>${data.job_id}</td></tr>
             <tr><td>作業</td><td>${j.script_label || ''}</td></tr>
             <tr><td>頻率</td><td>${j.freq_label || ''} ${j.time_str || ''}</td></tr>
           </table>
-          <div class="hitl-meta">⚠ 刪除後此排程不再自動執行，此動作無法復原。</div>
+          <div class="hitl-meta">⚠ Delete後此排程不再auto-run ，此動作無法復原。</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_schedule" data-payload='${JSON.stringify({job_id:data.job_id})}'>✅ 確認刪除</button>
-          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_schedule" data-payload='${JSON.stringify({job_id:data.job_id})}'>✅ ConfirmDelete</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'alert_delete_confirm') {
     const r = data.rule || {};
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header danger">🗑 刪除警示規則 — 請確認</div>
+        <div class="hitl-header danger">🗑 Delete警示規則 — 請Confirm</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
             <tr><td>ID</td><td>${data.rule_id}</td></tr>
             <tr><td>條件</td><td>${data.condition_label || ''}</td></tr>
-            <tr><td>範圍</td><td>${r.scope_txt || '全部商品'}</td></tr>
+            <tr><td>範圍</td><td>${r.scope_txt || 'all items'}</td></tr>
           </table>
-          <div class="hitl-meta">⚠ 刪除後此警示不再主動通知，此動作無法復原。</div>
+          <div class="hitl-meta">⚠ Delete後此警示不再主動通知，此動作無法復原。</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_alert" data-payload='${JSON.stringify({rule_id:data.rule_id})}'>✅ 確認刪除</button>
-          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_alert" data-payload='${JSON.stringify({rule_id:data.rule_id})}'>✅ ConfirmDelete</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'config_confirm' || view === 'script_confirm') {
     const isCfg = view === 'config_confirm';
     const preview = data.preview || [];
     const riskLevel = preview.length > 10 ? 'danger' : 'warn';
-    const riskLabel = preview.length > 10 ? '⚠️ 高風險操作' : '✋ 需要授權';
+    const riskLabel = preview.length > 10 ? '⚠️ High-risk operation' : '✋ Authorisation required';
     const diffHtml = isCfg
       ? (preview.length
           ? `<div class="hitl-diff" style="flex-direction:column;align-items:flex-start;gap:6px">
@@ -1924,7 +1924,7 @@ function renderViewCard(view, data, topSummary) {
                   <span class="hitl-arrow">→</span>
                   <span class="hitl-after">${p.new}</span>
                 </div>`).join('')}
-              ${preview.length>8?`<div class="hitl-meta">…共 ${preview.length} 項異動</div>`:''}
+              ${preview.length>8?`<div class="hitl-meta">…${preview.length} changes</div>`:''}
             </div>`
           : `<div class="hitl-diff">
               <span class="hitl-before">${data.old ?? '—'}</span>
@@ -1933,7 +1933,7 @@ function renderViewCard(view, data, topSummary) {
               <span style="font-size:12px;color:var(--muted);margin-left:6px">「${data.label||data.canon||''}」</span>
             </div>`)
       : `<div class="hitl-diff">
-          <span style="font-size:13px">📜 腳本：<b>${data.script_id||data.script_name||''}</b></span>
+          <span style="font-size:13px">📜 Script: <b>${data.script_id||data.script_name||''}</b></span>
         </div>`;
     card.innerHTML = `
       <div class="hitl-card">
@@ -1960,35 +1960,35 @@ function renderViewCard(view, data, topSummary) {
       ? `<a href="/${isAudit?'audit':'reports'}/${fname}" download="${fname}"
            style="display:inline-block;margin-top:8px;padding:6px 14px;
                   background:var(--accent);color:#fff;border-radius:6px;
-                  font-size:13px;text-decoration:none">⬇ 下載 ${fname}</a>` : '';
+                  font-size:13px;text-decoration:none">⬇ Download ${fname}</a>` : '';
     const summaryLine = tail.match(/SUMMARY:(.+)/);
     const summaryText = summaryLine ? summaryLine[1].trim() : (data.summary || '');
-    card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} 腳本執行${data.ok===false?'失敗':'完成'}</div>
+    card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} script run ${data.ok===false?'failed':'done'}</div>
       <div style="padding:8px;font-size:14px">${summaryText}</div>
       ${dlHtml}
-      ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · 已記錄到 audit log</div>`:''}`;
+      ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · logged to audit log</div>`:''}`;
   } else if (view === 'report_done') {
     const trace = data.trace || [];
     const ICON = {glob:'🔍', grep:'📑', read:'📂', reason:'🧠', act:'✍️'};
-    const KIND = {glob:'掃檔', grep:'比對', read:'讀取', reason:'彙整', act:'寫檔'};
+    const KIND = {glob:'Scan', grep:'Match', read:'Read', reason:'Aggregate', act:'Write'};
     const rptFname = data.file || '';
     const rptDlHtml = rptFname
       ? `<a href="/reports/${rptFname}" download="${rptFname}"
            style="display:inline-block;margin-top:8px;padding:6px 14px;
                   background:var(--accent);color:#fff;border-radius:6px;
-                  font-size:13px;text-decoration:none">⬇ 下載 ${rptFname}</a>` : '';
+                  font-size:13px;text-decoration:none">⬇ Download ${rptFname}</a>` : '';
     card.innerHTML = `
-      <div class="label">📄 報告已產出 — <span style="color:var(--accent)">${rptFname}</span></div>
+      <div class="label">📄 Report generated — <span style="color:var(--accent)">${rptFname}</span></div>
       <div class="agent-trace">
         ${trace.map((s,i)=>`<div class="trace-step" style="animation-delay:${i*0.22}s">
           <span class="ts-icon">${ICON[s.kind]||'•'}</span>
           <span class="ts-kind">${KIND[s.kind]||s.kind}</span>
           <span class="ts-detail">${s.detail||''}</span></div>`).join('')}
       </div>
-      ${data.chart ? `<img class="report-chart" src="/reports/${data.chart}" alt="報告圖表">` : ''}
+      ${data.chart ? `<img class="report-chart" src="/reports/${data.chart}" alt="Report chart">` : ''}
       <pre class="report-preview">${(data.preview||'').replace(/</g,'&lt;')}</pre>
       ${rptDlHtml}
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">完整檔：warehouse_data/reports/${rptFname}</div>`;
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Full file: warehouse_data/reports/${rptFname}</div>`;
   } else if (view === 'file_list') {
     const rows = data.rows || [];
     if (data.area === null) {
@@ -2004,28 +2004,28 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'po_confirm') {
     const lines = data.lines || [];
     if (!lines.length) {
-      card.innerHTML = `<div class="label">📋 採購建議</div><div style="padding:8px">目前沒有需要補貨的品項。</div>`;
+      card.innerHTML = `<div class="label">📋 Purchase suggestion</div><div style="padding:8px">No items need restocking.</div>`;
     } else {
       const totalAmt = (data.total||0).toLocaleString();
       const riskLevel = lines.length > 15 ? 'danger' : 'warn';
       card.innerHTML = `
         <div class="hitl-card">
-          <div class="hitl-header ${riskLevel}">✋ 採購授權 — 請確認後送出</div>
+          <div class="hitl-header ${riskLevel}">✋ 採購授權 — 請Confirm後送出</div>
           <div class="hitl-body">
             <div style="font-size:13px;margin-bottom:8px">
               共 <b>${lines.length}</b> 項商品需補貨，預估金額
               <b style="color:var(--accent);font-size:16px">NT$ ${totalAmt}</b>
             </div>
             <table class="exp-table" style="margin:8px 0">
-              <tr><th>商品</th><th>倉</th><th>補貨量</th><th>金額</th><th>供應商</th></tr>
+              <tr><th>商品</th><th></th><th>補貨量</th><th>金額</th><th>供應商</th></tr>
               ${lines.slice(0,12).map(l=>`<tr>
                 <td>${l.name}</td><td>${l.warehouse}</td>
                 <td><b>${l.order_qty}</b></td>
                 <td style="color:var(--accent)">NT$ ${(l.amount||0).toLocaleString()}</td>
                 <td style="color:var(--muted)">${l.supplier||'—'}</td></tr>`).join('')}
-              ${lines.length>12?`<tr><td colspan="5" style="text-align:center;color:var(--muted)">…還有 ${lines.length-12} 項</td></tr>`:''}
+              ${lines.length>12?`<tr><td colspan="5" style="text-align:center;color:var(--muted)">… and ${lines.length-12}  more</td></tr>`:''}
             </table>
-            <div class="hitl-meta">確認後將建立採購草稿存入 PO_draft/，並記錄至 audit log。</div>
+            <div class="hitl-meta">Confirm後將建立採購草稿存入 PO_draft/，並記錄至 audit log。</div>
           </div>
           <div class="hitl-btns">
             <button class="hitl-approve" onclick='doConfirm(this)' data-action="generate_po"
@@ -2037,12 +2037,12 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'po_done') {
     card.innerHTML = `<div class="label">✅ 採購草稿已建立</div>
       <div style="padding:8px;font-size:14px">${data.po_id||''} — ${data.lines||0} 項，存到 PO_draft/</div>
-      ${data.trace_id?`<div style="font-size:11px;color:var(--muted)">trace_id: ${data.trace_id} · 已記 audit</div>`:''}`;
+      ${data.trace_id?`<div style="font-size:11px;color:var(--muted)">trace_id: ${data.trace_id} · audit logged</div>`:''}`;
   } else if (view === 'alert_confirm') {
-    const scopeTxt = (data.scope_names||[]).length ? (data.scope_names||[]).join('、') : '全部商品';
+    const scopeTxt = (data.scope_names||[]).length ? (data.scope_names||[]).join('、') : 'all items';
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header warn">🔔 設定警示 — 請確認</div>
+        <div class="hitl-header warn">🔔 設定警示 — 請Confirm</div>
         <div class="hitl-body">
           <div style="font-size:13px;margin-bottom:10px">${(currentBotMsg?currentBotMsg.textContent:'')||data.summary||''}</div>
           <div class="hitl-diff">
@@ -2052,7 +2052,7 @@ function renderViewCard(view, data, topSummary) {
               <div style="font-size:12px;color:var(--muted);margin-top:2px">規則 ID：${data.rule_id} · 啟用後背景掃描自動套用</div>
             </div>
           </div>
-          <div class="hitl-meta">確認後寫入 alert_rules.json 並記錄 audit log。</div>
+          <div class="hitl-meta">Confirm後寫入 alert_rules.json 並記錄 audit log。</div>
         </div>
         <div class="hitl-btns">
           <button class="hitl-approve" onclick='doConfirm(this)' data-action="set_alert"
@@ -2061,34 +2061,34 @@ function renderViewCard(view, data, topSummary) {
         </div>
       </div>`;
   } else if (view === 'alert_done') {
-    card.innerHTML = `<div class="label">🔔 警示規則已設定 — ${data.rule_id||''}</div>
-      <div style="padding:8px;font-size:14px">當【${(data.scope_names||[]).join('、')||'全部商品'}】發生「${data.condition_label}」時主動通知。</div>
-      <div style="font-size:11px;color:var(--muted)">背景掃描會自動套用此規則（點右上角 🔔 查看）</div>`;
+    card.innerHTML = `<div class="label">🔔 Alert rule created — ${data.rule_id||''}</div>
+      <div style="padding:8px;font-size:14px">當【${(data.scope_names||[]).join('、')||'all items'}】發生「${data.condition_label}」時主動通知。</div>
+      <div style="font-size:11px;color:var(--muted)">Background scans will apply this rule (tap 🔔 top right to view)</div>`;
   } else if (view === 'schedule_confirm') {
     card.innerHTML = `
       <div class="hitl-card">
-        <div class="hitl-header">⏰ 設定定時排程 — 請確認</div>
+        <div class="hitl-header">⏰ 設定定時排程 — 請Confirm</div>
         <div class="hitl-body">
           <div style="font-size:13px;margin-bottom:10px">${(currentBotMsg?currentBotMsg.textContent:'')||''}</div>
           <div class="hitl-diff">
             <span style="font-size:20px">⏰</span>
             <div>
-              <div style="font-weight:700;font-size:14px">${data.freq_label} ${data.time_str} 自動執行【${data.script_label}】</div>
+              <div style="font-weight:700;font-size:14px">${data.freq_label} ${data.time_str} auto-run 【${data.script_label}】</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px">排程 ID：${data.job_id} · 寫入 schedule_jobs.json，重啟不消失</div>
             </div>
           </div>
-          <div class="hitl-meta">確認後 Agent 將定時自動執行，完成後推送通知到此對話。</div>
+          <div class="hitl-meta">Confirm後 Agent 將定時auto-run ，done後推送通知到此對話。</div>
         </div>
         <div class="hitl-btns">
           <button class="hitl-approve" onclick='doConfirm(this)' data-action="set_schedule"
-            data-payload='${JSON.stringify({pending:data})}'>✅ 確認建立排程</button>
-          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+            data-payload='${JSON.stringify({pending:data})}'>✅ Confirm建立排程</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'schedule_done') {
-    card.innerHTML = `<div class="label">⏰ 排程已建立 — ${data.job?.id||''}</div>
-      <div style="padding:8px;font-size:14px">${data.job?.freq_label||''} ${data.job?.time_str||''} 自動執行【${data.job?.script_label||''}】</div>
-      <div style="font-size:11px;color:var(--muted)">點右上角 🔔 → 定時排程 可查看 / 刪除</div>`;
+    card.innerHTML = `<div class="label">⏰ Schedule created — ${data.job?.id||''}</div>
+      <div style="padding:8px;font-size:14px">${data.job?.freq_label||''} ${data.job?.time_str||''} auto-run 【${data.job?.script_label||''}】</div>
+      <div style="font-size:11px;color:var(--muted)">Tap 🔔 top right → Schedules to view / delete</div>`;
   } else if (view === 'period_compare') {
     // 跨期比較
     const rows = data.rows || [];
@@ -2107,10 +2107,10 @@ function renderViewCard(view, data, topSummary) {
       <div class="clarify-opts">
         ${opts.map((opt, i) => {
           const c = _cands[i];
-          const sub = c ? `<span class="clarify-sub">${esc(c.category||'')}｜共 ${c.qty} ${esc(c.unit||'件')}</span>` : '';
+          const sub = c ? `<span class="clarify-sub">${esc(c.category||'')}｜total ${c.qty} ${esc(c.unit||'件')}</span>` : '';
           return `<button class="clarify-row" data-copt="${i}"><span class="clarify-num">${i+1}</span><span class="clarify-text">${esc(opt)}${sub}</span></button>`;
         }).join('')}
-        <button class="clarify-row clarify-cancel" data-copt="cancel"><span class="clarify-num">✕</span><span class="clarify-text">取消，我不查了</span></button>
+        <button class="clarify-row clarify-cancel" data-copt="cancel"><span class="clarify-num">✕</span><span class="clarify-text">Cancel，我不查了</span></button>
       </div>
       <div class="clarify-hint">點選項目，或輸入數字 1~${opts.length} / 直接輸入完整問題</div>
     `;
@@ -2121,7 +2121,7 @@ function renderViewCard(view, data, topSummary) {
     // 點選項 = 跟打數字走同一條路（解析成實際指令 → sendQuery）
     card.querySelectorAll('.clarify-row').forEach(btn => {
       btn.onclick = () => {
-        // 取消鈕：訪客隨口問問、不想選了 → 直接關掉卡片，不送任何查詢（展場友善）
+        // Cancel鈕：訪客隨口問問、不想選了 → 直接關掉卡片，不送任何查詢（展場友善）
         if (btn.dataset.copt === 'cancel') {
           window._clarifyOpts = null;
           window._clarifyActions = null;
@@ -2159,20 +2159,20 @@ function renderViewCard(view, data, topSummary) {
   scrollBottom();
 }
 
-// ── HITL 確認：把 pending 送回 server commit ──
+// ── HITL Confirm：把 pending 送回 server commit ──
 function doConfirm(btn) {
   const action = btn.dataset.action;
   const payload = JSON.parse(btn.dataset.payload || '{}');
   const btnsEl = btn.closest('.hitl-btns');
   const origHtml = btnsEl ? btnsEl.innerHTML : '';
-  if (btnsEl) btnsEl.innerHTML = '<div style="padding:10px;color:var(--muted)">執行中…</div>';
+  if (btnsEl) btnsEl.innerHTML = '<div style="padding:10px;color:var(--muted)">Running…</div>';
   const msg = JSON.stringify({type:'confirm', action, ...payload});
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(msg);
     return;
   }
   // 斷線：重連後「等到真的 OPEN」才送，等不到就還原按鈕讓使用者重按
-  // （原本固定 1200ms 硬送，重連沒完成 ws.send 會 throw，確認永久丟失、UI 卡「執行中…」）
+  // （原本固定 1200ms 硬送，重連沒done ws.send 會 throw，Confirm永久丟失、UI 卡「Running…」）
   connectWS();
   let tries = 0;
   const timer = setInterval(() => {
@@ -2182,7 +2182,7 @@ function doConfirm(btn) {
     } else if (++tries >= 20) {   // 最多等 20 × 300ms = 6 秒
       clearInterval(timer);
       if (btnsEl) btnsEl.innerHTML = origHtml;   // 還原按鈕，可重按
-      appendBot('⚠️ 連線中斷，剛才的確認沒有送出，請再按一次確認。');
+      appendBot('⚠️ 連線Central斷，your confirmation was not sent - please tap Confirm again.');
       currentBotMsg = null;
     }
   }, 300);
@@ -2190,7 +2190,7 @@ function doConfirm(btn) {
 
 function formatMetric(metric, val) {
   if (metric === 'stock_value') return `NT$ ${val.toLocaleString()}`;
-  if (metric === 'item_count')  return `${val.toLocaleString()} 件`;
+  if (metric === 'item_count')  return `${val.toLocaleString()} units`;
   if (metric === 'turnover')    return val.toFixed(3);
   return String(val);
 }
@@ -2227,7 +2227,7 @@ function showCalc(el) {
 }
 function closeCalc() { $('calc-pop').classList.remove('show'); }
 
-// ─── 點「撐 X 天」→ 彈出庫存預測算式 ───
+// ─── 點「cover X days」→ 彈出庫存預測算式 ───
 function showForecast(el) {
   const stock = +el.dataset.stock;
   const burn = +el.dataset.burn;
@@ -2240,31 +2240,31 @@ function showForecast(el) {
   const reorder = el.dataset.reorder === '1';
   let pw = [];
   try { pw = JSON.parse(decodeURIComponent(el.dataset.pw || '[]')); } catch {}
-  const trendTxt = trend === 'up' ? '↗ 上升(賣越來越快、消耗 ×1.3 不低估)'
-                 : (trend === 'down' ? '↘ 下滑(退燒中、消耗 ×0.8)' : '→ 持平');
+  const trendTxt = trend === 'up' ? '↗ rising (selling faster, burn ×1.3)'
+                 : (trend === 'down' ? '↘ falling (cooling off, burn ×0.8)' : '→ steady');
   const box = $('calc-box');
   box.innerHTML = `
-    <h3>⏳ 「${bname}」還能撐 ${days} 天?</h3>
+    <h3>⏳ 「${bname}」還能cover ${days} days?</h3>
     <div class="calc-formula">
-      現有庫存 <b>${stock}</b> 件<br>
-      ÷ 每天約賣 <b>${burn}</b> 件<br>
-      <span class="big">${stock} ÷ ${burn} ≈ ${days} 天</span>
+      現有stock <b>${stock}</b> units<br>
+      ÷ 每天約賣 <b>${burn}</b> units<br>
+      <span class="big">${stock} ÷ ${burn} ≈ ${days} days</span>
     </div>
     <div class="calc-compare">
-      📈 每天賣多少 = 看近 30 天平均,再依趨勢加權:<br>
+      📈 每天賣多少 = 看近 30 days平均,再依趨勢加權:<br>
       　趨勢 ${trendTxt}<br>
-      🔔 庫存跌到安全線(${safety} 件)或撐不到 7 天 → 就提醒補貨。
+      🔔 庫存跌到安全線(${safety} units)或撐不到 7 days → 就提醒補貨。
     </div>
     ${reorder && suggest > 0 ? `
       <div class="calc-compare" style="margin-top:10px;background:#fff5f5;padding:10px;border-radius:8px">
-        📦 <b class="hi">建議補 ${suggest} 件</b>${pw.length ? `
+        📦 <b class="hi">suggest ordering ${suggest} units</b>${pw.length ? `
         <div style="margin-top:6px;font-size:12px">
-          ${pw.map(x => `<div>　• ${x.label}:現 ${x.stock} 件 → 補 <b>${x.suggest_qty}</b> 件</div>`).join('')}
+          ${pw.map(x => `<div>　• ${x.label}:now ${x.stock} → order <b>${x.suggest_qty}</b> units</div>`).join('')}
         </div>` : ''}
-        <span style="font-size:11px;color:var(--muted)">每倉各自補到能撐 ${target} 天、含叫貨緩衝(缺最多的倉排前面)</span>
+        <span style="font-size:11px;color:var(--muted)">每各自補到能cover ${target} days、含叫貨緩衝(缺最多的排前面)</span>
       </div>` : ''}
     <div class="calc-compare" style="margin-top:8px;font-size:11px;color:var(--muted)">
-      這叫「線性消耗預測」— 依最近賣法往前推,倉儲補貨常用算法,不是亂猜。
+      這叫「線性消耗預測」— 依最近賣法往前推,儲補貨常用算法,不是亂猜。
     </div>
     <button class="calc-close" onclick="closeCalc()">懂了！</button>
   `;
@@ -2276,49 +2276,49 @@ function renderFollowups(view, data) {
   if (view === 'inventory_single' || view === 'inventory_multi') {
     const kw = data.keyword || '';
     const items = [];
-    if (kw) items.push({ label: `${kw} 本週進出`, query: `${kw} 本週進出` });
-    items.push({ label: '🚨 庫存警示', direct_call: { function: 'list_low_stock' } });
-    items.push({ label: '🔥 本週熱銷', query: '本週熱銷' });
+    if (kw) items.push({ label: `${kw} movements this week`, query: `${kw} movements this week` });
+    items.push({ label: '🚨 Low stock', direct_call: { function: 'list_low_stock' } });
+    items.push({ label: '🔥 best sellers this week', query: 'best sellers this week' });
     showSuggestions(items);
   } else if (view === 'low_stock') {
     showSuggestions([
-      { label: '北倉缺貨', query: '北倉缺貨清單' },
-      { label: '中倉缺貨', query: '中倉缺貨清單' },
-      { label: '南倉缺貨', query: '南倉缺貨清單' },
-      { label: '🔥 本週熱銷', query: '本週熱銷' },
+      { label: 'North low stock', query: 'low stock in north' },
+      { label: 'Central low stock', query: 'low stock in central' },
+      { label: 'South low stock', query: 'low stock in south' },
+      { label: '🔥 best sellers this week', query: 'best sellers this week' },
     ]);
   } else if (view === 'movement') {
     showSuggestions([
-      { label: '今天進出', query: '今天進出狀況' },
-      { label: '本週進出', query: '本週進出狀況' },
-      { label: '本月進出', query: '本月進出狀況' },
-      { label: '🚨 庫存警示', direct_call: { function: 'list_low_stock' } },
+      { label: 'Today in/out', query: 'todays movements' },
+      { label: 'This week in/out', query: 'this weeks movements' },
+      { label: 'This month in/out', query: 'this months movements' },
+      { label: '🚨 Low stock', direct_call: { function: 'list_low_stock' } },
     ]);
   } else if (view === 'compare_warehouses') {
     showSuggestions([
-      { label: '比庫存價值', query: '北倉跟南倉庫存價值比較' },
-      { label: '比商品數量', query: '北倉跟中倉商品數量比較' },
-      { label: '比週轉率', query: '中倉跟南倉週轉率比較' },
+      { label: 'By stock value', query: 'compare north and south by stock value' },
+      { label: 'By item count', query: 'compare north and central by item count' },
+      { label: 'By turnover', query: 'compare central and south by turnover' },
     ]);
   } else if (view === 'hot_items') {
     showSuggestions([
-      { label: '本週熱銷', query: '本週熱銷排行' },
-      { label: '本月熱銷', query: '本月熱銷排行' },
-      { label: '本月滯銷', query: '本月滯銷品' },
-      { label: '🚨 庫存警示', direct_call: { function: 'list_low_stock' } },
+      { label: 'best sellers this week', query: 'best sellers this week' },
+      { label: 'Best sellers this month', query: 'best sellers this month' },
+      { label: 'Slow movers this month', query: 'slow movers this month' },
+      { label: '🚨 Low stock', direct_call: { function: 'list_low_stock' } },
     ]);
   } else if (view === 'rejected') {
     showSuggestions([
-      { label: '藍牙耳機庫存', query: '藍牙耳機庫存' },
-      { label: '庫存警示', direct_call: { function: 'list_low_stock' } },
-      { label: '本週熱銷', query: '本週熱銷' },
-      { label: '今天進貨', query: '今天進了什麼貨' },
+      { label: 'bluetooth earphones stock', query: 'bluetooth earphones stock' },
+      { label: 'low stock alert', direct_call: { function: 'list_low_stock' } },
+      { label: 'best sellers this week', query: 'best sellers this week' },
+      { label: 'Today inbound', query: 'what came in today' },
     ]);
   } else if (view === 'compare_help') {
     showSuggestions([
-      { label: '北倉 vs 南倉 庫存', query: '北倉跟南倉哪個庫存比較多' },
-      { label: '中倉 vs 南倉 週轉', query: '中倉跟南倉週轉率比較' },
-      { label: '北倉 vs 中倉 商品數', query: '北倉跟中倉商品數量比較' },
+      { label: 'North vs South stock', query: 'which has more stock north or south' },
+      { label: 'Central vs South turnover', query: 'compare central and south by turnover' },
+      { label: 'North vs Central items', query: 'compare north and central by item count' },
     ]);
   } else if (view === 'related') {
     // 連鎖探索:連帶品本身可再點(看它的連帶)→ 一路探索停不下來
@@ -2327,11 +2327,11 @@ function renderFollowups(view, data) {
     rels.slice(0, 3).forEach(r => {
       items.push({ label: `🔗 ${r.name} 還連到啥`, query: `買${r.name}的人還會買什麼` });
     });
-    // 該商品庫存 + 隨機驚喜
+    // 該商品stock + 隨機驚喜
     if (data.anchor_name) {
       items.push({ label: `📦 ${data.anchor_name} 庫存`, query: `${data.anchor_name}庫存` });
     }
-    items.push({ label: '🎲 隨機來一個', action: randomSurprise });
+    items.push({ label: '🎲 Surprise me', action: randomSurprise });
     showSuggestions(items);
   } else if (view === 'expiring') {
     const items = [];
@@ -2340,22 +2340,22 @@ function renderFollowups(view, data) {
     rows.slice(0, 3).forEach(r => {
       items.push({ label: `📦 ${r.name} 庫存`, query: `${r.name}庫存` });
     });
-    // 換倉看
-    items.push({ label: '北倉到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'north', within_days: 30 } } });
-    items.push({ label: '中倉到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'central', within_days: 30 } } });
-    items.push({ label: '南倉到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'south', within_days: 30 } } });
+    // 換看
+    items.push({ label: 'North到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'north', within_days: 30 } } });
+    items.push({ label: 'Central到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'central', within_days: 30 } } });
+    items.push({ label: 'South到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'south', within_days: 30 } } });
     showSuggestions(items);
   }
 }
 
 // 🎲 隨機驚喜:隨機挑一個情境錨點問連帶(像轉扭蛋)
 const SURPRISE_KEYWORDS = [
-  '藍牙耳機','咖啡機','尿布','帳篷','瑜珈墊','慢跑鞋','洗衣精','羽絨外套',
+  'bluetooth earphones','coffee machine','diapers','tent','yoga mat','running shoes','laundry detergent','down jacket',
   '氣泡水','野炊鍋','防蚊液','登山水壺','健身環','排汗衣','行動電源',
 ];
 function randomSurprise() {
   const kw = SURPRISE_KEYWORDS[Math.floor(Math.random() * SURPRISE_KEYWORDS.length)];
-  sendQuery(`買${kw}的人還會買什麼`);
+  sendQuery(`what else do ${kw} buyers get`);
 }
 
 function sendQuery(text) {
@@ -2368,7 +2368,7 @@ function sendQuery(text) {
   }
   setSending(true);
   appendUser(text);
-  // 「處理中」動畫放在對話裡（bot 氣泡的 loading dots），一直顯示到收到
+  // 「處理Central」動畫放在對話裡（bot 氣泡的 loading dots），一直顯示到收到
   // 第一個 token/done 才被真回覆取代——不再靠底部 send-status（那位置讓給
   // 效能徽章）。token/done handler 會清掉 dots 再填內容。
   currentBotMsg = appendLoading();
@@ -2383,7 +2383,7 @@ function sendDirectCall(func, args) {
     return;
   }
   setSending(true);
-  const labelMap = { list_low_stock: '🚨 庫存警示', list_expiring_items: '⏰ 到期警示' };
+  const labelMap = { list_low_stock: '🚨 Low stock', list_expiring_items: '⏰ 到期警示' };
   appendUser(labelMap[func] || func);
   currentBotMsg = appendLoading();
   setTimeout(() => { if (currentBotMsg) currentBotMsg.innerHTML = ''; }, 50);
@@ -2404,56 +2404,56 @@ document.querySelectorAll('#chips-bar .chip').forEach(c => {
     } else if (a === 'low-stock-direct') {
       sendDirectCall('list_low_stock', {});
     } else if (a === 'hot-items') {
-      sendQuery('本週熱銷');
+      sendQuery('best sellers this week');
     } else if (a === 'show-related-menu') {
       currentBotMsg = appendBot('想看哪個商品「買的人還會買什麼」?點一個試試:');
-      const seeds = ['藍牙耳機', '咖啡機', '尿布', '帳篷', '瑜珈墊', '慢跑鞋'];
-      const items = seeds.map(kw => ({ label: kw, query: `買${kw}的人還會買什麼` }));
-      items.push({ label: '🎲 隨機來一個', action: randomSurprise });
+      const seeds = ['bluetooth earphones', 'coffee machine', 'diapers', 'tent', 'yoga mat', 'running shoes'];
+      const items = seeds.map(kw => ({ label: kw, query: `what else do ${kw} buyers get` }));
+      items.push({ label: '🎲 Surprise me', action: randomSurprise });
       showSuggestions(items);
       currentBotMsg = null;
     } else if (a === 'expiring-direct') {
       sendDirectCall('list_expiring_items', { within_days: 30 });
     } else if (a === 'movement-menu') {
-      // ── 進出貨：demo 訪客一句話改庫存數字，走 HITL 確認卡 ──
-      currentBotMsg = appendBot('📥 進貨 / 出貨，一句話就好（會先給你確認卡，確認後才寫入）。點一個試試:');
+      // ── 進出貨：demo 訪客一句話改庫存數字，走 HITL Confirm卡 ──
+      currentBotMsg = appendBot('📥 Inbound / Outbound，一句話就好（會先給你Confirm卡，Confirm後才寫入）。點一個試試:');
       showSuggestions([
-        { label: '📥 北倉進了藍牙耳機50件', query: '北倉進了藍牙耳機50件' },
-        { label: '📤 南倉出貨行動電源20個', query: '南倉出貨行動電源20個' },
-        { label: '📥 中倉進三箱衛生紙', query: '中倉進三箱衛生紙' },
-        { label: '📤 北倉賣掉8支無線滑鼠', query: '北倉賣掉8支無線滑鼠' },
+        { label: '📥 north received 50 bluetooth earphones', query: 'north received 50 bluetooth earphones' },
+        { label: '📤 south shipped 20 power banks', query: 'south shipped 20 power banks' },
+        { label: '📥 central received 3 boxes of facial tissue', query: 'central received 3 boxes of facial tissue' },
+        { label: '📤 North賣掉8支無線滑鼠', query: 'North賣掉8支無線滑鼠' },
       ]);
       currentBotMsg = null;
     } else if (a === 'transfer-menu') {
-      // ── 調貨：跨倉調撥，demo 最直覺想玩的「貨在倉間移動」 ──
-      currentBotMsg = appendBot('🔄 把貨從一個倉調到另一個倉（來源倉不夠會擋下）。點一個試試:');
+      // ── 調貨：跨調撥，demo 最直覺想玩的「貨在間移動」 ──
+      currentBotMsg = appendBot('🔄 把貨從一個調到另一個（來源不夠會擋下）。點一個試試:');
       showSuggestions([
-        { label: '🔄 北倉調30個藍牙耳機給南倉', query: '北倉調30個藍牙耳機給南倉' },
-        { label: '🔄 中倉搬20台藍牙喇叭到北倉', query: '中倉搬20台藍牙喇叭到北倉' },
-        { label: '🔄 南倉撥15個行動電源到中倉', query: '南倉撥15個行動電源到中倉' },
+        { label: '🔄 transfer 30 bluetooth earphones from north to south', query: 'transfer 30 bluetooth earphones from north to south' },
+        { label: '🔄 move 20 bluetooth speakers from central to north', query: 'move 20 bluetooth speakers from central to north' },
+        { label: '🔄 South撥15個行動電源到Central', query: 'South撥15個行動電源到Central' },
       ]);
       currentBotMsg = null;
     } else if (a === 'return-menu') {
-      // ── 退貨：客人退貨（庫存加回），走 HITL 確認卡 ──
-      currentBotMsg = appendBot('↩️ 客人退貨，庫存會加回來（一樣先給確認卡）。點一個試試:');
+      // ── 退貨：客人退貨（庫存加回），走 HITL Confirm卡 ──
+      currentBotMsg = appendBot('↩️ 客人退貨，庫存會加回來（一樣先給Confirm卡）。點一個試試:');
       showSuggestions([
-        { label: '↩️ 客人退了3個藍牙耳機', query: '北倉客人退了3個藍牙耳機' },
-        { label: '↩️ 顧客退2台藍牙喇叭', query: '南倉顧客退2台藍牙喇叭' },
-        { label: '↩️ 中倉被退5個智慧手環', query: '中倉被退5個智慧手環' },
+        { label: '↩️ 客人退了3個bluetooth earphones', query: 'customer returned 3 bluetooth earphones at north' },
+        { label: '↩️ 顧客退2台藍牙喇叭', query: 'South顧客退2台藍牙喇叭' },
+        { label: '↩️ 5 smart bands returned at central', query: '5 smart bands returned at central' },
       ]);
       currentBotMsg = null;
     } else if (a === 'agent-menu') {
       // ── v2 智慧管家：進階 Agent 能力 + 商品管理/改設定收進這裡當次選單 ──
       currentBotMsg = appendBot('🤖 智慧管家能「追原因 / 改設定 / 跑作業 / 管商品」。挑一個看看 Agent 怎麼多步思考:');
       showSuggestions([
-        { label: '🔍 追查庫存對不上', query: '智慧手環怎麼少這麼多' },
-        { label: '📄 產全倉體檢報告(含圖表)', query: '幫我出個全倉體檢報告' },
-        { label: '📋 缺貨→自動產採購單', query: '幫我把缺貨的產採購單' },
-        { label: '🔔 設警示(缺貨就通知)', query: '藍牙耳機缺貨就通知我' },
+        { label: '🔍 追check stock對不上', query: 'why are smart bands down so much' },
+        { label: '📄 產全體檢報告(含圖表)', query: 'give me a full warehouse report' },
+        { label: '📋 缺貨→自動產採購單', query: 'create a purchase order for low stock items' },
+        { label: '🔔 設警示(缺貨就通知)', query: 'bluetooth earphones缺貨就通知我' },
         { label: '📈 這月vs上月變化', query: '這個月跟上個月哪些變化大' },
-        { label: '⚙️ 南倉安全庫存全部+30', query: '南倉安全庫存全部加30' },
-        { label: '➕ 新增商品', query: '新增商品' },
-        { label: '🗑 刪除商品', query: '刪除商品' },
+        { label: '⚙️ South安全庫存全部+30', query: 'increase safety stock by 30 in south' },
+        { label: '➕ add item', query: 'add item' },
+        { label: '🗑 delete item', query: 'delete item' },
         { label: '🛠️ 跑月底盤點', query: '幫我跑一次月底盤點' },
       ]);
       currentBotMsg = null;
@@ -2558,7 +2558,7 @@ function startVAD(stream) {
       vadRAF = requestAnimationFrame(tick);
     };
     tick();
-  } catch (e) { /* VAD 失敗不影響錄音，只是要手動再點一下 */ }
+  } catch (e) { /* VAD failed不影響錄音，只是要手動再點一下 */ }
 }
 
 function stopLocalRec() {
@@ -2571,7 +2571,7 @@ async function startLocalRec() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (e) {
-    micStatus.textContent = '❌ 麥克風權限被拒、請到瀏覽器設定開啟';
+    micStatus.textContent = '❌ Microphone permission denied - please enable it in browser settings';
     return;
   }
   audioChunks = [];
@@ -2589,9 +2589,9 @@ async function startLocalRec() {
     isRecording = false;
     micBtn.classList.remove('recording');
     const blob = new Blob(audioChunks, { type: 'audio/webm' });
-    if (blob.size < 2000) { micStatus.textContent = '⚠️ 沒聽到聲音、請再試一次'; return; }
+    if (blob.size < 2000) { micStatus.textContent = '⚠️ Didn't catch that - please try again'; return; }
 
-    micStatus.textContent = '🧠 辨識中…';
+    micStatus.textContent = '🧠 辨識Central…';
     try {
       const r = await fetch('/api/asr', { method: 'POST', body: blob });
       const j = await r.json();
@@ -2603,14 +2603,14 @@ async function startLocalRec() {
         micStatus.textContent = '⚠️ ' + (j.reason || '沒聽出內容') + '、請再試一次';
       }
     } catch (e) {
-      micStatus.textContent = '⚠️ 辨識失敗、請再試一次';
+      micStatus.textContent = '⚠️ 辨識failed、請再試一次';
     }
   };
 
   mediaRec.start();
   isRecording = true;
   micBtn.classList.add('recording');
-  micStatus.textContent = '🎤 聆聽中… 講完會自動送出';
+  micStatus.textContent = '🎤 聆聽Central… 講完會自動送出';
   startVAD(stream);
 }
 
@@ -2634,7 +2634,7 @@ if (!SpeechRec) {
   recognition.onstart = () => {
     isRecording = true;
     micBtn.classList.add('recording');
-    micStatus.textContent = '🎤 聆聽中... 請說話';
+    micStatus.textContent = '🎤 聆聽Central... 請說話';
   };
   recognition.onresult = ev => {
     let txt = '';
@@ -2647,9 +2647,9 @@ if (!SpeechRec) {
     isRecording = false;
     micBtn.classList.remove('recording');
     if (ev.error === 'not-allowed' || ev.error === 'permission-denied') {
-      micStatus.textContent = '❌ 麥克風權限被拒、請到瀏覽器設定開啟';
+      micStatus.textContent = '❌ Microphone permission denied - please enable it in browser settings';
     } else if (ev.error === 'no-speech') {
-      micStatus.textContent = '⚠️ 沒聽到聲音、請再試一次';
+      micStatus.textContent = '⚠️ Didn't catch that - please try again';
     } else if (ev.error === 'network') {
       micStatus.textContent = '⚠️ 語音辨識需要網路（iOS Safari 離線可用）';
     } else {
@@ -2661,7 +2661,7 @@ if (!SpeechRec) {
     micBtn.classList.remove('recording');
     const text = $('input-text').value.trim();
     if (text) {
-      micStatus.textContent = '✓ 辨識完成、送出中...';
+      micStatus.textContent = '✓ 辨識done、送出Central...';
       setTimeout(() => {
         $('input-text').value = '';
         sendQuery(text);
@@ -2686,7 +2686,7 @@ if (!SpeechRec) {
       try {
         recognition.start();
       } catch (e) {
-        micStatus.textContent = '語音啟動失敗：' + e.message;
+        micStatus.textContent = '語音啟動failed：' + e.message;
       }
     }
   });
@@ -2694,7 +2694,7 @@ if (!SpeechRec) {
 
 function refreshSnapshot() {
   fetch('/snapshot').then(r => r.json()).then(s => {
-    $('snap-date').textContent = `${s.snapshot_date} · ${s.sku_count} SKU · ${s.warehouse_count} 倉`;
+    $('snap-date').textContent = `${s.snapshot_date} · ${s.sku_count} SKU · ${s.warehouse_count} `;
   });
 }
 refreshSnapshot();
@@ -2702,14 +2702,14 @@ refreshSnapshot();
 // ─── 鉤子入口隨機輪播(勾起好奇、騙人點進連帶分析)───
 // 每次開/重整網頁,從池子隨機選 2 顆鉤子插在 chips-bar 最前面
 const HOOK_POOL = [
-  { txt: '🍺 買尿布的也買了…?', kw: '尿布' },
-  { txt: '☕ 買咖啡機還要囤啥?', kw: '咖啡機' },
-  { txt: '🏕️ 買帳篷的人還扛了?', kw: '帳篷' },
-  { txt: '🎧 買耳機順手帶了啥?', kw: '藍牙耳機' },
-  { txt: '💪 買瑜珈墊的還買?', kw: '瑜珈墊' },
-  { txt: '🏃 跑者購物車有啥?', kw: '慢跑鞋' },
-  { txt: '❄️ 買羽絨外套還配?', kw: '羽絨外套' },
-  { txt: '🧹 大掃除要囤哪些?', kw: '洗衣精' },
+  { txt: '🍺 買diapers的也買了…?', kw: 'diapers' },
+  { txt: '☕ 買coffee machine還要囤啥?', kw: 'coffee machine' },
+  { txt: '🏕️ 買tent的人還扛了?', kw: 'tent' },
+  { txt: '🎧 買耳機順手帶了啥?', kw: 'bluetooth earphones' },
+  { txt: '💪 買yoga mat的還買?', kw: 'yoga mat' },
+  { txt: '🏃 跑者購物車有啥?', kw: 'running shoes' },
+  { txt: '❄️ 買down jacket還配?', kw: 'down jacket' },
+  { txt: '🧹 大掃除要囤哪些?', kw: 'laundry detergent' },
 ];
 (function mountHooks() {
   const bar = $('chips-bar');
@@ -2724,13 +2724,13 @@ const HOOK_POOL = [
     const btn = document.createElement('button');
     btn.className = 'chip hook';
     btn.textContent = h.txt;
-    btn.onclick = () => sendQuery(`買${h.kw}的人還會買什麼`);
+    btn.onclick = () => sendQuery(`what else do ${h.kw} buyers get`);
     bar.insertBefore(btn, bar.firstChild);
   });
 })();
 
 currentBotMsg = appendBot(
-  '👋 嗨！我是倉管 Agent。你可以「直接打字問我」，像跟同事講話一樣。\n\n' +
+  '👋 嗨！我是管 Agent。你可以「直接打字問我」，像跟同事講話一樣。\n\n' +
   '我會這幾類事 —— 不知道怎麼問的話，下面的範例點一下就會幫你送出 👇'
 );
 // ── 能力地圖：明白告訴使用者「我會哪幾類事」+ 每類給可點範例 ──
