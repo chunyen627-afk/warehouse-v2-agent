@@ -5525,7 +5525,29 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             if _clean_user.endswith(_sfx):
                 _clean_user = _clean_user[: -len(_sfx)].strip()
                 break
+        # EN build：英文 RCA 語尾同樣要剝，否則 'charger cable stock doesnt
+        #   add up' 整句拿去抽 keyword 會被 doesnt/add/up 干擾
+        if _is_mostly_english(user_text):
+            _clean_user = _re.sub(
+                r"\b(?:stock|inventory|count|numbers?|figures?)?\s*"
+                r"(?:doesn'?t|does not|dont|do not)\s+(?:add up|match|tally)\b"
+                r"|\bis\s+off\b|\blooks?\s+(?:off|wrong|strange)\b"
+                r"|\bcount\s+is\s+(?:off|strange|wrong)\b"
+                r"|\bshortfall\b|\bdiscrepanc(?:y|ies)\b|\bmismatch\b"
+                r"|\bwhat\s+happened\s+to\b|\bwho\s+(?:moved|took|changed)\b"
+                r"|\btrace\s+the\b|\binvestigate\s+the\b",
+                " ", _clean_user, flags=_re.I)
+            _clean_user = _re.sub(r"\s+", " ", _clean_user).strip(" ?.!,")
         # 先用模型抽到的 keyword 跑 SKU match；沒結果再用去後綴的 user_text
+        # ⚠️ EN build：LLM 的 keyword 常是**幻覺**（'charger cable stock
+        #   doesnt add up' → LLM 吐 'power cord'，句中根本沒有）。拿它去
+        #   match 會比到 Power Bank，再被下游接地層清空 → 整句退成全域對帳
+        #   （守衛 rca：回 6 筆全域短收而非指名商品）。英文先驗證接地，
+        #   不接地就改用原句抽。
+        if model_kw and _is_mostly_english(user_text) \
+                and not _kw_grounded(str(model_kw), user_text):
+            log.info(f"[校正 C17] LLM kw {model_kw!r} 未接地 → 改用原句抽")
+            model_kw = ""
         final_kw = _extract_sku_keyword(model_kw) if model_kw else ""
         if not final_kw:
             final_kw = _extract_sku_keyword(_clean_user)
