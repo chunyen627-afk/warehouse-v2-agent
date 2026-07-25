@@ -2710,11 +2710,37 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 後面不是數字量詞，不會誤中。
     _tf0_m = _re13a.search(r'[調挪移撥轉]\s*(?:[0-9]+|[零一二兩三四五六七八九十百千萬億]+)\s*'
                            r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|打)', user_text)
+    # ── EN build：英文**強**調貨動詞（語意唯一、不會是查詢句）。
+    #    零倉名/單倉名分支只收這些——`move`/`send`/`ship` 太弱，零倉名時
+    #    `what moved today` 這類查詢會被誤搶；`transfer 20 earphones`
+    #    （沒說從哪到哪）則該開卡讓 clarify 問路線──
+    _EN_STRONG_TF = ("transfer", "transfers", "transferring", "relocate",
+                     "reallocate", "redistribute", "rebalance", "transferred")
+    _has_en_strong_tf = any(w in _ut13a for w in _EN_STRONG_TF)
+    # 單倉名 + 目標倉介系詞（`move 30 yoga mats to south`）也算調貨意圖：
+    #   有「動詞＋數量＋to 倉名」就夠明確，來源留空讓 clarify 問
+    _en_to_wh_m = _re13a.search(
+        r'\b(?:to|into|over to)\s+(?:the\s+)?(?:north|central|south)\b', _ut13a)
     if (func_name != "create_transfer" and _has_transfer_verb
             and (_qty13a_int is not None or _vague_qty13a)
             and (len(_wh_keys13a) >= 2
                  or (len(_wh_keys13a) == 0 and _tf0_m is not None
                      and not any(w in user_text for w in _CONFIG_KEY_WORDS))
+                 # EN build：零倉名 + 強調貨動詞（`transfer 20 earphones`）
+                 or (len(_wh_keys13a) == 0 and _has_en_strong_tf
+                     and _qty13a_int is not None
+                     and not any(w in text_low for w in ("safety stock",
+                                                        "reorder point",
+                                                        "lead time")))
+                 # EN build：單倉名 + 目標倉介系詞（`move 30 yoga mats to south`）
+                 #   排除明確的進貨動詞——`add/put/received 100 X to south`
+                 #   是單倉進貨（C13b），不是調貨
+                 or (len(_wh_keys13a) == 1 and _has_en_transfer_verb
+                     and _en_to_wh_m is not None and _qty13a_int is not None
+                     and not any(w in _ut13a for w in
+                                 ("add ", "added", "adding", "put ", "puts ",
+                                  "received", "receive", "restock", "arrived",
+                                  "came in", "delivered", "returned")))
                  # 單倉 + 強調貨動詞（兩字以上，不含單字「調/搬/移/撥」）也算調貨
                  # 意圖：「調撥25個藍牙耳機給南倉」只提到目標倉，來源留空讓
                  # create_transfer 的 clarify 問「從哪個倉調」（守衛庫抓到的回歸：
@@ -5384,7 +5410,12 @@ _PEND_OK = ("好", "好的", "好啊", "可以", "確認", "確定", "對", "是
 _PEND_OK_SUB = ("按確認", "幫我按", "幫我確認", "按下去", "按鈕", "點確認", "就這樣",
                 "送出", "執行吧", "確認吧", "可以了", "沒問題",
                 # r78：「現在先跑一次」＝執行腳本卡
-                "跑一次", "跑吧", "執行")
+                "跑一次", "跑吧", "執行",
+                # EN build：英文版對應講法（原全中文 → 英文訪客講什麼都不命中，
+                #   落到守門員回教學文）
+                "press confirm", "click confirm", "hit confirm", "confirm it",
+                "go ahead", "do it", "submit", "sounds good", "looks good",
+                "thats right", "that's right", "correct")
 # 疑問/求助（「這樣對嗎」「要按哪裡」）→ 也該引導，不可回教學文
 _PEND_ASK = ("對嗎", "可以嗎", "是這樣嗎", "要按哪", "怎麼按", "然後呢", "接下來", "要幹嘛",
              # r55 收官批：「算了照原本的」＝維持卡片內容 → 引導按確認（不代按、不取消）
@@ -5392,25 +5423,36 @@ _PEND_ASK = ("對嗎", "可以嗎", "是這樣嗎", "要按哪", "怎麼按", "�
              # r57：暫停詞（「先等一下」「還在嗎」）＝卡片留著等訪客想，引導不取消
              "等一下", "等等", "先等", "考慮一下", "讓我想", "還在嗎",
              # r64：維持語新形
-             "維持原樣", "保持原樣", "維持現狀")
+             "維持原樣", "保持原樣", "維持現狀",
+             # EN build
+             "is this right", "is that right", "what now", "whats next",
+             "what's next", "which button", "where do i", "how do i",
+             "then what", "keep it", "leave it", "as is", "wait", "hold on",
+             "let me think")
 _PEND_FIX = ("不對", "不是", "改成", "改為", "錯了", "應該是", "換成", "改一下", "多一點",
              "少一點", "太多", "太少", "數量錯", "倉庫錯", "商品錯",
              # r35 反悔鏈：訪客改主意的實際講法（「還是80好了」曾落到守門員教學文、
              #   「我是說南倉」曾回「找不到『我是說』相關商品」）
              "還是", "我是說", "我要說", "剛剛講錯", "說成", "打成", "應該改",
              # r55 收官批：「等等 改15個」——短句帶「改」就是想改卡片內容
-             "改")
-_PEND_LABEL = {"movement_confirm": "確認進貨/出貨", "transfer_confirm": "確認調貨",
-               "config_confirm": "確認設定", "item_confirm": "確認新增",
-               "item_delete_confirm": "確認刪除", "po_confirm": "授權建立採購單",
-               "alert_confirm": "授權啟用警示", "schedule_confirm": "確認建立排程",
-               "script_confirm": "授權執行"}
+             "改",
+             # EN build
+             "wrong", "not right", "change it", "change to", "make it",
+             "should be", "i meant", "i mean", "instead", "too many",
+             "too few", "no its", "no it's")
+_PEND_LABEL = {"movement_confirm": "Confirm Inbound/Outbound",
+               "transfer_confirm": "Confirm Transfer",
+               "config_confirm": "Confirm Setting", "item_confirm": "Confirm Add",
+               "item_delete_confirm": "Confirm Delete",
+               "po_confirm": "Authorize Purchase Order",
+               "alert_confirm": "Authorize Alert", "schedule_confirm": "Confirm Schedule",
+               "script_confirm": "Authorize Run"}
 # 修正引導的例句要貼合卡片類型（設定卡舉進貨的例子會讓訪客更迷惘）
-_PEND_EXAMPLE = {"movement_confirm": "北倉進100個無線滑鼠",
-                 "transfer_confirm": "從北倉調20個無線滑鼠到南倉",
-                 "config_confirm": "把智慧手環安全庫存設成50",
-                 "alert_confirm": "瑜珈墊低於30就提醒我",
-                 "schedule_confirm": "每天早上八點跑庫存報表"}
+_PEND_EXAMPLE = {"movement_confirm": "north received 100 wireless mouse",
+                 "transfer_confirm": "transfer 20 wireless mouse from north to south",
+                 "config_confirm": "set fitness band safety stock to 50",
+                 "alert_confirm": "alert me when yoga mats drop below 30",
+                 "schedule_confirm": "run the stock report at 8am every day"}
 
 
 # ── r33 統一放棄層 ──
@@ -5423,7 +5465,12 @@ _ABORT_WORDS = ("取消", "算了", "不用了", "不要了", "我不要", "先�
                 "放棄", "當我沒說", "沒事了", "不管了", "先不用", "不繼續", "不做了",
                 "不用補", "不補了",   # r71：「那不用補囉」曾被 ctx 當查詢回庫存
                 "不管它", "不理它", "隨它",   # r73：「還很多啊 那不管它」曾回庫存
-                "先不補")   # r79：「好 那先不補」曾回庫存卡
+                "先不補",   # r79：「好 那先不補」曾回庫存卡
+                # EN build：英文放棄講法（原全中文 → 英文訪客說 cancel/never
+                #   mind 沒有任何一條命中，卡片取消不掉）
+                "cancel", "never mind", "nevermind", "forget it", "drop it",
+                "no thanks", "no thank you", "not now", "leave it", "stop",
+                "quit", "exit", "abort", "discard", "undo", "scrap it")
 
 
 # 「取消所有排程」「取消瑜珈墊的警示」是**管理指令**不是放棄——有明確對象詞就豁免
@@ -5442,6 +5489,14 @@ def _abort_intent(text: str) -> bool:
     # r73：結尾語放棄（「還很多啊 那不管它」）——結尾錨定放寬到 12 字
     if len(t) <= 12 and _re.search(r"(不管它|不理它|隨它|算了吧)$", t):
         return True
+    # EN build：英文用單詞數門檻（原「字元數 > 8」是中文制，英文
+    #   "never mind" 就 10 字元直接被擋掉＝放棄層對英文全失效）；
+    #   比對也要小寫化（"Cancel" / "Never mind" 大寫開頭很常見）。
+    if _is_mostly_english(t):
+        if len(t.split()) > 4:
+            return False
+        _tl = t.lower()
+        return any(w in _tl for w in _ABORT_WORDS)
     if len(t) > 8:
         return False
     return any(w in t for w in _ABORT_WORDS)
@@ -5450,19 +5505,29 @@ def _abort_intent(text: str) -> bool:
 def _pending_reply(vid, text: str) -> str:
     """有 pending 卡且訪客在對卡片講話 → 回引導語；否則回空字串。"""
     pend = _pending_by_vid.get(vid)
-    if not pend or len(text) > 12:
+    if not pend:
+        return ""
+    # 長度門檻：原本「字元數 > 12」是為中文調的，英文字元數是中文 2-3 倍
+    #   （"is this right?" 才 3 詞卻 14 字元）→ 英文引導語幾乎全被擋掉。
+    #   英文改用單詞數 > 6（同 long-gate 的處理方式）。
+    _is_en_pend = _is_mostly_english(text)
+    if (len(text.split()) > 6) if _is_en_pend else (len(text) > 12):
         return ""
     view = pend.get("view", "")
-    btn = _PEND_LABEL.get(view, "確認")
+    btn = _PEND_LABEL.get(view, "Confirm")
     t = text.strip().strip("!！。.~ ").lower()
     # r57：FIX 先於 ASK——「等等 改15個」同時含暫停詞(等等)與修改詞(改)，
     # 訪客要的是改內容，修改引導比按鈕引導對
-    if any(w in text for w in _PEND_FIX):
-        eg = _PEND_EXAMPLE.get(view, "北倉進100個無線滑鼠")
-        return (f"要改內容的話，請重新說一次完整需求（例如「{eg}」），"
-                f"或直接點上方卡片的「✅ {btn}」按鈕確認原本的內容。")
-    if t in _PEND_OK or any(w in text for w in _PEND_OK_SUB) or any(w in text for w in _PEND_ASK):
-        return f"請點上方卡片的「✅ {btn}」按鈕才會真的寫入，或說「取消」放棄。"
+    if any(w in text for w in _PEND_FIX) or any(w in t for w in _PEND_FIX):
+        eg = _PEND_EXAMPLE.get(view, "north received 100 wireless mouse")
+        return (f'To change it, please say the full request again '
+                f'(e.g. "{eg}"), or just tap the "✅ {btn}" button on the '
+                f'card above to accept it as is.')
+    if t in _PEND_OK or any(w in text for w in _PEND_OK_SUB) \
+            or any(w in t for w in _PEND_OK_SUB) \
+            or any(w in text for w in _PEND_ASK) or any(w in t for w in _PEND_ASK):
+        return (f'Please tap the "✅ {btn}" button on the card above to '
+                f'actually save it, or say "cancel" to discard.')
     return ""
 
 # ─── Util ─────────────────────────────────────────────────

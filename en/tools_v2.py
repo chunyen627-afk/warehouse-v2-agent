@@ -1698,12 +1698,15 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
 #    stock.csv + transactions/，重開 server / 網頁重整不會消失。
 # ════════════════════════════════════════════════════════════
 def _movement_dir_label(direction: str) -> str:
-    """direction 可能是內部代碼 in/out，或原始中文詞；統一轉成給使用者看的中文標籤。"""
+    """direction 可能是內部代碼 in/out，或原始中文詞；統一轉成給使用者看的標籤。
+    EN build：回英文標籤——這個值會被拼進 clarify 的 options，而 options
+    是**會送回後端的查詢字串**，中文的話英文版後端會直接 reject（訪客一點
+    就壞）。"""
     d = direction or ""
     if any(w in d for w in ("進", "in")):
-        return "進了"
+        return "received"
     if any(w in d for w in ("出", "out")):
-        return "出貨"
+        return "shipped"
     return d
 
 
@@ -1712,15 +1715,19 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
     """觸發進出貨流程：找商品/倉別 → 算庫存變化 → 回確認卡（不執行寫入）。
     is_return=True 表示客人退貨（庫存增加，走 in 的算法，但顯示/紀錄標「退貨」）。"""
     if not keyword:
-        return W._err("請說明要異動哪個商品，例如「北倉進了藍牙耳機50件」")
+        return W._err('Please tell me which item to update, '
+                      'e.g. "north received 50 bluetooth earphones".')
 
     scored = W.match_items(keyword)
     if not scored:
         # r17：找不到商品是輸入問題不是系統錯誤 → clarify 藍卡而非 error 紅卡
         return {"ok": True, "view": "clarify",
-                "summary": f"找不到商品「{keyword}」，請確認商品名稱後再說一次。",
-                "data": {"question": f"找不到商品「{keyword}」，請確認商品名稱",
-                         "options": [], "hint": "例如「北倉進50個藍牙耳機」"}}
+                "summary": f'No item found for "{keyword}". '
+                           'Please check the item name and try again.',
+                "data": {"question": f'No item found for "{keyword}". '
+                                     'Please check the item name',
+                         "options": [],
+                         "hint": 'e.g. "north received 50 bluetooth earphones"'}}
     # 分數斷層過濾（同 warehouse.query_inventory 的邏輯）：避免共用規格 token
     # （如「1L」「男款」）讓不相干商品低分命中、誤觸發多筆 clarify。
     if len(scored) > 1:
@@ -1730,13 +1737,19 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
     if len(matches) > 1:
         opts = [it["name"] for it in matches[:5]]
         _dir_label = _movement_dir_label(direction)
-        _qty_txt = f"{qty}件" if qty else ""
+        _qty_txt = f" {qty}" if qty else ""
+        # options 會被送回後端當查詢字串 → 組成後端聽得懂的英文句
+        # （`north received 50 Wireless Mouse`），不是純標籤
+        _wh_txt = f"{warehouse} " if warehouse else ""
         return {"ok": True,
-                "summary": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想異動哪個？",
+                "summary": f'"{keyword}" matches {len(matches)} items. '
+                           'Which one do you want to update?',
                 "view": "clarify",
-                "data": {"question": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想異動哪個？",
-                         "options": [f"{n} {warehouse or ''}{_dir_label}{_qty_txt}".strip() for n in opts],
-                         "hint": "請輸入完整商品名稱重新描述"}}
+                "data": {"question": f'"{keyword}" matches {len(matches)} items. '
+                                     'Which one do you want to update?',
+                         "options": [f"{_wh_txt}{_dir_label}{_qty_txt} {n}".strip()
+                                     for n in opts],
+                         "hint": "Please give the full item name"}}
     item = matches[0]
     sku = item["sku_id"]
 
@@ -1748,9 +1761,11 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
         _pre_qty = 0
     if _pre_qty > 9999:
         return {"ok": True, "view": "clarify",
-                "summary": (f"一次異動 {_pre_qty:,} 件不太尋常"
-                            "（單次上限 9,999 件），請確認數量後再說一次。"),
-                "data": {"question": f"要異動 {_pre_qty:,} 件？請確認數量",
+                "summary": (f"{_pre_qty:,} units in one go is unusual "
+                            "(limit is 9,999 per operation). "
+                            "Please confirm the quantity and try again."),
+                "data": {"question": f"Update {_pre_qty:,} units? "
+                                     "Please confirm the quantity",
                          "options": [], "hint": ""}}
 
     wh = (warehouse or "").strip()
@@ -1759,15 +1774,18 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                    "south": "south", "南": "south", "南倉": "south", "South": "south", "南區": "south"}
     wh_key = _WH_ALIASES.get(wh, "")
     if not wh_key:
-        _dir_label_zh = _movement_dir_label(direction)
-        _qty_txt = f"{qty}件" if qty else "50件"
-        return {"ok": True, "summary": f"「{item['name']}」要異動哪個倉？",
+        _dir_label_en = _movement_dir_label(direction) or "received"
+        _qty_txt = f"{qty}" if qty else "50"
+        return {"ok": True,
+                "summary": f'Which warehouse for "{item["name"]}"?',
                 "view": "clarify",
-                "data": {"question": f"「{item['name']}」要異動哪個倉？",
-                         "options": [f"北倉{_dir_label_zh}{item['name']}{_qty_txt}",
-                                     f"中倉{_dir_label_zh}{item['name']}{_qty_txt}",
-                                     f"南倉{_dir_label_zh}{item['name']}{_qty_txt}"],
-                         "hint": "請輸入完整描述，例如「北倉進了{}{}」".format(item['name'], _qty_txt),
+                "data": {"question": f'Which warehouse for "{item["name"]}"?',
+                         # options 是送回後端的查詢字串 → 組成完整英文寫入句
+                         "options": [f"north {_dir_label_en} {_qty_txt} {item['name']}",
+                                     f"central {_dir_label_en} {_qty_txt} {item['name']}",
+                                     f"south {_dir_label_en} {_qty_txt} {item['name']}"],
+                         "hint": 'e.g. "north {} {} {}"'.format(
+                             _dir_label_en, _qty_txt, item['name']),
                          # r56：寫入續流——追問倉別後訪客只答「北倉」也要能接回進出貨
                          # （曾變成庫存查詢、流程斷裂）。server WS 層讀這包重呼叫。
                          "flow": {"tool": "create_movement", "await": "warehouse",
@@ -1781,35 +1799,45 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
         dir_key = "in" if any(w in direction for w in ("進", "入", "到貨", "收貨", "in")) else \
                   "out" if any(w in direction for w in ("出", "出貨", "出庫", "賣", "out")) else ""
     if not dir_key:
-        return W._err(f"請說明是「進貨」還是「出貨」，例如「{wh}{item['name']}進了{qty or 50}件」")
+        return W._err('Please say whether it is inbound or outbound, '
+                      f'e.g. "{wh} received {qty or 50} {item["name"]}".')
 
     try:
         qty_val = int(str(qty).strip() or 0)
     except ValueError:
         qty_val = 0
-    _dir_zh = "退貨" if is_return else ("進貨" if dir_key == "in" else "出貨")
+    _dir_en = "returned" if is_return else ("received" if dir_key == "in" else "shipped")
     if qty_val < 0:
         # r17：「北倉進貨-20個耳機」負號曾被吞、開出 +20 卡（語意反轉）
         return {"ok": True, "view": "clarify",
-                "summary": (f"數量不能是負數喔。要減少庫存請用「出貨」，"
-                            f"例如「{WH_LABEL_MAP.get(wh_key, wh_key)}出{abs(qty_val)}件{item['name']}」。"),
-                "data": {"question": "數量不能是負數，請重新描述", "options": [], "hint": ""}}
+                "summary": ("Quantity cannot be negative. To reduce stock, "
+                            'use "shipped", e.g. '
+                            f'"{WH_LABEL_MAP.get(wh_key, wh_key)} shipped '
+                            f'{abs(qty_val)} {item["name"]}".'),
+                "data": {"question": "Quantity cannot be negative, "
+                                     "please rephrase",
+                         "options": [], "hint": ""}}
     if qty_val == 0:
         # 缺數量 → clarify 追問（曾是 error 紅字卡，r17 統一成 clarify）
         return {"ok": True, "view": "clarify",
-                "summary": f"「{item['name']}」要{_dir_zh}幾件呢？例如「{_dir_zh}50件」。",
-                "data": {"question": f"「{item['name']}」要{_dir_zh}幾件？",
-                         "options": [f"{_dir_zh}10件", f"{_dir_zh}30件", f"{_dir_zh}50件"],
-                         "hint": "請說明數量，例如「進了50件」",
+                "summary": f'How many {item["name"]} were {_dir_en}? '
+                           f'e.g. "{_dir_en} 50".',
+                "data": {"question": f'How many {item["name"]} were {_dir_en}?',
+                         "options": [f"{wh} {_dir_en} 10 {item['name']}",
+                                     f"{wh} {_dir_en} 30 {item['name']}",
+                                     f"{wh} {_dir_en} 50 {item['name']}"],
+                         "hint": f'e.g. "{_dir_en} 50"',
                          "flow": {"tool": "create_movement", "await": "qty",
                                   "keyword": item["name"], "warehouse": wh,
                                   "direction": direction, "is_return": is_return}}}
     if qty_val > 9999:
         # r17：999999 件這種展場搗蛋數字不開卡，追問確認
         return {"ok": True, "view": "clarify",
-                "summary": (f"一次{_dir_zh} {qty_val:,} 件不太尋常"
-                            "（單次上限 9,999 件），請確認數量後再說一次。"),
-                "data": {"question": f"要{_dir_zh} {qty_val:,} 件？請確認數量",
+                "summary": (f"{qty_val:,} units {_dir_en} in one go is unusual "
+                            "(limit is 9,999 per operation). "
+                            "Please confirm the quantity and try again."),
+                "data": {"question": f"{_dir_en.capitalize()} {qty_val:,} units? "
+                                     "Please confirm the quantity",
                          "options": [], "hint": ""}}
 
     s = W.state()
@@ -1818,19 +1846,21 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
 
     if dir_key == "out" and new_qty < 0:
         return {"ok": False,
-                "summary": f"⚠️ 庫存不足，無法出貨。「{item['name']}」{WH_LABEL_MAP[wh_key]}目前僅 {current_qty} 件，不足 {qty_val} 件。",
+                "summary": f'⚠️ Not enough stock to ship. "{item["name"]}" has '
+                           f'only {current_qty} units in {WH_LABEL_MAP[wh_key]}, '
+                           f'short of {qty_val}.',
                 "view": "error", "data": {}}
 
     wh_label = WH_LABEL_MAP[wh_key]
     # 退貨顯示「退貨」、圖示不同，但庫存跟 in 一樣是加（sign=+）
-    dir_label = "退貨" if is_return else ("進貨" if dir_key == "in" else "出貨")
+    dir_label = "Return" if is_return else ("Inbound" if dir_key == "in" else "Outbound")
     icon = "↩️" if is_return else "📦"
     sign = "+" if dir_key == "in" else "-"
-    summary = (f"{icon} 確認{dir_label}\n"
-               f"商品：{item['name']}（{sku}）\n"
-               f"倉別：{wh_label}\n"
-               f"數量：{sign}{qty_val} 件\n"
-               f"目前庫存：{current_qty} 件 → {dir_label}後：{new_qty} 件")
+    summary = (f"{icon} Confirm {dir_label}\n"
+               f"Item: {item['name']} ({sku})\n"
+               f"Warehouse: {wh_label}\n"
+               f"Quantity: {sign}{qty_val} units\n"
+               f"Current stock: {current_qty} → after: {new_qty} units")
     return {"ok": True, "summary": summary, "view": "movement_confirm",
             "data": {"pending": True, "sku": sku, "name": item["name"], "warehouse": wh_key,
                      "warehouse_label": wh_label, "direction": dir_key, "direction_label": dir_label,
@@ -1858,7 +1888,7 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
     sku, wh_key, dir_key = p["sku"], p["warehouse"], p["direction"]
     qty_val = int(p["qty"])
     if qty_val <= 0:
-        return W._err("數量異常，無法寫入。")
+        return W._err("Invalid quantity, cannot write.")
 
     with _STOCK_LOCK:
         # 0. 在鎖內重讀當下庫存 → 重驗 → 重算（防 TOCTOU 陳舊寫入）
@@ -1867,9 +1897,11 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
         if dir_key == "out":
             if qty_val > current:
                 return {"ok": False,
-                        "summary": (f"⚠️ 庫存已變動，無法出貨。「{p['name']}」"
-                                    f"{p['warehouse_label']}目前僅 {current} 件，"
-                                    f"不足 {qty_val} 件（確認卡開立後庫存被其他操作改過）。"),
+                        "summary": ('⚠️ Stock changed — cannot ship. '
+                                    f'"{p["name"]}" now has only {current} units '
+                                    f'in {p["warehouse_label"]}, short of {qty_val} '
+                                    '(stock was changed by another operation '
+                                    'after this card was created).'),
                         "view": "error", "data": {}}
             after_qty = current - qty_val
         else:
@@ -1919,7 +1951,8 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
 
     _done = {**p, "before_qty": current, "after_qty": after_qty}
     return {"ok": True,
-            "summary": f"✅ 已記錄{p['direction_label']}。{p['name']} {p['warehouse_label']}現有 {after_qty} 件。",
+            "summary": f"✅ {p['direction_label']} recorded. {p['name']} now has "
+                       f"{after_qty} units in {p['warehouse_label']}.",
             "view": "movement_done", "data": {"trace_id": trace_id, **_done}}
 
 
@@ -1939,49 +1972,64 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
     """觸發調貨流程：找商品 → 解析來源/目標倉 → 檢查來源庫存 → 回確認卡（不寫入）。"""
     if not keyword:
         return {"ok": True, "view": "clarify",
-                "summary": "要調哪個商品呢？直接說商品名就可以，例如「衛生紙」。",
-                "data": {"question": "要調哪個商品？直接說商品名",
+                "summary": "Which item do you want to transfer? "
+                           'Just say the item name, e.g. "toilet paper".',
+                "data": {"question": "Which item do you want to transfer?",
                          "options": [], "hint": ""}}
 
     scored = W.match_items(keyword)
     if not scored:
         # r17：找不到商品是輸入問題不是系統錯誤 → clarify 藍卡而非 error 紅卡
         return {"ok": True, "view": "clarify",
-                "summary": f"找不到商品「{keyword}」，請確認商品名稱後再說一次。",
-                "data": {"question": f"找不到商品「{keyword}」，請確認商品名稱",
-                         "options": [], "hint": "例如「北倉進50個藍牙耳機」"}}
+                "summary": f'No item found for "{keyword}". '
+                           'Please check the item name and try again.',
+                "data": {"question": f'No item found for "{keyword}". '
+                                     'Please check the item name',
+                         "options": [],
+                         "hint": 'e.g. "transfer 20 bluetooth earphones '
+                                 'from north to south"'}}
     if len(scored) > 1:
         top_score = scored[0]["score"]
         scored = [m for m in scored if m["score"] * 2 >= top_score]
     matches = [m["item"] for m in scored]
     if len(matches) > 1:
         opts = [it["name"] for it in matches[:5]]
+        # options 送回後端 → 組成完整英文調貨句（缺的倉留給後續 clarify 問）
+        _rt = (f" from {from_wh}" if from_wh else "") + (f" to {to_wh}" if to_wh else "")
+        _q = f"{qty} " if qty else ""
         return {"ok": True,
-                "summary": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想調哪個？",
+                "summary": f'"{keyword}" matches {len(matches)} items. '
+                           'Which one do you want to transfer?',
                 "view": "clarify",
-                "data": {"question": f"找到 {len(matches)} 筆「{keyword}」相關商品，你想調哪個？",
-                         "options": [f"{n} 從{from_wh or ''}調到{to_wh or ''}" for n in opts],
-                         "hint": "請輸入完整商品名稱重新描述"}}
+                "data": {"question": f'"{keyword}" matches {len(matches)} items. '
+                                     'Which one do you want to transfer?',
+                         "options": [f"transfer {_q}{n}{_rt}".strip() for n in opts],
+                         "hint": "Please give the full item name"}}
     item = matches[0]
     sku = item["sku_id"]
 
     from_key = _WH_ALIASES_TF.get((from_wh or "").strip(), "")
     to_key = _WH_ALIASES_TF.get((to_wh or "").strip(), "")
     if not from_key or not to_key:
-        return {"ok": True, "summary": f"「{item['name']}」要從哪個倉調到哪個倉？",
+        _q20 = qty or 20
+        return {"ok": True,
+                "summary": f'Which warehouse to which for "{item["name"]}"?',
                 "view": "clarify",
-                "data": {"question": f"「{item['name']}」要從哪個倉調到哪個倉？",
-                         "options": [f"北倉調{item['name']}去南倉{qty or 20}件",
-                                     f"南倉調{item['name']}去北倉{qty or 20}件",
-                                     f"中倉調{item['name']}去北倉{qty or 20}件"],
-                         "hint": "請講清楚來源倉跟目標倉，例如「北倉調{}去南倉」".format(item['name']),
+                "data": {"question": f'Which warehouse to which for '
+                                     f'"{item["name"]}"?',
+                         "options": [f"transfer {_q20} {item['name']} from north to south",
+                                     f"transfer {_q20} {item['name']} from south to north",
+                                     f"transfer {_q20} {item['name']} from central to north"],
+                         "hint": 'e.g. "transfer {} {} from north to south"'.format(
+                             _q20, item['name']),
                          # r61：帶上已知的單邊倉——「調10個去南倉」只缺來源，
                          # 訪客答「從北倉調」單邊也要能補
                          "flow": {"tool": "create_transfer", "await": "route",
                                   "keyword": item["name"], "qty": str(qty),
                                   "from_wh": from_wh or "", "to_wh": to_wh or ""}}}
     if from_key == to_key:
-        return W._err("來源倉跟目標倉不能是同一個，請確認一下要從哪調到哪。")
+        return W._err("Source and destination warehouse cannot be the same. "
+                      "Please confirm where to transfer from and to.")
 
     try:
         qty_val = int(str(qty).strip() or 0)
@@ -1991,8 +2039,10 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
         # 缺數量→clarify 追問（非 error 紅字）。RPI5 conv100-r2：「調一批…到」
         # 模糊量詞無精確數，友善問數量比報錯好。帶已知商品/來源/目標讓前端可續填。
         _kwn = keyword or ""
+        _kwq = f' "{_kwn}"' if _kwn else ""
         return {"ok": True, "view": "clarify",
-                "summary": f"要調多少{('「'+_kwn+'」') if _kwn else ''}呢？請說個數量，例如「調20件」。",
+                "summary": f"How many{_kwq} do you want to transfer? "
+                           'Please give a quantity, e.g. "transfer 20".',
                 "data": {"pending_transfer": True, "keyword": _kwn,
                          "from_wh": from_wh, "to_wh": to_wh,
                          "flow": {"tool": "create_transfer", "await": "qty",
@@ -2003,15 +2053,17 @@ def create_transfer(keyword: str = "", from_wh: str = "", to_wh: str = "",
     to_cur = s.stock.get(to_key, {}).get(sku, 0)
     if qty_val > from_cur:
         return {"ok": False,
-                "summary": f"⚠️ 庫存不足，無法調貨。「{item['name']}」{WH_LABEL_MAP[from_key]}目前僅 {from_cur} 件，不足 {qty_val} 件。",
+                "summary": f'⚠️ Not enough stock to transfer. "{item["name"]}" has '
+                           f'only {from_cur} units in {WH_LABEL_MAP[from_key]}, '
+                           f'short of {qty_val}.',
                 "view": "error", "data": {}}
 
     from_label, to_label = WH_LABEL_MAP[from_key], WH_LABEL_MAP[to_key]
-    summary = (f"🔄 確認調貨\n"
-               f"商品：{item['name']}（{sku}）\n"
-               f"數量：{qty_val} 件\n"
-               f"{from_label}：{from_cur} 件 → {from_cur - qty_val} 件\n"
-               f"{to_label}：{to_cur} 件 → {to_cur + qty_val} 件")
+    summary = (f"🔄 Confirm Transfer\n"
+               f"Item: {item['name']} ({sku})\n"
+               f"Quantity: {qty_val} units\n"
+               f"{from_label}: {from_cur} → {from_cur - qty_val} units\n"
+               f"{to_label}: {to_cur} → {to_cur + qty_val} units")
     return {"ok": True, "summary": summary, "view": "transfer_confirm",
             "data": {"pending": True, "sku": sku, "name": item["name"],
                      "from_wh": from_key, "from_label": from_label,
@@ -2036,7 +2088,7 @@ def commit_transfer(pending: dict, actor: str = "user_confirmed",
     from_key, to_key = p["from_wh"], p["to_wh"]
     qty_val = int(p["qty"])
     if qty_val <= 0:
-        return W._err("數量異常，無法調貨。")
+        return W._err("Invalid quantity, cannot transfer.")
 
     with _STOCK_LOCK:
         # 0. 鎖內重讀 → 重驗 → 重算
@@ -2045,9 +2097,11 @@ def commit_transfer(pending: dict, actor: str = "user_confirmed",
         to_cur = s.stock.get(to_key, {}).get(sku, 0)
         if qty_val > from_cur:
             return {"ok": False,
-                    "summary": (f"⚠️ 庫存已變動，無法調貨。「{p['name']}」"
-                                f"{p['from_label']}目前僅 {from_cur} 件，"
-                                f"不足 {qty_val} 件（確認卡開立後庫存被其他操作改過）。"),
+                    "summary": ('⚠️ Stock changed — cannot transfer. '
+                                f'"{p["name"]}" now has only {from_cur} units '
+                                f'in {p["from_label"]}, short of {qty_val} '
+                                '(stock was changed by another operation '
+                                'after this card was created).'),
                     "view": "error", "data": {}}
         from_after = from_cur - qty_val
         to_after = to_cur + qty_val
@@ -2101,10 +2155,10 @@ def commit_transfer(pending: dict, actor: str = "user_confirmed",
     _done = {**p, "from_before": from_cur, "from_after": from_after,
              "to_before": to_cur, "to_after": to_after}
     return {"ok": True,
-            "summary": (f"✅ 已完成調貨。{p['name']} {qty_val} 件從 {p['from_label']}"
-                        f"調到 {p['to_label']}。\n"
-                        f"{p['from_label']}現有 {from_after} 件、"
-                        f"{p['to_label']}現有 {to_after} 件。"),
+            "summary": (f"✅ Transfer complete. {qty_val} units of {p['name']} "
+                        f"moved from {p['from_label']} to {p['to_label']}.\n"
+                        f"{p['from_label']} now has {from_after} units, "
+                        f"{p['to_label']} now has {to_after} units."),
             "view": "transfer_done", "data": {"trace_id": trace_id, **_done}}
 
 
