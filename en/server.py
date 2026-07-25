@@ -2627,6 +2627,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                        "抓去", "抓到", "支援",
                        # conv100-r7：「從中倉撤20包…回北倉」
                        "撤到", "撤回", "撤去", "撤")
+    # ── EN build：英文調貨動詞（原動詞庫全中文 → 英文調貨句一句都判不到，
+    #    守衛 tf 類 14 句全 FAIL：`transfer 30 earbuds from north to south`
+    #    掉到 C13b/查庫存。英文用小寫比對；動詞帶尾空白降低誤傷
+    #    （"移"對應 move，但 "movement/moved to" 是查進出貨紀錄，不能收裸 move）──
+    _ut13a = user_text.lower()
+    _EN_TRANSFER_VERBS = ("transfer ", "transfers ", "transferring ", "transfer ",
+                          "move ", "moving ", "shift ", "shifting ",
+                          "send ", "sending ", "ship ", "shipping ",
+                          "relocate", "reallocate", "redistribute",
+                          "rebalance", "reroute", "divert",
+                          "bring ", "take ", "pull ", "push ")
+    _has_en_transfer_verb = any(w in _ut13a for w in _EN_TRANSFER_VERBS)
     _qty13a_m = _re13a.search(
         r'([0-9]+|[零一二兩三四五六七八九十百千萬億]+)\s*'
         # 「個」排除「三個倉」（曾把倉數吃成 qty=3，conv100-r6）；單位補「盞」
@@ -2635,6 +2647,23 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     if not _qty13a_m:
         _qty13a_m = _re13a.search(
             r'[調撥挪搬移轉勻]\s*([0-9]{1,6})(?![0-9]*[月日號點樓年%．\.])', user_text)
+    # ── EN build：英文數量（同 C13b 的英文式數量，`transfer 30 earbuds`）。
+    #    排除日期時間百分比，另排除「14-inch」這種商品名內的數字
+    #    （`ship 5 14-inch Laptop Bag south to central` 要抓 5 不是 14）──
+    if not _qty13a_m and _has_en_transfer_verb:
+        # 數量＝**調貨動詞後緊跟的第一個數字**（`transfer 30 earbuds`）。
+        # 不能只用「數字＋空白＋字母」——`ship 5 14-inch Laptop Bag` 的 5 後面
+        # 接的是數字、14 後面接的是連字號，兩個都不中，qty 會抽成 None 而掉出
+        # C13a（守衛 tf 抓到）。綁動詞後最近的數字最穩，也不會誤收商品名內的
+        # 尺寸數字（14-inch / 28cm / 10000mAh）。
+        _qty13a_m = _re13a.search(
+            r'(?:transfer|transfers|transferring|move|moves|moving|shift|shifting|'
+            r'send|sends|sending|ship|ships|shipping|relocate|reallocate|'
+            r'redistribute|rebalance|reroute|divert|bring|take|pull|push)\s+'
+            r'(?:me\s+|us\s+|about\s+|around\s+|roughly\s+)?'
+            r'([0-9]{1,6})\b(?!\s*(?:%|percent|am\b|pm\b|days?\b|weeks?\b|'
+            r'months?\b|years?\b|hours?\b|minutes?\b|oclock\b))',
+            user_text, flags=_re13a.I)
     _qty13a_int = _cn_to_int(_qty13a_m.group(1)) if _qty13a_m else None
     # 動詞跟介系詞被商品隔開的句型：「北倉送20個藍牙耳機到南倉」的「送…到」
     # 子字串比對不到（第11輪抓到）。兩倉名+數量的前提下跨距比對安全。
@@ -2642,10 +2671,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 「北倉給南倉12瓶X」句型：倉名+給+倉名，沒有其他調貨動詞也算（conv100-r5）
     _wh_give_wh_m = _re13a.search(r'[北中南](?:區倉|區|倉)?\s*給\s*[北中南]', user_text)
     _has_transfer_verb = (any(w in user_text for w in _transfer_verbs)
-                          or _sep_verb_m is not None or _wh_give_wh_m is not None)
+                          or _sep_verb_m is not None or _wh_give_wh_m is not None
+                          or _has_en_transfer_verb)
     # 句中有外部對象（供應商/客戶）→ 是進出貨不是調貨，讓給 C13b
     # （conv100-r5：「供應商剛送到一批瑜珈墊 25張放南倉」的「送到」被搶成調貨 clarify）
-    if any(w in user_text for w in ("供應商", "廠商", "客戶", "客人", "顧客")):
+    # EN build：英文外部對象同理（`supplier sent 50 X to north` 是進貨不是調貨；
+    #   `shipped 20 X to the customer` 是出貨）
+    if any(w in user_text for w in ("供應商", "廠商", "客戶", "客人", "顧客")) \
+            or any(w in _ut13a for w in ("supplier", "vendor", "customer", "client",
+                                         "buyer")):
         _has_transfer_verb = False
     # 模糊量詞（「調一批悶燒罐到南倉」無精確數字）：有調貨動詞+兩倉時也算調貨，
     # qty 留 None 讓 create_transfer clarify 問數量（RPI5 conv100-r2：原本落 config）
@@ -2660,6 +2694,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 兩個不同倉名（北/中/南去重後 >= 2）才算調貨
     _wh_mentions13a = [w for w in ("北倉", "北區倉", "北區", "中倉", "中區倉", "中區",
                                     "南倉", "南區倉", "南區") if w in user_text]
+    # ── EN build：英文倉名（north/central/south [warehouse]）。**依出現順序**
+    #    收集，下面「來源倉＝第一個非目標倉」的邏輯才會對
+    #    （`from north to south`：north 先出現＝來源）──
+    if not _wh_mentions13a:
+        _EN_WH2ZH = {"north": "北倉", "central": "中倉", "south": "南倉"}
+        _wh_hits13a = []
+        for _en_w, _zh_w in _EN_WH2ZH.items():
+            for _mm in _re13a.finditer(r'\b' + _en_w + r'\b', _ut13a):
+                _wh_hits13a.append((_mm.start(), _zh_w))
+        _wh_mentions13a = [_z for _p, _z in sorted(_wh_hits13a)]
     _wh_keys13a = {w[0] for w in _wh_mentions13a}
     # 零倉名但「調貨動詞緊鄰數量量詞」（r20：「毛帽調10頂過去」曾退成查庫存）
     # → 開 transfer 讓 tools clarify 問從哪到哪。「安全庫存調成100」的「調成」
@@ -2690,6 +2734,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                               user_text)
         if _to_m:
             _to_key = _to_m.group(1)
+        # ── EN build：英文目標倉介系詞（to / into / over to / across to）。
+        #    `from north to south` 抓 south；`ship 10 X central to north` 抓 north。
+        #    用最後一個 to-片語（來源常在前、目標在後）──
+        if not _to_key:
+            _EN_TO_HITS = _re13a.findall(
+                r'(?:\bto|\binto|\bover to|\bacross to|\bthru to)\s+(?:the\s+)?'
+                r'(north|central|south)\b', _ut13a)
+            if _EN_TO_HITS:
+                _to_key = {"north": "北", "central": "中",
+                           "south": "南"}[_EN_TO_HITS[-1]]
         # 來源倉：第一個出現、且不是目標倉的倉名
         _from_key = ""
         for _w in _wh_mentions13a:
@@ -2711,6 +2765,20 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                    ("今天", "今日", "剛剛", "剛才", "幫我", "麻煩", "請", "從", "到", "去",
                     "過去", "給", "把", "庫存", "的貨", "的")):
             _pre13a = _pre13a.replace(_w, "")
+        # ── EN build：英文句要剝掉調貨動詞/倉名/介系詞，才抽得到商品名
+        #    （`transfer 20 wireless mouse from north to south` 不剝的話
+        #    _extract_sku_keyword 會被 from/to/north 干擾）。用 \b 詞界替換，
+        #    不能用裸 replace——`ship ` 會把商品名裡的字切壞──
+        if _has_en_transfer_verb:
+            _pre13a = _re13a.sub(
+                r'\b(?:transfer|transfers|transferring|move|moves|moving|shift|'
+                r'shifting|send|sends|sending|ship|ships|shipping|relocate|'
+                r'reallocate|redistribute|rebalance|reroute|divert|bring|take|'
+                r'pull|push|please|pls|can you|could you|i want to|i need to|'
+                r'from|to|into|over|across|the|units?|pcs|pieces?|boxes?|box|'
+                r'north|central|south|warehouse|wh|stock|inventory)\b',
+                ' ', _pre13a, flags=_re13a.I)
+            _pre13a = _re13a.sub(r'\s+', ' ', _pre13a).strip()
         _kw13a = _extract_sku_keyword(_pre13a) or _extract_sku_keyword(user_text) or ""
         # 商品名防呆（RPI5 conv100-r3：「把中倉庫存移一些去南倉」抽成雜訊
         # 「把 移一些去」）。kw 比對不到真商品 → 不硬轉 transfer 帶雜訊，退回
@@ -3059,6 +3127,24 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 範圍句殘留數字（r20：「進10到20個耳機」剝掉 qty「20個」後殘「10到」
         # 黏進 kw 變「10到耳機」→ 找不到）
         _pre_clean = _re13b_pre.sub(r'[0-9]+[到~－-]?', ' ', _pre_clean)
+        # ── EN build：英文剝詞（原剝詞表全中文 → 英文寫入句的動詞/倉名/外部
+        #    對象留在字串裡干擾比對：`shipped 20 mouse to the customer` 曾抽成
+        #    Wireless Bluetooth Earphones（靠 customer 的字亂中）、
+        #    `customer returned 5 keyboards` 抽成空 → 兩句都回「請說明要異動
+        #    哪個商品」。用 \b 詞界替換，不能用裸 replace 切壞商品名──
+        if any(w in _ut13b for w in _EN_IN_W + _EN_OUT_W):
+            _pre_clean = _re13b_pre.sub(
+                r'\b(?:shipped|ship|shipping|sent|send|sending|sold|sell|sells|'
+                r'dispatched|issued|received|receive|receives|got|add|added|'
+                r'adding|put|puts|restocked|restock|stocked|delivered|delivery|'
+                r'arrived|arrive|came|come|returned|return|took|take|taken|'
+                r'picked|pick|removed|remove|scrapped|damaged|discarded|'
+                r'wrote|write|off|out|in|into|to|from|the|a|an|of|and|'
+                r'customer|customers|client|clients|supplier|suppliers|vendor|'
+                r'buyer|warehouse|wh|north|central|south|today|yesterday|'
+                r'this|week|month|morning|please|pls|units?|pcs|pieces?)\b',
+                ' ', _pre_clean, flags=_re13b_pre.I)
+            _pre_clean = _re13b_pre.sub(r'\s+', ' ', _pre_clean).strip()
         _kw13b = _extract_sku_keyword(_pre_clean) or _extract_sku_keyword(user_text) or ""
         # 尾巴殘留介系詞（「空氣清淨機到」，conv100-r6）
         _kw13b = _kw13b.rstrip("到去往")

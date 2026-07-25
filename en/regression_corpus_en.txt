@@ -620,7 +620,7 @@ tf|transfer 5 small fan from south to central
 tf|move 30 soup jar from central to north
 tf|move 20 clothes iron from south to central
 tf|move 5 cooking pan from south to north
-tf|transfer 30 power toothbrush from central to north
+tf|transfer 10 power toothbrush from central to north
 
 # ═══ low (n=36) ═══
 low|whats running low

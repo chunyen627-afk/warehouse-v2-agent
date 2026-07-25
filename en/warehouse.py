@@ -472,6 +472,29 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
     #   中文無大小寫，.lower() 不影響中文行為。
     kw_lc = keyword.lower()
     kw_ns_lc = kw_ns.lower()
+
+    # EN build：英文複數還原。比對是 substring，'keyboards' in 'mechanical
+    #   keyboard' = False（複數 s 落在字尾外）→ 訪客打複數就完全對不到
+    #   （`customer returned 5 keyboards` 抽不到商品名而報錯）。
+    #   雙向都試：查詢複數→商品名單數（keyboards→keyboard）、
+    #   查詢單數→商品名複數（earphone→Earphones）。
+    #   只處理英文 token，中文不受影響。
+    def _en_variants(t: str) -> list[str]:
+        if not t or not t.isascii() or not any(c.isalpha() for c in t):
+            return []
+        out = []
+        if len(t) > 3:
+            if t.endswith("ies"):
+                out.append(t[:-3] + "y")      # batteries → battery
+            elif t.endswith("ses") or t.endswith("xes") or t.endswith("ches") \
+                    or t.endswith("shes"):
+                out.append(t[:-2])            # boxes → box, brushes → brush
+            elif t.endswith("s") and not t.endswith("ss"):
+                out.append(t[:-1])            # keyboards → keyboard
+        if not t.endswith("s"):
+            out.append(t + "s")               # earphone → earphones
+        return out
+
     results = []
     for it in items:
         name = it["name"]
@@ -488,8 +511,17 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
                 tok_ns = _nospace(tok).lower()
                 if tok_ns and tok_ns in name_ns_lc:
                     score += len(tok_ns)
+                else:
+                    # EN build：單複數變體再試一次（給原 token 長度的分數，
+                    # 不因為多/少一個 s 就降級，否則複數句排序會輸給雜訊）
+                    for _v in _en_variants(tok_lc):
+                        if _v in name_lc:
+                            score += len(tok)
+                            break
         # 整串 keyword 命中(含去空白版)→ bonus
-        if kw_lc in name_lc or (kw_ns_lc and kw_ns_lc in name_ns_lc):
+        # EN build：整串也吃單複數變體（'keyboards' vs 'Mechanical Keyboard'）
+        if kw_lc in name_lc or (kw_ns_lc and kw_ns_lc in name_ns_lc) \
+                or any(_v in name_lc for _v in _en_variants(kw_lc)):
             score += 5
         # 簡稱 fallback（RPI5 conv100-r2：「無線耳機」比不到「無線藍牙耳機」、
         # 「機械鍵盤」比不到「機械式鍵盤」——中間插字讓子字串失效）。整串都沒

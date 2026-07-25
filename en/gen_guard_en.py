@@ -133,7 +133,9 @@ TF_T = ["transfer {n} {k} from {a} to {b}", "move {n} {k} from {a} to {b}",
         "send {n} {k} from {a} warehouse to {b}", "ship {n} {k} {a} to {b}"]
 for name, variants, canon in ITEMS[:14]:
     a, b = random.sample([w[0] for w in WHS], 2)
-    add("tf", random.choice(TF_T).format(n=random.choice([5, 10, 20, 30]),
+    # 量取小值：部分 SKU 單倉庫存只有十幾件，隨機到 30 會回「庫存不足」
+    #   （業務上正確、但守衛期望 transfer_confirm 就會誤報 FAIL）
+    add("tf", random.choice(TF_T).format(n=random.choice([2, 3, 5, 10]),
                                           k=random.choice(variants), a=a, b=b))
 
 # ════════════════════════════════════════════════════════════
