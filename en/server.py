@@ -376,6 +376,12 @@ _GATEKEEPER_BLACKLIST = (
     "免費送我", "這台機器",
     # conv100-r15：白拿變體
     "算零元", "算我的",
+    # ── EN build：英文閒聊/離題詞（原黑名單全中文 → 'order me a pizza'
+    #    這類英文閒聊沒被擋、掉進 clarify 而不是婉拒）──
+    "pizza", "lunch", "dinner", "breakfast", "coffee for me", "order me",
+    "weather", "joke", "song", "music", "movie", "game", "translate",
+    "who are you", "your name", "how are you", "stock market", "bitcoin",
+    "recipe", "restaurant", "taxi", "flight", "hotel",
 )
 
 
@@ -594,6 +600,15 @@ _LOW_STOCK_INTENT_WORDS = (
     # r30：「有啥要趕快進貨的」插字變體、「庫存最危險的」
     "趕快進貨", "要趕快進", "最危險",
     "low stock", "restock", "running low", "alert",
+    # ── EN build：英文缺貨詞（原表幾乎全中文 → 'whats about to run out'
+    #    'which items need reordering' 不命中 _c3e_low → C3e 把 clf conf=1.00
+    #    的 list_low_stock 降級成 query_inventory 全店概覽）──
+    "run out", "running out", "about to run out", "run low", "runs low",
+    "reorder", "reordering", "need reorder", "needs restocking",
+    "need restocking", "restocking", "low on stock", "low inventory",
+    "almost out", "nearly out", "out of stock", "short on", "shortage",
+    "below safety", "safety stock", "need to order", "needs ordering",
+    "what's low", "whats low", "replenish",
 )
 
 # 熱銷意圖詞（C4 用）
@@ -829,6 +844,14 @@ _RCA_INTENT_WORDS = (
     # r25：「帳兜得攏嗎」（兜不攏的正問形）、「數量對嗎」
     "兜得攏", "兜攏嗎", "數量對嗎", "數字對嗎",
     "discrepancy", "why", "who changed", "trace",
+    # ── EN build：英文 RCA 詞（原表只有 4 個英文詞，'who moved the mouse stock'
+    #    'the earphone numbers dont match' 都不命中 → gate-rescue 降級成庫存查詢）──
+    "who moved", "who changed", "who took", "doesn't match", "dont match",
+    "don't match", "doesnt match", "mismatch", "not match", "count off",
+    "numbers off", "looks off", "seems off", "is off", "wrong", "missing",
+    "shortfall", "short", "reconcil", "audit", "investigate", "look into",
+    "went missing", "disappear", "strange", "weird", "odd", "unusual",
+    "doesn't add up", "dont add up", "don't add up", "add up",
 )
 
 
@@ -847,9 +870,17 @@ def _has_rca_word(t: str) -> bool:
 # intent_clf 兜底時尤其嚴重）。execute 之前檢查：這些工具若句中完全沒有對應
 # 意圖詞 → 判定為 LLM 幻覺，降級 rejected（第18輪訪客閒聊II抓到大量此類）。
 _TOOL_INTENT_GUARD = {
-    "set_alert":        ("通知", "提醒", "警示", "告訴我", "就通知", "缺貨就", "低於", "盯"),
-    "generate_po":      ("採購", "補貨", "叫貨", "進貨單", "po", "下單", "開單", "該補"),
-    "generate_report":  ("報告", "報表", "體檢", "健檢", "月報", "週報", "日報", "彙整", "摘要", "總結"),
+    # ⚠️ EN build：每個工具的詞表都補了英文（原表幾乎全中文 → 英文句一律不命中，
+    #    被 gate-rescue 降級成 query_inventory，clf conf=1.00 的正確判斷全被打掉）
+    "set_alert":        ("通知", "提醒", "警示", "告訴我", "就通知", "缺貨就", "低於", "盯",
+                         "alert", "notify", "warn", "remind", "let me know",
+                         "drops below", "drop below", "goes under", "falls below",
+                         "less than", "threshold"),
+    "generate_po":      ("採購", "補貨", "叫貨", "進貨單", "po", "下單", "開單", "該補",
+                         "purchase order", "raise a po", "create a po", "reorder",
+                         "restock order", "order the"),
+    "generate_report":  ("報告", "報表", "體檢", "健檢", "月報", "週報", "日報", "彙整", "摘要", "總結",
+                         "report", "summary", "overview report", "export report"),
     # 「一起/順便/還會」裸字太寬（「一起吃飯」誤命中 → related_empty，RPI5/WIN
     #  硬體分歧：本機 intent_clf route 判 related 繞過 C6-skip）。收緊成購物詞組。
     "query_related_items": ("買", "連帶", "搭配", "加購", "夥伴", "帶動", "連帶備貨",
@@ -860,14 +891,22 @@ _TOOL_INTENT_GUARD = {
                             # r23：「最佳拍檔/對味/麻吉」同款（詞表/NONQUERY/gate 三處要同步）
                             # r24：「跟啥最搭」同款；r26：搭檔；r27：還買啥
                             "類似", "同類", "相關", "拍檔", "對味", "麻吉", "最搭", "跟啥搭", "跟什麼搭",
-                            "搭檔", "還買啥"),
+                            "搭檔", "還買啥",
+                            # EN build：英文連帶詞
+                            "bought with", "buy with", "sells with", "sold with",
+                            "goes with", "go with", "pairs with", "pair with",
+                            "related", "bundle", "cross-sell", "cross sell",
+                            "also buy", "also bought", "also get", "along with",
+                            "combo", "together with", "what else"),
     "search_log":       _RCA_INTENT_WORDS,
-    "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料"),
+    "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料",
+                         "file", "files", "folder", "directory", "what data"),
     # run_script：需含腳本動作詞，否則閒聊句「一起吃飯」被 LLM 幻覺成
     # run_script{一起吃飯} → 執行時回「不在白名單，可用：月底盤點…」把內部
     # 腳本清單暴露給訪客（RPI5 v21 抓到）。沒動作詞 → 閘門擋成 rejected 婉拒。
     "run_script":       ("跑", "執行", "盤點", "匯出", "產出", "重產", "重新產生",
-                         "重生", "重建", "做一次", "做個", "run", "export", "regenerate"),
+                         "重生", "重建", "做一次", "做個", "run", "export", "regenerate",
+                         "stocktake", "stock count", "stock audit", "rebuild", "perform"),
     # query_movement：需進出貨/紀錄/期間意圖詞。閒聊句「今天過得如何」的
     # 「今天」曾讓 LLM 幻覺 movement（第19輪）。含商品名的進出貨已走 C13b
     # create_movement，這裡只擋純幻覺的空 movement。
@@ -880,7 +919,11 @@ _TOOL_INTENT_GUARD = {
                          # r26：「昨天有動嗎」——三表同步（PROTECT 加了閘門沒加，
                          # C7b 轉過去被 gate-rescue 轉回 inventory）
                          "有動", "動靜",
-                         "movement", "inbound", "outbound", "in", "out"),
+                         "movement", "inbound", "outbound", "in", "out",
+                         # EN build：英文進出貨詞
+                         "movements", "shipment", "shipments", "shipped", "ship",
+                         "received", "receive", "came in", "come in", "went out",
+                         "moved", "transactions", "activity", "goods"),
 }
 
 
@@ -2216,6 +2259,23 @@ def _extract_sku_keyword(text: str) -> str:
     if not all_names:
         return text.strip()
 
+    # ── EN build 英文快路徑（這支被呼叫 96 次，是全系統中樞）──────────────
+    #   下面各層是中文導向（剝中文雜詞、中文滑窗），對英文句會回傳整句或虛詞
+    #   （實測 'whats about to run out' → 'to'、'this weeks shipments' → 整句），
+    #   校正層/C18 再拿它去 match_items 誤配 → 把正確的 low_stock/compare 改成
+    #   庫存查詢。英文改走 match_items（已驗證對英文含錯字都準），並遵守
+    #   「不確定不猜」：分數不足或同分並列 → 回空字串，讓上層走無 keyword 路徑。
+    if _is_mostly_english(text):
+        try:
+            _m_en = _W.match_items(text)
+        except Exception:
+            return ""
+        if not _m_en or _m_en[0].get("score", 0) < 4:
+            return ""
+        if len(_m_en) > 1 and _m_en[1].get("score", 0) >= _m_en[0].get("score", 0):
+            return ""          # 同分並列＝歧義，不猜
+        return _m_en[0]["item"]["name"]
+
     # ── Layer 1: 完整雜詞剝除，取乾淨片段 ──
     cleaned = text
     # 按長度倒序剝（先剝長詞，避免「北區倉的」被「北區」先吃掉）
@@ -3186,7 +3246,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _alert_in_text = any(w in user_text for w in ("通知", "提醒", "警示我", "就通知", "就提醒", "就告訴我",
                                                    # r19：「幫瑜珈墊設缺貨警示」是設定警示不是查缺貨清單
                                                    "設缺貨警示", "設警示", "設庫存警示", "加警示",
-                                                   "建警示", "設個警示", "加個警示"))
+                                                   "建警示", "設個警示", "加個警示")) \
+                     or any(w in text_low for w in
+                            # EN build：英文「設定警示」語（原排除詞全中文 →
+                            #   'alert me when earphones drop below 30' 因含 'alert'
+                            #   命中 _LOW_STOCK_INTENT_WORDS 被 C3 搶成缺貨清單，
+                            #   而 set_alert 才是正解）
+                            ("alert me", "notify me", "warn me", "remind me", "tell me when",
+                             "let me know when", "set an alert", "set alert", "create an alert",
+                             "drops below", "drop below", "goes under", "falls below",
+                             "when it drops", "if it drops"))
     # 「叫貨」從 PO 排除詞移除：叫貨=缺貨要補的查詢語意，讓 C3 轉 low_stock
     # （開採購單是「採購單/下單/產採購/補貨單」等明確 PO 詞，RPI5 conv100-r2）
     _po_in_text = any(w in user_text for w in ("採購單", "下單", "產採購", "補貨單"))
@@ -9871,10 +9940,15 @@ async def ws_handler(ws: WebSocket):
                             func_args = {"keyword": _c18_kw2}
                         else:
                             _pos18 = []
+                            # EN build：倉名同時認中文與英文（原只認中文 → 英文句
+                            #   'compare central and south by value' 永遠抓不到倉名、
+                            #   退化成 all/all 全店比較，倉名資訊全毀）
                             for _zh18, _en18 in (("北倉", "north"), ("北區", "north"),
                                                  ("中倉", "central"), ("中區", "central"),
-                                                 ("南倉", "south"), ("南區", "south")):
-                                _p18 = user_text.find(_zh18)
+                                                 ("南倉", "south"), ("南區", "south"),
+                                                 ("north", "north"), ("central", "central"),
+                                                 ("south", "south")):
+                                _p18 = user_text.lower().find(_zh18.lower())
                                 if _p18 >= 0 and _en18 not in [e for _, e in _pos18]:
                                     _pos18.append((_p18, _en18))
                             _seq18 = [e for _, e in sorted(_pos18)]
@@ -9883,9 +9957,11 @@ async def ws_handler(ws: WebSocket):
                             else:
                                 func_args = {"warehouse_a": "all", "warehouse_b": "all",
                                              "metric": "item_count"}
-                            if "週轉" in user_text:
+                            _ut18 = user_text.lower()
+                            if "週轉" in user_text or "turnover" in _ut18:
                                 func_args["metric"] = "turnover"
-                            elif any(w in user_text for w in ("價值", "總值", "金額")):
+                            elif any(w in user_text for w in ("價值", "總值", "金額")) \
+                                    or any(w in _ut18 for w in ("value", "worth")):
                                 func_args["metric"] = "stock_value"
                     corrected_call = f"[C18]{func_name}({func_args})"
                 if corrected_call != raw_call:
