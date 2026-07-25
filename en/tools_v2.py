@@ -345,11 +345,28 @@ def search_log(keyword: str = "", time_range: str | None = None, source: str | N
 #    模型只抽意圖；實際寫入由 server 二次確認後 commit（見 commit_config_set）。
 # ════════════════════════════════════════════════════════════
 _KEY_ALIASES = {
+    # EN build：英文別名補齊（原本只有 safety stock / lead time / buffer 三個，
+    #   英文訪客常說的 reorder point / safety level / minimum stock 都對不到）
     "safety_stock":      ["安全庫存", "安全存量", "安全水位", "警戒值", "警戒水位", "安全量",
-                          "庫存底線", "存量底線", "safety stock", "safety_stock"],
-    "reorder_lead_days": ["前置天數", "補貨前置", "前置時間", "補貨天數", "lead time", "lead_days", "前置"],
-    "safety_buffer_ratio": ["安全水位倍數", "安全倍數", "buffer", "緩衝倍數"],
-    "restock_target_days": ["補貨目標天數", "補到撐", "target days", "撐幾天"],
+                          "庫存底線", "存量底線", "safety stock", "safety_stock",
+                          "safety level", "reorder point", "reorder level",
+                          "minimum stock", "min stock", "stock floor",
+                          "safety threshold", "alert level"],
+    "reorder_lead_days": ["前置天數", "補貨前置", "前置時間", "補貨天數", "lead time", "lead_days", "前置",
+                          "lead days", "reorder lead", "restock lead",
+                          "replenishment time", "delivery days"],
+    "safety_buffer_ratio": ["安全水位倍數", "安全倍數", "buffer", "緩衝倍數",
+                            "buffer ratio", "safety multiplier", "buffer multiplier"],
+    "restock_target_days": ["補貨目標天數", "補到撐", "target days", "撐幾天",
+                            "restock target", "target coverage", "days of cover"],
+}
+
+# EN build：設定項的訪客可見標籤（原本散在四處各寫一份中文 dict）
+_CONFIG_LABEL_EN = {
+    "safety_stock": "safety stock",
+    "reorder_lead_days": "reorder lead time (days)",
+    "safety_buffer_ratio": "safety buffer ratio",
+    "restock_target_days": "restock target days",
 }
 
 
@@ -403,18 +420,22 @@ def manage_config(action: str = "read", key: str = "", value=None,
     if isinstance(item, str) and item.startswith("__unknown__:"):
         _uk = item.split(":", 1)[1]
         return {"ok": True, "view": "clarify", "summary": (
-            f"找不到商品「{_uk}」，設定沒有改動。請確認商品名稱，"
-            "例如「瑜珈墊安全庫存加20」。"),
-            "data": {"question": f"找不到商品「{_uk}」，請確認商品名稱",
+            f'No item found for "{_uk}" — nothing was changed. '
+            'Please check the item name, e.g. '
+            '"increase yoga mat safety stock by 20".'),
+            "data": {"question": f'No item found for "{_uk}". '
+                                 'Please check the item name',
                      "options": [], "hint": ""}}
     canon = _resolve_key(key)
     if not canon:
         # key 不是合法設定項（LLM 把「空間/容量」這種非設定問題誤投 manage_config）
         # → 不暴露內部設定項名，改友善引導（RPI5 v21：「倉庫空間夠不夠」露「哪個設定項:空間」）
         return {"ok": True, "view": "guide", "summary": (
-            "我能調的是庫存相關設定（安全庫存、補貨前置天數）。\n"
-            "試試這樣說：「北倉安全庫存改成50」「補貨前置天數設成7天」，\n"
-            "或問「安全庫存現在設多少」查目前設定。"
+            "I can adjust stock-related settings (safety stock, "
+            "reorder lead time).\n"
+            'Try: "set north safety stock to 50", '
+            '"set reorder lead time to 7 days",\n'
+            'or ask "what is the safety stock now" to check current settings.'
         ), "data": {}}
 
     # ── read ──
@@ -442,24 +463,28 @@ def manage_config(action: str = "read", key: str = "", value=None,
                 for r in rows[:3]:
                     vals = set(r["by_warehouse"].values())
                     if len(vals) == 1:
-                        parts.append(f"「{r['name']}」目前設 {vals.pop()}（三倉同值）")
+                        parts.append(f'"{r["name"]}" is set to {vals.pop()} '
+                                     '(same across all 3 warehouses)')
                     else:
-                        seg = "、".join(f"{_wh_lbl[w]} {q}" for w, q in r["by_warehouse"].items())
-                        parts.append(f"「{r['name']}」{seg}（基準 {r['base']}）")
-                summary = "目前安全庫存：" + "；".join(parts) + "。"
+                        seg = ", ".join(f"{_wh_lbl[w]} {q}" for w, q in r["by_warehouse"].items())
+                        parts.append(f'"{r["name"]}" {seg} (base {r["base"]})')
+                summary = "Current safety stock: " + "; ".join(parts) + "."
             else:
                 # r59：指定倉別時摘要要講出來（「只看南倉的」曾回不含倉別的泛話）
                 _sc_lbl = {"north": "North", "central": "Central",
                            "south": "South"}.get(warehouse, "")
-                summary = (f"目前{_sc_lbl}安全庫存設定（{len(rows)} 項，含分倉覆寫值）如下表。"
+                summary = (f"Current {_sc_lbl} safety stock settings "
+                           f"({len(rows)} items, including per-warehouse "
+                           "overrides) are shown in the table below."
                            if _sc_lbl else
-                           f"目前安全庫存設定（{len(rows)} 項）：基準值寫在 config，可分倉覆寫。")
+                           f"Current safety stock settings ({len(rows)} items): "
+                           "base values live in config and can be overridden "
+                           "per warehouse.")
             return {"ok": True, "summary": summary, "view": "config_read",
                     "data": {"canon": canon, "rows": rows, "trace": steps}}
         else:
             cur = cfg.get(canon)
-            label = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
-                     "restock_target_days": "補貨目標天數"}.get(canon, canon)
+            label = _CONFIG_LABEL_EN.get(canon, canon)
             summary = f"\"{label}\" is currently set to {cur}."
             return {"ok": True, "summary": summary, "view": "config_read",
                     "data": {"canon": canon, "current": cur, "label": label, "trace": steps}}
@@ -470,20 +495,21 @@ def manage_config(action: str = "read", key: str = "", value=None,
         if mode is None:
             # 沒給有效數值（含 LLM 佔位符「+N」）→ 不報 error，改 clarify 友善追問
             # （RPI5 conv100-r4：「安全水位要怎麼設定」諮詢句被判 set 卻無值）
-            _lbl = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
-                    "safety_stock": "安全庫存"}.get(canon, "安全庫存")
+            _lbl = _CONFIG_LABEL_EN.get(canon, "safety stock")
             return {"ok": True, "view": "clarify", "summary": (
-                f"要把「{_lbl}」設成多少呢？例如「{_lbl}改成50」或「加30」。"
+                f'What should "{_lbl}" be set to? '
+                f'e.g. "set {_lbl} to 50" or "increase by 30".'
             ), "data": {"canon": canon, "label": _lbl, "pending_config": True}}
         # 極端值防呆（r17：「設成十萬」中文數字修好後能正確解析 100000，
         # 但這數量級對 demo 資料絕非本意，會開出影響 183 項的確認卡）→ 追問
         if abs(num) > 9999:
-            _lbl2 = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
-                     "safety_stock": "安全庫存"}.get(canon, "安全庫存")
+            _lbl2 = _CONFIG_LABEL_EN.get(canon, "safety stock")
             return {"ok": True, "view": "clarify", "summary": (
-                f"「{_lbl2}」設成 {num:,} 不太尋常（一般在 0～9999 之間），"
-                "請確認數值後再說一次。"),
-                "data": {"question": f"「{_lbl2}」要設成 {num:,}？請確認數值",
+                f'Setting "{_lbl2}" to {num:,} is unusual '
+                "(normally between 0 and 9999). "
+                "Please confirm the value and try again."),
+                "data": {"question": f'Set "{_lbl2}" to {num:,}? '
+                                     "Please confirm the value",
                          "options": [], "hint": ""}}
 
         # 只有安全水位倍數允許小數，其餘設定項取整（r26）
@@ -507,12 +533,14 @@ def manage_config(action: str = "read", key: str = "", value=None,
                     preview.append({"sku_id": sku, "name": name, "warehouse": wh, "old": old, "new": new})
             _trace(steps, "reason",
                    f"預覽：{'全部' if not skus else len(skus)} 商品 × {len(whs)} 倉 → 共 {len(preview)} 項異動")
-            verb = f"{'增加' if num >= 0 else '減少'} {abs(num)}" if mode == "delta" else f"設為 {num}"
-            wh_label = "全部倉" if warehouse == "all" else \
+            verb = (f"{'increase' if num >= 0 else 'decrease'} by {abs(num)}"
+                    if mode == "delta" else f"set to {num}")
+            wh_label = "all warehouses" if warehouse == "all" else \
                        {"north": "North", "central": "Central", "south": "South"}.get(warehouse, warehouse)
             scope = "all items" if not skus else ", ".join(it["name"] for it in skus[:3])
-            summary = (f"準備把【{wh_label}】的【{scope}】安全庫存{verb}，"
-                       f"共影響 {len(preview)} 項。請確認後才會寫入。")
+            summary = (f"About to {verb} the safety stock of [{scope}] "
+                       f"in [{wh_label}], affecting {len(preview)} entries. "
+                       "Please confirm to apply.")
             return {
                 "ok": True, "summary": summary, "view": "config_confirm",
                 "data": {
@@ -524,14 +552,13 @@ def manage_config(action: str = "read", key: str = "", value=None,
         else:
             old = cfg.get(canon)
             new = (old + num) if mode == "delta" else num
-            label = {"reorder_lead_days": "補貨前置天數", "safety_buffer_ratio": "安全水位倍數",
-                     "restock_target_days": "補貨目標天數"}.get(canon, canon)
+            label = _CONFIG_LABEL_EN.get(canon, canon)
             summary = f"About to change \"{label}\" from {old} to {new}. Please confirm to apply."
             return {"ok": True, "summary": summary, "view": "config_confirm",
                     "data": {"pending": True, "canon": canon, "old": old, "new": new,
                              "label": label, "trace": steps}}
 
-    return W._err(f"不支援的 config 動作：{action}")
+    return W._err(f"Unsupported config action: {action}")
 
 
 def commit_config_set(pending: dict, actor: str = "user_confirmed",
@@ -573,7 +600,8 @@ def commit_config_set(pending: dict, actor: str = "user_confirmed",
 
     # 4) 熱更新記憶體 state，讓後續查詢立即生效
     W.state().v2_config = cfg
-    return {"ok": True, "summary": f"已寫入 {changed} 項，並備份到 config.json.bak、記錄到 audit log。",
+    return {"ok": True, "summary": f"✅ {changed} entries saved, backed up to "
+                                   "config.json.bak and recorded in the audit log.",
             "view": "config_done", "data": {"changed": changed, "trace_id": trace_id, "canon": canon}}
 
 

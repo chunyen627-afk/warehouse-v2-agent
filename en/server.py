@@ -1067,7 +1067,16 @@ _CONFIG_KEY_WORDS = ("安全庫存", "安全存量", "安全水位", "安全線"
                      "安全水位倍數", "補貨目標天數", "警戒值", "補貨天數", "安全量",
                      # r24：「把三層抽取衛生紙的庫存底線拉高到400」曾退成純庫存查詢
                      "庫存底線", "存量底線",
-                     "lead", "safety stock")
+                     # EN build：⚠️ 這裡的詞會被 C9-key 拿去「以最長者覆寫 key」，
+                     #   所以必須是 _resolve_key() 認得的**完整**別名。原本放的
+                     #   碎片 "lead" 會把 'lead time' 覆寫成 'lead' → resolve
+                     #   不到 → 回 guide 教學文（`set reorder lead time to 7
+                     #   days` 就是這樣壞的）。
+                     "safety stock", "safety level", "reorder point",
+                     "reorder level", "minimum stock", "min stock",
+                     "safety threshold", "lead time", "lead days",
+                     "reorder lead", "restock lead", "buffer ratio",
+                     "safety multiplier", "restock target", "days of cover")
 _CONFIG_SET_WORDS = ("改成", "設成", "設為", "調成", "調到", "改為", "設定為",
                      "調高", "調低", "提高", "提升", "降低", "降", "加", "減", "+", "改", "設",
                      "調升", "調降", "上修", "下修", "升到", "降到",
@@ -1075,7 +1084,13 @@ _CONFIG_SET_WORDS = ("改成", "設成", "設為", "調成", "調到", "改為",
                      "歸", "拉長", "拉長到", "延長到", "加長到",
                      "上調", "下調", "壓到", "改回",
                      # r24：庫存底線「拉高到400」
-                     "拉高", "拉高到", "拉到")
+                     "拉高", "拉高到", "拉到",
+                     # EN build：英文設定動詞（原全中文 → 英文設定句判不出
+                     #   action=set，LLM 給 read 就照 read 走，`reduce mouse
+                     #   safety stock by 10` 變成查詢）
+                     "set ", "change ", "update ", "increase", "decrease",
+                     "raise ", "lower ", "reduce ", "bump ", "adjust ",
+                     "make it ", "put it at", "bring it")
 _CONFIG_READ_WORDS = ("是多少", "設多少", "多少", "現在設", "目前", "查一下", "看一下", "設定值")
 # 問句/讀取語氣詞：出現這些且句中抽不到數值 → manage_config 一律當 read。
 # C9 / C9b / C18 三處共用（曾經三處各自維護，「設定給我看」只修了 C9b 又被
@@ -2502,6 +2517,36 @@ def _extract_config_value(user_text: str):
         g = _abs.group(1)
         n = g if "." in g else _cn_to_int(g)
         return str(n) if n is not None else None
+    # ── EN build：英文設定值（原全中文動詞 → 英文設定句 value 整個漏抽，
+    #    LLM 幻覺出的值沒有東西可以覆蓋。`set Power Bank 10000mAh safety
+    #    stock to 100` LLM 抽成 '10000mAh'（商品名裡的規格），真值 100 在
+    #    句尾）。用「**最後一個** to/at/= + 數字」——設定值總在句尾，
+    #    商品名裡的規格數字（10000mAh/2M/28cm）在前面，且要求數字後面
+    #    不接單位字母才算（排除 10000mAh）──
+    _en_abs = _re.findall(
+        r"(?:set(?:\s+\w+)*?\s+to|change(?:\s+\w+)*?\s+to|to|at|=|make\s+it)\s+"
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:days?|units?)?\b(?![A-Za-z])",
+        user_text, flags=_re.I)
+    # 相對值：動詞跟數字常被商品名隔開（`increase yoga mat safety stock by 20`）
+    #   → 用 by/to 錨定，動詞與 by 之間允許跨距。「by」是英文相對值的固定標記。
+    _en_rel_pos = _re.search(
+        r"(?:increase|raise|bump|add|up)\b[^0-9]{0,40}?\bby\s+"
+        r"([0-9]+(?:\.[0-9]+)?)\b(?![A-Za-z])", user_text, flags=_re.I) \
+        or _re.search(r"(?:increase|raise|bump)\s+(?:it\s+)?"
+                      r"([0-9]+(?:\.[0-9]+)?)\b(?![A-Za-z])",
+                      user_text, flags=_re.I)
+    _en_rel_neg = _re.search(
+        r"(?:decrease|reduce|lower|drop|cut|down)\b[^0-9]{0,40}?\bby\s+"
+        r"([0-9]+(?:\.[0-9]+)?)\b(?![A-Za-z])", user_text, flags=_re.I) \
+        or _re.search(r"(?:decrease|reduce|lower|cut)\s+(?:it\s+)?"
+                      r"([0-9]+(?:\.[0-9]+)?)\b(?![A-Za-z])",
+                      user_text, flags=_re.I)
+    if _en_rel_pos:
+        return f"+{_en_rel_pos.group(1)}"
+    if _en_rel_neg:
+        return f"-{_en_rel_neg.group(1)}"
+    if _en_abs:
+        return _en_abs[-1]
     return None
 
 
@@ -3527,6 +3572,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         if _k9 and _k9 != func_args.get("key"):
             func_args = {**func_args, "key": _k9}
             log.info(f"[校正 C9-key] key 以原句最長設定項覆寫 → {_k9!r}")
+        # ── EN build C9-act：LLM 把英文設定句判成 read 時要改回 set。
+        #    `reduce mouse safety stock by 10` LLM 給 action=read → 照 read
+        #    走變成查詢，設定完全沒生效（比報錯更糟：訪客以為改好了）。
+        #    條件從嚴：**同時**有設定動詞與抽得到的設定值才覆寫，
+        #    純查詢句（`whats the safety stock`）抽不到值不會誤中。
+        if func_args.get("action") != "set":
+            _sv9 = _extract_config_value(user_text)
+            if _sv9 is not None and any(w in text_low for w in _CONFIG_SET_WORDS):
+                func_args = {**func_args, "action": "set", "value": _sv9}
+                log.info(f"[校正 C9-act] 設定動詞+數值 → action=set value={_sv9!r}")
         # r26：value 也以原句抽取覆寫——「改成兩萬」LLM 幻覺 value=2000 開出
         # 錯值卡×183（原句抽取=20000 會被極端值防呆擋下）
         if func_args.get("action") == "set":
