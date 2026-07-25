@@ -61,7 +61,11 @@ ACCEPT = {
     "cfg_clarify": lambda v: v in ("clarify", "config_read", "guide"),
     "rel":   lambda v: v in ("related", "related_help", "related_empty"),
     "mvt":   lambda v: v == "movement",
-    "vague": lambda v: v in ("clarify", "guide", "rejected", "inventory"),
+    # vague：模糊指涉。若**明確指到單一商品**（'the earphones' 只有一款
+    #   藍牙耳機），直答單品才對——反問「你是指哪個」反而是明知故問，
+    #   違反不猜原則的反面（該猜時就猜）。故 inventory_single 也算通過。
+    "vague": lambda v: v in ("clarify", "guide", "rejected", "inventory",
+                             "inventory_single"),
     "noex":  lambda v: v in ("clarify", "rejected", "error", "related_empty", "guide",
                               "expiring_empty"),
     "any":   lambda v: v not in ("error", "clarify", "rejected"),

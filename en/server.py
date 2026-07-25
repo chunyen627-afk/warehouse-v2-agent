@@ -867,7 +867,21 @@ _EXPIRING_INTENT_WORDS = (
 
 # r44 C4-mv：進出量問句判準（進/出+量疑問緊鄰）——「上週出了幾件」「這個月進多少」
 # 「出貨了沒」是 movement 不是庫存；描述直達/C3e/C13 各 hard-return 出口都要讓路。
-_C4MV_RE = re.compile(r'([進出])貨?了?(幾|多少|了沒|沒有)')
+_C4MV_RE = re.compile(
+    r'([進出])貨?了?(幾|多少|了沒|沒有)'
+    # EN build：英文進出量問句。'how much X moved this month' 的 clf 判
+    #   query_movement conf=1.00，但 LLM 吐 search_log 且兩者都在候選內
+    #   → C18 不仲裁 → 回單品庫存（守衛 mvt 類）。
+    r'|\b(?:how\s+(?:much|many)|whats?|what)\b[^.?]{0,40}?'
+    r'\b(?:moved|move|movement|movements|shipped|received|went\s+out|came\s+in|'
+    r'in\s+and\s+out|ins?\s+and\s+outs?|inbound|outbound)\b'
+    r'|\b(?:moved|shipped|received|went\s+out|came\s+in)\b[^.?]{0,20}?'
+    r'\b(?:this|last|past)\s+(?:week|month|day)\b'
+    # 無疑問詞的省略句：'this months in and out' / 'todays movements'
+    r'|\b(?:in\s+and\s+out|ins?\s+and\s+outs?)\b'
+    r'|\b(?:this|last|past|todays?|yesterdays?)\s*(?:week|month|day)?s?\s+'
+    r'(?:movements?|inbound|outbound)\b',
+    re.IGNORECASE)
 
 # 功能描述直達的「非查庫存意圖」守衛詞（2026-07-09）：進貨/出貨/調貨/連帶/
 # 銷況句常「描述命中+無查詢語氣」，錯字放寬會誤劫成查庫存。這些意圖詞出現時
@@ -2219,6 +2233,10 @@ def _detect_clarify(user_text: str) -> dict | None:
     #   「你想知道跑鞋的什麼」。它有明確目標（運動飲料），放行讓
     #   _extract_sku_keyword 的描述層處理。
     if matched and _is_mostly_english(t) and _en_descriptor_hit(t):
+        matched = []
+    # 進出量問句同理不可在這裡被商品名亂中後反問
+    #   （'this months in and out' 撈到 Smart Fitness Band 反問）
+    if matched and _is_mostly_english(t) and _C4MV_RE.search(t):
         matched = []
     if matched and not has_intent:
         item = matched[0]
@@ -4287,16 +4305,45 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 帶具體商品名的熱銷問句（「輕量羽絨外套最近賣得如何」）是問該商品銷況，
     # 回全類別排行答非所問 → 轉該商品 movement（conv100-r13）
     _c4mv = _C4MV_RE.search(user_text)
-    if func_name in ("query_inventory", "list_low_stock") and _c4mv \
+    # EN build：英文進出量問句的 LLM 常吐 search_log（clf 判 query_movement
+    #   conf=1.00 但兩者都在候選內 → C18 不仲裁）→ 也要收 search_log
+    if func_name in ("query_inventory", "list_low_stock",
+                     *(("search_log",) if _is_mostly_english(user_text) else ())) \
+            and _c4mv \
             and not any(w in user_text for w in ("還有多少", "還剩多少", "剩多少")):
-        _mv_dir = "in" if _c4mv.group(1) == "進" else "out"
+        # 英文分支沒有 group(1)（中文的進/出）→ 從英文詞判方向，
+        #   'in and out' 這種雙向句用 both
+        if _c4mv.group(1) == "進":
+            _mv_dir = "in"
+        elif _c4mv.group(1) == "出":
+            _mv_dir = "out"
+        else:
+            _t4l = user_text.lower()
+            if _re.search(r"\bin\s+and\s+out\b|\bins?\s+and\s+outs?\b|"
+                          r"\bmovements?\b|\bmoved\b", _t4l):
+                _mv_dir = "both"
+            elif _re.search(r"\b(?:shipped|went\s+out|outbound|sold)\b", _t4l):
+                _mv_dir = "out"
+            else:
+                _mv_dir = "in"
         _mv_period = ("today" if "今天" in user_text else
                       "yesterday" if "昨天" in user_text else
                       "last_week" if any(w in user_text for w in ("上週", "上周", "上禮拜")) else
                       "this_week" if any(w in user_text for w in ("這週", "本週", "這周", "本周", "這禮拜")) else
                       "this_month")
+        if _is_mostly_english(user_text):
+            _t4l = user_text.lower()
+            _mv_period = ("today" if "today" in _t4l else
+                          "yesterday" if "yesterday" in _t4l else
+                          "last_week" if _re.search(r"\blast\s+week\b", _t4l) else
+                          "this_week" if _re.search(r"\bthis\s+week\b", _t4l) else
+                          "this_month")
         _mv_src = _re.sub(r'[進出]貨?了?(幾|多少|了沒|沒有).*', '', user_text)
         _mv_kw = _extract_sku_keyword(_mv_src)
+        # 英文：kw 要接地於原句，否則 'this months in and out'（沒指名商品）
+        #   會抽到雜訊商品 → 變成單品進出貨（該回全店進出總覽）
+        if _mv_kw and _is_mostly_english(user_text) and not _kw_grounded(_mv_kw, user_text):
+            _mv_kw = ""
         _mv_args = {"period": _mv_period, "direction": _mv_dir}
         if _mv_kw:
             _mv_args["keyword"] = _mv_kw

@@ -571,7 +571,7 @@ mv|5 cookware set came in at central
 mv|north sent out 20 cookware set
 mv|record 5 glass box inbound at north
 mv|south shipped 30 lunch box
-mv|north sent out 100 electric mop
+mv|north sent out 30 electric mop
 mv|put 100 mop into south
 mv|20 Sparkling Water 500ml came in at north
 mv|add 30 Sparkling Water 500ml to north
