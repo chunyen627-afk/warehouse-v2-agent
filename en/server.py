@@ -559,6 +559,14 @@ def _text_has_item_name(text: str) -> bool:
                     return True
             except Exception:
                 pass
+            # 功能描述句也算「指到了商品」——'something to clean teeth'
+            #   沒有任何商品名單詞，但它明確在問電動牙刷，不該被守門員擋
+            try:
+                from descriptor_en import descriptor_hit_en as _dsc_gd
+                if _dsc_gd(text):
+                    return True
+            except Exception:
+                pass
             return False
 
         # r43：單字通稱（帽子/鍋子…）也算具體商品指涉——「帽子有哪些」曾被 guide
@@ -2206,6 +2214,12 @@ def _detect_clarify(user_text: str) -> dict | None:
 
     # ⑤ 只有商品名、沒有任何動作詞 → 問要做什麼（用 t_clean 剝掉填充詞再 match）
     matched = W.match_items(t_clean) if t_clean else []
+    # EN build：功能描述句不可在這裡被 match_items 亂中後反問——
+    #   'what do i drink after running' 撈到 Running Shoes Men's 反問
+    #   「你想知道跑鞋的什麼」。它有明確目標（運動飲料），放行讓
+    #   _extract_sku_keyword 的描述層處理。
+    if matched and _is_mostly_english(t) and _en_descriptor_hit(t):
+        matched = []
     if matched and not has_intent:
         item = matched[0]
         name = item["item"]["name"] if isinstance(item, dict) and "item" in item else item.get("name", t)
@@ -2494,6 +2508,15 @@ _ALL_KEYWORD_NOISE = (
     "想知道", "想看看", "我想",
 )
 
+def _en_descriptor_hit(text: str) -> str:
+    """英文功能描述句 → 商品關鍵字（包一層，避免各呼叫點重複 try/import）。"""
+    try:
+        from descriptor_en import descriptor_hit_en as _d
+        return _d(text) or ""
+    except Exception:
+        return ""
+
+
 def _en_fuzzy_keyword(core: str) -> str:
     """EN build：英文錯字 → 商品名（編輯距離模糊比對）。抓不準就回 ""。
 
@@ -2725,6 +2748,28 @@ def _extract_sku_keyword(text: str) -> str:
         _en_core = _re.sub(_q_stop_intent, " ", text, flags=_re.I)
         _en_core = _re.sub(_q_stop, " ", _en_core, flags=_re.I)
         _en_core = _re.sub(r"\s+", " ", _en_core).strip(" ?.!,")
+        # ── 功能描述句**優先**（要在 match_items 之前）────────────────────
+        #   'something to clean teeth' 的 clean 會讓 match_items 撈到
+        #   Rubber Cleaning Gloves（分數還過 4 分門檻）→ 描述層永遠輪不到，
+        #   而且誤配成清潔手套。描述表命中＝訪客講的是**功能**不是商品名，
+        #   應該直接用描述的目標。
+        #   ⚠️ 但**句中已有明確商品名**時不可搶（'yoga mat stock' 會中
+        #   yoga+mat 規則，雖然目標一樣，但 'coffee beans stock' 會被
+        #   'makes coffee' 類規則導向咖啡機）→ 先確認沒有扎實的商品名比對。
+        try:
+            _m_pre = _W.match_items(_en_core) if _en_core else []
+            _solid_pre = bool(_m_pre and _m_pre[0].get("score", 0) >= 8)
+        except Exception:
+            _solid_pre = False
+        if not _solid_pre:
+            try:
+                from descriptor_en import descriptor_hit_en as _dsc_pre
+                _d_pre = _dsc_pre(text)
+                if _d_pre:
+                    log.info(f"[EN descriptor] {text!r} → {_d_pre!r}")
+                    return _d_pre
+            except Exception:
+                pass
         try:
             # 先用剝乾淨的核心詞比對；剝到空（整句都是虛詞）才退回整句
             _m_en = _W.match_items(_en_core) if _en_core else _W.match_items(text)
@@ -2742,6 +2787,18 @@ def _extract_sku_keyword(text: str) -> str:
             if _fz:
                 log.info(f"[EN fuzzy] {(_en_core or text)!r} → {_fz!r}")
                 return _fz
+            # 英文**功能描述句**（訪客講不出商品名時的招牌能力）：
+            #   'something to clean teeth' / 'the machine that makes coffee'。
+            #   中文版靠 _DESCRIPTOR_ALIASES，但那張表回傳中文名、英文版已
+            #   關掉（會湊出中英混血）→ descriptor_en 是英文版的對應物。
+            try:
+                from descriptor_en import descriptor_hit_en as _dsc_en
+                _d = _dsc_en(text)
+                if _d:
+                    log.info(f"[EN descriptor] {text!r} → {_d!r}")
+                    return _d
+            except Exception:
+                pass
             return ""
         if len(_m_en) > 1 and _m_en[1].get("score", 0) >= _m_en[0].get("score", 0):
             return ""          # 同分並列＝歧義，不猜
@@ -3106,12 +3163,16 @@ def _kw_grounded(kw: str, user_text: str) -> bool:
         #   _en_fuzzy_keyword 自帶陌生修飾詞防線，OOV 句仍不會誤放行。
         try:
             # 用 _extract_sku_keyword（英文快路徑已含剝虛詞 + 別名 + 模糊 +
-            #   不確定不猜）的結果比對；直接傳整句給 _en_fuzzy_keyword 會被
-            #   'on hand' 這種虛詞觸發 OOV 防線（踩過兩次的坑）
+            #   描述表 + 不確定不猜）的結果比對；直接傳整句給
+            #   _en_fuzzy_keyword 會被 'on hand' 這種虛詞觸發 OOV 防線
             if _extract_sku_keyword(user_text) == kw:
                 return True
         except Exception:
             pass
+        # 功能描述句：keyword 字面必然不在原句（那正是描述句的定義）
+        _d_g = _en_descriptor_hit(user_text)
+        if _d_g and _d_g.lower() in (kw or "").lower():
+            return True
         return False
 
     k = (kw or "").replace(" ", "")
@@ -4629,7 +4690,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         #   'how many chairs for the office' 的 chairs 接地成立（主檔真有
         #   chair），但 office 不是任何商品名的字＝訪客要的是「辦公椅」，
         #   庫裡沒有 → 該誠實回概覽/OOV，不能回露營椅（守衛 noex 期望）。
-        elif _is_mostly_english(user_text) and func_args.get("keyword"):
+        elif (_is_mostly_english(user_text) and func_args.get("keyword")
+              # 功能描述句由 descriptor_en 負責，不可當 OOV 清掉
+              #   （'something to clean teeth' 的 clean/teeth 都不是主檔字，
+              #    會被判陌生修飾詞 → 清 kw 回全店概覽）
+              and not _en_descriptor_hit(user_text)):
             _oov_stop = {"many", "much", "have", "there", "some", "any",
                          "show", "tell", "give", "list", "check", "look",
                          "left", "stock", "stocks", "inventory", "count",
@@ -10883,6 +10948,11 @@ async def ws_handler(ws: WebSocket):
                             _fz_ok = bool(_fz_h) and _fz_h.lower() == _kw_h
                         except Exception:
                             _fz_ok = False
+                        # 功能描述句的 keyword 字面本來就不在原句
+                        #   （'something to clean teeth' → Electric Toothbrush）
+                        if not _fz_ok:
+                            _d_h = _en_descriptor_hit(user_text)
+                            _fz_ok = bool(_d_h) and _d_h.lower() in _kw_h
                     if _kw_h and not _fz_ok and not any(c in _txt_h for c in (_kw_h,)) \
                             and not any(w in _txt_h for w in _kw_h.split() if len(w) >= 3):
                         log.info(f"[anti-hallu] keyword={_kw_h!r} 不在原句 → 丟棄")
@@ -10946,7 +11016,17 @@ async def ws_handler(ws: WebSocket):
                         "cost", "costs", "low", "high", "short", "out",
                         "empty", "full", "fine", "okay", "good", "bad",
                     }
+                    # 功能描述句不是「查不存在的商品」——它有明確目標，
+                    #   由 descriptor_en 處理，這裡不可攔成 OOV
+                    _is_desc_nx = False
                     try:
+                        from descriptor_en import descriptor_hit_en as _dsc_nx
+                        _is_desc_nx = bool(_dsc_nx(user_text))
+                    except Exception:
+                        pass
+                    try:
+                        if _is_desc_nx:
+                            raise ValueError("descriptor句，跳過 OOV 判定")
                         import warehouse as _Wnx
                         import difflib as _dlnx
                         _nx_words = set()
