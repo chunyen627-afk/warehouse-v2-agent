@@ -2267,6 +2267,14 @@ def _extract_sku_keyword(text: str) -> str:
     #   庫存查詢。英文改走 match_items（已驗證對英文含錯字都準），並遵守
     #   「不確定不猜」：分數不足或同分並列 → 回空字串，讓上層走無 keyword 路徑。
     if _is_mostly_english(text):
+        # 先把英文俗稱正規化成能命中主檔的字串（alias_en：英文版對應中文
+        #   _TYPO_NORM 的角色）。守衛庫抓到 61 個俗稱對不到/誤配：
+        #   battery pack→Craft Beer、toilet paper→Coffee Filter、sneakers→無。
+        try:
+            from alias_en import normalize_alias_en as _norm_en
+            text = _norm_en(text)
+        except Exception:
+            pass
         try:
             _m_en = _W.match_items(text)
         except Exception:
@@ -9854,11 +9862,34 @@ async def ws_handler(ws: WebSocket):
                 #   比對用小寫且允許逐詞命中（keyword 可能是複合詞的一部分）。
                 if func_args.get("keyword"):
                     _kw_h = str(func_args["keyword"]).lower().strip()
+                    # ⚠️ 比對基準要用「原句 + 別名正規化後的原句」——否則
+                    #   'earbuds stock' 經 alias_en 正規化出的正解 keyword
+                    #   'Wireless Bluetooth Earphones' 會被自己的防幻覺閘門丟掉
+                    #   （別名修復與防幻覺互相打架，2026-07-25 守衛抓到）。
                     _txt_h = user_text.lower()
+                    try:
+                        from alias_en import normalize_alias_en as _norm_h
+                        _txt_h += " " + _norm_h(user_text).lower()
+                    except Exception:
+                        pass
                     if _kw_h and not any(c in _txt_h for c in (_kw_h,)) \
                             and not any(w in _txt_h for w in _kw_h.split() if len(w) >= 3):
                         log.info(f"[anti-hallu] keyword={_kw_h!r} 不在原句 → 丟棄")
                         func_args.pop("keyword", None)
+
+                # ── EN build：LLM 抽的 keyword 也套英文俗稱正規化 ──
+                #   （_extract_sku_keyword 那條路已套，這裡補 LLM 直出的 keyword：
+                #     LLM 常原樣抽 'earbuds'/'sneakers'，主檔沒這些字會對不到）
+                if func_args.get("keyword"):
+                    try:
+                        from alias_en import normalize_alias_en as _norm_kw
+                        _kw_o = str(func_args["keyword"])
+                        _kw_n = _norm_kw(_kw_o)
+                        if _kw_n != _kw_o:
+                            func_args["keyword"] = _kw_n
+                            log.info(f"[alias-en] keyword {_kw_o!r} → {_kw_n!r}")
+                    except Exception:
+                        pass
 
                 # ── OOV 偵測：keyword 不在 SKU 清單時推測候選 ──
                 oov = _detect_oov(func_name, func_args)

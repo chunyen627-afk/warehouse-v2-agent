@@ -26,10 +26,12 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import websockets
 from pathlib import Path
 
-# --rpi5：在 RPI5 本機跑全量回歸（wss 8001，跟訪客同一條路）
+# --rpi5：在 RPI5 本機跑全量回歸（跟訪客同一條路）
+# ⚠️ EN build：英文版服務在 **8002**（8001 是中文版）。原本沿用 8001 →
+#    整批守衛其實測到中文版、回答全中文、must 斷言全 FAIL（2026-07-25 抓到）。
 if "--rpi5" in sys.argv:
     sys.argv.remove("--rpi5")
-    WS_URI = 'wss://localhost:8001/ws?fast=1'
+    WS_URI = 'wss://localhost:8002/ws?fast=1'
     SSL_CTX = ssl.create_default_context()
     SSL_CTX.check_hostname = False
     SSL_CTX.verify_mode = ssl.CERT_NONE
