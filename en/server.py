@@ -2270,6 +2270,138 @@ _ALL_KEYWORD_NOISE = (
     "想知道", "想看看", "我想",
 )
 
+def _en_fuzzy_keyword(core: str) -> str:
+    """EN build：英文錯字 → 商品名（編輯距離模糊比對）。抓不準就回 ""。
+
+    為什麼需要：match_items 是 substring 打分，英文**一個字母打錯就整個
+    對不到**（pwerbank / keyyboard / crackees），回全店概覽＝答非所問。
+    中文版對應的是 _phonetic_match（同音字），英文對應的是編輯距離。
+
+    比對對象＝商品名的每個單詞 + alias_en 的別名鍵（俗稱也會被打錯，
+    如 biscuits/crackees）。門檻從嚴，避免把陌生詞硬掰成商品：
+      - 只比長度 ≥4 的詞（短詞編輯距離 1 就換一個意思：mop/map/mob）
+      - 允許的距離隨長度放寬：4-5 字母容 1、6-8 容 2、9+ 容 2
+      - 最佳與次佳必須指向**同一商品**，否則＝歧義不猜
+    """
+    import difflib
+    import warehouse as _W
+    if not core:
+        return ""
+    try:
+        items = _W.state().items
+    except Exception:
+        return ""
+    # 候選：商品名單詞 → 商品名；alias 鍵（含多詞片語的整串與單詞）→ 目標商品
+    cand: dict[str, str] = {}
+    for it in items:
+        for w in _re.split(r"[\s\-/]+", it["name"]):
+            w = w.strip().lower()
+            # 純數字/規格詞（2m、28cm、10000mah、5pcs）不當比對錨點
+            if len(w) >= 4 and not any(c.isdigit() for c in w):
+                cand.setdefault(w, it["name"])
+    try:
+        from alias_en import ALIAS_EN as _AL
+        for _k, _v in _AL.items():
+            _kl = _k.lower()
+            if len(_kl) >= 4:
+                cand.setdefault(_kl, _v)
+            for _w in _kl.split():
+                if len(_w) >= 4:
+                    cand.setdefault(_w, _v)
+    except Exception:
+        pass
+    if not cand:
+        return ""
+    keys = list(cand)
+
+    def _max_dist(n: int) -> int:
+        return 1 if n <= 7 else 2
+
+    # 誤傷防線：這些是**閒聊/搗蛋/非商品**常見詞，跟商品名差一兩個字母
+    #   （weather↔water、chairs↔chair(Camping Chair)、robot、joke…）。
+    #   模糊層把它們救成商品＝搗蛋句回商品卡，比漏抓更糟 → 明確擋掉。
+    #   ⚠️ 不可放商品名裡真的有的詞（water/coffee/chair 是主檔用字，擋掉會
+    #      傷到正常查詢）——只擋「非商品語境」的詞；weather/chairs 這類跟
+    #      商品名近似的，靠上面 cutoff 0.85 + 長度差把關。
+    _FUZZY_BLOCK = {
+        "weather", "whether", "robot", "robots", "joke", "jokes",
+        "feeling", "feelings", "hello", "hallo", "there",
+        "pizza", "burger", "database", "data", "system", "server",
+        "admin", "password", "instruction", "instructions", "developer",
+        "mode", "everything", "thing", "things", "stuff", "item", "items",
+        "product", "products", "order", "orders", "morning", "afternoon",
+        "evening", "night", "today", "tomorrow", "thanks", "thank",
+        "please", "sorry", "help", "hours", "open", "human", "person",
+        "people", "name", "names", "price", "prices",
+    }
+
+    hits: list[str] = []
+    for tok in _re.split(r"[\s\-/]+", core.lower()):
+        tok = tok.strip(" ?.!,'\"")
+        if len(tok) < 4 or any(c.isdigit() for c in tok):
+            continue
+        if tok in _FUZZY_BLOCK:
+            continue
+        if tok in cand:                      # 精確詞本來就中，不需模糊
+            hits.append(cand[tok])
+            continue
+        # difflib 先粗篩再用長度比例把關（cutoff 提高到 0.85：0.8 會把
+        #   weather→water、chairs→chair 這種「差一兩字母但語意完全不同」的
+        #   詞救錯；錯字句通常相似度 0.87 以上）
+        near = difflib.get_close_matches(tok, keys, n=3, cutoff=0.85)
+        if not near:
+            continue
+        best = near[0]
+        if abs(len(best) - len(tok)) > _max_dist(len(tok)):
+            continue
+        # 次佳若指向**不同商品**且分數同樣接近 → 歧義，不猜
+        if len(near) > 1 and cand[near[1]] != cand[best]:
+            r0 = difflib.SequenceMatcher(None, tok, best).ratio()
+            r1 = difflib.SequenceMatcher(None, tok, near[1]).ratio()
+            if r1 >= r0:
+                continue
+        hits.append(cand[best])
+    if not hits:
+        return ""
+    # OOV 防線：句中有**主檔沒有的修飾詞**時不要硬救。
+    #   'office chairs' 的 chairs 精確命中 Folding Camping Chair 的 chair，
+    #   但 office 不是任何商品名的字 → 這是庫裡沒有的「辦公椅」，該誠實說
+    #   沒有，不能回露營椅（守衛 noex 類期望的正是這個）。
+    _core_toks = [t.strip(" ?.!,'\"").lower()
+                  for t in _re.split(r"[\s\-/]+", core.lower())]
+    _core_toks = [t for t in _core_toks if len(t) >= 4 and not any(c.isdigit() for c in t)]
+    #   判準：**每個** ≥4 字母的實詞都要能對應到主檔（精確或模糊），
+    #   有任何一個是全然陌生的詞 → 這是庫裡沒有的商品，不猜。
+    #     office chairs / hair dryer / gaming chair：office/hair/gaming
+    #       對不到任何主檔字 → 誠實回空（守衛 noex 期望）
+    #     phonne coaer / usbc cablle：兩個 token 都模糊對得到 → 救回
+    #   ⚠️ 這條同時解掉「單一 token 靠一個字母之差亂中」（hair→chair）：
+    #      hair 雖模糊比得到 chair，但它是**唯一**實詞且是 OOV 商品的核心，
+    #      所以另外要求：模糊救回的商品，其名稱必須有 ≥2 個字元級證據
+    #      （token 長度 ≥5，或句中有第二個 token 也指向同一商品）。
+    _unknown_tok = False
+    for t in _core_toks:
+        if t in _FUZZY_BLOCK or t in cand:
+            continue
+        if not difflib.get_close_matches(t, keys, n=1, cutoff=0.85):
+            _unknown_tok = True
+            break
+    if _unknown_tok:
+        return ""
+    # 單一短詞（≤4 字母）靠模糊硬中 → 證據不足（hair→chair、mose→mouse
+    #   前者是 OOV 後者是錯字，長度是唯一可靠的區分訊號）
+    _fuzzy_only = [t for t in _core_toks if t not in cand]
+    if len(_core_toks) == 1 and _fuzzy_only and len(_core_toks[0]) <= 4:
+        return ""
+    # 多個 token 指向同一商品（Wireeless Bluetouth Earpones）→ 該商品；
+    # 指向不同商品 → 取出現最多次者，仍平手就不猜
+    from collections import Counter
+    _c = Counter(hits).most_common(2)
+    if len(_c) > 1 and _c[1][1] == _c[0][1]:
+        return ""
+    return _c[0][0]
+
+
 def _extract_sku_keyword(text: str) -> str:
     """從任意句子抽出最可能的 SKU keyword。
     分層清理 → 精準匹配 → fuzzy 滑窗 → 字元重疊。"""
@@ -2298,11 +2430,38 @@ def _extract_sku_keyword(text: str) -> str:
             text = _norm_en(text)
         except Exception:
             pass
+        # ⚠️ 用**整句**比對會被查詢虛詞稀釋：match_items 是逐 token 加分，
+        #   'mop on hand' 的 on/hand 會低分撈到一堆不相干商品，讓 Electric Mop
+        #   從單看 'mop' 的 8 分掉到 3 分（< 4 門檻）→ 回空 → 上層沒 keyword →
+        #   全店概覽。守衛 inv 類大量 FAIL 都是這個成因（mop/biscuits/錯字句）。
+        #   → 先剝掉查詢虛詞，只留商品詞再比對。
+        _q_stop = (r"\b(?:how|many|much|whats|what|is|are|the|a|an|of|do|does|"
+                   r"we|i|you|got|have|has|any|some|there|show|me|tell|give|"
+                   r"list|check|look|looking|see|find|get|left|remain|remaining|"
+                   r"stock|stocks|inventory|count|counts|on|hand|in|at|for|to|"
+                   r"from|with|now|currently|available|availability|status|"
+                   r"please|pls|quantity|qty|units?|level|levels|number|"
+                   r"warehouse|wh|north|central|south|total|still|right|"
+                   r"hows|how's|what's|whats|its|it)\b")
+        _en_core = _re.sub(_q_stop, " ", text, flags=_re.I)
+        _en_core = _re.sub(r"\s+", " ", _en_core).strip(" ?.!,")
         try:
-            _m_en = _W.match_items(text)
+            # 先用剝乾淨的核心詞比對；剝到空（整句都是虛詞）才退回整句
+            _m_en = _W.match_items(_en_core) if _en_core else _W.match_items(text)
         except Exception:
             return ""
+        # ── 英文錯字模糊層（守衛 inv 類最大宗）──────────────────────────
+        #   match_items 是 substring 打分，**一個字母打錯就完全對不到**：
+        #   pwerbank / keyyboard / crackees / Wireeless Bluetouth Earpones
+        #   全部 match 到空 → 回全店概覽。中文版靠 _phonetic_match 救同音字，
+        #   英文對應的是**編輯距離**（英文版當初關掉發音層是對的——中文拼音
+        #   對英文亂救；但不能什麼都不補）。
+        #   只在精確比對失敗時啟用，且門檻從嚴（見下），避免亂救。
         if not _m_en or _m_en[0].get("score", 0) < 4:
+            _fz = _en_fuzzy_keyword(_en_core or text)
+            if _fz:
+                log.info(f"[EN fuzzy] {(_en_core or text)!r} → {_fz!r}")
+                return _fz
             return ""
         if len(_m_en) > 1 and _m_en[1].get("score", 0) >= _m_en[0].get("score", 0):
             return ""          # 同分並列＝歧義，不猜
@@ -2617,6 +2776,44 @@ def _kw_grounded(kw: str, user_text: str) -> bool:
     或商品核心尾字（非把/的等虛字）出現在原句。「把北倉的傘」被 fuzzy 成
     「除塵電動拖把」——兩者毫無重疊、只靠介詞「把」亂中（conv100-r8）。
     正向案例要保住：「帽子」→防曬遮陽帽（尾字帽 ✓）、「電鍋」→陶瓷不沾鍋（尾字鍋 ✓）。"""
+    # ── EN build：英文句要走英文接地判準 ────────────────────────────────
+    #   原判準是**中文字元級**（任兩字出現在原句）。英文錯字天生不接地——
+    #   'keyyboard on hand' 裡找不到 'Mechanical Keyboard' 的任何兩字元 →
+    #   判未接地 → C1g 把模糊層剛救回的正解清掉，又回全店概覽（守衛 inv
+    #   類大量 FAIL 的最後一哩）。英文改判「詞級接地」：商品名的任一實詞
+    #   出現在原句、或原句某個詞跟它足夠相似（＝模糊層的證據本身）。
+    if _is_mostly_english(user_text):
+        _kl = (kw or "").lower()
+        _ul = user_text.lower()
+        if not _kl:
+            return False
+        _kw_words = [w for w in _re.split(r"[\s\-/]+", _kl)
+                     if len(w) >= 4 and not any(c.isdigit() for c in w)]
+        if not _kw_words:
+            return _kl in _ul
+        _u_words = [w.strip(" ?.!,'\"") for w in _re.split(r"[\s\-/]+", _ul)]
+        _u_words = [w for w in _u_words if len(w) >= 3]
+        # 別名正規化後的字面接地最可信（biscuits→Crackers：字面不重疊，
+        #   但 alias 是確定性映射，不是幻覺）→ 先看這條
+        try:
+            from alias_en import normalize_alias_en as _na
+            _norm = _na(user_text).lower()
+            if any(_kwd in _norm for _kwd in _kw_words):
+                return True
+        except Exception:
+            pass
+        if any(_kwd in _ul for _kwd in _kw_words):
+            return True
+        # 模糊接地：只要**商品名的任一實詞**在原句有夠像的對應詞就算接地
+        #   （'keyyboard' ≈ Keyboard → Mechanical Keyboard 接地成立；訪客
+        #   只講部分名稱是英文常態，不能要求商品名的詞全部出現）。
+        #   ⚠️ 這一層只負責「kw 是不是憑空冒出來的」；「chairs for the
+        #   office 該不該回露營椅」是 OOV 判斷，由 _en_fuzzy_keyword 的
+        #   陌生修飾詞防線處理，不在這裡兼管（職責分開才不會互相拉扯）。
+        import difflib as _dl
+        return any(_dl.SequenceMatcher(None, _uw, _kwd).ratio() >= 0.84
+                   for _kwd in _kw_words for _uw in _u_words)
+
     k = (kw or "").replace(" ", "")
     if len(k) < 2:
         return bool(k) and k in user_text
@@ -4055,6 +4252,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # ── C1g（r23）：LLM 自帶 kw 全域接地——「中倉有什麼要進貨的」「哪些貨在
     # 苟延殘喘」LLM 曾幻覺 keyword=耳機 回無關單品。kw 與原句無 bigram/尾字/
     # SKU 代號重疊 → 清除退概覽（寧錯殺不亂答）──
+    _en_oov_cleared = False   # C1g-oov 清過 kw → 下游 C1/C1s 不要補回來
     if func_name == "query_inventory" and func_args.get("keyword"):
         _kwg = str(func_args["keyword"])
         if not _kw_grounded(_kwg, user_text):
@@ -4064,6 +4262,52 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             if not _kwg_sku or _kwg_sku.lower() not in user_text.lower():
                 log.info(f"[校正 C1g] LLM kw 未接地 → 清除 {_kwg!r}")
                 func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+        # ── EN build C1g-oov：英文句帶**陌生修飾詞**時不要硬回近似商品。
+        #   'how many chairs for the office' 的 chairs 接地成立（主檔真有
+        #   chair），但 office 不是任何商品名的字＝訪客要的是「辦公椅」，
+        #   庫裡沒有 → 該誠實回概覽/OOV，不能回露營椅（守衛 noex 期望）。
+        elif _is_mostly_english(user_text) and func_args.get("keyword"):
+            _oov_stop = {"many", "much", "have", "there", "some", "any",
+                         "show", "tell", "give", "list", "check", "look",
+                         "left", "stock", "stocks", "inventory", "count",
+                         "hand", "with", "from", "that", "this", "them",
+                         "they", "your", "what", "whats", "hows", "does",
+                         "still", "right", "available", "availability",
+                         "status", "please", "quantity", "units", "unit",
+                         "level", "levels", "number", "warehouse", "north",
+                         "central", "south", "total", "currently", "remaining",
+                         "remain", "looking", "about", "need", "want", "know"}
+            try:
+                import warehouse as _Woov
+                _oov_words = set()
+                for _it in _Woov.state().items:
+                    for _w in _re.split(r"[\s\-/]+", _it["name"].lower()):
+                        if len(_w) >= 4:
+                            _oov_words.add(_w)
+                from alias_en import ALIAS_EN as _ALoov
+                for _k in _ALoov:
+                    for _w in _k.lower().split():
+                        if len(_w) >= 4:
+                            _oov_words.add(_w)
+                import difflib as _dloov
+                _oov_keys = list(_oov_words)
+                for _t in _re.split(r"[\s\-/]+", user_text.lower()):
+                    _t = _t.strip(" ?.!,'\"")
+                    if len(_t) < 4 or _t in _oov_stop or any(c.isdigit() for c in _t):
+                        continue
+                    if _t in _oov_words:
+                        continue
+                    if not _dloov.get_close_matches(_t, _oov_keys, n=1, cutoff=0.85):
+                        log.info(f"[校正 C1g-oov] 陌生修飾詞 {_t!r} → 清除 kw "
+                                 f"{func_args['keyword']!r}")
+                        func_args = {k: v for k, v in func_args.items()
+                                     if k != "keyword"}
+                        # 標記：下游補 kw 的規則（C1/C1s）要尊重這個判斷，
+                        #   否則清掉後 C1s 立刻用 match_items 補回同一個商品
+                        _en_oov_cleared = True
+                        break
+            except Exception:
+                pass
 
     # ── C1: query_inventory 沒抽到 keyword 但 user_text 含商品意圖詞 → 補 keyword ──
     if func_name == "query_inventory":
@@ -4077,7 +4321,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             # 若 user_text 含意圖詞 → 把去掉意圖詞跟時間詞的剩餘字當 keyword
             if any(w in user_text for w in _INVENTORY_INTENT_WORDS):
                 cleaned = _extract_sku_keyword(user_text)
-                if cleaned and len(cleaned) >= 2 and _kw_grounded(cleaned, user_text):
+                if cleaned and len(cleaned) >= 2 and _kw_grounded(cleaned, user_text) \
+                        and not _en_oov_cleared:
                     log.info(f"[校正 C1] query_inventory 補 keyword: {cleaned!r}")
                     func_args = dict(func_args)
                     func_args["keyword"] = cleaned
@@ -4089,7 +4334,8 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 import warehouse as _W_c1s
                 _c1s_kw = _extract_sku_keyword(user_text)
                 _c1s_m = _W_c1s.match_items(_c1s_kw) if _c1s_kw else []
-                if _c1s_m and _c1s_m[0].get("score", 0) >= 3 and _kw_grounded(_c1s_kw, user_text):
+                if _c1s_m and _c1s_m[0].get("score", 0) >= 3 \
+                        and _kw_grounded(_c1s_kw, user_text) and not _en_oov_cleared:
                     log.info(f"[校正 C1s] 無語氣詞但商品名扎實 → 補 keyword: {_c1s_kw!r}")
                     func_args = dict(func_args)
                     func_args["keyword"] = _c1s_kw
@@ -10136,7 +10382,23 @@ async def ws_handler(ws: WebSocket):
                         _txt_h += " " + _norm_h(user_text).lower()
                     except Exception:
                         pass
-                    if _kw_h and not any(c in _txt_h for c in (_kw_h,)) \
+                    # ⚠️ 第三個接地依據＝**英文模糊層的結果**。訪客打錯字時
+                    #   （keyyboard/pwerbank/crackees）正解 keyword 的字面
+                    #   本來就不會出現在原句——那正是要模糊救的原因。少了這條，
+                    #   模糊層剛救回的正解會被這道閘門丟掉，又退回全店概覽
+                    #   （別名修復曾踩過同一個坑，見上方註解）。
+                    #   用 _extract_sku_keyword（英文快路徑：剝虛詞 → 精確
+                    #   比對 → 模糊層，且自帶不確定不猜/OOV 防線）的結果當
+                    #   基準——直接呼叫 _en_fuzzy_keyword 要自己傳剝乾淨的
+                    #   核心詞，傳整句會被 'on hand' 這種虛詞觸發 OOV 防線。
+                    _fz_ok = False
+                    if _is_mostly_english(user_text):
+                        try:
+                            _fz_h = _extract_sku_keyword(user_text)
+                            _fz_ok = bool(_fz_h) and _fz_h.lower() == _kw_h
+                        except Exception:
+                            _fz_ok = False
+                    if _kw_h and not _fz_ok and not any(c in _txt_h for c in (_kw_h,)) \
                             and not any(w in _txt_h for w in _kw_h.split() if len(w) >= 3):
                         log.info(f"[anti-hallu] keyword={_kw_h!r} 不在原句 → 丟棄")
                         func_args.pop("keyword", None)
