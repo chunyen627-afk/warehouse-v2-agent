@@ -2602,12 +2602,15 @@ def _en_fuzzy_keyword(core: str) -> str:
             # 純數字/規格詞（2m、28cm、10000mah、5pcs）不當比對錨點
             if len(w) >= 4 and not any(c.isdigit() for c in w):
                 cand.setdefault(w, it["name"])
+    _ALIAS_KEYS_EN: list[str] = []
     try:
         from alias_en import ALIAS_EN as _AL
         for _k, _v in _AL.items():
             _kl = _k.lower()
             if len(_kl) >= 4:
                 cand.setdefault(_kl, _v)
+                if len(_kl) >= 5:
+                    _ALIAS_KEYS_EN.append(_kl)
             # ⚠️ 多詞別名**不拆單詞**：修飾詞單獨拆出來必然歧義
             #   （cordless 同時屬於 cordless mouse / cordless mop，
             #    workout 屬於 workout bra / mat / shirt / towel），
@@ -2695,6 +2698,19 @@ def _en_fuzzy_keyword(core: str) -> str:
         #     「句中還有別的 token 指向同一商品」時才採用（同商品佐證），
         #     單獨一個模稜兩可的詞不放行。
         near = difflib.get_close_matches(tok, keys, n=3, cutoff=0.85)
+        # ── alias 鍵（人工維護的俗稱表）放寬到 0.80 ────────────────────────
+        #   'rimper'→'romper'(0.833) 卡在 0.85 外 → 整句回空。
+        #   alias 鍵只有 186 個且是人工挑的俗稱，範圍遠小於主檔全詞，
+        #   放寬風險低——**實測驗證**：守衛 noex 的 13 個 OOV 詞
+        #   （hair/dryers/microwave/toothpaste/umbrellas/laptops/printer/
+        #   shampoo/bicycle/chairs/pads/office/gaming）對 alias 鍵在 0.80
+        #   門檻下**零誤中**，只有 rimper→romper 命中。
+        #   ⚠️ 限 ≥5 字母：4 字母的編輯距離 1 就換一個意思。
+        if not near and len(tok) >= 5:
+            near = [k for k in difflib.get_close_matches(
+                tok, _ALIAS_KEYS_EN, n=3, cutoff=0.80) if k in cand]
+            if near:
+                log.info(f"[EN fuzzy] alias 鍵放寬 0.80: {tok!r} → {near[0]!r}")
         if not near:
             continue
         best = near[0]
@@ -2770,6 +2786,12 @@ def _en_fuzzy_keyword(core: str) -> str:
         if t in _FUZZY_BLOCK or t in cand or t in _split_ok:
             continue
         if not difflib.get_close_matches(t, keys, n=1, cutoff=0.85):
+            # alias 鍵放寬 0.80（同上方 near 的放寬，兩處必須同步——
+            #   'rimper' 在 near 已靠 alias 對到 romper，但這道防線用
+            #   0.85 對全主檔比不到 → 又把它擋掉）
+            if len(t) >= 5 and difflib.get_close_matches(
+                    t, _ALIAS_KEYS_EN, n=1, cutoff=0.80):
+                continue
             if _consensus_words and difflib.get_close_matches(
                     t, list(_consensus_words), n=1, cutoff=0.80):
                 log.info(f"[EN fuzzy] 陌生詞 {t!r} 對共識商品 "
