@@ -2568,6 +2568,35 @@ def _en_descriptor_hit(text: str) -> str:
         return ""
 
 
+_EN_Q_STOP_RE = _re.compile(
+    r"\b(?:how|many|much|whats|what|is|are|the|a|an|of|do|does|"
+    r"we|i|you|got|have|has|any|some|there|show|me|tell|give|"
+    r"list|check|look|looking|see|find|get|left|remain|remaining|"
+    r"stock|stocks|inventory|count|counts|on|hand|in|at|for|to|"
+    r"from|with|now|currently|available|availability|status|"
+    r"please|pls|quantity|qty|units?|level|levels|number|"
+    r"warehouse|wh|north|central|south|total|still|right|"
+    r"hows|how's|what's|whats|its|it)\b", _re.I)
+_EN_Q_STOP_INTENT_RE = _re.compile(
+    r"\b(?:running|getting|going|runs|gets)\s+(?:out|low|short|down|empty)\b",
+    _re.I)
+
+
+def _en_query_core(text: str) -> str:
+    """剝掉英文查詢虛詞，只留商品詞。
+
+    ⚠️ 為什麼要抽成共用函式：`_en_fuzzy_keyword` 對**整句**會失效——
+    虛詞（whats/the/count/hand）會進 _core_toks，被 OOV 防線判成陌生詞
+    一票否決整句。實測：
+      fuzzy('whats the lapptop case count') = ''      ← 整句
+      fuzzy('lapptop case')                 = 'Laptop Bag'  ← 剝完
+    原本這段剝詞是內嵌在 _extract_sku_keyword 快路徑裡，別處要用只能
+    複製一份 → 必然不同步。抽出來讓所有呼叫端共用同一套。"""
+    _c = _EN_Q_STOP_INTENT_RE.sub(" ", text)
+    _c = _EN_Q_STOP_RE.sub(" ", _c)
+    return _re.sub(r"\s+", " ", _c).strip(" ?.!,")
+
+
 def _en_fuzzy_keyword(core: str) -> str:
     """EN build：英文錯字 → 商品名（編輯距離模糊比對）。抓不準就回 ""。
 
@@ -2885,22 +2914,9 @@ def _extract_sku_keyword(text: str) -> str:
         #   從單看 'mop' 的 8 分掉到 3 分（< 4 門檻）→ 回空 → 上層沒 keyword →
         #   全店概覽。守衛 inv 類大量 FAIL 都是這個成因（mop/biscuits/錯字句）。
         #   → 先剝掉查詢虛詞，只留商品詞再比對。
-        _q_stop = (r"\b(?:how|many|much|whats|what|is|are|the|a|an|of|do|does|"
-                   r"we|i|you|got|have|has|any|some|there|show|me|tell|give|"
-                   r"list|check|look|looking|see|find|get|left|remain|remaining|"
-                   r"stock|stocks|inventory|count|counts|on|hand|in|at|for|to|"
-                   r"from|with|now|currently|available|availability|status|"
-                   r"please|pls|quantity|qty|units?|level|levels|number|"
-                   r"warehouse|wh|north|central|south|total|still|right|"
-                   r"hows|how's|what's|whats|its|it)\b")
-        # 意圖動名詞：'whats running out at north' 的 running 會比到
-        #   Running Shoes（守衛第 10 輪）。但 'running shoes stock' 的
-        #   running 是商品名的一部分 → 只在**後面接意圖介副詞**時才剝。
-        _q_stop_intent = (r"\b(?:running|getting|going|runs|gets)\s+"
-                          r"(?:out|low|short|down|empty)\b")
-        _en_core = _re.sub(_q_stop_intent, " ", text, flags=_re.I)
-        _en_core = _re.sub(_q_stop, " ", _en_core, flags=_re.I)
-        _en_core = _re.sub(r"\s+", " ", _en_core).strip(" ?.!,")
+        # 剝詞已抽成共用函式 _en_query_core（原本內嵌在這裡，別處要用只能
+        #   複製一份 → 必然不同步；見該函式註解）
+        _en_core = _en_query_core(text)
         # ── 功能描述句**優先**（要在 match_items 之前）────────────────────
         #   'something to clean teeth' 的 clean 會讓 match_items 撈到
         #   Rubber Cleaning Gloves（分數還過 4 分門檻）→ 描述層永遠輪不到，
@@ -6005,6 +6021,55 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     func_args = {**func_args, "keyword": _kw17d}
                     log.info(f"[校正 C17a2d] kw 低分雜訊「{_kw_wh}」→「{_kw17d}」")
 
+    # ── EN build：clf/LLM 給的 keyword 被「撞名詞」帶偏 → 讓模糊層糾正 ──
+    #   'whats the lapptop case count' → clf 直接給 keyword='Phone
+    #   Protective Case'（靠 **case** 撞名），但句中 lapptop→**laptop** 是
+    #   更強的訊號（0.923），正解是 14-inch Laptop Bag。
+    #   條件從嚴，只在「模糊層有答案 + 該答案的字面證據明顯較強」時才覆寫：
+    #     ①模糊層對整句有明確答案 ②與現有 kw 不同
+    #     ③模糊答案在原句的字面支持 > 現有 kw 的字面支持
+    #   （字面支持＝商品名的詞有幾個能在句中找到近似 token）
+    if (func_name == "query_inventory" and _is_mostly_english(user_text)
+            and func_args.get("keyword")):
+        try:
+            # 餵剝過虛詞的 core（見 _en_query_core 註解）
+            _fz_fix = _en_fuzzy_keyword(_en_query_core(user_text))
+        except Exception:
+            _fz_fix = ""
+        if _fz_fix and _fz_fix != func_args.get("keyword"):
+            import difflib as _dlfx
+
+            def _lit_support(_nm: str) -> int:
+                _nw = [w.strip(" ?.!,'\"").lower()
+                       for w in _re.split(r"[\s\-/]+", _nm.lower())]
+                _nw = [w for w in _nw if len(w) >= 4 and not any(c.isdigit() for c in w)]
+                _tk = [t.strip(" ?.!,'\"").lower()
+                       for t in _re.split(r"[\s\-/]+", user_text.lower())]
+                _tk = [t for t in _tk if len(t) >= 4]
+                return sum(1 for w in _nw
+                           if w in _tk or _dlfx.get_close_matches(w, _tk, n=1, cutoff=0.85))
+            _s_new, _s_old = _lit_support(_fz_fix), _lit_support(func_args["keyword"])
+            # 平手也採用模糊層：'lapptop case' 兩者都只中一個詞
+            #   （Laptop Bag 靠 lapptop≈laptop、Phone Case 靠 case），
+            #   但模糊層是拿**整個 core** 判的、證據更完整，而 clf 的 kw
+            #   只是被通用詞 case 撞名帶偏。舊 kw 明顯較強時（>）才保留。
+            if _s_new >= _s_old:
+                # ⚠️ 正規化成**主檔名**再寫回：模糊層可能回 alias 值
+                #   （'Laptop Bag' 而非主檔的 '14-inch Laptop Bag'），
+                #   下游閘門拿 alias 值比對會對不到 → 清掉 kw 回全店概覽
+                #   （實測 lapptop case 就是這樣從誤配變成概覽）。
+                _fz_norm = _fz_fix
+                try:
+                    import warehouse as _W_fz
+                    _mfz = _W_fz.match_items(_fz_fix)
+                    if _mfz and _mfz[0].get("score", 0) >= 4:
+                        _fz_norm = _mfz[0]["item"]["name"]
+                except Exception:
+                    pass
+                log.info(f"[EN kw 糾正] clf kw {func_args['keyword']!r}(支持{_s_old}) "
+                         f"→ 模糊層 {_fz_norm!r}(支持{_s_new})")
+                func_args = {**func_args, "keyword": _fz_norm}
+
     # 通用 category 接地檢查（inventory/related 直達路徑，conv100-r13）
     if func_name in ("query_inventory", "query_related_items"):
         func_args = _drop_ungrounded_category(func_args, user_text)
@@ -6028,7 +6093,22 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     _solid_kw = bool(_m_ce and _m_ce[0].get("score", 0) >= 8)
                 except Exception:
                     _solid_kw = False
-            if not _solid_kw:
+            # ⚠️ 轉類別前先問模糊層：'food conntainers on hand' 的 food 命中
+            #   類別詞，但 conntainers→Glass Food **Containers** 是明確的
+            #   錯字商品查詢，轉成整個 food_beverage 類＝答非所問。
+            #   模糊層對整句有明確答案時，那才是訪客要的。
+            _fz_cat = ""
+            try:
+                # 餵**剝過虛詞的 core**，不能餵整句（見 _en_query_core 註解）
+                _fz_cat = _en_fuzzy_keyword(_en_query_core(user_text))
+            except Exception:
+                _fz_cat = ""
+            if _fz_cat:
+                func_args = {**func_args, "keyword": _fz_cat}
+                func_args.pop("category", None)
+                log.info(f"[EN cat-fill] 讓路模糊層：{user_text!r} → kw={_fz_cat!r}"
+                         f"（不轉 {_cat_en2} 類）")
+            elif not _solid_kw:
                 func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                 func_args["category"] = _cat_en2
                 log.info(f"[EN cat-fill] {user_text!r} → query_inventory"
@@ -11593,6 +11673,24 @@ async def ws_handler(ws: WebSocket):
                         if not _fz_ok:
                             _d_h = _en_descriptor_hit(user_text)
                             _fz_ok = bool(_d_h) and _d_h.lower() in _kw_h
+                        # 第四個接地依據＝**直接問模糊層**（餵剝過虛詞的 core）。
+                        #   上面用 _extract_sku_keyword 當基準，但它可能被
+                        #   撞名詞帶偏（'lapptop case' → Phone Protective
+                        #   **Case**），而 [EN kw 糾正] 已用模糊層把 kw 改成
+                        #   正解 14-inch Laptop Bag → 基準不匹配 → 正解被這道
+                        #   閘門丟掉（坑 3 第五次）。模糊層自己認得的就算接地。
+                        if not _fz_ok:
+                            try:
+                                _fz_h2 = _en_fuzzy_keyword(_en_query_core(user_text))
+                                if _fz_h2:
+                                    _fz_ok = _fz_h2.lower() == _kw_h
+                                    if not _fz_ok:
+                                        import warehouse as _W_h2
+                                        _m_h2 = _W_h2.match_items(_fz_h2)
+                                        _fz_ok = bool(_m_h2) and \
+                                            _m_h2[0]["item"]["name"].lower() == _kw_h
+                            except Exception:
+                                pass
                     if _kw_h and not _fz_ok and not any(c in _txt_h for c in (_kw_h,)) \
                             and not any(w in _txt_h for w in _kw_h.split() if len(w) >= 3):
                         log.info(f"[anti-hallu] keyword={_kw_h!r} 不在原句 → 丟棄")
