@@ -1,0 +1,61 @@
+# 語音回歸批（EN）——所有句子都是 **/api/asr 的真實輸出**，不是理想文字
+#
+# 素材：voice_poc/audio/en/{US-male,SG-male}/*.wav（edge-tts 產音 + ffmpeg 混噪）
+# 產生方式：curl -X POST /api/asr --data-binary @xx.wav
+# 為何要這批：文字端 r1-r5 全綠 ≠ 語音可用。ASR 有自己的產物型態
+#   （大小寫、句末標點、聽錯詞），r1-r5 一句都沒覆蓋到。
+#
+# ⚠️ whisper 輸出經 _asr_normalize 正規化（小寫、去句末標點）後才進系統，
+#   所以這裡的句子是**正規化後**的形態——直接打字送出等價於語音路徑。
+
+### V1 US 乾淨層（ASR 全對，驗端到端）
+> how many bluetooth earphones are left | inventory_single | Wireless Bluetooth Earphones
+> what's the stock of yoga mat | inventory_single | Yoga Mat
+> wireless mouse count | inventory_single | Wireless Mouse
+> power bank inventory | inventory_single | Power Bank
+> what is expiring soon | expiring
+> best sellers this month | hot_items
+> compare north and south warehouse | compare_warehouses
+> how much stock is in central warehouse | inventory,inventory_single,clarify
+> what else do power bank buyers get | related,clarify
+> why is the toothbrush count off | agent_rca
+
+### V2 寫入類（語音最尷尬的失敗：訪客以為進貨了其實沒有）
+> north received 50 wireless mouse | movement_confirm | Wireless Mouse
+[confirm]
+> transfer 20 bluetooth earphones from north to central | transfer_confirm
+[confirm]
+> south shipped 30 yoga mat | movement_confirm | Yoga Mat
+[confirm]
+> set safety stock for yoga mat to 80 | config_confirm
+[confirm]
+
+### V3 追問鏈（ASR 短句 + context）
+> power bank inventory | inventory_single | Power Bank
+> north | inventory_single,inventory
+> and central | inventory_single,inventory
+> the most urgent one | low_stock,inventory_single,clarify,agent_rca
+
+### V4 ASR 聽錯商品名（heavy 噪音層真實產物）
+! 這四句 ASR 把商品名聽壞了，看容錯層能撈回多少、撈不回時是否優雅
+> north received 50 wireless metals | movement_confirm,clarify,error
+> south shift 30 yoga man | movement_confirm,clarify,inventory_single
+> do we have any camping tech | inventory_single,inventory,clarify
+> which items are running well | low_stock,hot_items,inventory,clarify
+
+### V5 SG 腔（ASR 最弱的一組，WER 23%）
+> powerbank inventory | inventory_single | Power Bank
+> what else do power bang bias get | related,clarify,inventory_single
+> north receive 50 wireless mouse | movement_confirm | Wireless Mouse
+! 倉名被聽壞——**不可回 view=error 醜錯誤**（r5-voice 修：無效倉名退回全倉比較）
+> compare north and self-way house | compare_warehouses,clarify,inventory
+> what's the stock of yoga meant | inventory_single,clarify
+> south street 30 yoga met | movement_confirm,clarify,inventory_single
+> the most urgent wine | clarify,low_stock,inventory,inventory_single
+
+### V6 ASR 大小寫（whisper 一律首字大寫，打字訪客不會這樣打）
+! 正規化層若失效，這些會走進「詞表全小寫」的比對死角
+> Transfer 20 Bluetooth earphones from North to Central. | transfer_confirm
+> What else do coffee beans buyers get? | related,clarify
+> How many Bluetooth earphones are left? | inventory_single | Wireless Bluetooth Earphones
+> Which items are running low? | low_stock

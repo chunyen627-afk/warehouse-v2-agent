@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -2506,7 +2506,7 @@ $('send-btn').onclick = () => {
   }
 };
 
-// ─── 語音輸入 (Web Speech API、zh-TW) ───
+// ─── 語音輸入（本地 whisper tiny.en 優先，Web Speech API en-US 回退）───
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 const micBtn = $('mic-btn');
 const micStatus = $('mic-status');
@@ -2634,7 +2634,9 @@ if (!SpeechRec) {
   }
 } else {
   recognition = new SpeechRec();
-  recognition.lang = 'zh-TW';
+  // EN build：回退路徑也要講英文——本地 ASR 掛掉時才走這裡，而那正是最
+  //   需要它能用的時候。設成 zh-TW 等於「回退方案本身也是壞的」。
+  recognition.lang = 'en-US';
   recognition.continuous = false;
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;

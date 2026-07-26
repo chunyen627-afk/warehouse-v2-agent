@@ -515,6 +515,20 @@ _GATEKEEPER_BLACKLIST = (
     "weather", "joke", "song", "music", "movie", "game", "translate",
     "who are you", "your name", "how are you", "stock market", "bitcoin",
     "recipe", "restaurant", "taxi", "flight", "hotel",
+    # ── r5-voice：問系統在幹嘛/是什麼（user 現場抓到 `what are you doing`
+    #   回了全店 60 項概覽）。這族的共同結構是**問句的詞被停用詞剝光 →
+    #   空 keyword → 落到「全店概覽」fallback**，而不是被守門員婉拒。
+    #   `who are you` / `are you a robot` 早就在黑名單所以正確擋下，
+    #   `what are you …` 這側漏了一整族。
+    #   ⚠️ 用完整片語不用裸前綴（坑 8）——實測撞到四句**合法倉管查詢**：
+    #     'what are you'    ⊂ 'what are you selling most of'（熱銷）
+    #                       ⊂ 'what are you missing'（缺貨）
+    #     'whats happening' ⊂ 'whats happening with the toothbrush count'（RCA）
+    #     'what do you do'  ⊂ 'what do you do with expired items'（到期處理）
+    #   → 只收「後面不會再接倉管語」的完整閒聊句。
+    "what are you doing", "what are you up to", "what're you doing",
+    "whats going on", "what's going on", "how do you work",
+    "how does this work", "what is this thing", "what r u doing",
     # ── EN build（劇情批 r5）：展場「場館問題」——訪客把 demo 機當服務台。
     #   原本掉進 oov:noex 回「No item matching "wifi password"」（把它當成
     #   一個查不到的商品），該婉拒並導回倉管能力。
@@ -541,6 +555,19 @@ GUIDE_KEYWORDS = {
     # r76：「新來的同事要用這系統 怎麼教」曾 rejected
     "怎麼教", "怎麼上手", "怎麼入門",
     "menu", "help", "list", "options", "what can", "guide",
+    # ── r5-voice：英文只有上面六個詞，中文的「怎麼用/怎麼操作/教我/使用說明」
+    #   一個對應都沒有 → `how does the transfer work` 這類「問功能怎麼用」
+    #   掉進商品比對回全店概覽（訪客想學怎麼操作，收到 60 項清單）。
+    #   ⚠️ 用片語不用裸詞（坑 8）——實測撞到三句**合法商品查詢**，已移除：
+    #     'how to use'   ⊂ 'how to use the yoga mat'
+    #     'show me how'  ⊂ 'show me how many earphones are left'
+    #     'instructions' ⊂ 'instructions for the coffee machine'
+    #   （`_is_guide_request` 開頭雖有「含具體商品→當查詢」的排除，
+    #    但不賭它涵蓋所有情況——詞表本身就該乾淨。）
+    "how do i use this", "how does it work", "how does this work",
+    "how does the transfer work", "how does transfer work",
+    "teach me", "tutorial", "what else can you", "anything else you can",
+    "capabilities", "getting started", "how do i start", "where do i start",
 }
 
 GUIDE_MSG = (
@@ -1219,11 +1246,19 @@ _TOOL_INTENT_GUARD = {
 
 
 def _tool_intent_ok(func_name: str, user_text: str) -> bool:
-    """該工具需要意圖詞才合理時，檢查句中有沒有。沒列在 guard 裡的工具一律放行。"""
+    """該工具需要意圖詞才合理時，檢查句中有沒有。沒列在 guard 裡的工具一律放行。
+
+    ⚠️ EN build（語音）：**要同時比對小寫**——guard 的英文詞全是小寫，而 ASR
+    （whisper）一律輸出首字大寫（`What else do coffee beans buyers get?`）→
+    連帶詞 'what else do' 不命中 → `gate-rescue` 把正確的 query_related_items
+    降級成 query_inventory（訪客問搭售卻收到庫存數字）。
+    這道閘門管七個工具，大小寫敏感等於**所有 ASR 句都少一層保護**。
+    """
     words = _TOOL_INTENT_GUARD.get(func_name)
     if not words:
         return True
-    return any(w in user_text for w in words)
+    _ut_low = user_text.lower()
+    return any(w in user_text or w in _ut_low for w in words)
 
 
 def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
@@ -2176,7 +2211,15 @@ def _detect_clarify(user_text: str) -> dict | None:
             "hint": "輸入數字選擇，或直接輸入完整描述",
         }
 
-    has_intent = any(w in t for w in _ALL_INTENT_WORDS)
+    # ⚠️ EN build（語音）：**要用小寫比對**——`_ALL_INTENT_WORDS` 的英文詞
+    #   全是小寫，而 ASR（whisper）一律輸出首字大寫與專有名詞大寫
+    #   （`Transfer 20 Bluetooth earphones from North to Central.`）→
+    #   `"transfer" in t` 不成立 → has_intent=False → 整句被判成「只有商品名
+    #   沒動作」轉 clarify，**校正層（C13a）根本執行不到**。
+    #   實測：同一句小寫開卡成功、大寫回「你想知道耳機的什麼？」。
+    #   打字訪客不會打大寫，所以文字端 r1-r5 五輪收斂都沒暴露這條。
+    _t_low_intent = t.lower()
+    has_intent = any(w in t or w in _t_low_intent for w in _ALL_INTENT_WORDS)
 
     # 剝通用填充詞，避免「幫我查」的「幫我」誤觸商品 match
     _FILLER = ("幫我", "幫忙", "請問", "麻煩", "請", "幫", "給我", "看一下",
@@ -2657,9 +2700,22 @@ _EN_Q_STOP_RE = _re.compile(
     r"from|with|now|currently|available|availability|status|"
     r"please|pls|quantity|qty|units?|level|levels|number|"
     r"warehouse|wh|north|central|south|total|still|right|"
+    # r5-voice：疑問詞（`which items are running well` 剝完只剩 which →
+    #   回「No item matching "which"」）。
+    # ⚠️ **不收 why/when/where**——那三個是 RCA（why is X off）與期間查詢的
+    #   關鍵意圖詞，剝掉會傷到 _RCA_INTENT_WORDS 之類的下游判斷。
+    r"which|whose|whom|"
     r"hows|how's|what's|whats|its|it)\b", _re.I)
 _EN_Q_STOP_INTENT_RE = _re.compile(
-    r"\b(?:running|getting|going|runs|gets)\s+(?:out|low|short|down|empty)\b",
+    # ⚠️ 這裡收的是「動詞+狀態」的**意圖片語**，剝掉才不會讓 running 之類的
+    #   詞被當商品名。`running` 單獨留下會撈到 **Running** Shoes Men's
+    #   （score 12）——語音實測 `which items are running well`（ASR 把
+    #   'low' 聽成 'well'）整句被改成「跑鞋庫存」，clf 明明正確判了
+    #   list_low_stock。同坑 1：英文短詞必然撞商品名。
+    #   r5-voice：補「賣得好/賣得快」那側的狀態詞（原本只收缺貨側）。
+    r"\b(?:running|getting|going|runs|gets|selling|sells|moving|moves)\s+"
+    r"(?:out|low|short|down|empty|well|fine|good|great|fast|slow|"
+    r"strong|steady|badly|poorly)\b",
     _re.I)
 
 
@@ -4859,7 +4915,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             import warehouse as _W3e
             _c3e_kw = _extract_sku_keyword(user_text)
             _c3e_m = _W3e.match_items(_c3e_kw) if _c3e_kw else []
-            if _c3e_m and _c3e_m[0].get("score", 0) >= 2:
+            # ⚠️ EN build（語音）：英文要求**更高分數**才算「商品線索」——
+            #   score>=2 在英文太鬆，一個同時是功能詞的單詞就滿足：
+            #   `which items are running well` 的 **running** 撈到
+            #   Running Shoes Men's → clf 正確判的 list_low_stock 被改成
+            #   「跑鞋庫存」（訪客問的是哪些商品狀況好）。
+            #   同坑 1（短字串 substring 在英文必然誤爆）＋ 記憶裡「keyword
+            #   分數 ≥8 才算扎實」的既有標準。中文維持 >=2（中文詞不會這樣撞）。
+            _c3e_need = 8 if _is_mostly_english(user_text) else 2
+            if _c3e_m and _c3e_m[0].get("score", 0) >= _c3e_need:
                 log.info(f"[校正 C3e] low_stock 幻覺+商品線索 → query_inventory kw={_c3e_kw!r}")
                 return "query_inventory", {"keyword": _c3e_kw}, True
             # r30：概覽 fallback 前先試類別詞（「北倉的家電類庫存總覽」RPI5 LLM
@@ -5431,7 +5495,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          # r5：比較/門檻介系詞——'is it below safety stock'
                          #   回「No item matching "below"」
                          "below", "under", "above", "over", "than", "minimum",
-                         "maximum", "threshold", "limit", "target"}
+                         "maximum", "threshold", "limit", "target",
+                         # r5-voice：疑問詞（不收 why/when/where/who——那是
+                         #   RCA 與期間查詢的意圖詞）
+                         "which", "whose", "whom",
+                         # r5-voice：動名詞/泛詞被當商品名——
+                         #   'whats happening with the toothbrush count'
+                         #   → 回「No item matching "happening"」；
+                         #   'how does the transfer work' → 「"work"」
+                         "happening", "happens", "happened", "work", "works",
+                         "working", "mean", "means", "thing", "stuff"}
             try:
                 import warehouse as _Woov
                 _oov_words = set()
@@ -8682,22 +8755,27 @@ async def reset():
     return JSONResponse({"ok": True, "snapshot": snap}, headers=NO_CACHE)
 
 
-# ── 語音辨識（Fun-ASR-Nano 本地跑，展場離線可用）──────────────────
+# ── 語音辨識（whisper.cpp tiny.en 本地跑，展場離線可用）────────────
 #   為何不用瀏覽器 Web Speech API：那會連 Google 雲端，展場沒網路就死。
-#   前端錄音 → POST webm/wav → ffmpeg 轉 16k mono → llama-funasr-cli →
-#   簡體 → OpenCC s2twp 轉繁（順便轉台灣用語）→ 回文字給前端送 WS。
-#   缺任一組件（binary/模型/ffmpeg/opencc）→ 回 ok:false + reason，
+#   前端錄音 → POST webm/wav → ffmpeg 轉 16k mono → whisper-cli → 回文字。
+#   缺任一組件（binary/模型/ffmpeg）→ 回 ok:false + reason，
 #   前端據此回退到瀏覽器內建辨識，不讓展場整組壞掉。
-_VOICE_DIR = Path.home() / "voice_poc"
-_VOICE_CLI = _VOICE_DIR / "src/runtime/llama.cpp/build/bin/llama-funasr-cli"
-_VOICE_ENC = _VOICE_DIR / "gguf/funasr-encoder-f16.gguf"
-_VOICE_LLM = _VOICE_DIR / "gguf/qwen3-0.6b-q4km.gguf"
+#
+#   ── EN build：為何從 Fun-ASR-Nano 換成 whisper ──────────────────
+#   ① **來源約束**（user 定調）：Fun-ASR 是阿里（FunAudioLLM）的，
+#      英文版只用歐美模型。whisper 是 OpenAI，whisper.cpp 生態成熟。
+#   ② **原本英文根本不會成功**：舊取字邏輯是「取最後一行**含中文**的輸出」，
+#      英文辨識結果不含中文字 → text 恆空 → 一律回「聽不出內容」。
+#   ③ **實測 tiny.en 勝過 base.en**（RPI5 選型：0.94s/WER 9.3% vs
+#      2.33s/WER 10.2%）——倉管查詢句短、句型固定，tiny 容量已夠，
+#      模型變大的收益顯現不出來。比舊的 Fun-ASR（2.45s）快 2.6 倍。
+_VOICE_DIR = Path.home() / "whisper.cpp"
+_VOICE_CLI = _VOICE_DIR / "build/bin/whisper-cli"
+_VOICE_MODEL = _VOICE_DIR / "models/ggml-tiny.en.bin"
 
-try:
-    from opencc import OpenCC as _OpenCC
-    _VOICE_CC = _OpenCC("s2twp")
-except Exception:
-    _VOICE_CC = None
+# EN build：不再需要 OpenCC（s2twp 是簡轉繁+台灣用語，對英文無意義）。
+#   舊版把它列進 _voice_ready 的必要條件 → 沒裝 opencc 會讓英文語音
+#   整組回報不可用，那是中文版遺留的相依。
 
 
 # ── 語音專用：寫入動詞/倉別同音正規化 ────────────────────────────
@@ -8718,6 +8796,22 @@ _ASR_NUM = r"[0-9０-９一二三四五六七八九十百千兩]"
 _ASR_UNIT = r"[個件台臺箱包盒支瓶罐組雙頂條捲張片袋]"
 
 _ASR_FIX = [
+    # ── EN build：whisper 一律輸出**首字大寫＋專有名詞大寫＋句末標點**
+    #   （`Transfer 20 Bluetooth earphones from North to Central.`），而
+    #   訪客打字是小寫 → **系統裡 21 個詞表的英文詞全是小寫**，大小寫敏感
+    #   的比對一律落空。實測後果（都是真的踩到）：
+    #     `Transfer …` → `_ALL_INTENT_WORDS` 不中 → has_intent=False
+    #                    → 判成「只有商品名沒動作」轉 clarify，
+    #                    **校正層 C13a 根本執行不到**（小寫同句正常開卡）
+    #     `What else do …` → `_TOOL_INTENT_GUARD` 的連帶詞不中
+    #                    → gate-rescue 把 query_related 降級成庫存查詢
+    #   兩個關鍵閘門（`_detect_clarify` / `_tool_intent_ok`）已各自改成
+    #   同時比對小寫（治本，打字訪客打大寫也受惠）；這裡再做一次出口正規化
+    #   當**全面保險**，涵蓋其餘 19 個詞表。
+    #   ⚠️ 全小寫安全：`match_items` 早已 `.lower()` 比對（英文化時修的
+    #   大小寫 bug），商品名 USB-C / LED / 1kg 全小寫仍對得到。
+    #   ⚠️ 只掛 /api/asr 出口，打字路徑完全不受影響（同中文版設計）。
+    #   實作在下面的 `_asr_normalize`（開頭就處理，不放進這張中文規則表）。
     # ③ 倉別同音（最高頻錯誤：實測 20 句錯 5 次）——限定方位詞後
     #   「藏」是真人聲實測補的（合成音從沒產生過；user 唸「北倉」→「北藏」）。
     #   守衛/sweep 語料含「藏」皆 0 次 → 安全。
@@ -8751,7 +8845,17 @@ _ASR_FIX = [
 
 
 def _asr_normalize(text: str) -> str:
-    """語音專用同音修正。回修正後文字（沒命中則原樣回傳）。"""
+    """語音專用正規化。回修正後文字（沒命中則原樣回傳）。
+
+    EN build：英文句只做**大小寫＋句末標點**正規化（理由見 _ASR_FIX 開頭
+    的長註解：系統 21 個詞表的英文詞全是小寫，whisper 一律大寫開頭）。
+    中文同音規則（_ASR_FIX）對英文無意義，且可能誤傷 → 英文句不跑。
+    """
+    if _is_mostly_english(text):
+        out = text.strip().lower()
+        # 句末標點：whisper 一定會加 . ? !，訪客打字通常沒有。
+        #   句中的標點保留（`14-inch` 的連字號、`usb-c` 都要留）。
+        return out.rstrip(" .?!,;:")
     out = text
     for pat, rep in _ASR_FIX:
         out = pat.sub(rep, out)
@@ -8759,12 +8863,13 @@ def _asr_normalize(text: str) -> str:
 
 
 def _voice_ready() -> tuple[bool, str]:
+    # EN build：訊息改英文（訪客會在載入畫面看到），並移除 OpenCC 檢查
+    #   ——舊版把它列為必要條件，沒裝 opencc 會讓英文語音整組回報不可用，
+    #   那是中文版的遺留相依（英文根本用不到簡轉繁）。
     if not _VOICE_CLI.exists():
-        return False, "ASR binary 未安裝"
-    if not (_VOICE_ENC.exists() and _VOICE_LLM.exists()):
-        return False, "ASR 模型未安裝"
-    if _VOICE_CC is None:
-        return False, "OpenCC 未安裝"
+        return False, "Speech recognition is not installed"
+    if not _VOICE_MODEL.exists():
+        return False, "Speech recognition model is missing"
     return True, ""
 
 
@@ -8811,23 +8916,29 @@ async def asr_api(req: Request):
 
         try:
             p = subprocess.run(
-                [str(_VOICE_CLI), "--enc", str(_VOICE_ENC), "-m", str(_VOICE_LLM),
-                 "-a", str(wav)],
+                # `-nt` = no timestamps：不加的話每行都是
+                #   `[00:00:00.000 --> 00:00:02.080]   How many …`，取字要剝
+                #   時間戳。加了之後 **stdout 只剩辨識文字**（載入訊息與計時
+                #   都走 stderr）→ 取字邏輯可以極簡、不必猜格式。
+                # `-l en` 明確指定英文：tiny.en 本就是英文專用模型，
+                #   指定後不會浪費時間做語言偵測。
+                [str(_VOICE_CLI), "-m", str(_VOICE_MODEL),
+                 "-f", str(wav), "-nt", "-l", "en"],
                 capture_output=True, text=True, timeout=120,
             )
         except subprocess.TimeoutExpired:
             return JSONResponse({"ok": False, "reason": "Speech recognition timed out"}, headers=NO_CACHE)
 
-    # CLI 夾雜載入訊息 → 取最後一行含中文的輸出
-    text = ""
-    for ln in reversed([l.strip() for l in p.stdout.splitlines() if l.strip()]):
-        if _re.search(r"[一-鿿]", ln):
-            text = ln
-            break
-    if not text:
+    # ── EN build：取字。舊版是「取最後一行**含中文**的輸出」——英文辨識結果
+    #   不含中文字 → text 恆空 → 英文語音**一句都不會成功**，一律回
+    #   「Could not make out any speech」。這是英文版語音先前結構性不可用的
+    #   主因之一。改成：whisper -nt 的 stdout 全是文字，接起來即可。
+    text = " ".join(l.strip() for l in p.stdout.splitlines() if l.strip()).strip()
+    # whisper 對無語音/純噪音會輸出空字串或 [BLANK_AUDIO] / (silence) 之類標記
+    if not text or _re.fullmatch(r"[\[\(][^\]\)]*[\]\)]", text):
         return JSONResponse({"ok": False, "reason": "Could not make out any speech"}, headers=NO_CACHE)
 
-    text = _VOICE_CC.convert(text).strip(" 。，？！、.,?!~～")
+    # EN build：不再經 OpenCC（s2twp 是簡轉繁，對英文無意義）
     _raw = text
     text = _asr_normalize(text)
     dt = round(_time.time() - t0, 2)
@@ -12389,6 +12500,18 @@ async def ws_handler(ws: WebSocket):
                         _p = user_text.find(_zh)
                         if _p >= 0 and _en not in [e for _, e in _cw_pos]:
                             _cw_pos.append((_p, _en))
+                    # ── EN build（語音）：英文倉名也要依原句校準（同坑 7：
+                    #   上面那張表的鍵全是中文，英文句一處也命中不了 → 沿用
+                    #   LLM 抽的值）。ASR 把倉名聽壞時（`compare north and
+                    #   self-way house`）LLM 給 warehouse_b='self-way'，
+                    #   原樣送進 tool → 訪客看到醜的 `view=error
+                    #   「Warehouse must be north / central / south」`。
+                    if not _cw_pos:
+                        _ut_cmp = user_text.lower()
+                        for _en_w in ("north", "central", "south"):
+                            _p = _ut_cmp.find(_en_w)
+                            if _p >= 0 and _en_w not in [e for _, e in _cw_pos]:
+                                _cw_pos.append((_p, _en_w))
                     _cw_seq = [e for _, e in sorted(_cw_pos)]
                     _cw_rank3 = any(w in user_text for w in (
                         "哪個倉", "哪倉", "各倉", "三倉", "三個倉", "每個倉",
@@ -12408,6 +12531,24 @@ async def ws_handler(ws: WebSocket):
                         func_args["metric"] = "stock_value"
                     elif any(w in user_text for w in ("幾件", "幾項", "品項數", "商品數")):
                         func_args["metric"] = "item_count"
+                    # ── EN build（語音）：**無效倉名接地**——上面校準完仍可能
+                    #   留著 LLM 抽的雜訊（ASR 聽壞倉名時只找得到一個真倉名，
+                    #   長度不足 2 走不到覆寫分支）。無效值直接送進 tool 會回
+                    #   `view=error`＝訪客看到醜錯誤。改成：只留有效倉名，
+                    #   湊不滿兩個就退回全倉比較（tool 的正常路徑）。
+                    #   ⚠️ 同「LLM 佔位字串會被下游當真實值」那類坑：凡是拿
+                    #   LLM 輸出當 enum 參數的地方都要驗，不能假設它合法。
+                    _VALID_WH_CMP = ("north", "central", "south", "all")
+                    _bad_wh = [_k for _k in ("warehouse_a", "warehouse_b")
+                               if str(func_args.get(_k, "")).lower() not in _VALID_WH_CMP]
+                    if _bad_wh:
+                        _keep = [str(func_args.get(_k, "")).lower()
+                                 for _k in ("warehouse_a", "warehouse_b")
+                                 if str(func_args.get(_k, "")).lower() in
+                                 ("north", "central", "south")]
+                        log.info(f"[Pre-C-Cmp2] 無效倉名 {[func_args.get(_k) for _k in _bad_wh]}"
+                                 f" → 退回全倉比較（保留 {_keep}）")
+                        func_args["warehouse_a"] = func_args["warehouse_b"] = "all"
                     log.info(f"[Pre-C-Cmp2] compare args 依原句校準 → {func_args}")
 
                 # ── Clarification：模糊意圖攔截（在校正前）──
@@ -12658,6 +12799,11 @@ async def ws_handler(ws: WebSocket):
                         # r5：比較/門檻介系詞（同 _oov_stop，兩處要同步）
                         "below", "under", "above", "over", "than", "minimum",
                         "maximum", "threshold", "limit", "target",
+                        # r5-voice：疑問詞（不收 why/when/where/who）
+                        "which", "whose", "whom",
+                        # r5-voice：動名詞/泛詞被當商品名（同 _oov_stop）
+                        "happening", "happens", "happened", "work", "works",
+                        "working", "mean", "means",
                     }
                     # 功能描述句不是「查不存在的商品」——它有明確目標，
                     #   由 descriptor_en 處理，這裡不可攔成 OOV
