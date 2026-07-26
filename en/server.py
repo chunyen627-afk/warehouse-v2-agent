@@ -7449,7 +7449,13 @@ def _ctx_expand(vid, text: str) -> str:
 # 拒、「不對是100個」把 100 match 成「運動毛巾 100x30cm」幻覺回庫存）。
 # 產品決策：一律引導按按鈕，寫入授權只認按鈕（打字不寫入）。
 _PEND_OK = ("好", "好的", "好啊", "可以", "確認", "確定", "對", "是", "沒錯", "嗯",
-            "嗯嗯", "行", "沒問題", "就這樣", "送出", "執行", "ok", "okay", "yes", "y")
+            "嗯嗯", "行", "沒問題", "就這樣", "送出", "執行", "ok", "okay", "yes", "y",
+            # ⚠️ EN build（r5-voice）：**裸 `confirm` 原本沒收**——中文的「確認」
+            #   在這裡，英文卻只有 `press confirm`/`confirm it` 那類片語進了
+            #   `_PEND_OK_SUB`。實測 alert 卡上打 `confirm` 回
+            #   「No item matching "confirm"」＝訪客照著卡片上的字打卻沒反應。
+            "confirm", "confirmed", "yep", "yeah", "yup", "sure", "affirmative",
+            "proceed", "go", "save", "save it", "done")
 # r33：整句比對漏掉「按確認」「幫我按」「就這樣送出」這類講法 → 落到守門員回教學文。
 #   卡片在時，含這些詞的短句一律視為「想按確認」。
 _PEND_OK_SUB = ("按確認", "幫我按", "幫我確認", "按下去", "按鈕", "點確認", "就這樣",
@@ -7460,7 +7466,15 @@ _PEND_OK_SUB = ("按確認", "幫我按", "幫我確認", "按下去", "按鈕",
                 #   落到守門員回教學文）
                 "press confirm", "click confirm", "hit confirm", "confirm it",
                 "go ahead", "do it", "submit", "sounds good", "looks good",
-                "thats right", "that's right", "correct")
+                "thats right", "that's right", "correct",
+                # r5-voice：訪客常見的「肯定＋客套」組合。原本只收單詞或
+                #   動賓片語，`yes please`(10 字元) 連長度門檻都過不了
+                #   （已同步改成英文用詞數，見 _vc_len_ok）
+                # ⚠️ 移除 "all good" / "perfect"（坑 8 撞出來的）：
+                #   'is that all good' 是**疑問**該引導不該代按（代按＝直接
+                #   寫入，判錯代價高）；'perfect fit socks stock' 是商品查詢。
+                "yes please", "ok do it", "please do", "go for it",
+                "thats fine", "that's fine")
 # 疑問/求助（「這樣對嗎」「要按哪裡」）→ 也該引導，不可回教學文
 _PEND_ASK = ("對嗎", "可以嗎", "是這樣嗎", "要按哪", "怎麼按", "然後呢", "接下來", "要幹嘛",
              # r55 收官批：「算了照原本的」＝維持卡片內容 → 引導按確認（不代按、不取消）
@@ -7473,7 +7487,12 @@ _PEND_ASK = ("對嗎", "可以嗎", "是這樣嗎", "要按哪", "怎麼按", "�
              "is this right", "is that right", "what now", "whats next",
              "what's next", "which button", "where do i", "how do i",
              "then what", "keep it", "leave it", "as is", "wait", "hold on",
-             "let me think")
+             "let me think",
+             # r5-voice：確認前再問一次（`is that all good` 曾回全店概覽）。
+             #   ⚠️ 放這裡（引導）**不是**放 _PEND_OK_SUB（代按）——疑問句
+             #   判成代按就是直接寫入，判錯代價高。
+             "all good", "is that ok", "is that okay", "does that look right",
+             "looks ok", "sure about", "you sure")
 _PEND_FIX = ("不對", "不是", "改成", "改為", "錯了", "應該是", "換成", "改一下", "多一點",
              "少一點", "太多", "太少", "數量錯", "倉庫錯", "商品錯",
              # r35 反悔鏈：訪客改主意的實際講法（「還是80好了」曾落到守門員教學文、
@@ -9058,9 +9077,25 @@ async def ws_handler(ws: WebSocket):
                     _vc_qty = (_vc_pend.get("data") or {}).get("qty")
                     _vc_qty_ok = (not _vc_num or not isinstance(_vc_qty, int)
                                   or abs(_vc_qty) == int(_vc_num.group(1)))
+                    # ⚠️ EN build：`_PEND_OK_SUB` 的英文詞全是小寫，這裡原本用
+                    #   **原句**比對（只有上面 _PEND_OK 那行有 .lower()）→
+                    #   `Go Ahead` / `GO AHEAD` 不命中代按，掉到 pending-gate
+                    #   只回「請按按鈕」。**這是寫入路徑**：訪客以為確認了、
+                    #   其實沒寫入（小寫 `go ahead` 同一張卡是真的寫入成功的）。
+                    #   語音更會踩到——whisper 一律首字大寫。
+                    _vc_low = _vc_txt.lower()
+                    # ⚠️ 長度門檻同樣要分語言（坑 2）：`<= 8 字元`是為中文調的，
+                    #   英文 `yes please`(10) / `go ahead please`(15) 都超標
+                    #   → 確認詞明明命中卻被長度擋掉（實測 `yes please` 大小寫
+                    #   都失敗，那是既有破口不是大小寫問題）。英文改**詞數 ≤ 3**。
+                    _vc_len_ok = ((len(_vc_txt.split()) <= 3)
+                                  if _is_mostly_english(_vc_txt)
+                                  else (len(_vc_txt) <= 8))
                     _vc_ok = (not _vc_neg
-                              and (_vc_txt.lower() in _PEND_OK
-                                   or (len(_vc_txt) <= 8 and any(w in _vc_txt for w in _PEND_OK_SUB))
+                              and (_vc_low in _PEND_OK
+                                   or (_vc_len_ok
+                                       and any(w in _vc_txt or w in _vc_low
+                                               for w in _PEND_OK_SUB))
                                    or (len(_vc_txt) <= 6 and ("確認" in _vc_txt or "送出" in _vc_txt))
                                    or (len(_vc_txt) <= 10 and _vc_qty_ok
                                        and _re.search(r"(確認|送出)$", _vc_txt))))

@@ -1,0 +1,84 @@
+# 大小寫回歸批（EN）——ASR 與手機輸入法的產物型態
+#
+# 為何獨立成一批：系統裡 21 個英文詞表**全是小寫**，而
+#   ① whisper 一律輸出首字大寫＋專有名詞大寫
+#   ② 手機輸入法（iOS 預設）自動大寫首字
+#   ③ 訪客開 CapsLock / shift 沒放開（blUetooth）
+# 打字訪客用電腦不會打大寫，所以 r1-r5 五輪收斂**一句都沒覆蓋**。
+#
+# ⚠️ 最危險的是**寫入路徑**（F 段）：確認詞大小寫敏感 ⇒ 訪客講
+#   `Go Ahead` 以為確認了、其實沒寫入（小寫同句是真的會寫入的）。
+
+### K1 商品名大寫
+> how many Bluetooth Earphones left | inventory_single | Wireless Bluetooth Earphones
+> stock of Yoga Mat | inventory_single | Yoga Mat
+> Wireless Mouse count | inventory_single | Wireless Mouse
+> do we have Power Bank | inventory_single | Power Bank
+
+### K2 句中動詞/倉名大寫（iOS 自動大寫首字）
+> North received 50 wireless mouse | movement_confirm | Wireless Mouse
+> south shipped 30 Yoga Mat | movement_confirm | Yoga Mat
+> Transfer 20 bluetooth earphones from north to Central | transfer_confirm
+> Set safety stock for Yoga Mat to 80 | config_confirm
+
+### K3 全大寫（CapsLock）
+> HOW MANY BLUETOOTH EARPHONES LEFT | inventory_single | Wireless Bluetooth Earphones
+> WHATS RUNNING LOW | low_stock
+> NORTH RECEIVED 50 WIRELESS MOUSE | movement_confirm | Wireless Mouse
+
+### K4 單字內亂大寫（shift 沒放開）＋ 錯字
+> blUetooth earphones stock | inventory_single | Wireless Bluetooth Earphones
+> yOga mat stock | inventory_single | Yoga Mat
+> pOwer bAnk stock | inventory_single | Power Bank
+> blUetoth earphones | inventory_single,clarify | Wireless Bluetooth Earphones
+> wireles mOuse | inventory_single,clarify | Wireless Mouse
+> WhAtS RuNnInG LoW | low_stock
+
+### K5 意圖詞大寫（詞表比對點，最容易漏）
+> What Else Do Coffee Beans Buyers Get | related,clarify
+> Which Items Are Running Low | low_stock
+> Why Is The Toothbrush Count Off | agent_rca
+> Compare North And South | compare_warehouses
+> Alert Me When Yoga Mat Drops Below 30 | alert_confirm
+
+### K6 卡片確認詞大寫（🚨 寫入路徑——r5-voice 修，原本不會寫入）
+> north received 10 steam iron | movement_confirm
+> Go Ahead | movement_done
+### K7 全大寫確認
+> north received 10 steam iron | movement_confirm
+> GO AHEAD | movement_done
+### K8 肯定＋客套（原本連長度門檻都過不了，8 字元是中文調的）
+> north received 10 steam iron | movement_confirm
+> yes please | movement_done
+### K9 同上大寫
+> north received 10 steam iron | movement_confirm
+> Yes Please | movement_done
+### K10 alert 卡裸 confirm（原本回「No item matching "confirm"」）
+> alert me when power bank drops below 50 | alert_confirm
+> confirm | alert_done
+### K11 alert 卡大寫
+> alert me when power bank drops below 50 | alert_confirm
+> CONFIRM | alert_done
+
+### K12 取消詞大寫
+> north received 30 power bank | movement_confirm
+> CANCEL | item_cancelled,movement_cancelled,clarify
+### K13 取消詞大寫變體
+> south shipped 20 yoga mat | movement_confirm
+> Never Mind | item_cancelled,movement_cancelled,clarify
+
+### K14 新增商品分步流程：大寫輸入 + 大寫取消
+> add item | item_create_step1,clarify
+> Reusable Straw | item_create_step2,item_create_step1,clarify
+> Daily Goods | item_create_step3,item_create_step2,clarify
+> CANCEL | item_cancelled,clarify
+
+### K15 🚨 不可被代按的（判錯＝直接寫入，代價最高）
+! 疑問句該走引導、否定句該走取消，都**不可**代按
+> north received 10 steam iron | movement_confirm
+> is that all good | movement_confirm,clarify
+### K16 否定
+> north received 10 steam iron | movement_confirm
+> no dont do it | movement_cancelled,item_cancelled,clarify,movement_confirm
+### K17 商品查詢不可被當確認詞（'perfect' 曾差點進代按詞表）
+> perfect fit socks stock | inventory_single,clarify
