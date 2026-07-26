@@ -191,6 +191,13 @@ GATEKEEPER_KEYWORDS = {
     "goes well with", "pairs with", "bundle with",
     "warehouse doing", "how are we doing", "stock value", "total value",
     "inventory value", "stock overview", "inventory overview",
+    # 新增/刪除商品的英文觸發詞——守門員排在流程攔截**之前**，
+    #   白名單沒收的話 'add item' 會先被擋成 rejected，根本進不了分步流程
+    "add item", "add a item", "add an item", "add new item", "add a new item",
+    "create item", "create a item", "create an item", "create a new item",
+    "new item", "new product", "add product", "add a product",
+    "register item", "delete item", "remove item", "delete product",
+    "remove product", "take down item", "discontinue",
     # ⚠️ 不放 status/summary/dashboard/overview 這種泛詞——'is this offline'
     #    'how big is the warehouse' 這類搗蛋句會跟著放行（guidey 類回歸）
     "powerbank", "lunch box", "lunchbox",
@@ -4115,7 +4122,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                              "when it drops", "if it drops"))
     # 「叫貨」從 PO 排除詞移除：叫貨=缺貨要補的查詢語意，讓 C3 轉 low_stock
     # （開採購單是「採購單/下單/產採購/補貨單」等明確 PO 詞，RPI5 conv100-r2）
-    _po_in_text = any(w in user_text for w in ("採購單", "下單", "產採購", "補貨單"))
+    # EN build：英文開單詞也要讓路——'create a purchase order for low stock
+    #   items' 的 "low stock" 命中缺貨詞表，被 C3 搶成缺貨清單
+    #   （clf 判 generate_po conf=1.00 卻沒生效）。這是能力地圖直接列出的
+    #   範例句，訪客一點就得到非預期結果。
+    _po_in_text = (any(w in user_text for w in ("採購單", "下單", "產採購", "補貨單"))
+                   or bool(_re.search(
+                       r"\b(?:create|generate|make|draft|raise|issue|open|prepare|"
+                       r"give me|build)\b[^.]{0,30}?\b(?:po|purchase orders?)\b",
+                       text_low)))
     # 「XX最近有補貨嗎」是問進貨紀錄不是缺貨清單 → 讓給 C7b movement（conv100-r13）
     _mv_q_in_text = any(w in user_text for w in ("有補貨", "有進貨", "補過貨", "進過貨"))
     # EN build：到期詞在場讓給 list_expiring_items——'expiry alerts' 的
@@ -6945,12 +6960,12 @@ async def api_query(req: Request):
             PROTECTED = {f"{p}{i:02d}" for p in "eafdcs" for i in range(1,11)}
             user_items = [it for it in _W_del_http.state().items if it["sku_id"] not in PROTECTED]
             if user_items:
-                names = "、".join(it["name"] for it in user_items[:10])
-                result = {"ok": True, "summary": f"可刪除的商品：{names}\n請輸入要刪除的名稱", "view": "item_list",
+                names = ", ".join(it["name"] for it in user_items[:10])
+                result = {"ok": True, "summary": f"Deletable items: {names}\nPlease type the name of the item to delete", "view": "item_list",
                            "data": {"items": [{"name": it["name"], "sku": it["sku_id"]} for it in user_items]}}
                 _item_delete_state["active"] = True
             else:
-                result = {"ok": True, "summary": "目前沒有可刪除的商品。先用「➕ 新增商品」建立。", "view": "item_list", "data": {}}
+                result = {"ok": True, "summary": "No deletable items yet. Use \"add item\" to create one first.", "view": "item_list", "data": {}}
         else:
             result = _tv2_del_http.delete_item_start(keyword=kw)
         return JSONResponse(result)
@@ -7223,7 +7238,11 @@ async def api_query(req: Request):
         func_args = {}
 
     # ── dispatch 攔截：「刪除/下架商品」→ delete_item 流程 ──
-    _delete_item_kws = ("刪除", "下架", "砍掉", "移除商品", "刪掉")
+    _delete_item_kws = ("刪除", "下架", "砍掉", "移除商品", "刪掉",
+                        # EN build：英文刪除商品觸發詞
+                        "delete item", "delete the item", "remove item",
+                        "remove the item", "delete product", "remove product",
+                        "take down item", "discontinue")
     if any(w in user_text for w in _delete_item_kws):
         import tools_v2 as _tv2_del
         kw = _extract_sku_keyword(user_text)
@@ -7248,7 +7267,14 @@ async def api_query(req: Request):
                              "data": {"total": len(rows), "items": rows}})
 
     # ── dispatch 攔截：「新增商品」→ 分步引導流程 ──
-    _create_item_kws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
+    _create_item_kws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品",
+                          # EN build：英文新增商品觸發詞（原表全中文 → 英文訪客
+                          #   打 "add item" 完全進不了流程，還被守門員擋成 rejected）
+                          "add item", "add a item", "add an item", "add new item",
+                          "add a new item", "create item", "create a item",
+                          "create an item", "create a new item", "new item",
+                          "new product", "add product", "add a product",
+                          "register item", "register a new item")
     if any(w in user_text for w in _create_item_kws):
         import tools_v2 as _tv2
         log.info(f"[dispatch] 新增商品攔截: {user_text!r}")
@@ -8443,11 +8469,21 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # ── 刪除/下架（優先於 clarify）──
-            _delete_kws_ws = ("刪除", "下架", "砍掉", "移除", "刪掉", "刪了")
+            _delete_kws_ws = ("刪除", "下架", "砍掉", "移除", "刪掉", "刪了",
+                              # EN build：英文刪除商品觸發詞（原表全中文 →
+                              #   "delete item" 進不了流程，被當成查詢 "delete"
+                              #   這個商品 → oov:noex 回「查無此商品」）
+                              "delete item", "delete the item", "remove item",
+                              "remove the item", "delete product", "remove product",
+                              "take down", "discontinue", "delist")
             # r19：「刪掉早上九點的排程」是排程管理不是刪商品——排程/警示對象
             # 讓給 Pre-C-Sched 的取消排程規則（列排程讓訪客選）
             if (any(w in user_text for w in _delete_kws_ws)
-                    and not any(w in user_text for w in ("排程", "警示", "提醒", "鬧鐘"))):
+                    and not any(w in user_text for w in ("排程", "警示", "提醒", "鬧鐘"))
+                    # ⚠️ 這裡是 WS handler 作用域，沒有 text_low（那是
+                    #   _correct_function_call 的區域變數）→ 自己 lower()
+                    and not any(w in user_text.lower()
+                                for w in ("schedule", "alert", "reminder", "job"))):
                 # r74：schedule_list/alert_list 畫面後的短刪除句（「刪掉它」）是刪
                 # 排程/警示不是刪商品——曾誤入商品刪除流程回「電動牙刷無法刪除」
                 _lv74 = _ctx_for(vid).get("last_view")
@@ -8506,14 +8542,14 @@ async def ws_handler(ws: WebSocket):
                     PROTECTED = {f"{p}{i:02d}" for p in "eafdcs" for i in range(1,11)}
                     user_items = [it for it in _W_del_list.state().items if it["sku_id"] not in PROTECTED]
                     if user_items:
-                        names = "、".join(it["name"] for it in user_items[:10])
-                        result = {"ok": True, "summary": f"可刪除的商品：{names}\n請輸入要刪除的名稱", "view": "item_list",
+                        names = ", ".join(it["name"] for it in user_items[:10])
+                        result = {"ok": True, "summary": f"Deletable items: {names}\nPlease type the name of the item to delete", "view": "item_list",
                                    "data": {"items": [{"name": it["name"], "sku": it["sku_id"]} for it in user_items]}}
                         # 刪除 pending 狀態以 vid 為 key——全域旗標會讓下一個訪客的
                         # 任意輸入被當成要刪的商品名（跨訪客污染，conv100-r5）
                         _item_delete_state[vid] = True
                     else:
-                        result = {"ok": True, "summary": "目前沒有可刪除的商品。先用「➕ 新增商品」建立。", "view": "item_list", "data": {}}
+                        result = {"ok": True, "summary": "No deletable items yet. Use \"add item\" to create one first.", "view": "item_list", "data": {}}
                 else:
                     result = _tv2_del_ws.delete_item_start(keyword=kw)
                 for ch in result.get("summary", ""):
@@ -9945,7 +9981,14 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # ── 新增商品 keyword 攔截（首次進入流程，per-vid）──
-            _create_item_kws_ws2 = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
+            _create_item_kws_ws2 = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品",
+                          # EN build：英文新增商品觸發詞（原表全中文 → 英文訪客
+                          #   打 "add item" 完全進不了流程，還被守門員擋成 rejected）
+                          "add item", "add a item", "add an item", "add new item",
+                          "add a new item", "create item", "create a item",
+                          "create an item", "create a new item", "new item",
+                          "new product", "add product", "add a product",
+                          "register item", "register a new item")
             if any(w in user_text for w in _create_item_kws_ws2):
                 import tools_v2 as _tv2_ci2
                 raw = user_text
@@ -11357,7 +11400,14 @@ async def ws_handler(ws: WebSocket):
                     continue
 
                 # ── dispatch-ws：新增商品 keyword 攔截（per-vid）──
-                _create_item_kws_ws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
+                _create_item_kws_ws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品",
+                          # EN build：英文新增商品觸發詞（原表全中文 → 英文訪客
+                          #   打 "add item" 完全進不了流程，還被守門員擋成 rejected）
+                          "add item", "add a item", "add an item", "add new item",
+                          "add a new item", "create item", "create a item",
+                          "create an item", "create a new item", "new item",
+                          "new product", "add product", "add a product",
+                          "register item", "register a new item")
                 if any(w in user_text for w in _create_item_kws_ws):
                     import tools_v2 as _tv2_ci
                     log.info(f"[dispatch-ws] 新增商品攔截: {user_text!r}")

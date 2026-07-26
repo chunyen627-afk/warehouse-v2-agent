@@ -38,6 +38,18 @@ SCRIPT_EN = {
     ),
 }
 
+# 英文別名：LLM 抽出的 script_name 常跟 label 不完全一致
+#   （'run the month-end stocktake' → 'stocktake' / 'stock take'），
+#   _match_script 會拿這些比對，沒有的話對不到白名單就 clarify。
+SCRIPT_ALIASES_EN = {
+    "stock_audit": ["stocktake", "stock take", "stock audit", "audit",
+                    "inventory count", "count stock", "month end stocktake"],
+    "export_movements": ["export movements", "movement log", "export log",
+                         "movement export", "export transactions"],
+    "generate_report": ["health report", "warehouse report", "full report",
+                        "generate report", "report"],
+}
+
 # ── 供應商名稱 ───────────────────────────────────────────────────────────────
 #   對照主檔實際的 6 家（SUP01-06），依原名語感取英文名
 SUPPLIER_EN = {
@@ -69,6 +81,10 @@ def do_manifest() -> None:
         key = "description" if "description" in sc else "desc"
         sc[key + "_zh"] = sc.get(key)
         sc[key] = en[1]
+        # 英文別名（_match_script 會比對；沒有的話 LLM 抽出的變體對不到）
+        al = SCRIPT_ALIASES_EN.get(sc["id"], [])
+        if al:
+            sc["aliases"] = sorted(set(sc.get("aliases") or []) | set(al))
         n += 1
     io.open(p, "w", encoding="utf-8").write(
         json.dumps(data, ensure_ascii=False, indent=2))

@@ -632,7 +632,20 @@ def _match_script(script_name: str) -> dict | None:
     if not script_name:
         return None
     # 剝掉動詞前綴
-    q = script_name.replace(" ", "")
+    # EN build：LLM 常把 script_name 抽成帶雜訊的字串
+    #   （'run the month-end stocktake' → 'this_month%20stock_take'）→
+    #   URL 編碼、底線、時間詞全混在一起，跟白名單完全對不上。
+    #   先正規化：解 URL 編碼、底線/連字號轉空白、剝時間詞與英文動詞。
+    q = script_name
+    try:
+        from urllib.parse import unquote
+        q = unquote(q)
+    except Exception:
+        pass
+    q = re.sub(r"[_\-]+", " ", q)
+    q = re.sub(r"\b(?:this|last|next)\s+(?:month|week|day|year)\b", " ", q, flags=re.I)
+    q = re.sub(r"\b(?:run|execute|start|do|perform|please|the|a|an)\b", " ", q, flags=re.I)
+    q = q.replace(" ", "")
     for prefix in sorted(_SCRIPT_VERB_PREFIX, key=len, reverse=True):
         if q.startswith(prefix):
             q = q[len(prefix):]
@@ -1569,7 +1582,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             # 防呆：檢查同名
             if any(it["name"] == _name for it in W.state().items):
                 return {"ok": True, "summary": f'⚠️ Item "{_name}" already exists. Please use a different name.',
-                        "view": "item_create_step1", "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
+                        "view": "item_create_step1", "data": {"step": 1, "prompt": "Please enter a different item name"}}
             new_sku = _next_sku(_found_cat)
             pending = {
                 "name": _name, "category": _found_cat,
@@ -1600,7 +1613,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             return {"ok": True, "summary": f'⚠️ Item "{name}" already exists (SKU: {existing[0]["sku_id"]}). '
                            "Please use a different name.",
                     "view": "item_create_step1",
-                    "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
+                    "data": {"step": 1, "prompt": "Please enter a different item name"}}
         return {"ok": True,
                 "summary": f'Name recorded: "{name}"\n'
                            "Step 2: which category? electronics / appliance & "
@@ -1611,7 +1624,22 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
     elif step == 2:
         # r75：類別欄要驗證＋正規化成主檔 key——「陶瓷馬克杯」曾被當類別吸收
         # 造成整條流程欄位錯位；中文原字入檔會生出幻影類別（SKU 也拿到 x 前綴）
-        _cat_zh2key = {"電子": "electronics", "3c": "electronics",
+        # EN build：補英文類別別名。第二步的提示語是英文
+        #   （"electronics / appliance & kitchen / food & beverage /
+        #     daily goods / apparel / sports"），訪客照著打 "daily goods"
+        #   （帶空格）對不到主檔 key "daily_goods" → 卡在第二步出不去。
+        _cat_zh2key = {"electronic": "electronics", "electronics": "electronics",
+                       "appliance": "appliance_kitchen", "kitchen": "appliance_kitchen",
+                       "appliance & kitchen": "appliance_kitchen",
+                       "appliance and kitchen": "appliance_kitchen",
+                       "food": "food_beverage", "beverage": "food_beverage",
+                       "drink": "food_beverage", "food & beverage": "food_beverage",
+                       "food and beverage": "food_beverage",
+                       "daily": "daily_goods", "daily goods": "daily_goods",
+                       "daily good": "daily_goods", "household": "daily_goods",
+                       "apparel": "apparel", "clothing": "apparel", "clothes": "apparel",
+                       "sport": "sports", "sports": "sports", "fitness": "sports",
+                       "電子": "electronics", "3c": "electronics",
                        "家電": "appliance_kitchen", "廚具": "appliance_kitchen", "廚房": "appliance_kitchen",
                        "食品": "food_beverage", "飲料": "food_beverage",
                        "日用": "daily_goods", "生活": "daily_goods",
@@ -1699,7 +1727,11 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         }
         stock_summary = f"North {sn}, Central {sc}, South {ss}" if (sn+sc+ss) > 0 else "all 0"
         return {"ok": True,
-                "summary": f"📦 準備新增「{name}」\n類別：{pending['category_label']} | 單價：{pending['price']}元 | 安全庫存：{pending['safety']}件\n初始庫存：{stock_summary}",
+                "summary": f'📦 Ready to add "{name}"\n'
+                           f"Category: {pending['category_label']} | "
+                           f"Unit price: {pending['price']} | "
+                           f"Safety stock: {pending['safety']}\n"
+                           f"Initial stock: {stock_summary}",
                 "view": "item_confirm",
                 "data": {"pending": True, "item": pending}}
 
