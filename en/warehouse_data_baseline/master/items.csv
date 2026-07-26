@@ -1,0 +1,61 @@
+﻿sku_id,name,category,category_label,unit_price,safety_stock,shelf_life_days
+e01,Wireless Bluetooth Earphones,electronics,Electronics,1290,50,
+e02,Power Bank 10000mAh,electronics,Electronics,590,80,
+e03,USB-C Fast Charging Cable 2M,electronics,Electronics,290,150,
+e04,Bluetooth Speaker,electronics,Electronics,1890,30,
+e05,Smart Fitness Band,electronics,Electronics,1490,40,
+e06,Phone Protective Case,electronics,Electronics,390,120,
+e07,Wireless Mouse,electronics,Electronics,590,90,
+e08,Mechanical Keyboard,electronics,Electronics,1690,40,
+e09,14-inch Laptop Bag,electronics,Electronics,890,60,
+e10,Desktop USB Fan,electronics,Electronics,350,100,
+a01,Stainless Steel Thermal Food Jar,appliance_kitchen,Kitchen Appliances,880,40,
+a02,Steam Iron,appliance_kitchen,Kitchen Appliances,1490,20,
+a03,Ceramic Non-stick Pan 28cm,appliance_kitchen,Kitchen Appliances,1290,30,
+a04,Electric Toothbrush,appliance_kitchen,Kitchen Appliances,1990,25,
+a05,Mini Blender,appliance_kitchen,Kitchen Appliances,990,35,
+a06,Automatic Coffee Machine,appliance_kitchen,Kitchen Appliances,4990,25,
+a07,Pour-over Coffee Set,appliance_kitchen,Kitchen Appliances,1280,40,
+a08,Camping Cookware Set,appliance_kitchen,Kitchen Appliances,1590,35,
+a09,Glass Food Containers 5pcs,appliance_kitchen,Kitchen Appliances,590,70,
+a10,Electric Mop,appliance_kitchen,Kitchen Appliances,2290,30,
+f01,Sparkling Water 500ml,food_beverage,Food & Beverage,28,300,365
+f02,Classic Black Coffee Beans 1kg,food_beverage,Food & Beverage,680,60,540
+f03,Honey Lemon Tea 600ml,food_beverage,Food & Beverage,45,250,270
+f04,Mixed Nuts 500g,food_beverage,Food & Beverage,320,90,365
+f05,Whole Wheat Crackers 200g,food_beverage,Food & Beverage,65,180,180
+f06,Craft Beer 6-pack,food_beverage,Food & Beverage,390,100,270
+f07,Electrolyte Sports Drink,food_beverage,Food & Beverage,35,220,365
+f08,Whey Protein Drink,food_beverage,Food & Beverage,80,160,540
+f09,Hot Cocoa Powder 300g,food_beverage,Food & Beverage,180,110,730
+f10,Drip Coffee Bags 20pcs,food_beverage,Food & Beverage,280,130,540
+d01,Antibacterial Laundry Detergent 4kg,daily_goods,Daily Goods,320,120,1095
+d02,3-ply Facial Tissue,daily_goods,Daily Goods,290,200,
+d03,Natural Body Wash 1L,daily_goods,Daily Goods,280,100,1095
+d04,Mosquito Repellent Refill,daily_goods,Daily Goods,120,150,730
+d05,Heavy-duty Trash Bags 50pcs,daily_goods,Daily Goods,95,180,
+d06,Baby Diapers Size L,daily_goods,Daily Goods,450,140,1095
+d07,Baby Wet Wipes,daily_goods,Daily Goods,99,200,730
+d08,Mosquito Repellent Spray,daily_goods,Daily Goods,150,130,730
+d09,Rubber Cleaning Gloves,daily_goods,Daily Goods,60,160,
+d10,Coffee Filter Papers 100pcs,daily_goods,Daily Goods,75,140,1825
+c01,Cotton Plain T-shirt Men's,apparel,Apparel,390,100,
+c02,Wool Warm Socks 3-pair,apparel,Apparel,290,150,
+c03,Lightweight Down Jacket,apparel,Apparel,2890,40,
+c04,Denim Jeans Men's,apparel,Apparel,1290,60,
+c05,Elastic Sports Bra,apparel,Apparel,690,80,
+c06,Moisture-wicking Shirt,apparel,Apparel,590,110,
+c07,Sports Compression Arm Sleeve,apparel,Apparel,290,90,
+c08,Baby Onesie,apparel,Apparel,350,100,
+c09,Warm Beanie,apparel,Apparel,350,90,
+c10,Sun Hat,apparel,Apparel,390,100,
+s01,Yoga Mat 6mm,sports,Sports & Outdoors,690,50,
+s02,Hiking Water Bottle 1L,sports,Sports & Outdoors,450,80,
+s03,Resistance Fitness Ring,sports,Sports & Outdoors,390,70,
+s04,Dumbbells 5kg Pair,sports,Sports & Outdoors,890,45,
+s05,Sports Towel 100x30cm,sports,Sports & Outdoors,220,120,
+s06,Camping Tent 4-person,sports,Sports & Outdoors,3990,25,
+s07,Folding Camping Chair,sports,Sports & Outdoors,690,60,
+s08,Running Shoes Men's,sports,Sports & Outdoors,2290,40,
+s09,Camping Mug,sports,Sports & Outdoors,250,90,
+s10,LED Camping Lantern,sports,Sports & Outdoors,590,55,

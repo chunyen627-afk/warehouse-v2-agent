@@ -1,0 +1,7 @@
+﻿supplier_id,name,lead_time_days,categories,name_zh
+SUP01,Grand Ding Electronics,7,electronics,宏鼎電子
+SUP02,AllChef Industrial,10,appliance_kitchen,全廚實業
+SUP03,FreshFood Logistics,3,food_beverage,鮮食物流
+SUP04,CleanHome Daily,5,daily_goods,潔家日用
+SUP05,Weave Textiles,14,apparel,織品紡織
+SUP06,Kinetic Sports,9,sports,動能運動

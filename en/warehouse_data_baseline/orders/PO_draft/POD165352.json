@@ -1,0 +1,210 @@
+{
+  "po_id": "POD165352",
+  "type": "PO_draft",
+  "date": "2026-05-26",
+  "status": "draft",
+  "created_by": "user_confirmed",
+  "lines": [
+    {
+      "sku_id": "f01",
+      "name": "Sparkling Water 500ml",
+      "warehouse": "central",
+      "order_qty": 118,
+      "reason": "17 days left, suggest ordering 118",
+      "unit_price": 28,
+      "amount": 3304,
+      "supplier": "FreshFood Logistics"
+    },
+    {
+      "sku_id": "a04",
+      "name": "Electric Toothbrush",
+      "warehouse": "central",
+      "order_qty": 13,
+      "reason": "18 days left, suggest ordering 13",
+      "unit_price": 1990,
+      "amount": 25870,
+      "supplier": "AllChef Industrial"
+    },
+    {
+      "sku_id": "e04",
+      "name": "Bluetooth Speaker",
+      "warehouse": "south",
+      "order_qty": 11,
+      "reason": "27 days left, suggest ordering 11",
+      "unit_price": 1890,
+      "amount": 20790,
+      "supplier": "Grand Ding Electronics"
+    },
+    {
+      "sku_id": "s03",
+      "name": "Resistance Fitness Ring",
+      "warehouse": "north",
+      "order_qty": 42,
+      "reason": "28 days left, suggest ordering 42",
+      "unit_price": 390,
+      "amount": 16380,
+      "supplier": "Kinetic Sports"
+    },
+    {
+      "sku_id": "s04",
+      "name": "Dumbbells 5kg Pair",
+      "warehouse": "south",
+      "order_qty": 26,
+      "reason": "33 days left, suggest ordering 26",
+      "unit_price": 890,
+      "amount": 23140,
+      "supplier": "Kinetic Sports"
+    },
+    {
+      "sku_id": "a06",
+      "name": "Automatic Coffee Machine",
+      "warehouse": "south",
+      "order_qty": 4,
+      "reason": "33 days left, suggest ordering 4",
+      "unit_price": 4990,
+      "amount": 19960,
+      "supplier": "AllChef Industrial"
+    },
+    {
+      "sku_id": "s03",
+      "name": "Resistance Fitness Ring",
+      "warehouse": "south",
+      "order_qty": 45,
+      "reason": "35 days left, suggest ordering 45",
+      "unit_price": 390,
+      "amount": 17550,
+      "supplier": "Kinetic Sports"
+    },
+    {
+      "sku_id": "e01",
+      "name": "Wireless Bluetooth Earphones",
+      "warehouse": "central",
+      "order_qty": 10,
+      "reason": "40 days left, suggest ordering 10",
+      "unit_price": 1290,
+      "amount": 12900,
+      "supplier": "Grand Ding Electronics"
+    },
+    {
+      "sku_id": "a06",
+      "name": "Automatic Coffee Machine",
+      "warehouse": "central",
+      "order_qty": 2,
+      "reason": "40 days left, suggest ordering 2",
+      "unit_price": 4990,
+      "amount": 9980,
+      "supplier": "AllChef Industrial"
+    },
+    {
+      "sku_id": "s03",
+      "name": "Resistance Fitness Ring",
+      "warehouse": "central",
+      "order_qty": 27,
+      "reason": "42 days left, suggest ordering 27",
+      "unit_price": 390,
+      "amount": 10530,
+      "supplier": "Kinetic Sports"
+    },
+    {
+      "sku_id": "s04",
+      "name": "Dumbbells 5kg Pair",
+      "warehouse": "central",
+      "order_qty": 6,
+      "reason": "47 days left, suggest ordering 6",
+      "unit_price": 890,
+      "amount": 5340,
+      "supplier": "Kinetic Sports"
+    },
+    {
+      "sku_id": "c03",
+      "name": "Lightweight Down Jacket",
+      "warehouse": "north",
+      "order_qty": 27,
+      "reason": "55 days left, suggest ordering 27",
+      "unit_price": 2890,
+      "amount": 78030,
+      "supplier": "Weave Textiles"
+    },
+    {
+      "sku_id": "s02",
+      "name": "Hiking Water Bottle 1L",
+      "warehouse": "south",
+      "order_qty": 16,
+      "reason": "56 days left, suggest ordering 16",
+      "unit_price": 450,
+      "amount": 7200,
+      "supplier": "Kinetic Sports"
+    },
+    {
+      "sku_id": "a04",
+      "name": "Electric Toothbrush",
+      "warehouse": "south",
+      "order_qty": 10,
+      "reason": "64 days left, suggest ordering 10",
+      "unit_price": 1990,
+      "amount": 19900,
+      "supplier": "AllChef Industrial"
+    },
+    {
+      "sku_id": "e03",
+      "name": "USB-C Fast Charging Cable 2M",
+      "warehouse": "central",
+      "order_qty": 81,
+      "reason": "76 days left, suggest ordering 81",
+      "unit_price": 290,
+      "amount": 23490,
+      "supplier": "Grand Ding Electronics"
+    },
+    {
+      "sku_id": "d08",
+      "name": "Mosquito Repellent Spray",
+      "warehouse": "south",
+      "order_qty": 33,
+      "reason": "78 days left, suggest ordering 33",
+      "unit_price": 150,
+      "amount": 4950,
+      "supplier": "CleanHome Daily"
+    },
+    {
+      "sku_id": "a05",
+      "name": "Mini Blender",
+      "warehouse": "south",
+      "order_qty": 14,
+      "reason": "82 days left, suggest ordering 14",
+      "unit_price": 990,
+      "amount": 13860,
+      "supplier": "AllChef Industrial"
+    },
+    {
+      "sku_id": "c05",
+      "name": "Elastic Sports Bra",
+      "warehouse": "south",
+      "order_qty": 29,
+      "reason": "82 days left, suggest ordering 29",
+      "unit_price": 690,
+      "amount": 20010,
+      "supplier": "Weave Textiles"
+    },
+    {
+      "sku_id": "e01",
+      "name": "Wireless Bluetooth Earphones",
+      "warehouse": "south",
+      "order_qty": 7,
+      "reason": "88 days left, suggest ordering 7",
+      "unit_price": 1290,
+      "amount": 9030,
+      "supplier": "Grand Ding Electronics"
+    },
+    {
+      "sku_id": "e03",
+      "name": "USB-C Fast Charging Cable 2M",
+      "warehouse": "south",
+      "order_qty": 81,
+      "reason": "95 days left, suggest ordering 81",
+      "unit_price": 290,
+      "amount": 23490,
+      "supplier": "Grand Ding Electronics"
+    }
+  ],
+  "total": 365704
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "receipt_id": "GR-PO00456-a05",
+    "po_id": "PO00456",
+    "sku_id": "a05",
+    "received_qty": 60,
+    "receipt_date": "2026-04-18",
+    "warehouse": "north",
+    "note": ""
+  },
+  {
+    "receipt_id": "GR-PO00456-a10",
+    "po_id": "PO00456",
+    "sku_id": "a10",
+    "received_qty": 66,
+    "receipt_date": "2026-04-18",
+    "warehouse": "north",
+    "note": ""
+  }
+]

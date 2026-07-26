@@ -1,0 +1,16 @@
+{
+  "jobs": [
+    {
+      "id": "SCH001",
+      "script_id": "stock_audit",
+      "script_label": "Month-end Stocktake",
+      "freq": "daily",
+      "freq_label": "Daily",
+      "time_str": "09:00",
+      "enabled": true,
+      "created": "2026-06-25T16:24:21",
+      "actor": "user_confirmed",
+      "last_run": "2026-07-26T09:00:40"
+    }
+  ]
+}
