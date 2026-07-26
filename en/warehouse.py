@@ -1456,8 +1456,8 @@ def list_expiring_items(
         if not kw_skus:
             return {
                 "ok": True,
-                "summary": f"We do not carry \"{keyword}\", so there is no expiry info."
-                           "想看全部的話可以說「快過期的有哪些」。",
+                "summary": f'We do not carry "{keyword}", so there is no expiry info. '
+                           'Say "whats expiring soon" to see everything.',
                 "data": {"within_days": within_days, "warehouse": warehouse,
                          "category": category, "keyword": keyword,
                          "rows": [], "counts": {"red": 0, "orange": 0, "yellow": 0}},
@@ -1685,8 +1685,9 @@ def query_related_items(
     s = state()
     if not keyword:
         return _err(
-            "想看哪個商品的連帶備貨分析？講商品名（例「藍牙耳機」「咖啡」），"
-            "我幫你找「買的人通常也會買什麼、要不要一起補貨」",
+            "Which item do you want the related-stocking analysis for? "
+            'Say an item name (e.g. "bluetooth earphones", "coffee") and I will '
+            'find what buyers usually also take and whether to restock together.',
             view="related_help",
         )
 

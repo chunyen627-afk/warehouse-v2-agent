@@ -1976,16 +1976,22 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
                          "options": [], "hint": ""}}
     if qty_val == 0:
         # 缺數量 → clarify 追問（曾是 error 紅字卡，r17 統一成 clarify）
+        _wh_en = WH_LABEL_MAP.get(wh_key, wh_key or "north")
         return {"ok": True, "view": "clarify",
                 "summary": f'How many {item["name"]} were {_dir_en}? '
                            f'e.g. "{_dir_en} 50".',
+                # ⚠️ options 是**送回後端的查詢字串** → 要用英文倉名。
+                #   wh 是訪客原始輸入（可能是中文「北倉」，或已正規化的 key），
+                #   直接塞進去會產生中文選項 → 英文版後端 reject（一點就壞）。
                 "data": {"question": f'How many {item["name"]} were {_dir_en}?',
-                         "options": [f"{wh} {_dir_en} 10 {item['name']}",
-                                     f"{wh} {_dir_en} 30 {item['name']}",
-                                     f"{wh} {_dir_en} 50 {item['name']}"],
+                         "options": [f"{_wh_en} {_dir_en} 10 {item['name']}",
+                                     f"{_wh_en} {_dir_en} 30 {item['name']}",
+                                     f"{_wh_en} {_dir_en} 50 {item['name']}"],
                          "hint": f'e.g. "{_dir_en} 50"',
+                         # flow 是內部續流程狀態（訪客看不到），但存**正規化
+                         #   的 key** 比較乾淨，也避免中文值流到別處
                          "flow": {"tool": "create_movement", "await": "qty",
-                                  "keyword": item["name"], "warehouse": wh,
+                                  "keyword": item["name"], "warehouse": wh_key or wh,
                                   "direction": direction, "is_return": is_return}}}
     if qty_val > 9999:
         # r17：999999 件這種展場搗蛋數字不開卡，追問確認

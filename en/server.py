@@ -11312,10 +11312,11 @@ async def ws_handler(ws: WebSocket):
                 if func_name == "__help__":
                     reason = func_args.get("reason", "")
                     if reason == "compare_missing_slot":
-                        msg = ("想比較兩個倉的什麼？\n"
-                               "試試這樣問：「北倉跟南倉哪個庫存比較多」「中倉跟南倉週轉率比較」")
+                        msg = ("What do you want to compare between two warehouses?\n"
+                               'Try: "which has more stock north or south" or '
+                               '"compare central and south by turnover"')
                     else:
-                        msg = "請補充更明確的訊息再試一次"
+                        msg = "Please add a bit more detail and try again"
                     for ch in msg:
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(_TK_DELAY.get() * 1.5)
