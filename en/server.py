@@ -5177,6 +5177,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          # r1：'whats worth watching in stock' 的 watching /
                         #   worth 被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
+                        # r1：確認語（did it take effect / put it back）不是商品名
+                        "effect", "effective", "applied", "apply", "back",
+                        "take", "takes", "took", "put", "puts", "get", "gets",
+                        "done", "changed", "change", "updated", "saved",
                         "interesting", "important", "urgent", "attention",
                         "busy", "today", "tomorrow", "yesterday", "morning",
                          "afternoon", "evening", "night", "hello", "hey",
@@ -6521,6 +6525,42 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
     回傳 (new_func_name, new_func_args) 或原值。
     """
     _ctx = _ctx_for(vid)
+    # ── EN build（劇情批 r1 S6）：**設定復原**（'put it back' / 'revert'）──
+    #   上一輪剛改過設定，訪客要改回原值。舊值由 commit_config 存進
+    #   `last_cfg_undo`（沒有舊值就不接，讓它走原路徑誠實反問）。
+    if (_is_mostly_english(user_text)
+            and _ctx.get("last_cfg_undo")
+            and len(user_text.split()) <= 5
+            and _re.search(r"\b(?:back|revert|undo|restore|原|previous|before)\b",
+                           user_text, _re.I)):
+        _u = _ctx["last_cfg_undo"]
+        _undo_args = {"action": "set", "key": _u.get("canon") or "safety stock",
+                      "value": str(_u.get("value"))}
+        if _u.get("item"):
+            _undo_args["item"] = _u["item"]
+        if _u.get("warehouse"):
+            _undo_args["warehouse"] = _u["warehouse"]
+        log.info(f"[ctx] 設定復原 → manage_config{{set {_undo_args.get('item')}="
+                 f"{_u.get('value')}}}: {user_text!r}")
+        return "manage_config", _undo_args
+    # ── EN build（劇情批 r1）：**設定生效確認**（'did it take effect' /
+    #   'put it back'）——上一輪剛改過設定，訪客問的是**設定值**不是庫存量。
+    #   沒這條會回 inventory_single（Yoga Mat 335 units），答非所問。
+    if (_is_mostly_english(user_text)
+            and _ctx.get("last_func") == "manage_config"
+            and len(user_text.split()) <= 5
+            # ⚠️ 'back' / 'revert' 不列入——那是**復原意圖**（要改回原值，
+            #   走 config_confirm），不是查詢確認。混在一起會讓
+            #   'put it back' 只回設定值、什麼都沒改。
+            and _re.search(r"\b(?:effect|effective|applied|apply|done|"
+                           r"changed|updated|saved|work|worked)\b",
+                           user_text, _re.I)):
+        _cfg_item = _ctx.get("last_sku") or ""
+        log.info(f"[ctx] 設定生效確認 → manage_config{{read}} item={_cfg_item!r}: "
+                 f"{user_text!r}")
+        return "manage_config", ({"action": "read", "key": "safety stock",
+                                  "item": _cfg_item} if _cfg_item
+                                 else {"action": "read", "key": "safety stock"})
     # ── EN build（劇情批 r1）：**全域功能追問**（沒有商品，是追問上一輪的
     #   那份結果）。'which week shipped more…' → period_compare 之後，
     #   'by how many units' 是在問同一份比較的細節，但 carry-over 只處理
@@ -6693,6 +6733,9 @@ def _ctx_absorb(vid, result: dict):
     # 曾因 last_view 被 clarify 蓋掉而誤入商品刪除
     if view and view not in ("rejected", "guide", "clarify", "error"):
         _ctx_for(vid)["last_view"] = view
+    # 設定改動的**舊值**（劇情批 r1 S6：'put it back' 復原用）
+    if view == "config_done" and (data.get("undo") or {}).get("value") is not None:
+        _ctx_for(vid)["last_cfg_undo"] = data["undo"]
     # r74：排程/警示清單記憶——「刪掉它」只有一筆時可以直指
     if view == "schedule_list":
         _ctx_for(vid)["last_sched_jobs"] = [
@@ -12124,6 +12167,10 @@ async def ws_handler(ws: WebSocket):
                         #   被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
                         "interesting", "important", "urgent", "attention",
+                        # r1：確認語（did it take effect / put it back）不是商品名
+                        "effect", "effective", "applied", "apply", "back",
+                        "done", "changed", "change", "updated", "saved",
+                        "take", "takes", "took", "put", "puts", "get", "gets",
                         # 劇情批 r1：寒暄/時間/語氣詞不是商品名——'hi there
                         #   busy today' 曾回「No item matching "busy today"」
                         #   （訪客只是打招呼，卻被當成在查一個叫 busy today

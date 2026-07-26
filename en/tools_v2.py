@@ -608,9 +608,20 @@ def commit_config_set(pending: dict, actor: str = "user_confirmed",
 
     # 4) 熱更新記憶體 state，讓後續查詢立即生效
     W.state().v2_config = cfg
+    # 舊值回傳給前端/context，讓 'put it back'（復原）有值可用
+    #   （劇情批 r1 S6：訪客改完設定後說「改回去」）
+    _undo = None
+    if pending.get("preview"):
+        _p0 = pending["preview"][0]
+        _undo = {"canon": canon, "item": _p0.get("name"),
+                 "warehouse": _p0.get("warehouse"), "value": _p0.get("old")}
+    elif pending.get("old") is not None:
+        _undo = {"canon": canon, "item": None,
+                 "warehouse": None, "value": pending.get("old")}
     return {"ok": True, "summary": f"✅ {changed} entries saved, backed up to "
                                    "config.json.bak and recorded in the audit log.",
-            "view": "config_done", "data": {"changed": changed, "trace_id": trace_id, "canon": canon}}
+            "view": "config_done", "data": {"changed": changed, "trace_id": trace_id,
+                                            "canon": canon, "undo": _undo}}
 
 
 # ════════════════════════════════════════════════════════════

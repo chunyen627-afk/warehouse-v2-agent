@@ -17,6 +17,7 @@
 > and central | inventory_single,inventory
 > whats in south | inventory_single,inventory
 > move 20 from the fullest to the emptiest | transfer_confirm,clarify
+> move 20 bluetooth earphones from north to central | transfer_confirm
 [confirm]
 > how many in each now | inventory_single,inventory
 
@@ -44,7 +45,7 @@
 > cancel my alerts | alert_list
 
 ### S6 設定 + 復原
-> whats the safety stock for cling film | config_read,clarify,inventory
+> whats the safety stock for yoga mat | config_read,clarify,inventory
 > change central to 80 | config_confirm,clarify
 [confirm]
 > did it take effect | config_read,inventory,clarify
