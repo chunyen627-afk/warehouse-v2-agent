@@ -1,0 +1,68 @@
+### S1 pending 卡片中途插話（展場最常見：卡片出現後不按確認、改問別的）
+! r1 沒測過：確認卡在場時打字，卡片該作廢還是保留？
+> north received 30 wireless mouse | movement_confirm
+> actually how many do we have now | inventory_single,inventory,clarify
+> ok never mind | item_cancelled,clarify,rejected
+> bluetooth earphones stock | inventory_single
+
+### S2 寫入流程中斷 + 改量
+> south shipped 50 yoga mat | movement_confirm
+> make it 20 instead | movement_confirm,clarify
+[confirm]
+> whats the yoga mat count in south now | inventory_single,inventory,clarify
+
+### S3 新增商品流程中途插查詢（step 機被打斷）
+> add item | item_create_step1
+> whats running low | item_create_step1,low_stock,clarify
+> cancel | clarify,item_cancelled,rejected
+> which items are running low | low_stock
+
+### S4 多商品混合詢問（一句問兩個）
+> earphones and mouse stock | clarify,inventory,inventory_single
+> compare bluetooth earphones with wireless mouse | clarify,inventory,compare_warehouses,inventory_single
+> which one sells better | hot_items,clarify,inventory_single
+
+### S5 到期 + 連帶 + RCA 混合追問
+> what is expiring soon | expiring
+> the most urgent one | expiring,inventory_single,clarify
+> what else do people buy with it | related,clarify,related_help
+> does its count add up | agent_rca,clarify,inventory_single
+
+### S6 倉庫比較追問鏈
+> compare north and south | compare_warehouses
+> what about central | compare_warehouses,clarify,inventory
+> by turnover instead | compare_warehouses,clarify
+> which is the fullest | compare_warehouses,inventory,clarify
+
+### S7 採購閉環 + 中途反悔
+> create a purchase order for low stock items | po_confirm
+> wait how many lines is that | po_confirm,clarify,low_stock
+> forget it | item_cancelled,clarify,rejected
+> whats running low | low_stock
+
+### S8 別名 + 俗稱 + 錯字混合（英文訪客真實講法）
+> got any earbuds | inventory_single
+> nappies stock | inventory_single
+> do we have trainers | inventory_single
+> powerbank count | inventory_single
+> keyyboard inventory | inventory_single
+> how many crackees left | inventory_single
+
+### S9 邊界值 + 無效輸入
+> ship 0 yoga mat from north | clarify,error,movement_confirm
+> ship 999999 yoga mat from north | error,clarify
+> set safety stock to -5 | clarify,error,config_confirm
+> add 1.5 mouse to north | clarify,error,movement_confirm
+
+### S10 亂敲 + 搗蛋 + 台語 + 告別（~20%）
+> qwertyuiop
+> zzzzzzz
+> stock stock stock stock
+> 攏總偌濟錢
+> do you accept credit cards
+> whats your name
+> can i buy this
+> 123456
+> !!!!!!
+> ok im done here
+> bye

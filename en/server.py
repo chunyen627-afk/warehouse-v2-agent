@@ -5180,6 +5180,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         # r1：確認語（did it take effect / put it back）不是商品名
                         "effect", "effective", "applied", "apply", "back",
                         "take", "takes", "took", "put", "puts", "get", "gets",
+                        # r2：序數/最高級指代（the most urgent one）不是商品名
+                        "most", "least", "urgent", "one", "ones", "cheapest",
+                        "biggest", "largest", "smallest", "newest", "oldest",
                         "done", "changed", "change", "updated", "saved",
                         "interesting", "important", "urgent", "attention",
                         "busy", "today", "tomorrow", "yesterday", "morning",
@@ -6471,6 +6474,9 @@ _CTX_FOLLOWUP_RE_EN = _re.compile(
     # 承接副詞：'then' / 'also' / 'too' / 'again' / 'now' / 'each'
     r"then|also|too|again|now|each|"
     # 序數指代：'the first one' / 'the second'
+    # ⚠️ 'the \w+ ones?' 要排在 'the (first|…)' **前面**（交替分支左優先不回溯，
+    #   否則 'the most urgent one' 不會命中——r2 S5 實測）
+    r"the\s+(?:\w+\s+){1,3}ones?|"
     r"the\s+(?:first|second|third|fourth|fifth|last|other|next)|"
     r"earlier|just now|last time|previous)\b", _re.I)
 _CTX_FUNC_HINT = {
@@ -8887,6 +8893,37 @@ async def ws_handler(ws: WebSocket):
             #   卡片在畫面上時訪客打「好」→ 過去被守門員 rejected；打「不對是100個」
             #   → 100 被 match 成「運動毛巾 100x30cm」幻覺回庫存。寫入授權只認按鈕，
             #   這裡一律引導，不寫入、不猜商品。新增商品流程中不套用（那是 step 值）。
+            # ── EN build（劇情批 r2 S2）：**卡片改量**（'make it 20 instead'）──
+            #   原本回「請重講整句」＝訪客要把商品/倉別再打一次，體驗差。
+            #   卡片本身已有商品/倉別/方向，缺的只是新數量 → 抽到數字就
+            #   **重開一張確認卡**（仍需按鈕授權，符合「寫入只認按鈕」原則，
+            #   不是直接寫入）。
+            _pend_cur = _pending_by_vid.get(vid)
+            if (_pend_cur and _is_mostly_english(user_text)
+                    and not _item_create_state_ws.get(vid, {}).get("active")
+                    and _pend_cur.get("view") in ("movement_confirm",
+                                                  "transfer_confirm")):
+                _mq = _re.search(
+                    r"\b(?:make it|change it to|change to|set it to|"
+                    r"instead|actually|rather)\b.{0,12}?\b(\d+)\b"
+                    r"|\b(\d+)\b\s*(?:instead|rather)\b", user_text, _re.I)
+                if _mq:
+                    _newq = _mq.group(1) or _mq.group(2)
+                    # data 結構（實測）：{pending: bool, sku, name, warehouse,
+                    #   warehouse_label, direction, direction_label, qty, …}
+                    _pd = _pend_cur.get("data") or {}
+                    _pend_item = _pd.get("name")
+                    _pend_wh = _pd.get("warehouse")
+                    _pend_dir = _pd.get("direction")
+                    if _pend_item and _newq:
+                        _verb = "received" if _pend_dir == "in" else "shipped"
+                        _wh_txt = {"north": "north", "central": "central",
+                                   "south": "south"}.get(str(_pend_wh).lower(), "")
+                        _restated = f"{_wh_txt} {_verb} {_newq} {_pend_item}".strip()
+                        log.info(f"[pending-fix] 改量 {user_text!r} → 重開卡 "
+                                 f"{_restated!r}")
+                        user_text = _restated
+                        _pending_by_vid.pop(vid, None)   # 舊卡作廢，走正常流程開新卡
             if not _item_create_state_ws.get(vid, {}).get("active"):
                 _pend_msg = _pending_reply(vid, user_text)
                 if _pend_msg:
@@ -9589,9 +9626,15 @@ async def ws_handler(ws: WebSocket):
                     #   'can you speak chinese' / 'do you sell rolex' 這些
                     #   搗蛋句溜進來（它們原本正是靠白名單不命中被擋的）。
                     #   追問的判準：帶指代詞/序數/承接詞，或極短的裸名詞片語。
+                    # ⚠️ 'the \w+ ones?' 必須排在 'the (first|second|…)' **前面**：
+                    #   交替分支是**左優先且不回溯**，'the most urgent one' 會先
+                    #   被 'the (?:first|…|one)' 嘗試、失敗後整個 the-分支就放棄，
+                    #   不會再試後面的 'the \w+ one'（實測 followup=False）。
                     _is_followup = bool(_re.search(
-                        r"\b(?:it|its|that|this|those|these|them|the (?:first|second|"
-                        r"third|last|other|same|one)|first|second|third|last one|"
+                        r"\b(?:it|its|that|this|those|these|them|"
+                        r"the (?:\w+ ){1,3}ones?|"
+                        r"the (?:first|second|third|last|other|same|one)|"
+                        r"first|second|third|last one|"
                         r"and|what about|how about|then|also|too|again|"
                         r"back|effect|now|instead)\b", user_text, _re.I))
                     # 純數量/倉別追問（'20 more' / 'in central'）也算
@@ -10876,10 +10919,29 @@ async def ws_handler(ws: WebSocket):
                                        "熱銷", "賣最", "排行", "快到期", "進出紀錄",
                                        "異動", "查一下", "查詢", "比較", "警示", "報表",
                                        "幾個", "幾件")
-                if any(w in user_text for w in _CREATE_QUERY_WORDS):
+                # ── EN build（劇情批 r2 S3）：上面詞表**全是中文** → 英文查詢句
+                #   一個都不中，'add item' → step1 後打 'whats running low'
+                #   直接變成「Name recorded: "whats running low"」＝訪客會建出
+                #   一個叫那句話的商品（展場最容易踩的一種）。
+                _CREATE_QUERY_RE_EN = _re.compile(
+                    r"\b(?:whats|what|which|how many|how much|show me|show|list|"
+                    r"tell me|do we|does it|is there|are there|any\b|"
+                    r"stock|stocks|inventory|running low|low stock|restock|"
+                    r"expiring|expire|expiry|best sellers?|hot items?|"
+                    r"compare|comparison|movements?|alerts?|report|reports|"
+                    r"count|counts|left|remaining|total)\b", _re.I)
+                if (any(w in user_text for w in _CREATE_QUERY_WORDS)
+                        or (_is_mostly_english(user_text)
+                            and _CREATE_QUERY_RE_EN.search(user_text))):
                     _cq_step = _ic_st.get("step", 1)
-                    _cq_msg = (f"你正在新增商品的流程中（第 {_cq_step} 步），"
-                               "這句不會被存成商品資料。要查別的請先說「取消」退出流程。")
+                    if _is_mostly_english(user_text):
+                        _cq_msg = (f"You're in the middle of adding an item "
+                                   f"(step {_cq_step}) — this won't be saved as "
+                                   f'item data. Say "cancel" first if you want to '
+                                   f"look something up.")
+                    else:
+                        _cq_msg = (f"你正在新增商品的流程中（第 {_cq_step} 步），"
+                                   "這句不會被存成商品資料。要查別的請先說「取消」退出流程。")
                     log.info(f"[create-gate] 流程中的查詢句 → 提示退出: {user_text!r}")
                     for ch in _cq_msg:
                         await send({"type": "token", "text": ch})
@@ -12171,6 +12233,9 @@ async def ws_handler(ws: WebSocket):
                         "effect", "effective", "applied", "apply", "back",
                         "done", "changed", "change", "updated", "saved",
                         "take", "takes", "took", "put", "puts", "get", "gets",
+                        # r2：序數/最高級指代（the most urgent one）不是商品名
+                        "most", "least", "urgent", "one", "ones", "cheapest",
+                        "biggest", "largest", "smallest", "newest", "oldest",
                         # 劇情批 r1：寒暄/時間/語氣詞不是商品名——'hi there
                         #   busy today' 曾回「No item matching "busy today"」
                         #   （訪客只是打招呼，卻被當成在查一個叫 busy today
