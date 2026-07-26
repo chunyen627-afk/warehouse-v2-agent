@@ -167,6 +167,9 @@ GATEKEEPER_KEYWORDS = {
     "moved", "inbound", "outbound", "transfers", "help",
     "what can you", "how does this", "safety stock", "purchase order",
     "report", "stocktake", "audit", "reconcile", "discrepanc",
+    # r3：抱怨式 RCA 講法（'the numbers dont look right' / 'this is wrong'）
+    "numbers", "look right", "not right", "doesnt look", "doesn't look",
+    "add up", "off by", "went missing", "make sense",
     # Agent Tools 的功能句（RCA/檔案/排程/警示/報表/期間比較）——
     #   這些不含商品名，守門員收嚴後會被擋，但都是合法功能查詢
     "purchase record", "transaction log", "transaction record",
@@ -238,6 +241,8 @@ GATEKEEPER_KEYWORDS = {
     "short", "discrepancy", "mismatch",
     # English actions
     "stock", "inventory", "low", "alert", "restock", "compare", "hot", "slow",
+    # r3：'yogamat count' 的 count 是查詢詞（黏字商品名靠模糊層還原）
+    "count", "counts", "qty", "quantity", "amount",
     "top", "selling", "movement", "inbound", "outbound",
     "bluetooth", "earphone", "coffee", "machine", "bought", "together", "related",
     "what", "how", "show", "today", "week", "month",
@@ -297,6 +302,10 @@ def is_meaningful_input(text: str) -> bool:
         return False
     if re.fullmatch(r"\d+", s):
         return False
+    # r3 S9：純標點（'?' / '....' / '!!!!'）不是查詢——原本落到全店概覽，
+    #   該走 guide/rejected 給訪客方向
+    if re.fullmatch(r"[^\w一-鿿]+", s):
+        return False
     # EN build（純英文模型）：含中文字一律當搗蛋擋掉（純中文、中英夾雜都不受理）。
     #   user 定調 2026-07-26：英文版模型不留中文，遇中文/中英混雜 → reject。
     #   商品名/資料已全英文，正常英文查詢不含中文；此規則零誤傷正常英文輸入。
@@ -354,6 +363,9 @@ def is_meaningful_input(text: str) -> bool:
     # 管理動詞 / 數量問句（詞界比對，見 _GK_ACTION_RE 註解）
     if _GK_ACTION_RE.search(s) or _GK_QTY_RE.search(s):
         return True
+    # r3：黏字查詢句——要有黏字虛詞**且**句子不只那一個詞（避免裸 'stok' 過關）
+    if _GK_GLUED_RE.search(s) and len(s.split()) >= 2:
+        return True
     # r25：句含真商品名（3 字滑窗）→ 放行（「機械式鍵盤的帳兜得攏嗎」的商品
     # 不在手列俗稱名單曾被拒——與 guide 判定同款結構性判準）
     if _text_has_item_name(s):
@@ -373,6 +385,13 @@ _GK_ACTION_RE = re.compile(
 # 'how much/many' 連用才是查詢意圖（裸 much/many 會讓 'thank you very much'
 #   這種寒暄句矇混過守門員 → 回全店概覽）
 _GK_QTY_RE = re.compile(r"\bhow\s+(?:much|many)\b", re.I)
+# r3：語音/快打黏字的查詢句（'howmany …' / 'wat about themouse' /
+#   'powerbank stok'）——守門員原本擋掉，但它們是正常查詢只是打字黏了/錯了。
+#   ⚠️ 要求**同時**有黏字虛詞與其他內容（單獨一個 'stok' 不放行）。
+_GK_GLUED_RE = re.compile(
+    r"\b(?:howmany|howmuch|whatabout|isthere|arethere|doyou|dowe|"
+    r"themouse|theearphones|thestock|instock|stok|stcok|invetory|inventry)\b",
+    re.I)
 
 
 def _GATEKEEPER_BLACKLIST_HIT(text: str) -> bool:
@@ -1077,6 +1096,10 @@ _RCA_INTENT_WORDS = (
     "who moved", "who changed", "who took", "doesn't match", "dont match",
     "don't match", "doesnt match", "mismatch", "not match", "count off",
     "numbers off", "looks off", "seems off", "is off", "wrong", "missing",
+    # r3：訪客的抱怨式講法（'the numbers dont look right' / 'this is wrong'）
+    "look right", "looks right", "look correct", "seem right", "seems right",
+    "not right", "isnt right", "isn't right", "doesnt look", "doesn't look",
+    "off by", "out by", "no sense", "make sense",
     "shortfall", "short", "reconcil", "audit", "investigate", "look into",
     "went missing", "disappear", "strange", "weird", "odd", "unusual",
     "doesn't add up", "dont add up", "don't add up", "add up",
@@ -2646,6 +2669,29 @@ _EN_WRITE_STOP_RE = _re.compile(
     r"add|added|adding|plus|minus)\b", _re.I)
 
 
+# ── EN build（劇情批 r3 S1）：語音/快打的**黏字虛詞**還原 ────────────────
+#   ASR 與快打常把虛詞黏成一塊：'howmany' / 'themouse' / 'howmuch' /
+#   'whatabout' / 'isthere'。這些不是商品名，卻會被 OOV 判定當陌生商品
+#   → 整句回「No item matching "howmany"」或 rejected。
+#   ⚠️ 只還原**虛詞開頭**的黏字（how/what/the/is/are/do…），不動商品合成詞
+#   （powerbank/yogamat 要留給 _en_fuzzy_keyword 的拆解層處理）。
+_EN_GLUED_STOP_RE = _re.compile(
+    r"\b(?:how(?=many\b|much\b|long\b)|what(?=about\b|is\b|are\b)|"
+    r"the(?=mouse\b|earphones?\b|coffee\b|stock\b)|"
+    r"is(?=there\b|it\b)|are(?=there\b)|do(?=we\b|you\b)|"
+    # ⚠️ 'in(?=stock)' 只拆 'instock'；**不可**加 'ventory' ——
+    #   `in(?=ventory)` 會在正常單字 **in**ventory 內部命中，把它咬成
+    #   'in ventory' → 商品比對全毀（守衛 887，4 句錯字句掛掉）。
+    #   所有 lookahead 前面都要有 \b 保護，且不可對應到真實單字的內部。
+    r"can(?=you\b|i\b)|whats(?=the\b)|in(?=stock\b))",
+    _re.I)
+
+
+def _en_unglue(text: str) -> str:
+    """把黏在一起的虛詞拆開（'howmany' → 'how many'）。"""
+    return _EN_GLUED_STOP_RE.sub(lambda m: m.group(0) + " ", text)
+
+
 def _en_query_core(text: str) -> str:
     """剝掉英文查詢虛詞，只留商品詞。
 
@@ -2656,7 +2702,8 @@ def _en_query_core(text: str) -> str:
       fuzzy('lapptop case')                 = 'Laptop Bag'  ← 剝完
     原本這段剝詞是內嵌在 _extract_sku_keyword 快路徑裡，別處要用只能
     複製一份 → 必然不同步。抽出來讓所有呼叫端共用同一套。"""
-    _c = _EN_Q_STOP_INTENT_RE.sub(" ", text)
+    _c = _en_unglue(text)          # 黏字虛詞先拆（howmany → how many）
+    _c = _EN_Q_STOP_INTENT_RE.sub(" ", _c)
     _c = _EN_Q_STOP_RE.sub(" ", _c)
     # 寫入句動詞 + 純數字（守衛 mv 回歸）：'put 100 mop into south' 的
     #   '100' 會撈到 Power Bank **10000**mAh / Coffee Filter **100**pcs /
@@ -2695,12 +2742,18 @@ def _en_fuzzy_keyword(core: str) -> str:
     # 主檔名集合——用來辨識 cand 的值是「主檔名」還是「alias 值」（見下方
     #   假歧義修復：兩者可能指同一商品但字串不同）
     _ITEM_NAME_SET = {it["name"] for it in items}
+    # 3 字母的商品詞（mat / bra / pan / fan / cup…）另存一份——主 cand 用
+    #   len>=4 是為了避免短詞亂中，但**合成詞拆解**需要它們
+    #   （'yogamat' 要拆成 yoga|mat，mat 不在 cand 就永遠拆不開，r3 實測）。
+    _cand3: dict[str, str] = {}
     for it in items:
         for w in _re.split(r"[\s\-/]+", it["name"]):
             w = w.strip().lower()
             # 純數字/規格詞（2m、28cm、10000mah、5pcs）不當比對錨點
             if len(w) >= 4 and not any(c.isdigit() for c in w):
                 cand.setdefault(w, it["name"])
+            elif len(w) == 3 and not any(c.isdigit() for c in w):
+                _cand3.setdefault(w, it["name"])
     _ALIAS_KEYS_EN: list[str] = []
     try:
         from alias_en import ALIAS_EN as _AL
@@ -2780,8 +2833,11 @@ def _en_fuzzy_keyword(core: str) -> str:
             _sp_hit = None
             for _cut in range(3, len(tok) - 2):
                 _a, _b = tok[:_cut], tok[_cut:]
-                _ah = cand.get(_a) or cand.get(_a.rstrip("s"))
-                _bh = cand.get(_b) or cand.get(_b.rstrip("s"))
+                # 3 字母商品詞（mat/bra/pan…）也要查 —— 'yogamat' 拆 yoga|mat
+                _ah = (cand.get(_a) or cand.get(_a.rstrip("s"))
+                       or _cand3.get(_a) or _cand3.get(_a.rstrip("s")))
+                _bh = (cand.get(_b) or cand.get(_b.rstrip("s"))
+                       or _cand3.get(_b) or _cand3.get(_b.rstrip("s")))
                 # ⚠️ 合成詞**又打錯字**（pwerbank = powerbank 漏 o）：
                 #   拆成 pwer|bank 時 bank 精確命中、pwer 要靠模糊。
                 #   原本兩段都要求精確 → 這類永遠救不回（守衛 inv 長尾）。
@@ -4780,7 +4836,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _c4_prod = _extract_sku_keyword(user_text)
         _c4_pm = _W_c4p.match_items(_c4_prod) if _c4_prod else []
         # r27：kw 要接地——「熱銷榜 快」的「快」曾 fuzzy 成快充線回銷況（答非所問）
-        if _c4_pm and _c4_pm[0].get("score", 0) >= 3 and _kw_grounded(_c4_prod, user_text):
+        # ⚠️ EN build（r3 S9）：**裸意圖詞**不可轉商品——訪客只打 'hot'
+        #   （clf 已正確判 list_hot_items conf=0.98），卻因為 hot 撞到
+        #   Hot Cocoa Powder 被轉成該商品的銷況＝答非所問。
+        #   整句只有那個意圖詞時，clf 的判斷才是對的。
+        _c4_solo_intent = (_is_mostly_english(user_text)
+                           and len(user_text.strip().strip("?.!,").split()) <= 1)
+        if (_c4_pm and _c4_pm[0].get("score", 0) >= 3
+                and not _c4_solo_intent
+                and _kw_grounded(_c4_prod, user_text)):
             _c4_period = ("this_month" if any(w in user_text for w in ("本月", "這個月", "月")) else "this_month")
             log.info(f"[校正 C4-prod] 帶商品名的銷況問句 → query_movement kw={_c4_prod!r}")
             return "query_movement", {"keyword": _c4_prod, "period": _c4_period,
@@ -5182,6 +5246,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         "take", "takes", "took", "put", "puts", "get", "gets",
                         # r2：序數/最高級指代（the most urgent one）不是商品名
                         "most", "least", "urgent", "one", "ones", "cheapest",
+                        # r3：語音/快打的虛詞黏字與常見錯字（不是商品名）
+                        "howmany", "howmuch", "whatabout", "isthere", "stok",
+                        "stcok", "invetory", "inventry", "wat", "wht", "hw",
                         "biggest", "largest", "smallest", "newest", "oldest",
                         "done", "changed", "change", "updated", "saved",
                         "interesting", "important", "urgent", "attention",
@@ -6592,9 +6659,25 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
         _own_intent = any(_re.search(_p, user_text, _re.I)
                           for _p, _v in _CTX_FUNC_HINT_RE_EN)
         if not _own_intent and func_name != _ctx["last_func"]:
+            # 裸倉別追問（'north'）要把**倉別帶進去**，否則回的是全站榜
+            #   ＝沒回答訪客問的「北倉的」（r3 S9 實測）
+            _gf_args = {}
+            _gf_wh = _re.search(r"\b(north|central|south)\b", user_text, _re.I)
+            if _gf_wh:
+                # ⚠️ 不是每個功能都吃 warehouse——list_hot_items 是**全站榜**，
+                #   硬承接會回全站資料＝沒回答「北倉的」（r3 S9 實測）。
+                #   該功能不支援倉別時，改回該倉的庫存概況（訪客問裸倉名，
+                #   最可能就是想看那個倉的狀況）。
+                if _ctx["last_func"] in ("list_low_stock", "list_expiring_items",
+                                         "query_movement"):
+                    _gf_args["warehouse"] = _gf_wh.group(1).lower()
+                else:
+                    log.info(f"[ctx] {_ctx['last_func']!r} 不吃倉別 → 裸倉名回該倉庫存: "
+                             f"{user_text!r}")
+                    return "query_inventory", {"warehouse": _gf_wh.group(1).lower()}
             log.info(f"[ctx] 全域功能追問 {func_name!r} → 沿用上一輪 "
-                     f"{_ctx['last_func']!r}: {user_text!r}")
-            return _ctx["last_func"], {}
+                     f"{_ctx['last_func']!r}{_gf_args or ''}: {user_text!r}")
+            return _ctx["last_func"], _gf_args
     if not _ctx.get("last_sku"):
         return func_name, func_args
     # r76：排程/腳本/警示/採購管理 func 絕不被追問機制改寫——「排程 每週一早上
@@ -8903,10 +8986,13 @@ async def ws_handler(ws: WebSocket):
                     and not _item_create_state_ws.get(vid, {}).get("active")
                     and _pend_cur.get("view") in ("movement_confirm",
                                                   "transfer_confirm")):
+                # r3 S5：多輪反悔的各種講法——'make it 20' / 'actually 30' /
+                #   'no lets do 10' / 'change to 5' / 'just 15'
                 _mq = _re.search(
-                    r"\b(?:make it|change it to|change to|set it to|"
-                    r"instead|actually|rather)\b.{0,12}?\b(\d+)\b"
-                    r"|\b(\d+)\b\s*(?:instead|rather)\b", user_text, _re.I)
+                    r"\b(?:make it|change it to|change to|set it to|lets do|"
+                    r"let's do|do|just|only|instead|actually|rather|no)\b"
+                    r".{0,12}?\b(\d+)\b"
+                    r"|\b(\d+)\b\s*(?:instead|rather|then)\b", user_text, _re.I)
                 if _mq:
                     _newq = _mq.group(1) or _mq.group(2)
                     # data 結構（實測）：{pending: bool, sku, name, warehouse,
@@ -9617,7 +9703,8 @@ async def ws_handler(ws: WebSocket):
             #   ③不是純亂敲（要有母音、不是隨機字母串）
             #   ⇒ 亂敲（gjfkdls/asdkjhaskjdh）與閒聊搗蛋仍照擋。
             _gk_ctx_pass = False
-            if not is_meaningful_input(user_text):
+            # ⚠️ 純標點/純數字不是追問（r3 S9：'?' 被 context 放行 → 全店概覽）
+            if not is_meaningful_input(user_text) and _re.search(r"[a-z]", user_text, _re.I):
                 _gk_ctx = _ctx_by_vid.get(vid) or {}
                 if _gk_ctx.get("last_sku") or _gk_ctx.get("last_func"):
                     _w = user_text.strip().split()
@@ -12236,6 +12323,9 @@ async def ws_handler(ws: WebSocket):
                         # r2：序數/最高級指代（the most urgent one）不是商品名
                         "most", "least", "urgent", "one", "ones", "cheapest",
                         "biggest", "largest", "smallest", "newest", "oldest",
+                        # r3：語音/快打的虛詞黏字與常見錯字（不是商品名）
+                        "howmany", "howmuch", "whatabout", "isthere", "stok",
+                        "stcok", "invetory", "inventry", "wat", "wht", "hw",
                         # 劇情批 r1：寒暄/時間/語氣詞不是商品名——'hi there
                         #   busy today' 曾回「No item matching "busy today"」
                         #   （訪客只是打招呼，卻被當成在查一個叫 busy today

@@ -1,0 +1,69 @@
+### S1 語音誤聽風格（同音/黏字，ASR 產物）
+! 展場語音輸入的典型錯誤：連寫、同音、漏空格
+> howmany bluetooth earphones left | inventory_single,clarify
+> wat about themouse | inventory_single,inventory,clarify
+> powerbank stok | inventory_single
+> yogamat count | inventory_single
+> cofee machine inventory | inventory_single
+
+### S2 超長句 + 多條件
+> can you tell me how many wireless bluetooth earphones we currently have in the north warehouse right now please | inventory_single,inventory
+> i want to know which items in the food and beverage category are below their safety stock level | low_stock,inventory,clarify
+> show me everything that expires within the next seven days across all three warehouses | expiring,clarify
+
+### S3 連續打斷（每句都換主題）
+> bluetooth earphones stock | inventory_single
+> actually whats running low | low_stock
+> no wait show me best sellers | hot_items
+> hmm what about expiring items | expiring
+> ok back to the earphones | inventory_single,clarify,expiring
+
+### S4 情緒化 + 抱怨（展場訪客真的會這樣講）
+> this is wrong | clarify,rejected,agent_rca
+> the numbers dont look right | agent_rca,clarify
+> why is the toothbrush count off | agent_rca
+> that doesnt help | clarify,rejected,guide
+
+### S5 多輪反悔（改了又改）
+> north received 100 wireless mouse | movement_confirm
+> make it 50 | movement_confirm
+> actually 30 | movement_confirm
+> no lets do 10 | movement_confirm
+[confirm]
+> how many in north now | inventory_single,inventory,clarify
+
+### S6 模糊描述（講不出商品名）
+> the thing that charges phones | inventory_single,clarify
+> something to clean teeth | inventory_single,clarify
+> what do i drink after running | inventory_single,clarify,related
+> the machine that makes coffee | inventory_single,clarify
+
+### S7 倉庫+類別+時間三重條件
+> food category stock in north | inventory,clarify
+> what came into central this week | movement,clarify
+> compare electronics between north and south | compare_warehouses,inventory,clarify
+
+### S8 確認卡連環（開卡 → 開另一張 → 按確認）
+> south shipped 20 yoga mat | movement_confirm
+> transfer 10 bluetooth earphones from north to central | transfer_confirm
+[confirm]
+> did the yoga mat one go through | inventory_single,clarify,movement
+
+### S9 極短輸入
+> stock | inventory,clarify,guide
+> low | low_stock,clarify,inventory
+> hot | hot_items,clarify
+> north | inventory,clarify,inventory_single
+> ? | clarify,rejected,guide
+
+### S10 亂敲 + 搗蛋 + 告別（~20%）
+> aaaaaaaaaa
+> ;;;;;;;;
+> hello hello hello
+> 佇叨位
+> what time do you close
+> are you human
+> sing me a song
+> 999999999
+> ....
+> thanks bye
