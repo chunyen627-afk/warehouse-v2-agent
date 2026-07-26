@@ -2746,6 +2746,32 @@ def _en_fuzzy_keyword(core: str) -> str:
     from collections import Counter
     _c = Counter(hits).most_common(2)
     if len(_c) > 1 and _c[1][1] == _c[0][1]:
+        # ── 平手決勝：看哪個候選被**句中最多 token** 支持 ────────────────
+        #   投票是「每個 token 只投 top-1」，太粗：
+        #     'traash bags' → traash 投 Trash Bags、bags 投 **Coffee** Bags
+        #     （bags 對兩者同樣合理，卻只投給其中一個）→ 1:1 平手 → 回空。
+        #   但 Trash Bags 這個候選其實**兩個 token 都支持**（traash≈trash、
+        #   bags=bags）＝證據明顯較強。改用「候選名的詞被句中幾個 token
+        #   命中（精確或模糊≥0.8）」當決勝局，仍平手才真的不猜。
+        #   ⚠️ 只在平手時啟用，不改變原本的單一贏家行為（零回歸面）。
+        def _support(_name: str) -> int:
+            _nw = [w.strip(" ?.!,'\"").lower()
+                   for w in _re.split(r"[\s\-/]+", _name.lower())]
+            _nw = [w for w in _nw if len(w) >= 3 and not any(c.isdigit() for c in w)]
+            _n = 0
+            for _t in _core_toks:
+                if _t in _nw or _t.rstrip("s") in _nw or any(
+                        _t.rstrip("s") == w.rstrip("s") for w in _nw):
+                    _n += 1
+                elif difflib.get_close_matches(_t, _nw, n=1, cutoff=0.80):
+                    _n += 1
+            return _n
+        _s0, _s1 = _support(_c[0][0]), _support(_c[1][0])
+        if _s0 != _s1:
+            _win = _c[0][0] if _s0 > _s1 else _c[1][0]
+            log.info(f"[EN fuzzy 平手決勝] {_c[0][0]!r}({_s0}) vs "
+                     f"{_c[1][0]!r}({_s1}) → {_win!r}")
+            return _win
         return ""
     return _c[0][0]
 
@@ -2872,6 +2898,21 @@ def _extract_sku_keyword(text: str) -> str:
                 "and", "for", "all", "any", "new", "old", "put", "get", "set",
                 "add", "how", "why", "who", "was", "are", "has", "one", "two",
             }
+            # ── 並列時先問模糊層（錯字句的正解常在這裡）─────────────────
+            #   'traash bags' 的 match_items 是 Laptop Bag / Coffee Bags /
+            #   Trash Bags **三個同分 4**（都只靠 bags 撈到）→ 判歧義回空，
+            #   但模糊層明確知道 traash≈trash → Heavy-duty Trash Bags。
+            #   原本 fuzzy 只在「分數 <4」時才被呼叫，同分並列這條路徑
+            #   **完全跳過模糊層**＝錯字句永遠救不回來（守衛 inv 長尾主因）。
+            #   安全條件：fuzzy 的答案必須**就在並列候選裡**（等於用 fuzzy
+            #   在平手候選中做決勝，不是另起爐灶猜一個新商品）。
+            try:
+                _fz_tie = _en_fuzzy_keyword(_en_core or text)
+            except Exception:
+                _fz_tie = ""
+            if _fz_tie and any(r["item"]["name"] == _fz_tie for r in _tied):
+                log.info(f"[EN ambiguous→fuzzy] {len(_tied)} 並列 → 模糊層決勝 {_fz_tie!r}")
+                return _fz_tie
             if (_stem and len(_stem) >= 4 and _stem not in _STEM_STOP
                     and _re.search(rf"\b{_re.escape(_stem)}\b", text, _re.I)
                     and all(_stem in r["item"]["name"].lower() for r in _tied)):
@@ -4903,6 +4944,24 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                             _oov_words.add(_w)
                 import difflib as _dloov
                 _oov_keys = list(_oov_words)
+                # ── 已抽出的 keyword 當接地證據（坑 3：閘門吃掉正解）──
+                #   'drip coffoe bags' 的 kw 已經是 'Drip Coffee Bags 20pcs'
+                #   （drip/bags 精確命中），但 coffoe 對全主檔只有 0.833
+                #   卡在 0.85 外 → 這裡把**已抽對的 kw 清掉** → 全店概覽。
+                #   ⚠️ 與 oov:noex 的同名修復**兩處必須同步**（坑 3 的教訓：
+                #   修一層下一層又擋掉——實測就是修完 oov:noex 才發現還有這道）。
+                #   門檻同樣是 0.80（實測：真錯字 0.833 / 誤配 gaming→camping 0.769）。
+                _oov_tgt_words = set()
+                try:
+                    _oov_m = _Woov.match_items(func_args.get("keyword", ""))
+                    if _oov_m and _oov_m[0].get("score", 0) >= 4:
+                        for _wt in _re.split(r"[\s\-/]+",
+                                             _oov_m[0]["item"]["name"].lower()):
+                            _wt = _wt.strip(" ?.!,'\"")
+                            if len(_wt) >= 3 and not any(c.isdigit() for c in _wt):
+                                _oov_tgt_words.add(_wt)
+                except Exception:
+                    pass
                 for _t in _re.split(r"[\s\-/]+", user_text.lower()):
                     _t = _t.strip(" ?.!,'\"")
                     if len(_t) < 4 or _t in _oov_stop or any(c.isdigit() for c in _t):
@@ -4915,6 +4974,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                             continue
                     except Exception:
                         pass
+                    if _oov_tgt_words and _dloov.get_close_matches(
+                            _t, list(_oov_tgt_words), n=1, cutoff=0.80):
+                        continue
                     if not _dloov.get_close_matches(_t, _oov_keys, n=1, cutoff=0.85):
                         log.info(f"[校正 C1g-oov] 陌生修飾詞 {_t!r} → 清除 kw "
                                  f"{func_args['keyword']!r}")
@@ -11538,6 +11600,29 @@ async def ws_handler(ws: WebSocket):
                         except Exception:
                             pass
                         _nx_keys = list(_nx_words)
+                        # ── EN build：**已抽出的商品名**當額外接地證據（坑 3）──
+                        #   `drip coffoe bags` 的 extractor 已經抽對
+                        #   'Drip Coffee Bags 20pcs'（drip/bags 精確命中、
+                        #   coffoe 模糊 0.83），但這裡逐 token 對**全主檔**用
+                        #   cutoff 0.85 → coffoe/tiosue/persin/coaer 都落在
+                        #   0.83 卡在門檻外 → 判成 OOV「查無此商品」，
+                        #   **把已經抽對的正解擋掉**（守衛 inv 19 句大半是這樣掛的）。
+                        #   ⚠️ 不放寬全域門檻（上次那樣做撞名詞誤配已回退）：
+                        #   改成**只對已抽出的那個商品名**放寬 0.78——比對範圍從
+                        #   60 商品的所有詞縮到單一商品名的幾個詞，撞名機率極低。
+                        _nx_target_words = set()
+                        try:
+                            _nx_kw = _extract_sku_keyword(user_text)
+                            if _nx_kw:
+                                _nx_m = _Wnx.match_items(_nx_kw)
+                                if _nx_m and _nx_m[0].get("score", 0) >= 4:
+                                    for _wt in _re.split(r"[\s\-/]+",
+                                                         _nx_m[0]["item"]["name"].lower()):
+                                        _wt = _wt.strip(" ?.!,'\"")
+                                        if len(_wt) >= 3 and not any(c.isdigit() for c in _wt):
+                                            _nx_target_words.add(_wt)
+                        except Exception:
+                            pass
                         _unknown = []
                         for _tx in _re.split(r"[\s\-/]+", user_text.lower()):
                             _tx = _tx.strip(" ?.!,'\"")
@@ -11546,6 +11631,16 @@ async def ws_handler(ws: WebSocket):
                             if _tx in _nx_words or _tx.rstrip("s") in _nx_words:
                                 continue
                             if _dlnx.get_close_matches(_tx, _nx_keys, n=1, cutoff=0.85):
+                                continue
+                            # 對「已抽出商品名」的詞放寬到 0.80（範圍極小才敢放寬）。
+                            #   ⚠️ 門檻是**實測**切出來的，不是拍腦袋：
+                            #     真錯字 coffoe→coffee / tiosue→tissue /
+                            #       persin→person / soorts→sports 全落在 0.833
+                            #     誤配 gaming→camping 是 0.769（0.78 會放它過關，
+                            #       實測 'gaming chair' 誤配成 Folding Camping Chair）
+                            #   → 0.80 剛好切開兩者。動這個數字前先跑守衛 noex 類。
+                            if _nx_target_words and _dlnx.get_close_matches(
+                                    _tx, list(_nx_target_words), n=1, cutoff=0.80):
                                 continue
                             # 模糊層（含合成詞拆解 powerbank→Power Bank、
                             #   錯字 keyyboard→Keyboard）認得的就不是陌生詞
