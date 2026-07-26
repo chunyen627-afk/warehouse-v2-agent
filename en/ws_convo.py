@@ -279,7 +279,9 @@ async def main():
 
     if args.reset:
         import ssl as _ssl, urllib.request as _rq
-        base = "https://localhost:8001" if args.rpi5 else "http://localhost:8000"
+        # ⚠️ EN build：英文版在 **8002**（8001 是中文版）。ws_inspect/regression_ws
+        #   都踩過這雷（整批測到中文版、回答全中文），這支也要改。
+        base = "https://localhost:8002" if args.rpi5 else "http://localhost:8000"
         _ctx_no = _ssl.create_default_context()
         _ctx_no.check_hostname = False
         _ctx_no.verify_mode = _ssl.CERT_NONE
@@ -290,7 +292,7 @@ async def main():
             print(f"[reset] {json.loads(r.read()).get('summary', '')}")
 
     if args.rpi5:
-        uri = "wss://localhost:8001/ws?fast=1"
+        uri = "wss://localhost:8002/ws?fast=1"   # EN build：8002 不是 8001
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE

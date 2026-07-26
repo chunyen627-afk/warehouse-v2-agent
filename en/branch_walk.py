@@ -12,14 +12,17 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 import websockets
 
 if "--rpi5" in sys.argv:
-    URI = "wss://localhost:8001/ws?fast=1"
+    URI = "wss://localhost:8002/ws?fast=1"   # EN build：8002（8001 是中文版）
     CTX = ssl.create_default_context(); CTX.check_hostname = False; CTX.verify_mode = ssl.CERT_NONE
 else:
     URI, CTX = "ws://localhost:8000/ws?fast=1", None
 
 # 會出選單的觸發句（涵蓋：歧義短稱清單/通稱表/oov 選單/config 歧義/寫入歧義）
-TRIGGERS = ["咖啡還剩多少", "帽子有哪些", "鍋子還有嗎", "電動還有多少",
-            "嬰兒的東西總價值多少", "露營庫存", "咖啡安全庫存改成50", "進10個咖啡"]
+# EN build：英文會出選單的觸發句（歧義短稱/通稱/config 歧義/寫入歧義）
+TRIGGERS = ["stock of coffee", "mosquito repellent stock", "camping stock",
+            "how much coffee moved this month", "sports stock",
+            "set coffee safety stock to 50", "add 10 coffee",
+            "what else do buyers get"]
 
 
 async def ask(ws, text):
@@ -48,8 +51,21 @@ async def main():
                 r2 = await ask(ws2, str(opt))
             v2, s2 = r2.get("view", "?"), (r2.get("summary") or "")[:46]
             # 商品型選項（「XX 庫存」）驗回答含商品前 2 字；快捷型只驗不 error
-            core = str(opt).replace(" 庫存", "").strip()
-            ok = v2 not in ("error", "rejected") and (core[:2] in s2 or len(core) > 8 or "類" in core or core in ("查倉管", "商品清單", "全部商品庫存"))
+            # EN build：選項如 'Automatic Coffee Machine stock' / 'all items
+            #   stock' / 'how much is X'——取商品核心詞（剝掉尾綴動作詞）驗回答
+            core = str(opt)
+            for _suf in (" stock", " movements", " inventory"):
+                if core.lower().endswith(_suf):
+                    core = core[: -len(_suf)]
+            for _pre in ("how much is ", "set ", "all "):
+                if core.lower().startswith(_pre):
+                    core = core[len(_pre):]
+            core = core.strip()
+            _core_key = core.split()[0].lower() if core.split() else ""
+            ok = v2 not in ("error", "rejected") and (
+                _core_key in s2.lower() or len(core.split()) > 3
+                or core.lower() in ("item list", "items", "all items",
+                                    "whats running low", "help"))
             mark = "✅" if ok else "❌"
             if not ok:
                 bad += 1
@@ -57,13 +73,13 @@ async def main():
         # 序數路抽驗（同一條連線：觸發→第一個）
         async with websockets.connect(URI, ssl=CTX, max_size=None) as ws3:
             r0 = await ask(ws3, trig)
-            r3 = await ask(ws3, "第一個")
+            r3 = await ask(ws3, "the first one")
         v3 = r3.get("view", "?")
         # 鏈式 clarify 合法（寫入類選完商品再問倉別）；同選單重問=序數沒被理解才算異常
         same_menu = v3 == "clarify" and (r3.get("summary") or "") == (r0.get("summary") or "")
         m3 = "✅" if v3 not in ("error", "rejected") and not same_menu else "❌"
         if m3 == "❌": bad += 1
-        print(f"   {m3} 序數「第一個」→ {v3} | {(r3.get('summary') or '')[:46]}")
+        print(f"   {m3} ordinal 'the first one' → {v3} | {(r3.get('summary') or '')[:46]}")
     print(f"\n{'='*60}\n分支總數 {total_br}+序數8 · 異常 {bad}")
     sys.exit(1 if bad else 0)
 

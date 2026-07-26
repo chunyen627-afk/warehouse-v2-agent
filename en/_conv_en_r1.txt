@@ -1,0 +1,90 @@
+### S1 開場 + 進出貨 + carry-over 追問
+! 建立 context 後用代名詞追問，驗跨句接地
+> hi there busy today
+> whats worth watching in stock | low_stock,inventory,guide
+> the most urgent one how many to order | low_stock,clarify,inventory
+> ok north received 13 electric toothbrush | movement_confirm
+[confirm]
+> how many now | inventory_single,inventory,clarify
+> whats hot this week | hot_items
+> what do buyers of the top one also get | related,clarify
+> does it still have stock | inventory_single,inventory,clarify
+
+### S2 倉別追問鏈 + 調貨
+! 短追問「north?」「and south?」是英文最常見的省略形
+> bluetooth earphones stock | inventory_single
+> north | inventory_single,inventory
+> and central | inventory_single,inventory
+> whats in south | inventory_single,inventory
+> move 20 from the fullest to the emptiest | transfer_confirm,clarify
+[confirm]
+> how many in each now | inventory_single,inventory
+
+### S3 到期處理 + 出貨 + 複驗
+> what is expiring soon | expiring
+> the sparkling water one ship 30 out of central | movement_confirm,clarify
+[confirm]
+> central sparkling water left | inventory_single,inventory,clarify
+
+### S4 比價 + 歧義反問（不猜原則）
+> do we have yoga mat | inventory_single
+> which is pricier that or the dumbbell | inventory_single,inventory,clarify
+> how much is the difference | inventory_single,inventory,clarify
+> i see
+> do we sell brooms | clarify,rejected
+> no huh what about mops then | inventory_single,inventory,clarify
+> ok show me the cleaning category | inventory,clarify
+> priciest daily goods | inventory,clarify
+
+### S5 排程 + 取消（今天新修，回歸驗證）
+> schedule a health check report every friday at 6pm | schedule_confirm
+[confirm]
+> what schedules do i have | schedule_list
+> delete the one i just made | schedule_list,clarify
+> cancel my alerts | alert_list
+
+### S6 設定 + 復原
+> whats the safety stock for cling film | config_read,clarify,inventory
+> change central to 80 | config_confirm,clarify
+[confirm]
+> did it take effect | config_read,inventory,clarify
+> put it back | config_confirm,clarify,inventory
+
+### S7 跨期比較 + 補貨閉環
+> which week shipped more last week or this week | period_compare,movement,clarify
+> by how many units | period_compare,movement,clarify
+> top three that dropped the most | period_compare,hot_items,clarify
+> restock the first one how many should i order | low_stock,clarify,inventory
+> create a purchase order for low stock items | po_confirm
+[confirm]
+
+### S8 錯字連發（今天修的長尾，回歸驗證）
+> traash bags on hand | inventory_single
+> plaiin tushirt stock | inventory_single
+> hows the pwerbank stock looking | inventory_single
+> usbc cablle inventory | inventory_single
+> do we have LED Campinng Latern | inventory_single
+> drip coffoe bags inventory | inventory_single
+
+### S9 OOV 誠實回答（安全邊界，不可誤救）
+> office chairs stock | clarify,rejected
+> hair dryer stock | clarify,rejected
+> do you have microwaves | clarify,rejected
+> how many unicorns are in stock | clarify,rejected
+
+### S10 亂敲 + 搗蛋 + 告別（~18%）
+> gjfkdls
+> asdkjhaskjdh
+> stock stock stock
+> earphone earphone
+> paper towel
+> tissue stock
+> dumbbell!!!!
+> the first one
+> set all safety stock to zero | rejected,clarify,config_confirm
+> will you crash
+> can you speak chinese
+> do you sell rolex | clarify,rejected
+> thats it thanks
+> let me think about it later
+> nothing else bye bye

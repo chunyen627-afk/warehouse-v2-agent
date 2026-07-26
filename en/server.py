@@ -108,6 +108,10 @@ GATEKEEPER_KEYWORDS = {
     "中倉", "中區倉", "中區", "中部",
     "南倉", "南區倉", "南區", "南部",
     "倉", "倉庫", "warehouse",
+    # EN build：裸倉名（劇情批 r1）——中文「北倉呢」自帶倉名命中白名單，
+    #   英文訪客的追問是裸 'north' / 'and central'，原本只有 'warehouse'
+    #   在白名單 → 這類追問被當搗蛋拒絕。
+    "north", "central", "south",
     # 動作
     "庫存", "存量", "還有", "剩", "幾件", "多少", "幾個", "查詢",
     "怎麼用", "教我", "功能", "使用說明", "怎麼教", "系統",
@@ -173,6 +177,8 @@ GATEKEEPER_KEYWORDS = {
     "my alerts", "set alert", "notify me", "remind me",
     "last two months", "past two months", "month over month",
     "period compare", "trend", "growth", "decline",
+    # （管理動詞改用詞界比對，見下方 _GK_ACTION_RE——放在 set 裡會 substring
+    #   誤爆：'set ' ∈ sun**set** time、'order ' ∈ b**order** control）
     # ── 守衛第 8 輪：上一輪把守門員收嚴後，這些「沒有商品名但完全合法」
     #    的功能句被擋成 rejected（low/hot/rca/mv 共 11 句）。守門員的
     #    最後一關要求句中有商品名，功能句得靠白名單接住。
@@ -234,7 +240,11 @@ GATEKEEPER_KEYWORDS = {
     "stock", "inventory", "low", "alert", "restock", "compare", "hot", "slow",
     "top", "selling", "movement", "inbound", "outbound",
     "bluetooth", "earphone", "coffee", "machine", "bought", "together", "related",
-    "what", "how", "show", "today", "week", "month", "much", "many",
+    "what", "how", "show", "today", "week", "month",
+    # ⚠️ 'much'/'many' 拿掉裸詞（守衛 chat 類回歸）：'thank you very **much**'
+    #   命中白名單 → 寒暄句被當倉管查詢回全店概覽。改用 _GK_QTY_RE 要求
+    #   「how much/many」連用才算查詢意圖。
+    #   （中文版第 18 輪也移除過純虛詞，理由相同：守門形同虛設——見上方註解）
     # 錯字容錯關鍵字（避免 OOV 被守門員擋掉）
     "芽", "汽", "灌", "精", "只", "基", "郭", "伽", "店", "員", "文", "窄", "胡", "湖",
     "容", "鬥", "挖", "帶", "素", "協", "一", "運", "允", "燙",
@@ -341,11 +351,36 @@ def is_meaningful_input(text: str) -> bool:
     for kw in GATEKEEPER_KEYWORDS:
         if kw in s:
             return True
+    # 管理動詞 / 數量問句（詞界比對，見 _GK_ACTION_RE 註解）
+    if _GK_ACTION_RE.search(s) or _GK_QTY_RE.search(s):
+        return True
     # r25：句含真商品名（3 字滑窗）→ 放行（「機械式鍵盤的帳兜得攏嗎」的商品
     # 不在手列俗稱名單曾被拒——與 guide 判定同款結構性判準）
     if _text_has_item_name(s):
         return True
     return False
+
+
+# ── 劇情批 r1：寫入/設定/管理句「沒有商品名但語意完全明確」，原本被守門員
+#    擋成搗蛋（'change central to 80' / 'move 20 from the fullest to the
+#    emptiest'）。⚠️ 坑 1：這些詞**必須用詞界**，放進 GATEKEEPER_KEYWORDS
+#    做 substring 會誤爆（'set ' ∈ sun**set** time、'order ' ∈ b**order**
+#    control——實測過，兩句都被誤放行）。
+_GK_ACTION_RE = re.compile(
+    r"\b(?:change|set|adjust|update|increase|decrease|raise|lower|"
+    r"move|transfer|shift|ship|received|receive|restock|reorder|"
+    r"fullest|emptiest)\b", re.I)
+# 'how much/many' 連用才是查詢意圖（裸 much/many 會讓 'thank you very much'
+#   這種寒暄句矇混過守門員 → 回全店概覽）
+_GK_QTY_RE = re.compile(r"\bhow\s+(?:much|many)\b", re.I)
+
+
+def _GATEKEEPER_BLACKLIST_HIT(text: str) -> bool:
+    """句中是否命中黑名單（閒聊/破壞/注入）。
+    供「context 追問放行」用——放行短追問時，黑名單仍要照擋，
+    否則 'can you speak chinese' / 'will you crash' 這種閒聊會跟著溜進來。"""
+    _s = text.strip().lower()
+    return any(_k in _s for _k in _GATEKEEPER_BLACKLIST)
 
 
 GATEKEEPER_REJECT_MSG = (
@@ -2271,6 +2306,16 @@ def _detect_clarify(user_text: str) -> dict | None:
     #   （'this months in and out' 撈到 Smart Fitness Band 反問）
     if matched and _is_mostly_english(t) and _C4MV_RE.search(t):
         matched = []
+    # ⚠️ EN build（劇情批 r1）：**低分噪音**不可拿來反問。實測招呼語
+    #   'hi there busy today' 的 'hi' 撈到 Automatic Coffee **M**achine
+    #   （score=2）→ 訪客只是打招呼，系統卻反問「你想知道咖啡機的什麼？」。
+    #   同類前科：'alert me' 的 'no item' 比到 Ceramic **No**n-stick Pan。
+    #   反問是要幫訪客聚焦，拿一個他沒提過的商品反問只會更混亂
+    #   → 分數不足就不反問，讓下游走正常路徑（guide/概覽）。
+    if (matched and _is_mostly_english(t)
+            and matched[0].get("score", 0) < 4):
+        log.info(f"[clarify] 商品名分數不足({matched[0].get('score', 0)})不反問: {t!r}")
+        matched = []
     if matched and not has_intent:
         item = matched[0]
         name = item["item"]["name"] if isinstance(item, dict) and "item" in item else item.get("name", t)
@@ -2582,6 +2627,12 @@ _EN_Q_STOP_INTENT_RE = _re.compile(
     _re.I)
 
 
+_EN_WRITE_STOP_RE = _re.compile(
+    r"\b(?:put|into|onto|came|come|coming|arrived|arrive|customer|returned|"
+    r"return|returns|took|take|taken|got|goes|went|sent|send|out of|"
+    r"add|added|adding|plus|minus)\b", _re.I)
+
+
 def _en_query_core(text: str) -> str:
     """剝掉英文查詢虛詞，只留商品詞。
 
@@ -2594,6 +2645,12 @@ def _en_query_core(text: str) -> str:
     複製一份 → 必然不同步。抽出來讓所有呼叫端共用同一套。"""
     _c = _EN_Q_STOP_INTENT_RE.sub(" ", text)
     _c = _EN_Q_STOP_RE.sub(" ", _c)
+    # 寫入句動詞 + 純數字（守衛 mv 回歸）：'put 100 mop into south' 的
+    #   '100' 會撈到 Power Bank **10000**mAh / Coffee Filter **100**pcs /
+    #   Sports Towel **100**x30cm → 四個同分 3 → 判歧義回空，商品抽不到。
+    #   數量與寫入動詞都不是商品詞，比對前先剝掉。
+    _c = _EN_WRITE_STOP_RE.sub(" ", _c)
+    _c = _re.sub(r"\b\d+\b", " ", _c)
     return _re.sub(r"\s+", " ", _c).strip(" ?.!,")
 
 
@@ -3011,8 +3068,25 @@ def _extract_sku_keyword(text: str) -> str:
             #   **完全跳過模糊層**＝錯字句永遠救不回來（守衛 inv 長尾主因）。
             #   安全條件：fuzzy 的答案必須**就在並列候選裡**（等於用 fuzzy
             #   在平手候選中做決勝，不是另起爐灶猜一個新商品）。
+            #   ⚠️ 但**只在原句真的有錯字時**才用 fuzzy 決勝——否則會把
+            #   「真歧義」也一併猜掉：'stock of coffee' 有 5 個咖啡商品、
+            #   'mosquito repellent' 有 Spray/Refill 兩款，訪客講的就是
+            #   通稱，正確行為是**列候選反問**（user 定調的不確定不猜）。
+            #   實測回歸：這段沒設條件時，那些句子變成靜默猜第一個。
+            #   判準：core 的每個實詞都精確命中主檔 → 沒有錯字 → 是真歧義。
+            _core_toks_tie = [w.strip(" ?.!,'\"").lower()
+                              for w in _re.split(r"[\s\-/]+", (_en_core or text))]
+            _core_toks_tie = [w for w in _core_toks_tie if len(w) >= 3]
+            _item_words_tie = set()
+            for _r_tie in _tied:
+                for _w_tie in _re.split(r"[\s\-/]+", _r_tie["item"]["name"].lower()):
+                    _w_tie = _w_tie.strip(" ?.!,'\"")
+                    if len(_w_tie) >= 3:
+                        _item_words_tie.add(_w_tie)
+            _has_typo = any(w not in _item_words_tie and w.rstrip("s") not in _item_words_tie
+                            for w in _core_toks_tie)
             try:
-                _fz_tie = _en_fuzzy_keyword(_en_core or text)
+                _fz_tie = _en_fuzzy_keyword(_en_core or text) if _has_typo else ""
             except Exception:
                 _fz_tie = ""
             if _fz_tie and any(r["item"]["name"] == _fz_tie for r in _tied):
@@ -4101,6 +4175,68 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 and _frag13b not in _kw13b):
             log.info(f"[校正 C13b] 殘字「{_frag13b}」尾字與「{_kw13b}」不符 → 改用原詞當 OOV")
             _kw13b = _frag13b
+        # ── EN build（守衛 mv 回歸）：C13b 自己重抽商品，會被撞名詞帶偏——
+        #   '10 laptop sleeve came in at south' 被抽成 Sports Compression
+        #   Arm **Sleeve**（laptop sleeve 對 Laptop Bag / Arm Sleeve 是
+        #   6:6 同分），接著 anti-hallu 把這個錯的丟掉 → 商品變空 → 開不了卡
+        #   （回「Please tell me which item to update」）。
+        #   而 **clf/LLM 上游已經抽對**（keyword='14-inch Laptop Bag'）。
+        #   → C13b 的結果不接地時，優先沿用上游 keyword。
+        if _is_mostly_english(user_text):
+            _up_kw13b = str(func_args.get("keyword") or "").strip()
+            if _up_kw13b:
+                import warehouse as _W13b_up
+                _m_up = _W13b_up.match_items(_up_kw13b)
+                _up_ok = bool(_m_up and _m_up[0].get("score", 0) >= 6)
+                _cur_ok = False
+                if _kw13b:
+                    _m_cur = _W13b_up.match_items(_kw13b)
+                    # 現有 kw 要「接地」＝它的核心詞真的出現在原句。
+                    #   ⚠️ 單一詞命中不算——'Sports Compression Arm Sleeve'
+                    #   只靠 'sleeve' 一個詞就通過接地（laptop **sleeve**），
+                    #   而 sleeve 在原句其實是修飾 laptop 的。多詞商品名要求
+                    #   **至少兩個詞**命中，才不會被單一撞名詞蒙混。
+                    _cur_words = [w.lower() for w in _kw13b.split() if len(w) >= 4]
+                    _cur_hits = sum(1 for w in _cur_words
+                                    if w in user_text.lower())
+                    _cur_ok = bool(_m_cur and _m_cur[0].get("score", 0) >= 6
+                                   and _cur_hits >= (2 if len(_cur_words) >= 2 else 1))
+                # ⚠️ 上游 kw **也要接地**才可採用——否則會把 C13b 抽對的
+                #   結果換成 LLM 的幻覺。實測回歸：'take 20 espresso machine
+                #   out of south' 的 C13b 抽對 Automatic Coffee Machine
+                #   （espresso machine 是別名），我卻換成 LLM 的 'coffee
+                #   maker'（原句沒有）→ 被 anti-hallu 丟掉 → 開不了卡。
+                #   接地判準同下：多詞名要 ≥2 詞命中原句；別名對應則看
+                #   _extract_sku_keyword 是否也指向同一商品。
+                _up_words = [w.lower() for w in _up_kw13b.split() if len(w) >= 4]
+                _up_hits = sum(1 for w in _up_words if w in user_text.lower())
+                _up_grounded = _up_hits >= (2 if len(_up_words) >= 2 else 1)
+                if not _up_grounded:
+                    # 別名路：extractor 對原句的結果若與上游 kw 同一商品，也算接地
+                    try:
+                        _ex13b = _extract_sku_keyword(user_text)
+                        if _ex13b:
+                            _m_ex = _W13b_up.match_items(_ex13b)
+                            _up_grounded = bool(
+                                _m_ex and _m_up
+                                and _m_ex[0]["item"]["name"] == _m_up[0]["item"]["name"])
+                    except Exception:
+                        pass
+                # 兩者指向**同一商品**時保留現有 kw：C13b 給的是主檔全名
+                #   （Automatic Coffee Machine），上游可能是別名/俗稱
+                #   （'coffee maker'）——換過去反而會被 anti-hallu 丟掉。
+                _same_item = False
+                if _kw13b and _m_up:
+                    try:
+                        _m_cur2 = _W13b_up.match_items(_kw13b)
+                        _same_item = bool(
+                            _m_cur2
+                            and _m_cur2[0]["item"]["name"] == _m_up[0]["item"]["name"])
+                    except Exception:
+                        _same_item = False
+                if _up_ok and _up_grounded and not _cur_ok and not _same_item:
+                    log.info(f"[校正 C13b-en] kw {_kw13b!r} 不接地 → 沿用上游 {_up_kw13b!r}")
+                    _kw13b = _up_kw13b
         log.info(f"[校正 C13b] 進出貨意圖 → create_movement（原 {func_name}）kw={_kw13b!r} wh={_wh13b!r} dir={_dir13b} qty={_qty13b!r} return={_is_return13b}")
         _args13b = {"keyword": _kw13b, "warehouse": _wh13b,
                     "direction": _dir13b, "qty": _qty13b}
@@ -5015,7 +5151,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
               #   （'something to clean teeth' 的 clean/teeth 都不是主檔字，
               #    會被判陌生修飾詞 → 清 kw 回全店概覽）
               and not _en_descriptor_hit(user_text)):
-            _oov_stop = {"many", "much", "have", "there", "some", "any",
+            _oov_stop = {
+                         # 寒暄/時間/語氣詞（同 _NOEX_STOP，兩處要同步——
+                         #   劇情批 r1：'hi there busy today' 被當商品查詢）
+                         "busy", "today", "tomorrow", "yesterday", "morning",
+                         "afternoon", "evening", "night", "hello", "hey",
+                         "thanks", "thank", "please", "sorry", "welcome",
+                         "good", "great", "fine", "okay", "sure", "yeah",
+                         "well", "just", "really", "very", "quite", "maybe",
+                         "guys", "everyone", "team", "here", "hows", "doing",
+                         "many", "much", "have", "there", "some", "any",
                          "show", "tell", "give", "list", "check", "look",
                          "left", "stock", "stocks", "inventory", "count",
                          "hand", "with", "from", "that", "this", "them",
@@ -6283,11 +6428,38 @@ def _ctx_for(vid) -> dict:
 
 # ─── Context carry-over ────────────────────────────────────
 _CTX_FOLLOWUP_WORDS = ("那", "它", "這個", "該", "同樣", "這支", "這件", "剛才", "上次")
+# ── EN build（劇情批 r1）：追問詞表原本全中文 → 英文 carry-over **整條失效**。
+#   實測：'bluetooth earphones stock' 之後打 'north' / 'and central' /
+#   'whats in south' / 'how many in each now' 全部回**全店 60 商品概覽**，
+#   context 完全沒接上（其中 'north' 的 view=inventory 還被守衛判成通過＝
+#   畫面級破口，正是「只看 view 會漏」的實例）。
+#   同坑 7：中文鍵的對照表對英文一處也命中不了。
+_CTX_FOLLOWUP_RE_EN = _re.compile(
+    r"\b(?:it|its|it's|that|this|those|these|them|the same|same one|"
+    r"the one|that one|this one|the item|"
+    # 裸倉別追問：'north' / 'and central' / 'whats in south' / 'in north'
+    r"and\s+(?:north|central|south)|^(?:north|central|south)$|"
+    r"(?:in|at|for)\s+(?:north|central|south)|"
+    # 承接副詞：'then' / 'also' / 'too' / 'again' / 'now' / 'each'
+    r"then|also|too|again|now|each|"
+    # 序數指代：'the first one' / 'the second'
+    r"the\s+(?:first|second|third|fourth|fifth|last|other|next)|"
+    r"earlier|just now|last time|previous)\b", _re.I)
 _CTX_FUNC_HINT = {
     "進出": "query_movement", "異動": "query_movement", "紀錄": "query_movement",
     "搭配": "query_related_items", "推薦": "query_related_items",
     "到期": "list_expiring_items", "保存": "list_expiring_items",
 }
+# EN build：功能切換詞的英文版（'its movements?' / 'what goes with it' /
+#   'does it expire soon'）
+_CTX_FUNC_HINT_RE_EN = (
+    (r"\b(?:movements?|in\s*/?\s*out|inbound|outbound|shipments?|"
+     r"received|shipped)\b", "query_movement"),
+    (r"\b(?:goes? with|pairs? with|related|bought together|also (?:buy|get))\b",
+     "query_related_items"),
+    (r"\b(?:expir\w*|shelf life|use[- ]?by|best before)\b",
+     "list_expiring_items"),
+)
 
 def _update_ctx(vid, func_name: str, func_args: dict):
     """每輪成功執行後更新該訪客的 context。"""
@@ -6302,6 +6474,16 @@ def _update_ctx(vid, func_name: str, func_args: dict):
         _m_uc = _W_uc.match_items(str(kw).strip())
         if not (_m_uc and _m_uc[0].get("score", 0) >= 3):
             kw = None
+        # ⚠️ EN build（劇情批 r1）：存進 context 的必須是**命中的商品全名**，
+        #   不能是 LLM/clf 給的原始 keyword 片段。實測 'bluetooth earphones
+        #   stock' 的 kw 是 'Wireless'（片段）→ 下一句追問 'north' 被注入
+        #   'Wireless' → `"Wireless" matches 2 items` 歧義反問，carry-over
+        #   等於白接。用 match_items 已算好的結果正規化即可。
+        elif _m_uc and _m_uc[0].get("score", 0) >= 3:
+            _full_uc = _m_uc[0]["item"]["name"]
+            if _full_uc != kw:
+                log.info(f"[ctx] last_sku 正規化 {kw!r} → {_full_uc!r}")
+            kw = _full_uc
     if kw:
         _ctx["last_sku"] = kw
     if wh and wh not in ("all", None):
@@ -6327,6 +6509,9 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
                      "list_alerts"):
         return func_name, func_args
     is_followup = any(w in user_text for w in _CTX_FOLLOWUP_WORDS)
+    # EN build：英文追問詞（見 _CTX_FOLLOWUP_RE_EN 註解）
+    if not is_followup and _is_mostly_english(user_text):
+        is_followup = bool(_CTX_FOLLOWUP_RE_EN.search(user_text.strip()))
     raw_kw = (func_args.get("keyword") or func_args.get("target") or "").strip()
     # keyword 本身含代詞或功能詞視為無效（LLM 把「它 進出紀錄」「進出紀錄」當 keyword）
     _bad_kw_words = list(_CTX_FOLLOWUP_WORDS) + list(_CTX_FUNC_HINT.keys())
@@ -6355,18 +6540,44 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
     # 「紀錄檔」是問檔案列表（list_files），不是問進出紀錄，排除掉避免誤判成功能切換。
     _ctx_func_hint_text = user_text.replace("紀錄檔", "").replace("記錄檔", "")
     new_func = next((v for k, v in _CTX_FUNC_HINT.items() if k in _ctx_func_hint_text), None)
+    # EN build：英文功能切換詞
+    if new_func is None and _is_mostly_english(user_text):
+        for _p_fh, _v_fh in _CTX_FUNC_HINT_RE_EN:
+            if _re.search(_p_fh, _ctx_func_hint_text, _re.I):
+                new_func = _v_fh
+                break
 
     # 有功能切換詞 or 追問代詞，且沒有有效 keyword → 介入
     if not (is_followup or new_func) or has_kw:
         return func_name, func_args
     # r55 收官批：全域查詢句（「快過期的有哪些」）絕不注入 last_sku——
     # 拿舊商品過濾全域問題會漏報（到期警示曾被濾成單一商品 → 假「沒有快到期」）。
-    if any(w in user_text for w in _CTX_GLOBAL):
+    if any(w in user_text for w in _CTX_GLOBAL) or (
+            _is_mostly_english(user_text)
+            and _CTX_GLOBAL_RE_EN.search(user_text)):
         return func_name, func_args
 
     new_args = dict(func_args)
     new_args["keyword"] = _ctx["last_sku"]
     log.info(f"[ctx] 補 keyword={_ctx['last_sku']!r} 從上一輪 context")
+    # ⚠️ EN build（劇情批 r1）：注入 keyword 時要清掉 LLM 幻覺的 category。
+    #   'and central' 的 LLM 輸出是 query_inventory{category:electronics,
+    #   warehouse:central}——追問句本身沒有任何類別詞，category 是幻覺。
+    #   keyword + category 並存 → 商品被類別過濾 → 掉進歧義反問
+    #   （實測回「What do you want to know about "Smart Fitness Band"?」
+    #   ＝跳到完全不相干的商品）。追問句指的是**上一輪那個商品**，
+    #   類別條件必然是多餘的。
+    if new_args.get("category") and _is_mostly_english(user_text) \
+            and _category_from_en(user_text) is None:
+        log.info(f"[ctx] 追問句清掉幻覺 category={new_args['category']!r}")
+        new_args.pop("category", None)
+    # EN build：裸倉別追問（'north' / 'and central' / 'whats in south'）
+    #   除了補商品，還要把**倉別**帶進去，否則回的是三倉合計＝沒回答問題。
+    if _is_mostly_english(user_text) and not new_args.get("warehouse"):
+        _wh_fu = _re.search(r"\b(north|central|south)\b", user_text, _re.I)
+        if _wh_fu:
+            new_args["warehouse"] = _wh_fu.group(1).lower()
+            log.info(f"[ctx] 補 warehouse={new_args['warehouse']!r}（英文倉別追問）")
 
     if new_func:
         log.info(f"[ctx] 切換 func {func_name!r} → {new_func!r}")
@@ -6439,7 +6650,12 @@ def _ctx_absorb(vid, result: dict):
     if view == "agent_rca":
         _disc78 = data.get("discrepancies") or []
         if _disc78 and isinstance(_disc78[0], dict) and _disc78[0].get("name"):
-            _ctx_for(vid)["last_sku"] = str(_disc78[0]["name"]).split()[0]
+            # ⚠️ EN build：`.split()[0]` 是**中文導向**——中文商品名沒空格，
+            #   取第一段等於取全名；英文卻會截成 'Wireless'（Wireless
+            #   Bluetooth Earphones）→ 下一句追問拿它去比對變成歧義反問。
+            _n78 = str(_disc78[0]["name"])
+            _ctx_for(vid)["last_sku"] = (
+                _n78 if _is_mostly_english(_n78) else _n78.split()[0])
     # r77：連帶清單記憶——「第一個連帶的庫存」要能直指
     if view == "related":
         _ctx_for(vid)["last_related"] = [
@@ -6526,7 +6742,10 @@ def _ctx_absorb(vid, result: dict):
         import warehouse as _W_ab
         _m_ab = _W_ab.match_items(kw.strip())
         if _m_ab and _m_ab[0].get("score", 0) >= 3:
-            _ctx_for(vid)["last_sku"] = kw.strip()
+            # 存**命中的商品全名**而非原始 keyword（可能是 'Wireless' 這種
+            #   片段）——同 _update_ctx 的正規化，兩處要一致，否則
+            #   carry-over 拿片段去比對會變成歧義反問（劇情批 r1 實測）。
+            _ctx_for(vid)["last_sku"] = _m_ab[0]["item"]["name"]
     wh = data.get("warehouse")
     if isinstance(wh, str) and wh.strip() and wh not in ("all", "全部倉"):
         _ctx_for(vid)["last_wh"] = wh.strip()
@@ -6582,6 +6801,19 @@ _CTX_GLOBAL = ("哪些", "所有", "全部", "每個", "各倉", "各個", "排�
                "有什麼", "缺什麼", "全店", "全倉", "都有",
                # r74：「那看庫存總值」被 ctx 注入變成單品查詢——總值類詞是全店視角
                "總值", "總價值", "庫存價值", "總市值")
+# ── EN build：全域視角詞的英文版。⚠️ 必須跟 _CTX_FOLLOWUP_RE_EN 同時補，
+#   否則「補了追問詞、沒補全域詞」會變成：'whats running low' 被注入上一輪的
+#   商品 → 缺貨清單被濾成單一商品 → **假的「沒有缺貨」**（中文版 r55 踩過，
+#   註解就在上面）。這是「修一半更危險」的典型。
+_CTX_GLOBAL_RE_EN = _re.compile(
+    r"\b(?:which items?|what items?|all|every|everything|each (?:one|item)|"
+    r"list|lists|ranking|rankings|top \d+|top (?:three|five|ten)|"
+    r"best sellers?|hot items?|slow (?:movers?|moving)|"
+    r"running low|low stock|out of stock|restock|reorder|"
+    r"alerts?|clearance|expiring|expire|expiry|"
+    r"compare|comparison|versus|vs|overview|summary|"
+    r"total value|stock value|inventory value|overall|"
+    r"anything|whats there|what do we have|item list)\b", _re.I)
 
 
 # 「這個月」「那個星期」的代詞是時間片語，不是指商品
@@ -8772,6 +9004,33 @@ async def ws_handler(ws: WebSocket):
                 _ord_txt)
             _ord_last = _re.fullmatch(r"(?:我?要|選)?\s*最後(?:一個|一項|那個)?\s*(?:好了|吧)?[?？。!！]*", _ord_txt)
             _ord_first = _re.fullmatch(r"(?:我?要|選)?\s*(?:最上面|頭一個|頭一項)(?:那個)?\s*(?:好了|吧)?[?？。!！]*", _ord_txt)
+            # ── EN build（branch_walk r1）：序數 regex 原本全中文 → 英文訪客
+            #   說 'the first one' 被當商品名查詢 → rejected /「No item
+            #   matching "first one"」。語音輸入時代點不了按鈕，序數是最自然
+            #   的選法（中文版註解已寫明），英文必須對等支援。
+            if not (_ord51 or _ord_last or _ord_first):
+                _ord_en_num = _re.fullmatch(
+                    r"(?:i(?:'?d)?\s*(?:want|like|pick|choose|take)\s*)?"
+                    r"(?:the\s*)?(?:option\s*|item\s*|number\s*|no\.?\s*|#)?"
+                    r"(?:(first|second|third|fourth|fifth|sixth|seventh|eighth)|([1-8]))"
+                    r"\s*(?:one|option|item)?\s*(?:please|thanks)?[?.!]*",
+                    _ord_txt, _re.I)
+                _ord_en_last = _re.fullmatch(
+                    r"(?:i(?:'?d)?\s*(?:want|like|pick|choose|take)\s*)?"
+                    r"(?:the\s*)?last\s*(?:one|option|item)?\s*(?:please|thanks)?[?.!]*",
+                    _ord_txt, _re.I)
+                if _ord_en_last and _clarify_opts_by_vid.get(vid):
+                    _ord_last = _ord_en_last
+                elif _ord_en_num and _clarify_opts_by_vid.get(vid):
+                    _EN_ORD = {"first": 1, "second": 2, "third": 3, "fourth": 4,
+                               "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8}
+                    _oi_en = (_EN_ORD.get((_ord_en_num.group(1) or "").lower())
+                              or int(_ord_en_num.group(2) or 0))
+                    _opts_en = _clarify_opts_by_vid[vid]
+                    if 1 <= _oi_en <= len(_opts_en):
+                        log.info(f"[ordinal-select EN] vid={vid} {user_text!r} → "
+                                 f"選項{_oi_en}「{_opts_en[_oi_en-1]}」")
+                        user_text = str(_opts_en[_oi_en - 1])
             if (_ord51 or _ord_last or _ord_first) and _clarify_opts_by_vid.get(vid):
                 _ORD_MAP = {"一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5,
                             "六": 6, "七": 7, "八": 8}
@@ -8987,10 +9246,16 @@ async def ws_handler(ws: WebSocket):
             #   但黑名單有 'delete the'（防 'delete the database'）→ 被擋成搗蛋。
             #   放行後由 Pre-C-Sched 接手，它只**列清單**讓訪客指名、不做批量刪除。
             if (_bl_hit_ws
-                    and _re.search(r"\b(?:delete|remove|cancel|clear|drop|turn off|"
-                                   r"disable|stop)\b.{0,12}\b(?:schedules?|alerts?|"
-                                   r"alert rules?|reminders?|rules?|jobs?)\b",
-                                   user_text, _re.I)
+                    and (_re.search(r"\b(?:delete|remove|cancel|clear|drop|turn off|"
+                                    r"disable|stop)\b.{0,12}\b(?:schedules?|alerts?|"
+                                    r"alert rules?|reminders?|rules?|jobs?)\b",
+                                    user_text, _re.I)
+                         # 劇情批 r1：'delete the one i just made' —— 指代前一輪
+                         #   建立的東西（排程/警示/商品），是合法管理操作。
+                         #   限**有 context** 時，否則裸句仍照擋。
+                         or (_re.search(r"\b(?:delete|remove|cancel)\s+(?:the\s+)?"
+                                        r"(?:one|that|it|this)\b", user_text, _re.I)
+                             and bool(_ctx_by_vid.get(vid) or {})))
                     and not _re.search(r"\b(?:database|table|everything|all data|"
                                        r"all items|all stock|system)\b",
                                        user_text, _re.I)):
@@ -9203,7 +9468,49 @@ async def ws_handler(ws: WebSocket):
 
             # ── 守門員（per-vid：只有『自己這位訪客』在新增流程中才豁免）──
             _ic_st = _item_create_state_ws.get(vid, {})
-            if not _ic_st.get("active") and not is_meaningful_input(user_text):
+            # ── EN build：**有 context 時放行短追問**（劇情批 r1 抓到）──────
+            #   守門員是「白名單命中才放行」，但真實訪客的追問句不含任何
+            #   商品/倉管詞：'north' / 'and central' / 'the first one' /
+            #   'put it back' / 'did it take effect' → 全被當搗蛋拒絕。
+            #   中文版沒這問題是因為「北倉呢」自帶倉名命中白名單，
+            #   英文的裸 'north' 卻不在白名單（只有 'warehouse'）。
+            #   這類句子**靠 context 才有意義**，正解不是硬列白名單，
+            #   而是「上一輪有結果 → 這輪的短句是追問」。
+            #   條件從嚴：①上一輪留下了 context ②本句夠短（≤6 詞）
+            #   ③不是純亂敲（要有母音、不是隨機字母串）
+            #   ⇒ 亂敲（gjfkdls/asdkjhaskjdh）與閒聊搗蛋仍照擋。
+            _gk_ctx_pass = False
+            if not is_meaningful_input(user_text):
+                _gk_ctx = _ctx_by_vid.get(vid) or {}
+                if _gk_ctx.get("last_sku") or _gk_ctx.get("last_func"):
+                    _w = user_text.strip().split()
+                    # ⚠️ 只放行**看起來像追問**的句子，不能因為「有 context」
+                    #   就全放——實測放太寬會讓 'will you crash' /
+                    #   'can you speak chinese' / 'do you sell rolex' 這些
+                    #   搗蛋句溜進來（它們原本正是靠白名單不命中被擋的）。
+                    #   追問的判準：帶指代詞/序數/承接詞，或極短的裸名詞片語。
+                    _is_followup = bool(_re.search(
+                        r"\b(?:it|its|that|this|those|these|them|the (?:first|second|"
+                        r"third|last|other|same|one)|first|second|third|last one|"
+                        r"and|what about|how about|then|also|too|again|"
+                        r"back|effect|now|instead)\b", user_text, _re.I))
+                    # 純數量/倉別追問（'20 more' / 'in central'）也算
+                    if not _is_followup and len(_w) <= 3:
+                        _is_followup = True
+                    if (1 <= len(_w) <= 6 and _is_followup
+                            and not _GATEKEEPER_BLACKLIST_HIT(user_text)
+                            # 疑問式閒聊（will you… / can you… / do you sell…）
+                            # 不是追問，照擋
+                            and not _re.search(
+                                r"^\s*(?:will|can|could|would|are|do)\s+you\b",
+                                user_text, _re.I)):
+                        # 亂敲判準：每個詞都要有母音（gjfkdls/asdkjhaskjdh 沒有）
+                        if all(_re.search(r"[aeiou]", _t, _re.I)
+                               for _t in _w if len(_t) >= 3):
+                            _gk_ctx_pass = True
+                            log.info(f"[守門員] context 追問放行: {user_text!r}")
+            if not _ic_st.get("active") and not _gk_ctx_pass \
+                    and not is_meaningful_input(user_text):
                 log.info(f"[守門員] 拒絕無意義輸入: {user_text!r}")
                 await push_display({"type": "trace", "stage": "rejected",
                                     "reason": "input matched no warehouse keywords"})
@@ -11704,8 +12011,20 @@ async def ws_handler(ws: WebSocket):
                                             _m_h2[0]["item"]["name"].lower() == _kw_h
                             except Exception:
                                 pass
+                    # ⚠️ EN build（branch_walk r1）：逐詞命中原本是 `any`，
+                    #   **任一詞中就放行** → LLM 對 'Drip Coffee Bags 20pcs'
+                    #   幻覺出 keyword='coffee filter'，靠 'coffee' 一個詞
+                    #   矇混過關 → 訪客點「咖啡袋」卻收到「咖啡濾紙」
+                    #   （選單分支誤配，畫面級破口）。
+                    #   英文改成：多詞 keyword 要求**每個實詞**都在原句，
+                    #   單詞 keyword 維持原邏輯。
+                    _kw_words = [w for w in _kw_h.split() if len(w) >= 3]
+                    if _is_mostly_english(user_text) and len(_kw_words) >= 2:
+                        _kw_partial = all(w in _txt_h for w in _kw_words)
+                    else:
+                        _kw_partial = any(w in _txt_h for w in _kw_words)
                     if _kw_h and not _fz_ok and not any(c in _txt_h for c in (_kw_h,)) \
-                            and not any(w in _txt_h for w in _kw_h.split() if len(w) >= 3):
+                            and not _kw_partial:
                         log.info(f"[anti-hallu] keyword={_kw_h!r} 不在原句 → 丟棄")
                         func_args.pop("keyword", None)
 
@@ -11735,6 +12054,16 @@ async def ws_handler(ws: WebSocket):
                         and not func_args.get("category")
                         and _is_mostly_english(user_text)):
                     _NOEX_STOP = {
+                        # 劇情批 r1：寒暄/時間/語氣詞不是商品名——'hi there
+                        #   busy today' 曾回「No item matching "busy today"」
+                        #   （訪客只是打招呼，卻被當成在查一個叫 busy today
+                        #   的商品）。這類詞要跟功能詞一樣列入停用。
+                        "busy", "today", "tomorrow", "yesterday", "morning",
+                        "afternoon", "evening", "night", "hello", "hey",
+                        "thanks", "thank", "please", "sorry", "welcome",
+                        "good", "great", "fine", "okay", "sure", "yeah",
+                        "well", "just", "really", "very", "quite", "maybe",
+                        "guys", "everyone", "team", "here", "hows", "doing",
                         "how", "many", "much", "whats", "what", "have", "has",
                         "there", "some", "any", "show", "tell", "give", "list",
                         "check", "look", "looking", "left", "stock", "stocks",
@@ -12246,6 +12575,33 @@ async def ws_handler(ws: WebSocket):
                                 "data": {},
                             }
                         await send({"type": "done", "result": _rca_ask})
+                        continue
+                    # ── EN build（劇情批 r1）：有**管理動詞**但工具判錯的句子
+                    #   不是搗蛋，該問清楚而不是拒絕。實測被誤拒的：
+                    #     'change central to 80'（LLM 判成 query_movement）
+                    #     'move 20 from the fullest to the emptiest'（判成 search_log）
+                    #   訪客講的是真實操作，只是少了商品名/設定項 → clarify
+                    #   問缺的那一塊，符合「不確定不猜」而非當搗蛋趕走。
+                    if not _rescue and _is_mostly_english(user_text) \
+                            and _GK_ACTION_RE.search(user_text):
+                        log.info(f"[gate] 管理動詞句缺參數 → clarify（原 {func_name}）: "
+                                 f"{user_text!r}")
+                        _act_ask = {
+                            "ok": True, "view": "clarify",
+                            "summary": ("I can do that — which item, and which "
+                                        "warehouse? e.g. \"set safety stock for "
+                                        "yoga mat to 80\" or \"move 20 yoga mat "
+                                        "from north to central\"."),
+                            "data": {
+                                "question": "Which item should I apply this to?",
+                                "options": ["item list", "whats running low"],
+                                "hint": "Say the item name, or tap an option",
+                            },
+                        }
+                        for ch in _act_ask["summary"]:
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": _act_ask})
                         continue
                     if _rescue:
                         func_name, func_args = _rescue
