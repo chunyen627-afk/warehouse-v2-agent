@@ -2627,6 +2627,19 @@ _EN_Q_STOP_INTENT_RE = _re.compile(
     _re.I)
 
 
+# ── EN build：英文「查詢語境」詞（C13b/C13c 的寫入意圖排除用）──────────
+#   中文版有一長串排除詞（嗎/什麼/哪些/多少/上週/紀錄…），英文版沒有 →
+#   查詢句被寫入校正劫走。⚠️ 只擋**沒有明確數量**的句子（C13c 的前提已含
+#   `not _has_explicit_qty`），所以 'north received 50 mouse' 這種真寫入
+#   句不受影響。
+_EN_QUERY_CTX_RE = _re.compile(
+    r"\b(?:which|what|whats|how many|how much|hows|any|anything|"
+    r"records?|history|logs?|list|stats|statistics|summary|report|"
+    r"compare|comparison|versus|vs|more|less|most|least|total|"
+    r"last week|this week|last month|this month|today|yesterday|"
+    r"recently|lately|did we|do we|have we|was there|were there|"
+    r"why|when|where|who)\b", _re.I)
+
 _EN_WRITE_STOP_RE = _re.compile(
     r"\b(?:put|into|onto|came|come|coming|arrived|arrive|customer|returned|"
     r"return|returns|took|take|taken|got|goes|went|sent|send|out of|"
@@ -4268,7 +4281,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 # 位置/疑問詞在場=查詢不是異動
                 "哪個", "在哪", "去哪", "到底",
                 # r28：「我同事叫我問濕紙巾庫存」的「叫」誤觸（問=查詢語境）
-                "問", "庫存"))):
+                "問", "庫存"))
+            # ── EN build（劇情批 r1）：上面整串「查詢語境排除詞」**全是中文**
+            #    → 英文查詢句一個都命中不了，被 C13c 當成寫入意圖劫走。
+            #    實測 'which week shipped more last week or this week'
+            #    （clf 已正確判 compare_periods）被改成 create_movement，
+            #    還反問「Which warehouse for "Elastic Sports Bra"?」＝
+            #    問跨期比較卻跳出不相干商品，後續追問全崩。
+            and not _EN_QUERY_CTX_RE.search(user_text)):
         import warehouse as _W13c
         # 先剝進出貨動詞/數字量詞再抽（r19：「北倉進貨零個耳機」kw 抽成
         # 「進貨零個耳機」比不到商品 → C13c 沒接到）
@@ -5154,7 +5174,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _oov_stop = {
                          # 寒暄/時間/語氣詞（同 _NOEX_STOP，兩處要同步——
                          #   劇情批 r1：'hi there busy today' 被當商品查詢）
-                         "busy", "today", "tomorrow", "yesterday", "morning",
+                         # r1：'whats worth watching in stock' 的 watching /
+                        #   worth 被當商品名（訪客問的是「有什麼要注意的」）
+                        "watching", "watch", "worth", "noting", "note",
+                        "interesting", "important", "urgent", "attention",
+                        "busy", "today", "tomorrow", "yesterday", "morning",
                          "afternoon", "evening", "night", "hello", "hey",
                          "thanks", "thank", "please", "sorry", "welcome",
                          "good", "great", "fine", "okay", "sure", "yeah",
@@ -6497,6 +6521,34 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
     回傳 (new_func_name, new_func_args) 或原值。
     """
     _ctx = _ctx_for(vid)
+    # ── EN build（劇情批 r1）：**全域功能追問**（沒有商品，是追問上一輪的
+    #   那份結果）。'which week shipped more…' → period_compare 之後，
+    #   'by how many units' 是在問同一份比較的細節，但 carry-over 只處理
+    #   「商品追問」→ 這句掉到全店概覽（答非所問）。
+    #   → 上一輪是全域功能且本句是純追問（無商品、無新意圖）→ 重跑該功能。
+    if (_is_mostly_english(user_text)
+            and _ctx.get("last_func") in ("compare_periods", "list_hot_items",
+                                          "list_low_stock", "compare_warehouses",
+                                          "list_expiring_items")
+            and not func_args.get("keyword")
+            # 純追問＝**極短且無動作詞**。'by how many units' / 'and then'
+            #   算；'restock the first one how many should i order' 不算
+            #   （有 restock/order 動作詞，訪客要的是別的功能）。
+            and len(user_text.split()) <= 5
+            and not _GK_ACTION_RE.search(user_text)
+            and not _re.search(r"\b(?:order|buy|purchase|po|create|make|"
+                               r"generate|run|schedule|alert|notify)\b",
+                               user_text, _re.I)
+            and (_CTX_FOLLOWUP_RE_EN.search(user_text.strip())
+                 or _re.search(r"^\s*(?:by |and |so |then )?how (?:many|much)\b",
+                               user_text, _re.I))):
+        # 本句自己有明確功能意圖時不搶（'whats expiring' 該走自己的路）
+        _own_intent = any(_re.search(_p, user_text, _re.I)
+                          for _p, _v in _CTX_FUNC_HINT_RE_EN)
+        if not _own_intent and func_name != _ctx["last_func"]:
+            log.info(f"[ctx] 全域功能追問 {func_name!r} → 沿用上一輪 "
+                     f"{_ctx['last_func']!r}: {user_text!r}")
+            return _ctx["last_func"], {}
     if not _ctx.get("last_sku"):
         return func_name, func_args
     # r76：排程/腳本/警示/採購管理 func 絕不被追問機制改寫——「排程 每週一早上
@@ -9227,6 +9279,7 @@ async def ws_handler(ws: WebSocket):
                                    and not any(w in user_text.lower() for w in _BL_NEVER_EXEMPT))
             _bl_hit_ws = None if _desc_exempt_ws else next(
                 (b for b in _GATEKEEPER_BLACKLIST if b in user_text.lower()), None)
+            _gk_admin_pass = False   # 黑名單豁免（排程/警示管理句）→ 守門員也要放行
             # r62：倉管退貨句豁免（同 is_meaningful_input 的豁免，兩處要同步）
             #   r101：`\d` 只認阿拉伯數字 → 「退貨二十個滑鼠」（中文數字）漏豁免
             #   被 rejected（真人語音 #31）。改認阿拉伯＋中文數字，與 256 行同步。
@@ -9261,6 +9314,10 @@ async def ws_handler(ws: WebSocket):
                                        user_text, _re.I)):
                 log.info(f"[gate] 黑名單 {_bl_hit_ws!r} 豁免：排程/警示管理句 → 放行")
                 _bl_hit_ws = None
+                # ⚠️ 兩道關卡：黑名單豁免後**還有守門員**，只修前者無效
+                #   （實測 'delete the one i just made' 豁免通過後仍被
+                #   守門員拒絕）。既然已判定是合法管理句，直接標記放行。
+                _gk_admin_pass = True
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",
@@ -9510,6 +9567,7 @@ async def ws_handler(ws: WebSocket):
                             _gk_ctx_pass = True
                             log.info(f"[守門員] context 追問放行: {user_text!r}")
             if not _ic_st.get("active") and not _gk_ctx_pass \
+                    and not _gk_admin_pass \
                     and not is_meaningful_input(user_text):
                 log.info(f"[守門員] 拒絕無意義輸入: {user_text!r}")
                 await push_display({"type": "trace", "stage": "rejected",
@@ -11688,7 +11746,15 @@ async def ws_handler(ws: WebSocket):
                     log.info("[Pre-C-Sched] 取消警示意圖 → list_alerts（列出讓訪客選）")
                 elif (("排程" in user_text and any(w in user_text for w in ("取消", "刪除", "刪掉", "停掉", "關閉", "移除", "砍掉")))
                       or (_en_sched and _en_cancel_verb
-                          and _re.search(r"\bschedules?\b", user_text, _re.I))):
+                          and _re.search(r"\bschedules?\b", user_text, _re.I))
+                      # 代詞式取消（'delete the one i just made'）——上一輪
+                      #   剛列過排程/剛建過排程時，指的就是排程。
+                      #   列清單讓訪客指名（不做批量刪除，同中文版 conv100-r7）。
+                      or (_en_sched and _en_cancel_verb
+                          and _re.search(r"\b(?:the\s+)?(?:one|that|it|this)\b",
+                                         user_text, _re.I)
+                          and (_ctx_by_vid.get(vid) or {}).get("last_view")
+                              in ("schedule_list", "schedule_confirm", "schedule_done"))):
                     # 「取消所有排程」→ 先列排程讓訪客指名（不做批量刪除，conv100-r7）
                     func_name = "list_schedules"
                     func_args = {}
@@ -12054,6 +12120,10 @@ async def ws_handler(ws: WebSocket):
                         and not func_args.get("category")
                         and _is_mostly_english(user_text)):
                     _NOEX_STOP = {
+                        # r1：'whats worth watching in stock' 的 watching/worth
+                        #   被當商品名（訪客問的是「有什麼要注意的」）
+                        "watching", "watch", "worth", "noting", "note",
+                        "interesting", "important", "urgent", "attention",
                         # 劇情批 r1：寒暄/時間/語氣詞不是商品名——'hi there
                         #   busy today' 曾回「No item matching "busy today"」
                         #   （訪客只是打招呼，卻被當成在查一個叫 busy today
@@ -12257,7 +12327,16 @@ async def ws_handler(ws: WebSocket):
                     _oov_hint = None
 
                 # Context carry-over：追問句補 keyword/warehouse（按訪客 vid 隔離）
+                _pre_followup_func = func_name
                 func_name, func_args = _resolve_followup(vid, user_text, func_name, func_args)
+                # ⚠️ 坑 4：carry-over 改了 func 就要標 hard，否則下游 C18
+                #   （clf 仲裁）會拿 clf 的原判斷蓋回去。實測
+                #   'by how many units' 被 carry-over 正確導向 compare_periods，
+                #   卻被 clf(query_inventory conf=1.00) 覆蓋回全店概覽——
+                #   clf 看的是**單句**，看不到上一輪的 context，這種句子
+                #   本來就只有 carry-over 判得準。
+                if func_name != _pre_followup_func:
+                    _hard = True
                 corrected_call = f"{func_name}({func_args})"
 
                 # ── C18：clf mismatch 檢查（hard_corrected 時不蓋過）──
@@ -12582,6 +12661,31 @@ async def ws_handler(ws: WebSocket):
                     #     'move 20 from the fullest to the emptiest'（判成 search_log）
                     #   訪客講的是真實操作，只是少了商品名/設定項 → clarify
                     #   問缺的那一塊，符合「不確定不猜」而非當搗蛋趕走。
+                    # ── 先試 context 補齊（劇情批 r1 S6）：
+                    #   'whats the safety stock for cling film' → config_read
+                    #   之後，'change central to 80' 指的就是**那個商品**。
+                    #   直接 clarify 問「which item」等於忘了訪客剛講過，
+                    #   設定流程整條走不完。
+                    if not _rescue and _is_mostly_english(user_text) \
+                            and _GK_ACTION_RE.search(user_text):
+                        _cfg_ctx = _ctx_by_vid.get(vid) or {}
+                        _cfg_val = _re.search(r"\b(?:to|=)\s*(\d+)\b", user_text, _re.I)
+                        _cfg_wh = _re.search(r"\b(north|central|south)\b",
+                                             user_text, _re.I)
+                        if (_cfg_ctx.get("last_sku") and _cfg_val
+                                and _cfg_ctx.get("last_func") in
+                                ("manage_config", "query_inventory")):
+                            _rescue = ("manage_config", {
+                                "action": "set",
+                                "key": "safety stock",
+                                "item": _cfg_ctx["last_sku"],
+                                "value": _cfg_val.group(1),
+                                **({"warehouse": _cfg_wh.group(1).lower()}
+                                   if _cfg_wh else {}),
+                            })
+                            log.info(f"[gate] 管理句用 context 補齊 → manage_config"
+                                     f"{{{_cfg_ctx['last_sku']}={_cfg_val.group(1)}}}: "
+                                     f"{user_text!r}")
                     if not _rescue and _is_mostly_english(user_text) \
                             and _GK_ACTION_RE.search(user_text):
                         log.info(f"[gate] 管理動詞句缺參數 → clarify（原 {func_name}）: "
