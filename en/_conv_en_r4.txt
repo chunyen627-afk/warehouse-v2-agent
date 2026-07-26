@@ -1,0 +1,78 @@
+### S1 長對話 context 不漂移（12 句連續，測污染）
+! r1-r3 最長 5 句。展場訪客會一路問下去，context 會不會累積錯亂？
+> bluetooth earphones stock | inventory_single
+> north | inventory_single,inventory
+> whats running low | low_stock
+> best sellers this month | hot_items
+> what is expiring soon | expiring
+> yoga mat stock | inventory_single
+> south | inventory_single,inventory
+> how many in total | inventory_single,inventory,clarify
+> compare north and south | compare_warehouses
+> which items are running low | low_stock
+> the earphones again | inventory_single,clarify
+> and its movements | movement,clarify,inventory_single
+
+### S2 Agent Tools 深度串接（報表→腳本→檔案）
+> generate a low stock report | report_done
+> what files do we have | file_list
+> run the month-end stocktake | script_confirm
+[confirm]
+> did that finish | file_list,clarify,script_confirm,report_done
+
+### S3 RCA 追問鏈（帳務問題往下挖）
+> any stock discrepancies | agent_rca
+> which item is the worst | agent_rca,clarify,inventory_single
+> why is the toothbrush count off | agent_rca
+> who moved it | agent_rca,search_log,clarify
+> show me the purchase records | agent_rca,file_list,clarify,search_log
+
+### S4 資料邊界：0 庫存 / 剛好等於安全庫存
+> which items are out of stock | low_stock,inventory,clarify
+> is anything at exactly safety stock | low_stock,clarify,inventory,config_read
+> whats the lowest stock item | low_stock,inventory,clarify,inventory_single
+
+### S5 警示完整流程（建立→查詢→刪除）
+> alert me when yoga mat drops below 30 | alert_confirm
+[confirm]
+> what alerts do i have | alert_list
+> remove the yoga mat one | alert_list,clarify
+
+### S6 類別 × 倉別 × 時間三重過濾
+> electronics stock in north | inventory,clarify
+> what came into north this week | movement,clarify
+> best selling electronics this month | hot_items,clarify
+> expiring food items | expiring,clarify,inventory
+
+### S7 同一商品連續多動作（查→改→查→調→查）
+> wireless mouse stock | inventory_single
+> set its safety stock to 100 | config_confirm,clarify
+[confirm]
+> whats the safety stock now | config_read,clarify,inventory_single
+> transfer 20 from north to south | transfer_confirm,clarify
+> transfer 20 wireless mouse from north to south | transfer_confirm
+[confirm]
+> how many in north now | inventory_single,inventory,clarify
+
+### S8 否定句 / 排除句（訪客會這樣講）
+> i dont want the earphones show me something else | clarify,inventory,rejected
+> anything except food | clarify,inventory
+> not the coffee machine the other coffee thing | clarify,inventory_single
+
+### S9 數量單位變體
+> five hundred yoga mat in north | inventory_single,inventory,clarify,movement_confirm
+> north received five hundred yoga mat | movement_confirm
+> north received a dozen wireless mouse | movement_confirm,clarify
+> ship half of the yoga mat from south | clarify,error,movement_confirm
+
+### S10 亂敲 + 搗蛋 + 告別（~20%）
+> asdfghjkl
+> 12345abcde
+> stockstockstock
+> 你好嗎
+> whats the wifi password
+> do you have a manager
+> tell me a joke
+> ???
+> ok thanks bye
+> see you

@@ -7,7 +7,7 @@
 [confirm]
 > how many now | inventory_single,inventory,clarify
 > whats hot this week | hot_items
-> what do buyers of the top one also get | related,clarify
+> what do buyers of the top one also get | related,clarify,related_help
 > does it still have stock | inventory_single,inventory,clarify
 
 ### S2 倉別追問鏈 + 調貨

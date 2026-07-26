@@ -1097,6 +1097,9 @@ _RCA_INTENT_WORDS = (
     "don't match", "doesnt match", "mismatch", "not match", "count off",
     "numbers off", "looks off", "seems off", "is off", "wrong", "missing",
     # r3：訪客的抱怨式講法（'the numbers dont look right' / 'this is wrong'）
+    #   ⚠️ 複驗回歸：**不可放通用詞**——'back' 曾讓 'ok back to the earphones'
+    #   被 clf 判成 search_log(0.94) → 回 RCA 報告（訪客只是想切回那個商品）。
+    #   RCA 詞要**帳務語境專屬**，泛用動詞/介副詞一律不收。
     "look right", "looks right", "look correct", "seem right", "seems right",
     "not right", "isnt right", "isn't right", "doesnt look", "doesn't look",
     "off by", "out by", "no sense", "make sense",
@@ -2692,6 +2695,61 @@ def _en_unglue(text: str) -> str:
     return _EN_GLUED_STOP_RE.sub(lambda m: m.group(0) + " ", text)
 
 
+# ── EN build（劇情批 r4 S9）：英文數字詞 → 阿拉伯數字 ────────────────────
+#   'five hundred yoga mat in north' / 'a dozen wireless mouse' 的數量抽不到
+#   → 寫入句被當成查詢（實測回了庫存數字而非開卡）。
+#   ⚠️ 語音接上後更重要：ASR 常吐 'fifty' 而非 '50'。
+_EN_NUM_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+    "seventy": 70, "eighty": 80, "ninety": 90, "hundred": 100,
+    "dozen": 12, "couple": 2, "pair": 2,
+}
+# ⚠️ 誤傷防護（實測踩到）：
+#   ①'the one i mentioned' 的 one 是**指代詞**不是數字 → 前面接 the/that/this 不轉
+#   ②'a pair of socks' 的 pair 是**商品單位** → 後面接 of 不轉
+#   ③'couple'/'pair'/'dozen' 只在**明確數量語境**（前有 a/the 且後接名詞）才轉
+_EN_NUM_RE = _re.compile(
+    r"(?<!\bthe\s)(?<!\bthat\s)(?<!\bthis\s)(?<!\bwhich\s)"
+    r"\b(?:a\s+)?((?:" + "|".join(_EN_NUM_WORDS) + r")"
+    r"(?:[\s-]+(?:" + "|".join(_EN_NUM_WORDS) + r"))*)\b(?!\s+of\b)", _re.I)
+
+
+def _en_words_to_num(text: str) -> str:
+    """把英文數字詞換成阿拉伯數字（'five hundred'→500、'a dozen'→12）。"""
+    def _conv(m):
+        # ④ 裸 'one' 當**指代**時不轉（'the first one' / 'the most urgent one'
+        #   / 句尾的 one）——數量語境的 one 後面一定接商品名。
+        _g = m.group(1).lower()
+        if _g == "one":
+            _after = text[m.end():].strip()
+            if not _after or not _re.match(r"[a-z]", _after, _re.I):
+                return m.group(0)      # 句尾 → 指代
+            _before = text[:m.start()].strip().lower()
+            if _re.search(r"\b(?:first|second|third|last|other|next|same|"
+                          r"worst|best|biggest|smallest|most|least|urgent|"
+                          r"cheapest|newest|oldest)$", _before):
+                return m.group(0)      # 形容詞 + one → 指代
+        parts = _re.split(r"[\s-]+", m.group(1).lower())
+        total = cur = 0
+        for w in parts:
+            v = _EN_NUM_WORDS.get(w)
+            if v is None:
+                return m.group(0)
+            if v == 100:
+                cur = (cur or 1) * 100
+            elif v >= 20 and cur and cur < 20:
+                return m.group(0)          # 'two twenty' 這種不合理組合不動
+            else:
+                cur += v
+        total += cur
+        return str(total) if total else m.group(0)
+    return _EN_NUM_RE.sub(_conv, text)
+
+
 def _en_query_core(text: str) -> str:
     """剝掉英文查詢虛詞，只留商品詞。
 
@@ -3889,7 +3947,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
 
     # C-excl（r48）：排除式否定（衛生紙不要 其他都查/除了啤酒 什麼都好）——clf 高信心
     # route 曾帶著被排除的商品直查＝語意反轉。排除式總覽不支援 → 誠實說明。
-    _cexcl = _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要|通通|全列|列出來)', user_text)
+    # EN build（r4 S8）：排除式否定的英文講法——原正則全中文 → 英文句
+    #   'i dont want the earphones show me something else' 直接**回了耳機**
+    #   ＝語意反轉（訪客明說不要那個）。
+    _cexcl = _re.search(r'(?:不要|除了|排除)(?!北|中|南).{0,6}?(?:其他|以外|什麼都|都查|都好|都要|通通|全列|列出來)', user_text) \
+        or (_is_mostly_english(user_text) and _re.search(
+            r"\b(?:dont|don't|do not|not)\s+(?:want|need|like)\b.{0,40}?"
+            r"\b(?:something else|anything else|other|others|else)\b"
+            r"|\b(?:except|other than|apart from|besides|excluding)\b"
+            r"|\bnot\s+the\b.{0,30}?\b(?:the other|another|something else)\b",
+            user_text, _re.I))
     if _cexcl and func_name in ("query_inventory", "list_low_stock", "list_hot_items"):
         import warehouse as _W_cex
         _cex_kw = _extract_sku_keyword(user_text)
@@ -4765,6 +4832,26 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # ── C4: 熱銷 / 滯銷意圖詞 → list_hot_items ──
     is_hot = any(kw in user_text for kw in _HOT_INTENT_WORDS_HOT) or \
              any(kw in text_low for kw in _HOT_INTENT_WORDS_HOT)
+    # ⚠️ EN build（守衛回歸 891→887）：**意圖詞被商品名吸收**時不算意圖。
+    #   'hot cocoa availability' 的 hot 是 Hot Cocoa Powder 的一部分，
+    #   卻讓 is_hot=True → C4-prod 把庫存查詢轉成該商品的進出貨。
+    #   在源頭排除，下游（C4/C4b/C4-prod）全部受益。
+    #   ⚠️ 不能只用字面比對（'whats the hot cooa count' 錯字就漏掉）→
+    #   改判「抽出的商品名本身含該意圖詞」＝意圖詞被商品名吸收。
+    if is_hot and _is_mostly_english(user_text):
+        try:
+            import warehouse as _W_hn
+            _hn_kw = _extract_sku_keyword(user_text)
+            _hn_m = _W_hn.match_items(_hn_kw) if _hn_kw else []
+            if _hn_m and _hn_m[0].get("score", 0) >= 6:
+                _hn_name = _hn_m[0]["item"]["name"].lower()
+                if any(w.lower() in _hn_name for w in _HOT_INTENT_WORDS_HOT
+                       if w.isascii() and len(w) >= 3):
+                    log.info(f"[C4] 意圖詞被商品名吸收（{_hn_m[0]['item']['name']}）"
+                             f"→ 不算熱銷意圖: {user_text!r}")
+                    is_hot = False
+        except Exception:
+            pass
     is_slow = any(kw in user_text for kw in _HOT_INTENT_WORDS_SLOW) or \
               any(kw in text_low for kw in _HOT_INTENT_WORDS_SLOW)
     # 連帶意圖詞在場時熱銷不搶——「帳篷跟什麼一起賣最多」的「賣最多」是
@@ -4842,6 +4929,7 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         #   整句只有那個意圖詞時，clf 的判斷才是對的。
         _c4_solo_intent = (_is_mostly_english(user_text)
                            and len(user_text.strip().strip("?.!,").split()) <= 1)
+        # （'hot cocoa' 這類「意圖詞被商品名吸收」已在 is_hot 源頭排除）
         if (_c4_pm and _c4_pm[0].get("score", 0) >= 3
                 and not _c4_solo_intent
                 and _kw_grounded(_c4_prod, user_text)):
@@ -6543,6 +6631,13 @@ _CTX_FOLLOWUP_RE_EN = _re.compile(
     # 序數指代：'the first one' / 'the second'
     # ⚠️ 'the \w+ ones?' 要排在 'the (first|…)' **前面**（交替分支左優先不回溯，
     #   否則 'the most urgent one' 不會命中——r2 S5 實測）
+    # ⚠️ 最高級（the worst）必須排在 'the \w+ ones?' **之前**——交替分支
+    #   左優先不回溯：'the worst' 先被 'the \w+\s+ones?' 嘗試（那需要
+    #   「詞+空白」），worst 後沒空白 → 失敗後整個 the- 起點就放棄。
+    #   （r2 S5 同款坑，r4 加在後面又踩一次。）
+    r"the\s+(?:worst|best|biggest|largest|smallest|highest|lowest|cheapest|"
+    r"priciest|newest|oldest|most|least)\b|"
+    r"which\s+(?:item|one)\b|"
     r"the\s+(?:\w+\s+){1,3}ones?|"
     r"the\s+(?:first|second|third|fourth|fifth|last|other|next)|"
     r"earlier|just now|last time|previous)\b", _re.I)
@@ -6642,7 +6737,20 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
     if (_is_mostly_english(user_text)
             and _ctx.get("last_func") in ("compare_periods", "list_hot_items",
                                           "list_low_stock", "compare_warehouses",
-                                          "list_expiring_items")
+                                          "list_expiring_items",
+                                          # r4 S3：RCA 清單也要能追問
+                                          #   （'any stock discrepancies' →
+                                          #   'which item is the worst'）
+                                          # ⚠️ 複驗回歸：RCA 承接**只限最高級
+                                          #   追問**（which/worst/最嚴重），
+                                          #   否則 RCA 之後任何追問都被吸過去
+                                          #   （'ok back to the earphones' /
+                                          #   'did the yoga mat one go through'
+                                          #   全變成 agent_rca）。
+                                          "search_log")
+            and (_ctx.get("last_func") != "search_log"
+                 or _re.search(r"\b(?:which|worst|biggest|largest|most|"
+                               r"top|first)\b", user_text, _re.I))
             and not func_args.get("keyword")
             # 純追問＝**極短且無動作詞**。'by how many units' / 'and then'
             #   算；'restock the first one how many should i order' 不算
@@ -6654,7 +6762,25 @@ def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
                                user_text, _re.I)
             and (_CTX_FOLLOWUP_RE_EN.search(user_text.strip())
                  or _re.search(r"^\s*(?:by |and |so |then )?how (?:many|much)\b",
-                               user_text, _re.I))):
+                               user_text, _re.I))
+            # ⚠️ r4 S1：**本句自帶明確功能詞就不搶**。'best sellers this month'
+            #   因為含 'this month'（我列的追問詞）被搶去沿用上一輪的
+            #   low_stock，但 clf 已正確判 list_hot_items(conf=1.00)。
+            #   下面 _own_intent 只認 movement/related/expiring 三類，
+            #   漏了熱銷/缺貨/比較 → 在進入前先擋掉。
+            and not _re.search(
+                r"\b(?:best sellers?|top sellers?|hot items?|bestsell\w*|"
+                r"selling|slow (?:movers?|moving)|dead stock|"
+                r"running low|low stock|out of stock|restock|reorder|"
+                r"expir\w*|shelf life|compare|comparison|versus|vs|"
+                # r4 複驗回歸：**明確功能詞**也不可被承接——
+                #   'does it still have stock' 是問庫存，卻被承接成熱銷榜；
+                #   'move 20 from the fullest…' 是調貨，卻被承接成 RCA。
+                #   carry-over 只該接**沒有自己意圖**的純追問。
+                r"stock|stocks|inventory|count|left|remaining|"
+                r"move|transfer|ship|receive|received|add|remove|"
+                r"discrepanc\w*|anomal\w*|audit|reconcil\w*)\b",
+                user_text, _re.I)):
         # 本句自己有明確功能意圖時不搶（'whats expiring' 該走自己的路）
         _own_intent = any(_re.search(_p, user_text, _re.I)
                           for _p, _v in _CTX_FUNC_HINT_RE_EN)
@@ -6903,9 +7029,25 @@ def _ctx_absorb(vid, result: dict):
     #   會打壞下游的 keyword 抽取（「瑜珈墊 6mm搭配什麼賣」→ 反問「你想查什麼」，
     #   但「瑜珈墊搭配什麼賣」是好的）。context 只留可辨識的主幹。
     if isinstance(kw, str):
-        _kw_core = _re.split(r"[ 　]", kw.strip())[0]
-        if _kw_core and len(_kw_core) >= 2:
-            kw = _kw_core
+        # 🚨 EN build（劇情批 r4 S7）：這段「取第一個空白前的詞」是**中文導向**——
+        #   中文商品名沒有空白（「瑜珈墊 6mm」只有規格尾巴前有），取第一段
+        #   等於取全名；**英文商品名全部用空白分隔**，'Wireless Mouse' 會被
+        #   截成 'Wireless' → 下一句追問 match 到 Wireless Bluetooth
+        #   Earphones ＝ **context 從一開始就是錯的**。
+        #   實測後果（危險）：'wireless mouse stock' → 'set its safety stock
+        #   to 100' 改到了**耳機**的安全庫存。
+        #   英文改成只剝**規格尾巴**（純數字/單位詞），保留完整商品名。
+        if _is_mostly_english(kw):
+            _kw_core = _re.sub(
+                r"\s+(?:\d+(?:\.\d+)?\s*(?:mm|cm|m|kg|g|ml|l|pcs|pair|"
+                r"inch|in|oz|mah|w|x\d+)?|\d+x\d+\w*)\s*$", "", kw.strip(),
+                flags=_re.I).strip()
+            if len(_kw_core) >= 3:
+                kw = _kw_core
+        else:
+            _kw_core = _re.split(r"[ 　]", kw.strip())[0]
+            if _kw_core and len(_kw_core) >= 2:
+                kw = _kw_core
     # r34：清單類（缺貨/熱銷）的 data 是列表 → 取榜首，讓「最急的那個還剩幾個」
     #   「第一名還有多少」接得住（過去回「找不到商品『最急』」）。
     # r59：generic config_read（10 項無排序）的 rows[0] 是任意商品，不可當榜首吸——
@@ -8853,6 +8995,15 @@ async def ws_handler(ws: WebSocket):
                 continue
             _raw_text = user_text
             user_text = _normalize_typos(user_text)   # 同音錯字正規化（r17，最早套用）
+            # EN build（r4 S9）：英文數字詞 → 阿拉伯數字，**必須在寫入意圖
+            #   判定（C13b/C13c 抽數量）之前**，否則 'five hundred yoga mat'
+            #   抽不到數量 → 被當查詢回庫存數字（實測）。
+            #   語音接上後更關鍵：ASR 常吐 'fifty' 而非 '50'。
+            if _is_mostly_english(user_text):
+                _num_norm = _en_words_to_num(user_text)
+                if _num_norm != user_text:
+                    log.info(f"[EN num] {user_text!r} → {_num_norm!r}")
+                    user_text = _num_norm
             # 錯字被修好 → 告訴前端，讓對話氣泡顯示「修復後」的文字。
             #   展場價值：訪客打錯／ASR 聽錯時，畫面若顯示原始錯字會讓人以為
             #   系統沒聽懂；顯示修好的版本才看得出「錯字容錯」真的在運作。
@@ -9719,6 +9870,11 @@ async def ws_handler(ws: WebSocket):
                     #   不會再試後面的 'the \w+ one'（實測 followup=False）。
                     _is_followup = bool(_re.search(
                         r"\b(?:it|its|that|this|those|these|them|"
+                        # ⚠️ 最高級排在 ones? 之前（交替分支左優先不回溯，
+                        #   同 _CTX_FOLLOWUP_RE_EN 的修正）
+                        r"the (?:worst|best|biggest|largest|smallest|highest|"
+                        r"lowest|cheapest|priciest|newest|oldest|most|least)\b|"
+                        r"which (?:item|one)\b|"
                         r"the (?:\w+ ){1,3}ones?|"
                         r"the (?:first|second|third|last|other|same|one)|"
                         r"first|second|third|last one|"
@@ -12531,13 +12687,46 @@ async def ws_handler(ws: WebSocket):
                 # Context carry-over：追問句補 keyword/warehouse（按訪客 vid 隔離）
                 _pre_followup_func = func_name
                 func_name, func_args = _resolve_followup(vid, user_text, func_name, func_args)
+
+                # ── 🚨 EN build（劇情批 r4 S7）：**config set 的指代必須接對商品**
+                #   實測危險破口：'wireless mouse stock' 之後說
+                #   'set its safety stock to 100' → 系統改了 **[all items] 180 筆**
+                #   （its 沒接到 context，一路掉到「全庫套用」）。
+                #   寫入類誤傷全庫比答錯嚴重得多 → 有指代詞卻沒有明確商品時：
+                #     ①用 context 的 last_sku ②接不到就**反問**，絕不套用全庫。
+                if (func_name == "manage_config"
+                        and func_args.get("action") == "set"
+                        and _is_mostly_english(user_text)
+                        and not str(func_args.get("item") or "").strip()):
+                    _pron = _re.search(r"\b(?:its|it|that|this|the same)\b",
+                                       user_text, _re.I)
+                    if _pron:
+                        _cfg_sku = (_ctx_by_vid.get(vid) or {}).get("last_sku")
+                        if _cfg_sku:
+                            func_args["item"] = _cfg_sku
+                            log.info(f"[cfg-pron] 指代 {_pron.group(0)!r} → "
+                                     f"item={_cfg_sku!r}（避免誤套全庫）")
+                        else:
+                            log.info(f"[cfg-pron] 指代但無 context → 反問: {user_text!r}")
+                            _cp_msg = ('Which item should I change? Say the item '
+                                       'name, e.g. "set safety stock for yoga mat '
+                                       'to 100".')
+                            for ch in _cp_msg:
+                                await send({"type": "token", "text": ch})
+                                await asyncio.sleep(_TK_DELAY.get())
+                            await send({"type": "done", "result": {
+                                "ok": True, "view": "clarify", "summary": _cp_msg,
+                                "data": {"question": _cp_msg,
+                                         "options": ["item list"], "hint": ""}}})
+                            continue
                 # ⚠️ 坑 4：carry-over 改了 func 就要標 hard，否則下游 C18
                 #   （clf 仲裁）會拿 clf 的原判斷蓋回去。實測
                 #   'by how many units' 被 carry-over 正確導向 compare_periods，
                 #   卻被 clf(query_inventory conf=1.00) 覆蓋回全店概覽——
                 #   clf 看的是**單句**，看不到上一輪的 context，這種句子
                 #   本來就只有 carry-over 判得準。
-                if func_name != _pre_followup_func:
+                _ctx_hard_followup = (func_name != _pre_followup_func)
+                if _ctx_hard_followup:
                     _hard = True
                 corrected_call = f"{func_name}({func_args})"
 
@@ -12805,7 +12994,19 @@ async def ws_handler(ws: WebSocket):
                         log.info(f"[dispatch-ws] keyword 清理: 「{_raw2}」→「{_ck2}」")
                         func_args = {**func_args, _kw_f2: _ck2}
                 # ── 意圖閘門：LLM 對閒聊句幻覺出寫入/複雜工具時擋下（第18輪）──
-                if not _tool_intent_ok(func_name, user_text):
+                # ⚠️ EN build（r4 S3）：**carry-over 的硬決定不受意圖閘門管**。
+                #   'any stock discrepancies' → 'which item is the worst' 是
+                #   追問同一份 RCA 清單，carry-over 已正確導向 search_log，
+                #   但該句沒有 RCA 意圖詞（意圖在**上一輪**）→ 被閘門 rejected。
+                #   閘門是為了擋「LLM 對閒聊句亂輸出工具」，而 carry-over 是
+                #   看得到 context 的判斷，比單句閘門更可信。
+                #   ⚠️ 收緊（複驗回歸）：`_hard` 涵蓋太廣（校正層各處都會設），
+                #   用它豁免等於**把整道意圖閘門關掉** → clf 誤判
+                #   'ok back to the earphones'→search_log(0.94) 直接放行回 RCA
+                #   （舊版是被這道閘門擋下的）。改成只認
+                #   **carry-over 剛改過 func** 這一種情況。
+                if not _tool_intent_ok(func_name, user_text) \
+                        and not _ctx_hard_followup:
                     # reject 前先試降級救援（口語前綴害 LLM 輸出錯 function，RPI5 v21）
                     _rescue = _intent_guard_rescue(func_name, func_args, user_text)
                     if not _rescue and _re.search(r'[進出]的?貨', user_text):
