@@ -43,14 +43,23 @@ VIEW2ACTION = {
     "script_confirm":    "run_script",
 }
 SUSPICIOUS_VIEWS = {"error"}
+# ⚠️ EN build（r5）：原本這兩組全是中文 → 英文版跑 r1-r4 時**一句可疑都標不出來**，
+#   ⚠️ 標記形同虛設（所以「審到畫面、讀全文」才是唯一防線，見 review_to_the_screen）。
+#   這裡補英文對應詞，讓工具至少能標出最明顯的醜回答。
 SUSPICIOUS_TEXT = ("看不懂", "聽不懂", "我不太理解", "無法理解", "不知道你",
-                   "請再說一次", "哪個設定項", "我不確定")
+                   "請再說一次", "哪個設定項", "我不確定",
+                   # —— EN ——
+                   "I'm not sure", "I am not sure", "not quite sure",
+                   "please rephrase", "Please rephrase",
+                   "say that again", "Could not make out",
+                   "Which setting", "I don't understand", "do not understand")
+# 「擋下」型錯誤是正確行為（error view 是刻意的），不算破口
+_LEGIT_ERROR = ("庫存不足", "不足", "Not enough stock", "not enough stock")
 
 
 def looks_bad(view: str, text: str) -> str:
     if view in SUSPICIOUS_VIEWS:
-        # 「庫存不足 → 擋下」是正確行為（error view 是刻意的），不算破口
-        if "庫存不足" in text or "不足" in text:
+        if any(s in text for s in _LEGIT_ERROR):
             return ""
         return f"view={view}"
     for s in SUSPICIOUS_TEXT:
@@ -88,6 +97,11 @@ def parse_script(path: Path):
             expect = parts[1] if len(parts) >= 2 else ""
             must = parts[2] if len(parts) >= 3 else ""
             cur[1].append(("say", text, expect, must, who))
+        elif line.startswith("[para]"):
+            # r5：[para] … [/para] 之間的句子**同時**送出（真並發，驗 vid 隔離）
+            cur[1].append(("para",))
+        elif line.startswith("[/para]"):
+            cur[1].append(("endpara",))
         elif line.startswith("[confirm"):
             # [confirm] 或 [confirm@B]
             who = "A"
@@ -170,6 +184,93 @@ async def recv_result(ws, timeout=60):
             return (m.get("result") or {}), "".join(toks), llm_hit
 
 
+async def _ensure_conn(conns, who, uri, ctx):
+    """取得（必要時建立）訪客 who 的連線。握手逾時會自動重連——server 同時被別的
+    測試打時 opening handshake 偶爾逾時，那是連線層抖動，不該算成劇本失敗。"""
+    if who not in conns:
+        for _try in range(3):
+            try:
+                conns[who] = [await websockets.connect(uri, ssl=ctx, max_size=None), {}]
+                break
+            except Exception:
+                if _try == 2:
+                    raise
+                await asyncio.sleep(1.5 * (_try + 1))
+    return conns[who]
+
+
+async def _do_step(st, conns, name, quiet, multi):
+    """送出一個 step、收結果、評分。回傳 (fails, sus, llm_hit, report)。
+
+    report = (mark, label, view, ans, lat, why_fail, why_sus)，交由呼叫端印出——
+    並發模式下必須等整組跑完才印，否則多位訪客的輸出會交錯難讀。
+    """
+    fails, sus = [], []
+    who = st[-1]
+    ws, last = conns[who]
+    tag = "" if who == "A" and not multi else f"[{who}] "
+
+    if st[0] == "confirm":
+        view = last.get("view", "")
+        action = VIEW2ACTION.get(view)
+        if not action:
+            fails.append((name, f"{tag}[confirm]",
+                          f"上一輪 view={view or '?'} 不是確認卡，無法按確認"))
+            return fails, sus, False, ("✗", f"{tag}[confirm]", view or "?", "", 0,
+                                       f"上一輪 view={view or '?'} 沒有確認卡", "")
+        payload = {"type": "confirm", "action": action, "pending": last.get("data", {})}
+        if action == "run_script":
+            payload["script_id"] = (last.get("data") or {}).get("script_id", "")
+        label, t0 = f"{tag}[confirm→{action}]", time.perf_counter()
+        await ws.send(json.dumps(payload, ensure_ascii=False))
+        expect, must = "", ""
+    else:
+        _, text, expect, must, _ = st
+        label, t0 = f"{tag}Q: {text}", time.perf_counter()
+        await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
+
+    llm_hit = False
+    try:
+        r, toks, llm_hit = await recv_result(ws)
+    except Exception as e:
+        fails.append((name, label, f"WS 錯誤/逾時: {e}"))
+        return fails, sus, llm_hit, ("✗", label, "?", "", 0, f"WS 錯誤: {e}", "")
+
+    conns[who][1] = r
+    view = r.get("view", "?")
+    ans = (r.get("summary") or toks).strip()
+    lat = (time.perf_counter() - t0) * 1000
+
+    why_fail = check_expect(view, expect)
+    if not why_fail and must:
+        if "cand:" in must:
+            why_fail = check_candidates(r, must)   # 驗反問清單內容
+        elif must not in ans:
+            why_fail = f"回答缺「{must}」"
+    why_sus = looks_bad(view, ans)
+
+    if why_fail:
+        fails.append((name, label, f"{why_fail} | {ans[:60]}"))
+    if why_sus:
+        sus.append((name, label, f"{why_sus} | {ans[:60]}"))
+
+    mark = "✗" if why_fail else ("⚠️" if why_sus else " ")
+    return fails, sus, llm_hit, (mark, label, view, ans, lat, why_fail, why_sus)
+
+
+def _print_report(rep, quiet):
+    mark, label, view, ans, lat, why_fail, why_sus = rep
+    if quiet and not (why_fail or why_sus):
+        return
+    print(f"\n   {mark} {label}   [view={view} · {lat:.0f}ms]")
+    for ln in (ans or "（無文字回答）").splitlines():
+        print(f"     │ {ln}")
+    if why_fail:
+        print(f"     └─✗ FAIL: {why_fail}")
+    elif why_sus:
+        print(f"     └─⚠️ 可疑: {why_sus}")
+
+
 async def run_scene(uri, ctx, name, steps, quiet):
     """一個情境 = 一位（或多位）訪客，每位一條連線（= 一個 vid），連發所有 step。"""
     fails, sus = [], []
@@ -179,84 +280,57 @@ async def run_scene(uri, ctx, name, steps, quiet):
 
     conns: dict = {}   # who → (ws, last_result)
     try:
-        for st in steps:
+        i = 0
+        while i < len(steps):
+            st = steps[i]
             if st[0] == "note":
                 if not quiet:
                     print(f"   ! {st[1]}")
+                i += 1
                 continue
 
-            who = st[-1]
-            if who not in conns:
-                # 握手逾時會自動重連——server 同時被別的測試打時 opening handshake
-                # 偶爾逾時，那是連線層抖動，不該算成劇本失敗
-                for _try in range(3):
-                    try:
-                        conns[who] = [await websockets.connect(uri, ssl=ctx, max_size=None), {}]
-                        break
-                    except Exception:
-                        if _try == 2:
-                            raise
-                        await asyncio.sleep(1.5 * (_try + 1))
-            ws, last = conns[who]
-            tag = "" if who == "A" and len(conns) == 1 else f"[{who}] "
-
-            if st[0] == "confirm":
-                view = last.get("view", "")
-                action = VIEW2ACTION.get(view)
-                if not action:
-                    fails.append((name, f"{tag}[confirm]",
-                                  f"上一輪 view={view or '?'} 不是確認卡，無法按確認"))
-                    if not quiet:
-                        print(f"   ✗ {tag}[confirm] 上一輪 view={view or '?'} 沒有確認卡")
-                    continue
-                payload = {"type": "confirm", "action": action, "pending": last.get("data", {})}
-                if action == "run_script":
-                    payload["script_id"] = (last.get("data") or {}).get("script_id", "")
-                label, t0 = f"{tag}[confirm→{action}]", time.perf_counter()
-                await ws.send(json.dumps(payload, ensure_ascii=False))
-                expect, must = "", ""
-            else:
-                _, text, expect, must, _ = st
-                label, t0 = f"{tag}Q: {text}", time.perf_counter()
-                await ws.send(json.dumps({"type": "chat", "text": text}, ensure_ascii=False))
-
-            try:
-                r, toks, _llm = await recv_result(ws)
-                scene_llm = scene_llm or _llm
-            except Exception as e:
-                fails.append((name, label, f"WS 錯誤/逾時: {e}"))
+            # ── [para] 區塊：整組**同時**送出（r5 新增）──────────────────
+            # `>@B` 交錯語法測的是「輪流」，一次只有一個請求在 server 裡；
+            # 真正的並發（同一瞬間兩位訪客的請求在 server 內交錯執行）從沒測過。
+            # vid 隔離若有破口（共用 module-level 狀態、pending 卡互踩），
+            # 只有這種同時送才打得出來。
+            if st[0] == "para":
+                group = []
+                i += 1
+                while i < len(steps) and steps[i][0] != "endpara":
+                    if steps[i][0] != "note":
+                        group.append(steps[i])
+                    elif not quiet:
+                        print(f"   ! {steps[i][1]}")
+                    i += 1
+                i += 1   # 跳過 endpara
+                for g in group:
+                    await _ensure_conn(conns, g[-1], uri, ctx)
                 if not quiet:
-                    print(f"   ✗ {label}\n     WS 錯誤: {e}")
+                    print(f"   ⇉ [para] {len(group)} 位訪客同時送出")
+                results = await asyncio.gather(
+                    *[_do_step(g, conns, name, quiet, True) for g in group],
+                    return_exceptions=True)
+                for g, res in zip(group, results):
+                    if isinstance(res, Exception):
+                        fails.append((name, f"[{g[-1]}] para", f"並發例外: {res}"))
+                        if not quiet:
+                            print(f"   ✗ [{g[-1]}] para 並發例外: {res}")
+                        continue
+                    f, s, hit, rep = res
+                    fails += f
+                    sus += s
+                    scene_llm = scene_llm or hit
+                    _print_report(rep, quiet)
                 continue
 
-            conns[who][1] = r
-            view = r.get("view", "?")
-            ans = (r.get("summary") or toks).strip()
-            lat = (time.perf_counter() - t0) * 1000
-
-            why_fail = check_expect(view, expect)
-            if not why_fail and must:
-                if "cand:" in must:
-                    why_fail = check_candidates(r, must)   # 驗反問清單內容
-                elif must not in ans:
-                    why_fail = f"回答缺「{must}」"
-            why_sus = looks_bad(view, ans)
-
-            if why_fail:
-                fails.append((name, label, f"{why_fail} | {ans[:60]}"))
-            if why_sus:
-                sus.append((name, label, f"{why_sus} | {ans[:60]}"))
-
-            if quiet and not (why_fail or why_sus):
-                continue
-            mark = "✗" if why_fail else ("⚠️" if why_sus else " ")
-            print(f"\n   {mark} {label}   [view={view} · {lat:.0f}ms]")
-            for ln in (ans or "（無文字回答）").splitlines():
-                print(f"     │ {ln}")
-            if why_fail:
-                print(f"     └─✗ FAIL: {why_fail}")
-            elif why_sus:
-                print(f"     └─⚠️ 可疑: {why_sus}")
+            await _ensure_conn(conns, st[-1], uri, ctx)
+            f, s, hit, rep = await _do_step(st, conns, name, quiet, len(conns) > 1)
+            fails += f
+            sus += s
+            scene_llm = scene_llm or hit
+            _print_report(rep, quiet)
+            i += 1
     finally:
         for ws, _ in conns.values():
             await ws.close()
@@ -306,7 +380,8 @@ async def main():
     if args.only:
         scenes = [s for s in scenes if args.only in s[0]]
 
-    turns = sum(len(s[1]) for s in scenes)
+    turns = sum(1 for _, sts in scenes for st in sts
+                if st[0] in ("say", "confirm"))
     print(f"\n{'='*74}\nws_convo → {uri}\n劇本 {path.name}：{len(scenes)} 情境 / {turns} 輪\n{'='*74}")
 
     all_fails, all_sus = [], []

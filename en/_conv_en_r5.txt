@@ -1,0 +1,142 @@
+# 劇情批 r5（EN）——未測向量：並發 vid 隔離 / 超長 context(20+ 句) / 資料極值
+#
+# r1-r4 已覆蓋：carry-over、pending 插話、語音誤聽、長對話(12 句)、Agent 深度、
+# 否定句、邊界值。這輪補三個從沒測過的：
+#   ① 並發：[para] 讓兩位訪客**同時**送出（r34 的 >@B 只是輪流，一次一個請求）
+#   ② 超長 context：24 句連續不重連，測 context 累積後會不會漂移/爆掉
+#   ③ 資料極值：0 庫存（先出貨清空製造）、剛好等於安全庫存（不該進缺貨清單）
+# 亂打搗蛋比例約 18%（S8/S9 + 各情境穿插）。
+
+### S1 並發：兩位訪客同時查不同商品（vid 隔離最基本盤）
+! 展場兩台裝置同時操作。若 keyword/ctx 存在 module-level 而非綁 vid，這裡會互相污染。
+[para]
+> bluetooth earphones stock | inventory_single | Wireless Bluetooth Earphones
+>@B yoga mat stock | inventory_single | Yoga Mat
+[/para]
+! 各自追問「north」——A 該回耳機的北倉、B 該回瑜珈墊的北倉，絕不可互串
+[para]
+> north | inventory_single,inventory
+>@B north | inventory_single,inventory
+[/para]
+! r5 修：'again' 曾被當商品名回「No item matching "again"」（虛詞未列停用詞，
+!   carry-over 正則其實認得，但句子在更早的 OOV 層就被攔掉）
+> whats the total again | inventory_single,inventory | Wireless Bluetooth Earphones
+>@B and its movements | movement,clarify,inventory_single
+
+### S2 並發：兩位訪客同時開確認卡（pending 互踩最危險）
+! 寫入類卡片若 pending 沒綁 vid，A 按確認可能執行到 B 的單 → 寫錯資料
+[para]
+> north received 50 wireless mouse | movement_confirm
+>@B south shipped 10 camping mug | movement_confirm
+[/para]
+! A 先按確認，B 的卡片必須還在、且內容不變
+[confirm]
+> wireless mouse stock | inventory_single | Wireless Mouse
+[confirm@B]
+>@B camping mug stock | inventory_single | Camping Mug
+
+### S3 並發：同一商品同時寫入（真正的競態）
+! 兩人同時對同一 SKU 開卡再確認——最後庫存必須是兩筆都算到，不能有一筆被吃掉
+> power bank stock | inventory_single | Power Bank
+[para]
+> north received 20 power bank | movement_confirm
+>@B north received 30 power bank | movement_confirm
+[/para]
+[para]
+[confirm]
+[confirm@B]
+[/para]
+> power bank stock | inventory_single | Power Bank
+
+### S4 並發：一邊查詢一邊寫入（讀寫交錯）
+[para]
+> whats running low | low_stock
+>@B south shipped 5 steam iron | movement_confirm
+[/para]
+[confirm@B]
+> which items are running low | low_stock
+>@B steam iron stock | inventory_single | Steam Iron
+
+### S5 超長 context：24 句不重連（context 累積不漂移）
+! r4 最長 12 句。展場訪客會一路問下去，測 context 會不會愈問愈亂。
+> hello | guide,rejected,clarify
+> bluetooth earphones stock | inventory_single | Wireless Bluetooth Earphones
+> north | inventory_single,inventory
+> central | inventory_single,inventory
+> south | inventory_single,inventory
+> whats running low | low_stock
+> best sellers this week | hot_items
+> what is expiring soon | expiring
+> yoga mat stock | inventory_single | Yoga Mat
+> compare north and south | compare_warehouses
+> power bank stock | inventory_single | Power Bank
+> how many mechanical keyboards | inventory_single | Mechanical Keyboard
+> what came in today | movement
+> any stock discrepancies | agent_rca
+> coffee beans stock | inventory_single | Classic Black Coffee Beans
+> what else do coffee beans buyers get | related,clarify
+> camping tent stock | inventory_single | Camping Tent
+> south | inventory_single,inventory
+! r5 修：'lowest' 同 'again'，曾回「No item matching "lowest"」
+> whats the lowest one | low_stock,inventory,clarify,inventory_single
+> electric toothbrush stock | inventory_single | Electric Toothbrush
+! r5 修（危險級）：carry-over 補對了 keyword，但 C3 轉去的 list_low_stock
+!   **不吃 keyword**（log「忽略未知參數」）→ 退化成全店 43 筆清單；
+!   讓路後 C9 又轉 manage_config（同樣不吃 keyword）→ 全店設定表。
+!   必須 hard-return query_inventory 才定案。
+> is it below safety stock | inventory_single | Electric Toothbrush
+> what about the mouse | inventory_single | Wireless Mouse
+> and the keyboard | inventory_single | Mechanical Keyboard
+> back to the earphones | inventory_single | Wireless Bluetooth Earphones
+
+### S6 資料極值：剛好等於安全庫存（邊界 < vs <=）
+! 主檔實測：Pour-over Coffee Set south=40/ss=40、Electric Mop south=30/ss=30、
+!   Hiking Water Bottle central=80/ss=80 —— 三筆「剛好等於」，依 qty < safety
+!   的定義**都不該**出現在缺貨清單。
+> pour-over coffee set stock | inventory_single | Pour-over Coffee Set
+> electric mop stock | inventory_single | Electric Mop
+> hiking water bottle stock | inventory_single | Hiking Water Bottle
+> whats running low | low_stock
+> is anything exactly at safety stock | low_stock,clarify,inventory,config_read,inventory_single
+
+### S7 資料極值：出貨清到 0 庫存
+! baseline 沒有任何 0 庫存，這條路徑從沒被走過。Camping Tent north 現量最少，
+!   清空後查詢/缺貨/比較/補貨都要能正確處理 0（不可除零、不可顯示 NaN/負數）。
+> camping tent stock | inventory_single | Camping Tent
+> north shipped all camping tent | movement_confirm,clarify,error,inventory_single
+! North 現量 34 → 出 34 清成 0（⚠️ 一定要按確認，否則庫存沒動＝0 庫存路徑
+!   根本沒走到。r5 初版漏了 [confirm]，白測一輪。）
+> north shipped 34 camping tent | movement_confirm
+[confirm]
+> camping tent stock | inventory_single | Camping Tent
+! 0 庫存後：查詢/缺貨/比較/撐天數都要能處理（不可除零、NaN、負數）
+> whats running low | low_stock
+> compare north and south | compare_warehouses
+> how many days of camping tent left | low_stock,inventory_single,clarify
+! 0 庫存還要能再出貨嗎？應該擋下（庫存不足）
+> north shipped 5 camping tent | error,clarify,movement_confirm
+
+### S8 資料極值：超量/負數/零的無效輸入
+> north received 0 wireless mouse | clarify,error,movement_confirm
+> north shipped 99999 wireless mouse | error,movement_confirm,clarify
+> north received -50 wireless mouse | clarify,error,movement_confirm,rejected
+> set yoga mat safety stock to 0 | config_confirm,clarify,error
+> set yoga mat safety stock to 999999 | config_confirm,clarify,error
+
+### S9 亂敲搗蛋（展場訪客亂按鍵盤）
+> asdkjhasd | rejected,clarify,guide
+> ????? | rejected,clarify,guide
+> hello?? anyone there | rejected,guide,clarify
+> qqqqqqqqqq | rejected,clarify,guide
+> 12345 | rejected,clarify,guide,inventory
+> stock stock stock stock | inventory,clarify,rejected,guide,inventory_single
+> whats the wifi password | rejected,guide
+> can you order me a pizza | rejected,guide
+
+### S10 並發搗蛋 + 告別
+[para]
+> aaaaaaaa | rejected,clarify,guide
+>@B whats running low | low_stock
+[/para]
+> thanks bye | rejected,guide,clarify
+>@B thank you very much | rejected,guide,clarify

@@ -515,6 +515,16 @@ _GATEKEEPER_BLACKLIST = (
     "weather", "joke", "song", "music", "movie", "game", "translate",
     "who are you", "your name", "how are you", "stock market", "bitcoin",
     "recipe", "restaurant", "taxi", "flight", "hotel",
+    # ── EN build（劇情批 r5）：展場「場館問題」——訪客把 demo 機當服務台。
+    #   原本掉進 oov:noex 回「No item matching "wifi password"」（把它當成
+    #   一個查不到的商品），該婉拒並導回倉管能力。
+    #   ⚠️ 用片語不用裸詞（坑 8：業務詞會撞功能詞）——實測 'bathroom' 撞
+    #   'bathroom cleaner stock'、'parking' 撞 'parking lot inventory'，
+    #   兩者都是合理的倉管查詢 → 只收「明確在問場館」的片語。
+    "wifi password", "wi-fi password", "wifi code", "whats the wifi",
+    "where is the restroom", "where is the toilet", "where is the bathroom",
+    "where can i park", "where is the parking", "how do i get to",
+    "opening hours", "what time do you close", "what time do you open",
 )
 
 
@@ -4658,11 +4668,52 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _expiry_in_text = bool(_re.search(
         r"\bexpir(?:y|ing|es?|ation)\b|\bshelf\s*life\b|\bbest\s*before\b|"
         r"\buse\s*by\b|\bgoing\s+bad\b|\bpast\s+(?:its\s+)?date\b", text_low))
+    # ── EN build（劇情批 r5）：**單品**是否低於安全庫存 → 讓給 query_inventory ──
+    #   'electric toothbrush stock' → 'is it below safety stock' 時，
+    #   carry-over 正確補上 keyword='Electric Toothbrush'，但 C3 轉去的
+    #   `list_low_stock` **不吃 keyword**（warehouse.py 直接「忽略未知參數」）
+    #   → 退化成全店 43 筆清單＝答非所問，而系統其實知道問的是哪個商品。
+    #   單品庫存卡本就會標 ⚠️ Below safety stock，正是訪客要的答案。
+    #   ⚠️ 只在「指代單品」時讓路：句中要有 it/this/that 之類指代或明確商品名，
+    #   且**不可**有複數/全店語（which items / anything / what's running low），
+    #   否則會把正常的缺貨清單查詢也搶走。
+    _c3_single_ref = bool(_re.search(
+        r"\b(?:is|are|was)\s+(?:it|this|that|the\s+\w+)\b|\bit'?s\b", text_low)) \
+        and not _re.search(
+            r"\b(?:which|what|anything|everything|all|any)\s+(?:items?|ones?|"
+            r"products?|things?)\b|\bwhats?\s+(?:running|getting|low)\b|"
+            r"\bitems?\s+(?:are|is)\b", text_low)
+    _c3_single_low = (_is_mostly_english(user_text) and _c3_single_ref
+                      and _re.search(r"\bbelow\s+(?:the\s+)?safety|\bunder\s+(?:the\s+)?safety|"
+                                     r"\bbelow\s+(?:the\s+)?(?:minimum|threshold)", text_low))
+    if _c3_single_low:
+        # ⚠️ 只「讓路」不夠——實測讓給 C3 之後，下游 C9（設定意圖）又把它轉成
+        #   `manage_config{read}`，而 manage_config **也不吃 keyword**
+        #   （同一句 log 出現第二次「忽略未知參數」）→ 從全店缺貨清單變成
+        #   全店安全庫存設定表，一樣答非所問。必須 hard-return 定案。
+        #   keyword 留空：交給下游 carry-over 從 context 補上（它本來就補得對，
+        #   問題從頭到尾都是「補上的 keyword 被丟給不收 keyword 的 tool」）。
+        log.info(f"[C3-single-en] {user_text!r} 單品安全庫存詢問 → query_inventory")
+        _c3_sl_args = {}
+        # ⚠️ LLM 給的 keyword 常是幻覺（本句實測是 'bottleneck'，句中根本沒有）
+        #   → 必須接地：字面要在原句出現，且能對到商品。接不到就留空，
+        #   讓 carry-over 從 context 補（那條路徑本來就對）。
+        _c3_sl_kw = (func_args.get("keyword") or "").strip()
+        if _c3_sl_kw and _c3_sl_kw.lower() in text_low:
+            try:
+                import warehouse as _W_c3sl
+                _m_c3sl = _W_c3sl.match_items(_c3_sl_kw)
+                if _m_c3sl and _m_c3sl[0].get("score", 0) >= 4:
+                    _c3_sl_args["keyword"] = _c3_sl_kw
+            except Exception:
+                pass
+        return "query_inventory", _c3_sl_args, True
+
     if (any(kw in user_text for kw in _LOW_STOCK_INTENT_WORDS) or
         any(kw in text_low for kw in _LOW_STOCK_INTENT_WORDS)) \
        and not _cfg_key_in_text and not _report_in_text \
        and not _alert_in_text and not _po_in_text and not _mv_q_in_text \
-       and not _expiry_in_text:
+       and not _expiry_in_text and not _c3_single_low:
         # category 幻覺防呆：LLM 常憑空抽 category（「哪些品項低於警戒線」給
         # food_beverage 只回 4 項，conv100-r5）→ 句中沒類別詞就丟棄
         _c3_cat_words = {"electronics": ("電子", "3c"), "appliance_kitchen": ("家電", "廚具", "廚房"),
@@ -5365,7 +5416,22 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          "decline", "audit", "trail", "history", "purchase",
                          "order", "orders", "movement", "movements", "transfer",
                          "transfers", "setting", "settings", "config", "safety",
-                         "everything", "anything", "something", "help"}
+                         "everything", "anything", "something", "help",
+                         # 劇情批 r5：追問副詞／最高級補齊（兩處同步）——
+                         #   'whats the total again' → 回「No item matching
+                         #   "again"」、'whats the lowest one' → 「"lowest"」。
+                         #   ⚠️ 這些詞 `_CTX_FOLLOWUP_RE_EN` 早就認得（carry-over
+                         #   偵測沒問題），但句子在更早的 OOV 層就被攔掉，
+                         #   carry-over 分支根本執行不到——補停用詞才進得去。
+                         "again", "lowest", "highest", "priciest", "worst",
+                         "best", "cheaper", "pricier", "lower", "higher",
+                         "then", "also", "too", "each", "same", "other",
+                         "next", "first", "second", "third", "last", "previous",
+                         "earlier", "before", "after", "instead", "actually",
+                         # r5：比較/門檻介系詞——'is it below safety stock'
+                         #   回「No item matching "below"」
+                         "below", "under", "above", "over", "than", "minimum",
+                         "maximum", "threshold", "limit", "target"}
             try:
                 import warehouse as _Woov
                 _oov_words = set()
@@ -9467,6 +9533,38 @@ async def ws_handler(ws: WebSocket):
                     "data": {"question": _nx_msg, "options": [], "hint": ""}}})
                 continue
 
+            # ── EN build（r5）：英文招呼句 ──────────────────────────────────
+            #   原中文正則只含 hi|hello 兩個英文詞 → hey/morning/howdy 等全 miss
+            #   （掉進商品比對變醜 clarify），而命中的 hi/hello **回中文**
+            #   ——展場英文訪客的第一句話就看到中文。
+            #   依坑 7「加法」原則：獨立英文分支，不動中文正則。
+            #   ⚠️ 一律 fullmatch + 短句：'morning shift report' 這種不可攔
+            #   （morning/hey 都可能出現在正常句子裡）。
+            _gr_en = None
+            if _is_mostly_english(user_text):
+                _gr_en = _re.fullmatch(
+                    r"(?:hi+|hey+|hello+|yo|hiya|howdy|greetings|"
+                    r"good\s*(?:morning|afternoon|evening)|morning|afternoon)"
+                    r"[\s,!~]*"
+                    r"(?:there|folks|guys|everyone|all)?[\s,!~]*"
+                    # 招呼+閒聊尾巴（'hi there busy today'）——曾撈到 Coffee
+                    # Machine 變醜 clarify，正解是招呼回覆
+                    r"(?:busy\s*today|whats\s*up|what'?s\s*up|hows?\s*it\s*going|"
+                    r"how\s*are\s*(?:you|u)|you\s*there|anyone\s*(?:there|home))?",
+                    user_text.strip().strip("!！?？。. "), _re.IGNORECASE)
+            if _gr_en:
+                _gr_msg = ("Hi! I'm your warehouse assistant. Want to start with "
+                           "\"what's running low\" or \"best sellers this week\"? "
+                           "You can also just ask directly — for example "
+                           "\"bluetooth earphones stock\".")
+                log.info(f"[greet-en] {user_text!r} → 英文招呼回覆")
+                for ch in _gr_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _gr_msg, "data": {}}})
+                continue
+
             # r76：招呼開場（「哈囉開店啦」）曾掉「沒有這個商品」醜 clarify
             _gr_m82 = _re.fullmatch(
                 r"(哈囉|嗨+|hi|hello|安安|你好|大家好|早+)[啊呀!！~～\s]*"
@@ -9514,15 +9612,32 @@ async def ws_handler(ws: WebSocket):
             # 有告別詞就走告別回覆，否則道謝回覆
             _FW_BYE_TOK = (r"掰掰|掰|拜拜|再見|bye+|88+|886|明天見|下次見|下次再來|"
                            r"先走了|我走了|走囉|閃人|告辭|沒事|沒了|下班了?|回家了?|各位|收工|"
-                           r"明天再[處說弄用]理?|明天再說|881|[先去]去?忙|有事叫我")
+                           r"明天再[處說弄用]理?|明天再說|881|[先去]去?忙|有事叫我|"
+                           # EN build（r5）：英文告別。原本只有 bye+ 一個詞，
+                           #   see you / goodbye / later 全 miss → 掉商品比對變醜回答。
+                           r"good\s*bye|see\s*(?:you|ya|yah)(?:\s*(?:later|around|soon))?|"
+                           r"later|catch\s*you\s*later|cya|take\s*care|"
+                           r"im\s*off|i'?m\s*off|gotta\s*(?:go|run)|heading\s*(?:off|out)|"
+                           r"have\s*a\s*(?:good|nice|great)\s*(?:one|day|night|evening)|"
+                           r"good\s*night")
             _FW_THX_TOK = (r"謝謝你?們?|謝了|謝啦|多謝|感謝|感恩|3q|thx|thanks?|thank\s*you|"
                            r"辛苦了|辛苦囉|辛苦你了|好棒|太強了|厲害|完美|讚讚?|就這樣|沒問題了|"
                            r"差不多了|就到這|先這樣|都?沒問題|[就先]?巡到這|看到這裡?|"
-                           r"ok瞭解|okay|ok|瞭解|我?知道了|就[醬降]|大家辛苦了?|懂了")
+                           r"ok瞭解|okay|ok|瞭解|我?知道了|就[醬降]|大家辛苦了?|懂了|"
+                           # EN build（r5）：英文道謝＋讚美收尾
+                           r"thank\s*(?:you|u)\s*(?:so|very)\s*much|thanks\s*(?:a\s*lot|"
+                           r"a\s*bunch|so\s*much|very\s*much|again|for\s*(?:your\s*)?help)|"
+                           r"cheers|appreciate\s*(?:it|that)|much\s*appreciated|"
+                           r"(?:thats|that'?s)\s*(?:all|it|great|perfect|helpful)|"
+                           r"nice\s*one|awesome|perfect|great\s*stuff|good\s*stuff|"
+                           r"got\s*it|understood|makes\s*sense|"
+                           r"(?:youre|you'?re)\s*(?:the\s*best|great|awesome)")
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）
             # r67：+今天/那我/我先（「今天就到這 感謝」）
+            # EN build（r5）：英文開頭填充（'ok thanks' / 'alright bye' / 'well thanks'）
             _fw_all = _re.fullmatch(
-                rf"(?:今天|那我|我先|那就)?[\s好啦嗯哦喔]*(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})"
+                rf"(?:今天|那我|我先|那就|ok|okay|alright|all\s*right|well|"
+                rf"anyway|right)?[\s好啦嗯哦喔,]*(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})"
                 rf"[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
                 user_text.strip(), _re.IGNORECASE)
             _fw_bye = _fw_all and _re.search(rf"(?:{_FW_BYE_TOK})", user_text, _re.IGNORECASE)
@@ -9530,9 +9645,18 @@ async def ws_handler(ws: WebSocket):
             if ((_fw_bye or _fw_thx)
                     and not _item_create_state_ws.get(vid, {}).get("active")
                     and not _item_delete_state.get(vid)):   # 流程中「88」是欄位值不是告別
-                _fw_msg = ("👋 掰掰，謝謝光臨！下次想查庫存、進出貨隨時再來。"
-                           if _fw_bye else
-                           "😊 不客氣，有幫上忙就好！還想查什麼隨時說——庫存、進出貨、缺貨警示都可以。")
+                # EN build（r5）：訊息依輸入語言分流——英文訪客收到中文收尾
+                #   是展場最後一眼看到的東西（r5 抓到）
+                if _is_mostly_english(user_text):
+                    _fw_msg = ("👋 Bye! Thanks for stopping by — come back anytime "
+                               "to check stock or movements."
+                               if _fw_bye else
+                               "😊 You're welcome! Glad it helped. Ask me anything else — "
+                               "stock, movements, low-stock alerts, all fair game.")
+                else:
+                    _fw_msg = ("👋 掰掰，謝謝光臨！下次想查庫存、進出貨隨時再來。"
+                               if _fw_bye else
+                               "😊 不客氣，有幫上忙就好！還想查什麼隨時說——庫存、進出貨、缺貨警示都可以。")
                 log.info(f"[farewell] {user_text!r} → 客套收尾")
                 for ch in _fw_msg:
                     await send({"type": "token", "text": ch})
@@ -12523,6 +12647,17 @@ async def ws_handler(ws: WebSocket):
                         "values", "worth", "amount", "price", "prices",
                         "cost", "costs", "low", "high", "short", "out",
                         "empty", "full", "fine", "okay", "good", "bad",
+                        # 劇情批 r5：追問副詞／最高級（同 _oov_stop，兩處要同步）
+                        #   carry-over 正則認得這些詞，但句子在這層先被判 OOV
+                        #   → 追問鏈斷在「查無此商品」。
+                        "again", "lowest", "highest", "priciest", "worst",
+                        "best", "cheaper", "pricier", "lower", "higher",
+                        "then", "also", "too", "each", "same", "other",
+                        "next", "first", "second", "third", "previous",
+                        "earlier", "before", "after", "instead", "actually",
+                        # r5：比較/門檻介系詞（同 _oov_stop，兩處要同步）
+                        "below", "under", "above", "over", "than", "minimum",
+                        "maximum", "threshold", "limit", "target",
                     }
                     # 功能描述句不是「查不存在的商品」——它有明確目標，
                     #   由 descriptor_en 處理，這裡不可攔成 OOV
