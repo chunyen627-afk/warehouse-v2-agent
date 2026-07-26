@@ -2593,6 +2593,9 @@ def _en_fuzzy_keyword(core: str) -> str:
     # ⚠️ 一個詞可能出現在多個商品名（bags → Drip Coffee Bags / Trash Bags /
     #   Laptop Bag），這裡只留**第一個**——下游的歧義判斷依賴一對一映射。
     cand: dict[str, str] = {}
+    # 主檔名集合——用來辨識 cand 的值是「主檔名」還是「alias 值」（見下方
+    #   假歧義修復：兩者可能指同一商品但字串不同）
+    _ITEM_NAME_SET = {it["name"] for it in items}
     for it in items:
         for w in _re.split(r"[\s\-/]+", it["name"]):
             w = w.strip().lower()
@@ -2703,7 +2706,20 @@ def _en_fuzzy_keyword(core: str) -> str:
             r1 = difflib.SequenceMatcher(None, tok, near[1]).ratio()
             if r1 >= r0:
                 continue
-        hits.append(cand[best])
+        # ⚠️ alias 值 vs 主檔名的**假歧義**：cand 的值有兩種來源——主檔名
+        #   （"Cotton Plain T-shirt Men's"）與 alias 值（'Plain T-shirt'），
+        #   兩者其實是**同一個商品**，但字串不同 → 投票時被當成兩個候選 →
+        #   'plaiin tushirt'（plaiin→主檔名、tushirt→alias 值）判成歧義回空。
+        #   → 統一正規化成主檔名再投票。
+        _hit_name = cand[best]
+        if _hit_name not in _ITEM_NAME_SET:
+            try:
+                _hn_m = _W.match_items(_hit_name)
+                if _hn_m and _hn_m[0].get("score", 0) >= 4:
+                    _hit_name = _hn_m[0]["item"]["name"]
+            except Exception:
+                pass
+        hits.append(_hit_name)
     # ⚠️ 曾試過「0.82-0.85 降級候選 + 同商品佐證」想救『兩個 token 都打錯』
     #   的長尾（traash bags / plaiin tushirt）——只多修 1-2 句，卻因為撞名詞
     #   （sports/bags/coffee 出現在多個商品名）產生新誤配
@@ -2727,11 +2743,49 @@ def _en_fuzzy_keyword(core: str) -> str:
     #      hair 雖模糊比得到 chair，但它是**唯一**實詞且是 OOV 商品的核心，
     #      所以另外要求：模糊救回的商品，其名稱必須有 ≥2 個字元級證據
     #      （token 長度 ≥5，或句中有第二個 token 也指向同一商品）。
+    # ── 已達成共識的商品名，其**自己的詞**可當陌生詞的接地證據 ──────────
+    #   'Mosquuito Rpellent Soray'：mosquuito/rpellent 兩個 token 都指向
+    #   Mosquito Repellent（共識明確），只有 soray 對全主檔比不到 0.85
+    #   → 被這條防線一票否決回空。但 soray→**spray** 是 0.80，而 spray
+    #   正是該商品名裡的詞＝這是錯字不是 OOV 修飾詞。
+    #   安全前提（三個條件同時成立才放行，缺一不可）：
+    #     ①已有 **≥2 個** token 指向同一商品（共識，不是單一 token 硬猜）
+    #     ②陌生詞對**該商品名自己的詞**達 0.80（範圍極小才敢放寬）
+    #   OOV 案例不受影響：'office chairs' 只有 chairs 一個 token 命中
+    #   （不滿足①）；'hair dryer' 兩個 token 都對不到主檔（同樣不滿足①）。
+    _consensus_name = ""
+    if hits:
+        from collections import Counter as _Cn
+        _hc = _Cn(hits).most_common(1)
+        if _hc and _hc[0][1] >= 2:
+            _consensus_name = _hc[0][0]
+    _consensus_words = set()
+    if _consensus_name:
+        for _cw in _re.split(r"[\s\-/]+", _consensus_name.lower()):
+            _cw = _cw.strip(" ?.!,'\"")
+            if len(_cw) >= 3 and not any(c.isdigit() for c in _cw):
+                _consensus_words.add(_cw)
     _unknown_tok = False
     for t in _core_toks:
         if t in _FUZZY_BLOCK or t in cand or t in _split_ok:
             continue
         if not difflib.get_close_matches(t, keys, n=1, cutoff=0.85):
+            if _consensus_words and difflib.get_close_matches(
+                    t, list(_consensus_words), n=1, cutoff=0.80):
+                log.info(f"[EN fuzzy] 陌生詞 {t!r} 對共識商品 "
+                         f"{_consensus_name!r} 接地成立 → 視為錯字")
+                continue
+            # 共識已成立時，陌生詞對**任一主檔詞**達 0.80 也算錯字：
+            #   'Mosquuito Rpellent Soray' 的共識是 Mosquito Repellent
+            #   **Refill**（cand 只留第一個商品），soray 對 Refill 的詞
+            #   接地不了，但它對主檔的 **spray**（同家族另一款）是 0.80。
+            #   有 ≥2 token 共識當前提，這種放寬不會讓 OOV 案例過關
+            #   （office/dryer 對全主檔最高只有 0.31/0.44）。
+            if _consensus_name and difflib.get_close_matches(
+                    t, keys, n=1, cutoff=0.80):
+                log.info(f"[EN fuzzy] 陌生詞 {t!r} 在共識 "
+                         f"{_consensus_name!r} 下對主檔接地(0.80) → 視為錯字")
+                continue
             _unknown_tok = True
             break
     if _unknown_tok:
@@ -4976,6 +5030,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         pass
                     if _oov_tgt_words and _dloov.get_close_matches(
                             _t, list(_oov_tgt_words), n=1, cutoff=0.80):
+                        continue
+                    # kw 已抽出時，陌生詞對**主檔任一詞**達 0.80 也算錯字
+                    #   （同 oov:noex 的同名放寬，三道閘門必須同步——
+                    #   'Mosquuito Rpellent Soray' 的 soray 對 spray 是 0.80，
+                    #   但對已抽出的 Refill 接地不了）
+                    if _oov_tgt_words and _dloov.get_close_matches(
+                            _t, _oov_keys, n=1, cutoff=0.80):
                         continue
                     if not _dloov.get_close_matches(_t, _oov_keys, n=1, cutoff=0.85):
                         log.info(f"[校正 C1g-oov] 陌生修飾詞 {_t!r} → 清除 kw "
@@ -11631,6 +11692,16 @@ async def ws_handler(ws: WebSocket):
                             if _tx in _nx_words or _tx.rstrip("s") in _nx_words:
                                 continue
                             if _dlnx.get_close_matches(_tx, _nx_keys, n=1, cutoff=0.85):
+                                continue
+                            # keyword 已抽出（= 上游已對這句有把握）時，陌生詞
+                            #   對**主檔任一詞**達 0.80 也算錯字：
+                            #   'Mosquuito Rpellent Soray' 抽出 Mosquito
+                            #   Repellent Refill，soray 對 Refill 的詞接地不了，
+                            #   但對主檔的 spray（同家族另一款）是 0.80。
+                            #   前提是上游已抽出商品名，OOV 句（office chairs /
+                            #   hair dryer）抽不出來，不受影響。
+                            if _nx_target_words and _dlnx.get_close_matches(
+                                    _tx, _nx_keys, n=1, cutoff=0.80):
                                 continue
                             # 對「已抽出商品名」的詞放寬到 0.80（範圍極小才敢放寬）。
                             #   ⚠️ 門檻是**實測**切出來的，不是拍腦袋：
