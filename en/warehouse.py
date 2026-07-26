@@ -762,7 +762,7 @@ def query_inventory(
         for r in _cands:
             it = r["item"]
             _tot, _pw = _sku_total_stock(it["sku_id"], warehouse)
-            opts.append(f"{it['name']} 庫存")
+            opts.append(f"{it['name']} stock")
             rich_rows.append({"sku_id": it["sku_id"], "name": it["name"],
                               "category": CATEGORY_LABEL.get(it["category"], it["category"]),
                               "qty": _tot, "unit": it.get("unit", "units"),
@@ -770,9 +770,9 @@ def query_inventory(
         # 同類別再給一個「全部庫存」快捷
         if len(set(r["item"]["category"] for r in _cands)) == 1:
             _cl = CATEGORY_LABEL.get(_cands[0]["item"]["category"], "")
-            opts.append(f"{_cl}類 全部庫存")
+            opts.append(f"all {_cl} stock")
         else:
-            opts.append("全部商品庫存")
+            opts.append("all items stock")
         question = (f"\"{scope}\" matches {len(_cands)} items. "
                     f"Which one? (tap an item below, or say the full name)")
         return {

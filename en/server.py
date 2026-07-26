@@ -467,34 +467,34 @@ GUIDE_KEYWORDS = {
 }
 
 GUIDE_MSG = (
-    "我可以幫你查倉管系統：\n\n"
-    "📦 庫存查詢\n"
-    "  • 藍牙耳機庫存\n"
-    "  • 食品飲料類庫存\n"
-    "  • 北倉的氣泡水還剩多少\n\n"
-    "🚨 缺貨警示\n"
-    "  • 庫存警示\n"
-    "  • 北區倉缺貨清單\n"
-    "  • 哪些東西快沒了\n\n"
-    "🔥 熱銷排行\n"
-    "  • 本週最熱賣\n"
-    "  • 本月運動用品熱銷\n"
-    "  • 滯銷品有哪些\n\n"
-    "🔗 連帶備貨分析\n"
-    "  • 買藍牙耳機的人也買了什麼\n"
-    "  • 咖啡機的連帶商品\n"
-    "  • 買尿布的還會買啥\n\n"
-    "⏰ 到期警示\n"
-    "  • 哪些快到期\n"
-    "  • 北倉到期清單\n"
-    "  • 食品類保存期限\n\n"
-    "📊 進出貨記錄\n"
-    "  • 今天進了什麼貨\n"
-    "  • 本週耳機出貨多少\n\n"
-    "🏭 倉庫比較\n"
-    "  • 北區跟南區哪個庫存比較多\n"
-    "  • 中倉跟南倉週轉率比較\n\n"
-    "試試點下方的快捷按鈕、或直接口語輸入！"
+    "Here is what I can look up in the warehouse system:\n\n"
+    "📦 Stock lookup\n"
+    "  • bluetooth earphones stock\n"
+    "  • food and drinks category stock\n"
+    "  • how much sparkling water is left in north warehouse\n\n"
+    "🚨 Low stock alerts\n"
+    "  • stock alerts\n"
+    "  • north warehouse low stock list\n"
+    "  • which items are running low\n\n"
+    "🔥 Best sellers\n"
+    "  • best sellers this week\n"
+    "  • top selling sports gear this month\n"
+    "  • which items are slow moving\n\n"
+    "🔗 Related stocking analysis\n"
+    "  • what else do bluetooth earphone buyers get\n"
+    "  • related items for the coffee machine\n"
+    "  • what else do diaper buyers grab\n\n"
+    "⏰ Expiry alerts\n"
+    "  • what is expiring soon\n"
+    "  • north warehouse expiry list\n"
+    "  • shelf life for the food category\n\n"
+    "📊 Inbound and outbound records\n"
+    "  • what came in today\n"
+    "  • how many earphones shipped this week\n\n"
+    "🏭 Warehouse comparison\n"
+    "  • which has more stock, north or south\n"
+    "  • compare turnover of central and south warehouse\n\n"
+    "Tap a shortcut button below, or just type your question!"
 )
 
 
@@ -1283,6 +1283,19 @@ _CONFIG_KEY_WORDS = ("安全庫存", "安全存量", "安全水位", "安全線"
                      "safety threshold", "lead time", "lead days",
                      "reorder lead", "restock lead", "buffer ratio",
                      "safety multiplier", "restock target", "days of cover")
+
+# EN build：中文 config key → 英文標籤。歧義選單的 question/options 要給訪客看，
+#   也要能被後端重新解析（選項＝點了會送回來的查詢字串），所以用 _resolve_key()
+#   認得的完整英文別名，不能自創詞。
+_CFG_KEY_LABEL_EN = {
+    "安全庫存": "safety stock", "安全存量": "safety stock",
+    "安全水位": "safety level", "安全線": "safety level",
+    "安全量": "safety stock", "警戒值": "safety threshold",
+    "庫存底線": "minimum stock", "存量底線": "minimum stock",
+    "前置天數": "lead time", "補貨前置": "reorder lead",
+    "補貨天數": "lead days", "補貨目標天數": "restock target",
+    "安全水位倍數": "safety multiplier",
+}
 _CONFIG_SET_WORDS = ("改成", "設成", "設為", "調成", "調到", "改為", "設定為",
                      "調高", "調低", "提高", "提升", "降低", "降", "加", "減", "+", "改", "設",
                      "調升", "調降", "上修", "下修", "升到", "降到",
@@ -2274,14 +2287,14 @@ def _detect_clarify(user_text: str) -> dict | None:
     _too_short = len(t_clean) <= 3 and has_intent and not _has_cat and not _has_product
     if t in _vague or t_clean in _vague or (not t_clean and not has_intent) or _too_short:
         return {
-            "question": "你想查什麼？",
+            "question": "What would you like to check?",
             "options": [
-                "哪些商品快缺貨",
-                "哪些商品快到期",
-                "本週熱銷商品",
-                "採購對帳異常",
+                "which items are running low",
+                "what is expiring soon",
+                "best sellers this week",
+                "purchase reconciliation issues",
             ],
-            "hint": "點選其中一項，或直接輸入商品名稱或倉庫名稱"
+            "hint": "Tap one, or type an item name or warehouse name"
         }
 
     return None
@@ -2359,7 +2372,7 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
             return {"auto_fix": False,
                     "question": f"\"{keyword}\" matches {len(_tied)} items. Which one do you mean?",
                     "options": _tied,
-                    "hint": "點選其中一項，或直接輸入完整商品名稱",
+                    "hint": "Tap one, or type the full item name",
                     "oov": True, "original_keyword": keyword}
     if any(keyword in name or name in keyword for name in all_names):
         if keyword != (func_args.get("keyword") or func_args.get("target") or "").strip():
@@ -2392,9 +2405,9 @@ def _detect_oov(func_name: str, func_args: dict) -> dict | None:
         options = [n for _, n in scored[:3]]
         return {
             "auto_fix": False,
-            "question": f"找不到「{keyword}」，你是指？",
+            "question": f"No exact match for \"{keyword}\". Did you mean?",
             "options": options,
-            "hint": "點選其中一項，或直接輸入完整商品名稱",
+            "hint": "Tap one, or type the full item name",
             "oov": True,
             "original_keyword": keyword,
         }
@@ -2826,7 +2839,32 @@ def _extract_sku_keyword(text: str) -> str:
                 pass
             return ""
         if len(_m_en) > 1 and _m_en[1].get("score", 0) >= _m_en[0].get("score", 0):
-            return ""          # 同分並列＝歧義，不猜
+            # 同分並列＝歧義，不猜。但**不能回空字串**——回空的話下游沒 keyword，
+            #   query_inventory 會給「全店 60 商品概覽」，訪客問 'stock of coffee'
+            #   卻收到一份不相干清單（實測破口）。中文版 Layer 2.5 的作法是
+            #   **回共同片段**（「咖啡」），讓 query_inventory 走既有的「疑似清單
+            #   ＋各候選庫存概況」路請訪客選 → 英文對齊同一行為。
+            #   條件：剝乾淨的核心詞必須是**所有並列候選的共同 substring**，
+            #   才確定它是通稱（coffee×5 / mosquito repellent×2）而非碰巧撞分。
+            _tied = [r for r in _m_en
+                     if r.get("score", 0) >= _m_en[0].get("score", 0)]
+            _stem = (_en_core or "").strip().lower()
+            # ⚠️ 守衛回歸（869 vs 873）：光驗「是共同 substring」不夠——虛詞殘片
+            #   也會滿足（'put 100 mop into south' 剝完剩 'op'、'increase safety
+            #   stock by 30' 剩 'by'）→ 回出 `"op" matches 3 items` 這種醜回答。
+            #   詞幹必須是**真的通稱詞**：長度夠 + 不是虛詞 + 在原句以完整詞出現。
+            _STEM_STOP = {
+                "by", "op", "in", "on", "at", "to", "of", "up", "an", "as",
+                "is", "it", "or", "so", "we", "do", "no", "my", "me", "the",
+                "and", "for", "all", "any", "new", "old", "put", "get", "set",
+                "add", "how", "why", "who", "was", "are", "has", "one", "two",
+            }
+            if (_stem and len(_stem) >= 4 and _stem not in _STEM_STOP
+                    and _re.search(rf"\b{_re.escape(_stem)}\b", text, _re.I)
+                    and all(_stem in r["item"]["name"].lower() for r in _tied)):
+                log.info(f"[EN ambiguous] {_stem!r} → {len(_tied)} 並列候選，回詞幹讓下游列清單")
+                return _stem
+            return ""
         return _m_en[0]["item"]["name"]
 
     # ── Layer 1: 完整雜詞剝除，取乾淨片段 ──
@@ -3121,11 +3159,55 @@ _CAT_GROUND_WORDS = {
     "apparel": ("服飾", "衣服", "服裝"), "sports": ("運動", "露營", "戶外", "健身"),
 }
 
+# ── EN build：英文類別詞表 ────────────────────────────────────────────────
+#   全系統 20+ 處 cat_zh_map 的**鍵全是中文**（值才是 slug）→ 英文類別句
+#   （'Electronics stock' / 'all Daily Goods stock'）一處也命中不了，被當成
+#   商品名 keyword 抽出去 → OOV「庫中無此商品」誠實拒絕＝整條類別查詢功能
+#   在英文版是壞的（實測 6 類別 5 個掛，GUIDE_MSG 還教訪客這樣問）。
+#   ⚠️ 不走「英文→中文改寫」：_rewrite_query 的註解記錄了多次資訊銷毀事故
+#   （時間詞被吞、倉名全毀）→ 用**加法**，只在需要 category 的點多問一句。
+#   ⚠️ 坑 1：英文一律詞界比對。'sports' 會出現在 Electrolyte Sports Drink，
+#   但那是商品名不是類別語境，故類別解析只在「無扎實商品名命中」時才採用。
+_CAT_WORDS_EN = {
+    "electronics":       (r"electronics?", r"3c", r"consumer electronics"),
+    "appliance_kitchen": (r"appliances?", r"kitchen(?:ware)?", r"home appliances?",
+                          r"appliance\s*&?\s*kitchen"),
+    "food_beverage":     (r"food", r"foods", r"beverages?", r"drinks?",
+                          r"food\s*&?\s*beverage", r"food and drinks?",
+                          r"groceries", r"grocery"),
+    "daily_goods":       (r"daily goods", r"daily necessities", r"household",
+                          r"household goods", r"consumables", r"toiletries"),
+    "apparel":           (r"apparel", r"clothing", r"clothes", r"garments?",
+                          r"wear"),
+    "sports":            (r"sports?", r"sporting goods", r"fitness", r"outdoor",
+                          r"camping", r"gym"),
+}
+
+
+def _category_from_en(user_text: str) -> str | None:
+    """英文句 → category slug。找不到回 None。
+    最長匹配優先（'food & beverage' 要贏 'food'），避免部分命中選錯類。"""
+    if not _is_mostly_english(user_text):
+        return None
+    _best, _best_len = None, 0
+    for _cat, _pats in _CAT_WORDS_EN.items():
+        for _p in _pats:
+            _m = _re.search(rf"\b{_p}\b", user_text, _re.I)
+            if _m and len(_m.group(0)) > _best_len:
+                _best, _best_len = _cat, len(_m.group(0))
+    return _best
+
 
 def _drop_ungrounded_category(func_args: dict, user_text: str) -> dict:
     """LLM 常幻覺 category（「彈力健身環庫存」給 apparel 把 sports 商品濾光
     變成找不到，conv100-r13）→ 句中沒對應類別詞就丟棄。"""
     _cat = func_args.get("category")
+    # EN build：接地詞表全中文 → 英文句 LLM 給的**正解 category 會被丟掉**
+    #   （坑 3「防幻覺閘門吃掉正解」）→ 英文另用英文詞表接地。
+    if _cat in VALID_CATEGORIES and _is_mostly_english(user_text):
+        if _category_from_en(user_text) == _cat:
+            return func_args          # 英文接地成功，保留
+        return {k: v for k, v in func_args.items() if k != "category"}
     if _cat in VALID_CATEGORIES and not any(
             w in user_text for w in _CAT_GROUND_WORDS.get(_cat, ())):
         func_args = {k: v for k, v in func_args.items() if k != "category"}
@@ -4444,7 +4526,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             log.info(f"[校正 C4] rank_type 校準 → {func_args['rank_type']}")
         # period 也要一起校——hard-return 會跳過 C4b（「這個月熱銷排行」曾顯示本週，conv100-r8）
         # r25：這季/本季 取最接近的 this_month（回答標示「本月」誠實呈現實際範圍）
-        _c4p = ("this_month" if any(w in user_text for w in ("本月", "這個月", "月度", "這季", "本季", "這一季")) else "this_week")
+        # EN build：詞表全中文 → 英文 'best sellers this month' 一律掉回
+        #   this_week（實測回「This week…」＝答非所問）。C4b 有補 'month'，
+        #   但 C4 是 hard-return 搶先，永遠輪不到 C4b（本行上方註解已預告）。
+        _c4p = ("this_month"
+                if (any(w in user_text for w in ("本月", "這個月", "月度", "這季", "本季", "這一季"))
+                    or _re.search(r"\b(?:this|current|the)\s+(?:month|quarter)\b"
+                                  r"|\bmonthly\b|\bthis quarter\b", user_text, _re.I))
+                else "this_week")
         # r30：elif 分支的 category 幻覺也要接地（「這個月各類別賣最好的」LLM
         # 自帶 apparel 曾只回服飾類）
         _c4cat = func_args.get("category")
@@ -4452,7 +4541,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _c4cat_words = {"electronics": ("電子", "3c"), "appliance_kitchen": ("家電", "廚具", "廚房"),
                             "food_beverage": ("食品", "飲料"), "daily_goods": ("日用", "生活用品", "清潔"),
                             "apparel": ("服飾", "衣服", "服裝"), "sports": ("運動", "健身", "露營", "戶外")}
-            if not any(w in user_text for w in _c4cat_words.get(_c4cat, ())):
+            # EN build：接地詞表全中文 → 英文句的正解 category 會被當幻覺丟掉（坑 3）
+            _c4_grounded = (any(w in user_text for w in _c4cat_words.get(_c4cat, ()))
+                            or _category_from_en(user_text) == _c4cat)
+            if not _c4_grounded:
                 func_args = {k: v for k, v in func_args.items() if k != "category"}
                 log.info(f"[校正 C4] elif 丟棄幻覺 category={_c4cat}")
         if func_args.get("period") != _c4p:
@@ -4469,6 +4561,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     func_args = {**func_args, "category": _cat4}
                     log.info(f"[校正 C4] 補 category={_cat4}")
                     break
+            # EN build：中文表沒中 → 用英文類別表補（'top selling sports gear
+            #   this month' 是 GUIDE_MSG 教訪客的句型）
+            else:
+                _cat4_en = _category_from_en(user_text)
+                if _cat4_en:
+                    func_args = {**func_args, "category": _cat4_en}
+                    log.info(f"[校正 C4] 補 category={_cat4_en}（EN）")
         return func_name, func_args, True
 
     # ── C4e: 存量問句被 LLM 誤投 hot_items → 攔回 inventory ──
@@ -5208,12 +5307,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 _gnames = [it["name"] for it in _W_c9g.state().items
                            if any(f in it["name"] for f in _gf)]
                 if len(_gnames) >= 2:
-                    _gopts = ([f"{n} {_c9g_key}改成{_gv}" for n in _gnames]
+                    # EN build：同 C11d，選項要是後端認得的英文設定句
+                    _c9g_key_en = _CFG_KEY_LABEL_EN.get(_c9g_key, _c9g_key)
+                    _gopts = ([f"set {_c9g_key_en} for {n} to {_gv}" for n in _gnames]
                               if _gv is not None else _gnames)
                     log.info(f"[校正 C9-gen] 通稱設定句 {_gt!r} → clarify {len(_gnames)} 候選")
                     return "clarify", {
-                        "question": f"「{_gt}」對應到 {len(_gnames)} 個商品，你要改哪一個的{_c9g_key}？",
-                        "options": _gopts, "hint": "點選其中一項，或直接輸入完整商品名稱"}, True
+                        "question": (f"\"{_gt}\" matches {len(_gnames)} items. "
+                                     f"Which one's {_c9g_key_en} do you want to change?"),
+                        "options": _gopts,
+                        "hint": "Tap one, or type the full item name"}, True
                 break
 
     # C9-pct（r50·危險修復）：百分比/「N成」值＋設定意圖 → 誠實追問。C9 hard-return
@@ -5334,15 +5437,44 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   「就通知我 / 設個提醒 / 警示我 / 低於X就告訴我」
     _alert_words = ("通知我", "提醒我", "警示", "告訴我", "就通知", "設個提醒",
                     "設定警示", "低於就", "缺貨就", "到期就", "alert", "提醒")
+    # ── EN build：第二個 and 條件原本全中文（通知/提醒/警示/告訴）→ 英文句
+    #    命中 _alert_words 的 'alert' 卻過不了第二關，C14 對英文完全失效
+    #    （實測 'set alert' 掉到 query_inventory 回全店概覽）。
+    #    ⚠️ 坑 1：英文用詞界，避免 'alert' ∈ 'alerted' 之外的意外 substring。
+    _en_alert_hit = bool(_re.search(
+        r"\b(?:alert|alerts|notify|notification|notifications|remind|reminder|"
+        r"warn|warning|ping|heads[- ]?up|let me know|tell me when|"
+        r"drops? below|falls? below|goes? below|runs? out)\b",
+        user_text, _re.I))
+    # ⚠️ 守衛回歸：'expiry alerts' / 'stock alerts' / 'shelf life warnings' 是
+    #   **查清單**（exp / low_stock），不是設警示規則。裸名詞 alerts/warnings
+    #   跟著查詢主題詞出現時要讓路，否則 C14 會把整批查詢句搶成 alert_confirm。
+    #   （鏡像於 C3「警示設定讓路」——那邊是設定讓查詢路，這邊是查詢讓設定路。）
+    if _en_alert_hit and not _re.search(
+            r"\b(?:set|create|add|make|configure|enable|turn on|schedule|"
+            r"notify me|remind me|let me know|tell me when|alert me|when(?:ever)?|"
+            r"if|once|below|under|drops?|falls?|goes?)\b", user_text, _re.I):
+        # 沒有任何「設定/條件」語 → 是查詢句（'expiry alerts'、'stock alerts'）
+        _en_alert_hit = False
     if func_name != "set_alert" and any(w in user_text for w in _alert_words) \
-            and any(w in user_text for w in ("通知", "提醒", "警示", "告訴")):
-        cond = ("out_of_stock" if any(w in user_text for w in ("缺貨", "斷貨", "沒貨")) else
-                "expiring" if any(w in user_text for w in ("到期", "過期", "效期")) else
+            and (any(w in user_text for w in ("通知", "提醒", "警示", "告訴"))
+                 or _en_alert_hit):
+        # EN build：condition 判定原只認中文 → 英文一律落到 below_safety
+        #   （'alert me when X runs out' 應是 out_of_stock、'expiring' 應是 expiring）
+        cond = ("out_of_stock" if (any(w in user_text for w in ("缺貨", "斷貨", "沒貨"))
+                                   or _re.search(r"\b(?:runs? out|run out|out of stock|"
+                                                 r"sold out|stockout)\b", user_text, _re.I)) else
+                "expiring" if (any(w in user_text for w in ("到期", "過期", "效期"))
+                               or _re.search(r"\b(?:expir\w*|shelf life|use[- ]?by|"
+                                             r"best before)\b", user_text, _re.I)) else
                 "below_safety")
         log.info(f"[校正 C14] 警示意圖 → set_alert{{{cond}}}（原 {func_name}）")
         # 直接在 C14 內做 C17b 的工作，因為 return 後 C17b 跑不到
         import re as _re14
-        _thr14 = _re14.search(r'(?:低於|少於|小於|不足)\s*(\d+)', user_text)
+        # EN build：門檻正則原只認中文（低於/少於）→ 'drops below 30' 抓不到數字
+        _thr14 = (_re14.search(r'(?:低於|少於|小於|不足)\s*(\d+)', user_text)
+                  or _re14.search(r'\b(?:below|under|less than|fewer than|drops? to|'
+                                  r'falls? to)\s*(\d+)', user_text, _re14.I))
         _tgt14 = _extract_sku_keyword(user_text) or ""
         _c14_args = {"condition": ("below_threshold" if _thr14 else cond), "target": _tgt14}
         if _thr14:
@@ -5478,12 +5610,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 # 直接續 config 流——裸商品名會丟失「改成50」的原意圖變成查詢追問
                 _c11d_key = func_args.get("key", "安全庫存")
                 _c11d_val = str(func_args.get("value", "")).strip()
-                _c11d_opts = ([f"{n} {_c11d_key}改成{_c11d_val}" for n in _c11d_tied[:8]]
+                # EN build：選項是「點了會送回後端的查詢字串」，中文會被英文版
+                #   守門員 reject＝點了沒反應。用已驗證可用的英文設定句型。
+                _c11d_key_en = _CFG_KEY_LABEL_EN.get(_c11d_key, _c11d_key)
+                _c11d_opts = ([f"set {_c11d_key_en} for {n} to {_c11d_val}"
+                               for n in _c11d_tied[:8]]
                               if _c11d_val else _c11d_tied[:8])
                 return "clarify", {
-                    "question": f"「{func_args['item']}」對應到 {len(_c11d_tied)} 個商品，你要改哪一個的{_c11d_key}？",
+                    "question": (f"\"{func_args['item']}\" matches {len(_c11d_tied)} items. "
+                                 f"Which one's {_c11d_key_en} do you want to change?"),
                     "options": _c11d_opts,
-                    "hint": "點選其中一項，或直接輸入完整商品名稱"}, True
+                    "hint": "Tap one, or type the full item name"}, True
 
     # （r43 曾加 C11e「無 item 追問範圍」→ 守衛 11 句誤攔即撤：倉別/全域 config
     #   不指名商品是既有合法行為，確認卡本身就是保險。危險防線收斂為 C11f 百分比。）
@@ -5682,6 +5819,31 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 通用 category 接地檢查（inventory/related 直達路徑，conv100-r13）
     if func_name in ("query_inventory", "query_related_items"):
         func_args = _drop_ungrounded_category(func_args, user_text)
+
+    # ── EN build：英文類別句補 category（'all Sports stock'）────────────────
+    #   全系統 cat_zh_map 鍵全中文 → 英文類別詞填不進 category。走 OOV 那條的
+    #   已在 oov:noex→cat 攔下，但**類別詞撞到商品名**時（sports ∈ Electrolyte
+    #   Sports Drink）不會進 OOV，而是 keyword 抽空 → 全店 60 商品概覽。
+    #   條件從嚴：只在 query_inventory、**沒有 category 也沒抽到扎實商品名**時補，
+    #   避免把 'sports drink stock'（真商品）誤轉成整個 sports 類。
+    if (func_name == "query_inventory" and not func_args.get("category")
+            and _is_mostly_english(user_text)):
+        _cat_en2 = _category_from_en(user_text)
+        if _cat_en2:
+            _kw_en2 = str(func_args.get("keyword", "")).strip()
+            _solid_kw = False
+            if _kw_en2:
+                try:
+                    import warehouse as _W_ce
+                    _m_ce = _W_ce.match_items(_kw_en2)
+                    _solid_kw = bool(_m_ce and _m_ce[0].get("score", 0) >= 8)
+                except Exception:
+                    _solid_kw = False
+            if not _solid_kw:
+                func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                func_args["category"] = _cat_en2
+                log.info(f"[EN cat-fill] {user_text!r} → query_inventory"
+                         f"{{category:{_cat_en2}}}（原 kw={_kw_en2!r} 不扎實）")
 
     # related 直達且 kw 是雜訊（「買精釀啤酒的都會多帶什麼」LLM kw='都會'
     # → related_empty，conv100-r14）→ 從原句重抽
@@ -6439,7 +6601,9 @@ def load_system_prompt() -> str:
 def load_model():
     from llama_cpp import Llama
     path = find_gguf()
-    _set_health("loading_model", f"載入模型中... ({Path(path).name})")
+    # EN build：_set_health 的 message 會透過 /health 顯示在**訪客載入畫面**上
+    #   （log/print 是維運訊息、保留中文）
+    _set_health("loading_model", f"Loading model... ({Path(path).name})")
     log.info(f"載入模型：{path}")
     log.info(f"CPU 設定: n_threads={N_THREADS} n_threads_batch={N_THREADS_BATCH} "
              f"n_batch={N_BATCH} n_ctx={N_CTX}")
@@ -6455,7 +6619,7 @@ def load_model():
         flash_attn=False,
         verbose=False,
     )
-    _set_health("self_check", "模型載入完成、正在自我檢測推論（最多等 10 秒）...")
+    _set_health("self_check", "Model loaded, running inference self-check (up to 10s)...")
     log.info("模型載入完成、正在自我檢測推論...")
 
     import threading
@@ -6488,7 +6652,7 @@ def load_model():
             "  3. CPU 太舊（早於 2008 年）\n"
             "請回報此問題並附上 CPU 型號（執行 wmic cpu get name 取得）"
         )
-        _set_health("failed", "推論自我檢測失敗（10 秒無回應）", error=err_msg)
+        _set_health("failed", "Inference self-check failed (no response in 10s)", error=err_msg)
         print("\n" + "=" * 70, flush=True)
         print(" X 推論自我檢測失敗：超過 10 秒沒回應", flush=True)
         print("=" * 70, flush=True)
@@ -6500,7 +6664,7 @@ def load_model():
     if result_holder["error"] is not None:
         e = result_holder["error"]
         err_msg = f"{type(e).__name__}: {e}"
-        _set_health("failed", "推論自我檢測失敗（例外）", error=err_msg)
+        _set_health("failed", "Inference self-check failed (exception)", error=err_msg)
         raise RuntimeError(f"推論自我檢測失敗: {err_msg}") from e
 
     log.info(f"模型就緒 OK 自我檢測輸出: {result_holder['text']!r}")
@@ -6725,7 +6889,7 @@ def _background_init():
     """背景載入模型。"""
     global LLM, MODEL_FILE, SYSTEM_PROMPT
     try:
-        _set_health("starting", "初始化 seed 資料...")
+        _set_health("starting", "Initializing seed data...")
         finance.init(WH_DATA_DIR)
         intent_clf.load()
         SYSTEM_PROMPT = load_system_prompt()
@@ -6748,11 +6912,12 @@ def _background_init():
         log.info(f"SKU 數：{len(snap.items)} / 倉庫：{len(snap.warehouses)} / 類別：{len(snap.categories)}")
         log.info(f"URL: {get_url()}")
         _set_health("ready",
-                    f"就緒 — 快照 {snap.snapshot_date}、{len(snap.items)} SKU、{len(snap.warehouses)} 倉")
+                    f"Ready — snapshot {snap.snapshot_date}, {len(snap.items)} SKUs, "
+                    f"{len(snap.warehouses)} warehouses")
     except Exception as e:
         log.error(f"[startup] 初始化失敗: {e}", exc_info=True)
         if HEALTH["stage"] != "failed":
-            _set_health("failed", "初始化失敗", error=f"{type(e).__name__}: {e}")
+            _set_health("failed", "Initialization failed", error=f"{type(e).__name__}: {e}")
 
 
 @app.on_event("startup")
@@ -7028,7 +7193,8 @@ async def api_query(req: Request):
                         timeout=25.0,
                     )
         except (asyncio.TimeoutError, TimeoutError):
-            return JSONResponse({"ok": False, "view": "error", "summary": "系統忙碌中，請稍後再試"})
+            return JSONResponse({"ok": False, "view": "error",
+                                 "summary": "System is busy, please try again in a moment"})
         except Exception as e:
             return JSONResponse({"ok": False, "view": "error", "summary": str(e)})
 
@@ -7418,14 +7584,30 @@ async def api_query(req: Request):
     # ── 參數錯誤時，從 user_text 推測正確意圖 → clarify ──
     if isinstance(result, dict) and not result.get("ok") and "unexpected keyword" in str(result.get("summary", "")):
         log.info(f"[dispatch] 參數錯誤 {func_name}: {result['summary']!r} → clarify")
-        _hint_q = "你是想查什麼？"
-        _hint_opts = ["哪些商品快缺貨", "哪些商品快到期", "本週熱銷商品", "採購對帳異常"]
-        # 從 user_text 推測
-        if any(w in user_text for w in ("哪個", "哪", "比較", "比", "多", "少")):
-            _hint_q = "你是想比較倉庫、還是查庫存排行？"
-            _hint_opts = ["北倉跟南倉庫存比較", "本月熱銷排行", "查全部庫存"]
-        result = {"ok": True, "view": "clarify", "question": _hint_q, "options": _hint_opts,
-                  "hint": "輸入數字選擇，或直接輸入更完整的問題", "data": {}}
+        # EN build：這是**語言無關**的錯誤路徑（參數對不上就會走到），英文句
+        #   到得了 → 訊息與選項全給英文（選項送回後端，中文會被守門員 reject）。
+        if _is_mostly_english(user_text):
+            _hint_q = "What would you like to check?"
+            _hint_opts = ["whats running low", "whats expiring soon",
+                          "best sellers this week", "any stock discrepancies"]
+            if _re.search(r"\b(?:which|compare|more|less|most|least|versus|vs)\b",
+                          user_text, _re.I):
+                _hint_q = "Do you want to compare warehouses, or see a stock ranking?"
+                _hint_opts = ["compare north and south warehouse",
+                              "best sellers this month", "all items stock"]
+            result = {"ok": True, "view": "clarify", "question": _hint_q,
+                      "options": _hint_opts,
+                      "hint": "Tap an option, or type a more complete question",
+                      "data": {}}
+        else:
+            _hint_q = "你是想查什麼？"
+            _hint_opts = ["哪些商品快缺貨", "哪些商品快到期", "本週熱銷商品", "採購對帳異常"]
+            # 從 user_text 推測
+            if any(w in user_text for w in ("哪個", "哪", "比較", "比", "多", "少")):
+                _hint_q = "你是想比較倉庫、還是查庫存排行？"
+                _hint_opts = ["北倉跟南倉庫存比較", "本月熱銷排行", "查全部庫存"]
+            result = {"ok": True, "view": "clarify", "question": _hint_q, "options": _hint_opts,
+                      "hint": "輸入數字選擇，或直接輸入更完整的問題", "data": {}}
 
     if isinstance(result, dict):
         result["_function"] = func_name
@@ -7642,7 +7824,7 @@ async def asr_api(req: Request):
 
     audio = await req.body()
     if not audio:
-        return JSONResponse({"ok": False, "reason": "沒收到音訊"}, headers=NO_CACHE)
+        return JSONResponse({"ok": False, "reason": "No audio received"}, headers=NO_CACHE)
 
     t0 = _time.time()
     with tempfile.TemporaryDirectory() as td:
@@ -7657,10 +7839,10 @@ async def asr_api(req: Request):
                 capture_output=True, timeout=30,
             )
         except Exception as e:
-            return JSONResponse({"ok": False, "reason": f"轉檔失敗：{e}"},
+            return JSONResponse({"ok": False, "reason": f"Audio conversion failed: {e}"},
                                 headers=NO_CACHE)
         if not wav.exists() or wav.stat().st_size < 1000:
-            return JSONResponse({"ok": False, "reason": "音訊太短或格式不支援"},
+            return JSONResponse({"ok": False, "reason": "Audio too short or unsupported format"},
                                 headers=NO_CACHE)
 
         try:
@@ -7670,7 +7852,7 @@ async def asr_api(req: Request):
                 capture_output=True, text=True, timeout=120,
             )
         except subprocess.TimeoutExpired:
-            return JSONResponse({"ok": False, "reason": "辨識逾時"}, headers=NO_CACHE)
+            return JSONResponse({"ok": False, "reason": "Speech recognition timed out"}, headers=NO_CACHE)
 
     # CLI 夾雜載入訊息 → 取最後一行含中文的輸出
     text = ""
@@ -7679,7 +7861,7 @@ async def asr_api(req: Request):
             text = ln
             break
     if not text:
-        return JSONResponse({"ok": False, "reason": "沒聽出內容"}, headers=NO_CACHE)
+        return JSONResponse({"ok": False, "reason": "Could not make out any speech"}, headers=NO_CACHE)
 
     text = _VOICE_CC.convert(text).strip(" 。，？！、.,?!~～")
     _raw = text
@@ -7863,10 +8045,12 @@ async def ws_handler(ws: WebSocket):
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                         await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
                     else:
-                        res = {"ok": False, "summary": "未知的確認動作", "view": "error", "data": {}}
+                        res = {"ok": False, "summary": "Unknown confirmation action",
+                               "view": "error", "data": {}}
                 except Exception as e:
                     log.error(f"[confirm] vid={vid} {act} 失敗: {e}", exc_info=True)
-                    res = {"ok": False, "summary": f"執行失敗：{e}", "view": "error", "data": {}}
+                    res = {"ok": False, "summary": f"Action failed: {e}",
+                           "view": "error", "data": {}}
                 log.info(f"[confirm] vid={vid} {act} → {res.get('summary','')[:60]}")
                 await push_display({"type": "trace", "stage": "committed",
                                     "action": act, "result": res,
@@ -8667,7 +8851,7 @@ async def ws_handler(ws: WebSocket):
             if not _ic_st.get("active") and not is_meaningful_input(user_text):
                 log.info(f"[守門員] 拒絕無意義輸入: {user_text!r}")
                 await push_display({"type": "trace", "stage": "rejected",
-                                    "reason": "輸入未命中倉管關鍵字"})
+                                    "reason": "input matched no warehouse keywords"})
                 for ch in GATEKEEPER_REJECT_MSG:
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(_TK_DELAY.get())
@@ -9841,8 +10025,8 @@ async def ws_handler(ws: WebSocket):
                                     _pq_sm.append(_gm[0])
                     if len(_pq_sm) > 1:
                         _pq_snames = [r["item"]["name"] for r in _pq_sm[:8]]
-                        _pq_sq = (f"「{_pq_stem}」相關有 {len(_pq_snames)} 個商品，"
-                                  f"想問哪一個的價格？（想一項項看也可以直接點）")
+                        _pq_sq = (f"\"{_pq_stem}\" covers {len(_pq_snames)} items. "
+                                  f"Which one's price do you want? (or tap them one by one)")
                         log.info(f"[dispatch-ws] 組合詞價格選單: {_pq_stem!r} × {len(_pq_snames)}")
                         for ch in _pq_sq:
                             await send({"type": "token", "text": ch})
@@ -9850,8 +10034,8 @@ async def ws_handler(ws: WebSocket):
                         await send({"type": "done", "result": {
                             "ok": True, "view": "clarify", "summary": _pq_sq,
                             "data": {"question": _pq_sq,
-                                     "options": [f"{n} 多少錢" for n in _pq_snames],
-                                     "hint": "點選其中一項，或直接說完整商品名稱"}}})
+                                     "options": [f"how much is {n}" for n in _pq_snames],
+                                     "hint": "Tap one, or say the full item name"}}})
                         continue
                 _pq_kw = _extract_sku_keyword(user_text)
                 _pq_m = _W_pq.match_items(_pq_kw) if _pq_kw else []
@@ -9871,8 +10055,8 @@ async def ws_handler(ws: WebSocket):
                             if _gm59:
                                 _pq_n59.append(_gm59[0]["item"]["name"])
                         if len(_pq_n59) > 1:
-                            _pq_q59 = (f"「{_pq_st59}」對應到 {len(_pq_n59)} 個商品，"
-                                       f"你想問哪一個的價格？")
+                            _pq_q59 = (f"\"{_pq_st59}\" matches {len(_pq_n59)} items. "
+                                       f"Which one's price do you want?")
                             log.info(f"[dispatch-ws] 通稱價格選單: {_pq_st59!r}")
                             for ch in _pq_q59:
                                 await send({"type": "token", "text": ch})
@@ -9880,8 +10064,8 @@ async def ws_handler(ws: WebSocket):
                             await send({"type": "done", "result": {
                                 "ok": True, "view": "clarify", "summary": _pq_q59,
                                 "data": {"question": _pq_q59,
-                                         "options": [f"{n} 多少錢" for n in _pq_n59],
-                                         "hint": "點選其中一項，或直接說完整商品名稱"}}})
+                                         "options": [f"how much is {n}" for n in _pq_n59],
+                                         "hint": "Tap one, or say the full item name"}}})
                             continue
                         elif len(_pq_n59) == 1:
                             _pq_m = _W_pq.match_items(_pq_n59[0])
@@ -9892,8 +10076,8 @@ async def ws_handler(ws: WebSocket):
                     _pq_tied = [r["item"]["name"] for r in _pq_m
                                 if r.get("score", 0) * 2 >= _pq_m[0]["score"]][:8]
                     if len(_pq_tied) > 1:
-                        _pq_q = (f"「{_pq_kw}」對應到 {len(_pq_tied)} 個商品，"
-                                 f"你想問哪一個的價格？")
+                        _pq_q = (f"\"{_pq_kw}\" matches {len(_pq_tied)} items. "
+                                 f"Which one's price do you want?")
                         log.info(f"[dispatch-ws] 價格歧義選單: {_pq_kw!r} × {len(_pq_tied)}")
                         for ch in _pq_q:
                             await send({"type": "token", "text": ch})
@@ -9901,8 +10085,8 @@ async def ws_handler(ws: WebSocket):
                         await send({"type": "done", "result": {
                             "ok": True, "view": "clarify", "summary": _pq_q,
                             "data": {"question": _pq_q,
-                                     "options": [f"{n} 多少錢" for n in _pq_tied],
-                                     "hint": "點選其中一項，或直接說完整商品名稱"}}})
+                                     "options": [f"how much is {n}" for n in _pq_tied],
+                                     "hint": "Tap one, or say the full item name"}}})
                         continue
                 if _pq_m and _pq_m[0].get("score", 0) >= 3 and _kw_grounded(_pq_kw, user_text):
                     _pq_it = _pq_m[0]["item"] if "item" in _pq_m[0] else _pq_m[0]
@@ -10738,12 +10922,14 @@ async def ws_handler(ws: WebSocket):
                     log.warning(f"[timeout] vid={vid} 推理超時: {user_text!r}")
                     await send({
                         "type": "error",
-                        "text": "系統有點忙、請稍候再試（試試更簡短的講法、例如「藍牙耳機庫存」）",
+                        "text": ("System is a bit busy, please try again in a moment "
+                                 "(a shorter phrasing helps, e.g. "
+                                 "\"bluetooth earphones stock\")"),
                     })
                     continue
                 except Exception as e:
                     log.error(f"[llm-error] vid={vid} {type(e).__name__}: {e}", exc_info=True)
-                    await send({"type": "error", "text": "推理失敗、請重試"})
+                    await send({"type": "error", "text": "Inference failed, please try again"})
                     continue
 
                 output = r["choices"][0]["text"].strip()
@@ -10764,7 +10950,9 @@ async def ws_handler(ws: WebSocket):
                 if not parsed:
                     log.info(f"[trace] vid={vid} no_function")
                     await send({"type": "error",
-                                "text": "我看不懂這句話。試試：「藍牙耳機庫存」「庫存警示」「本月熱銷」"})
+                                "text": ("I didn't get that. Try: \"bluetooth earphones "
+                                         "stock\", \"stock alerts\", \"best sellers "
+                                         "this month\"")})
                     await push_display({"type": "trace", "stage": "no_function"})
                     continue
 
@@ -11184,6 +11372,38 @@ async def ws_handler(ws: WebSocket):
                             except Exception:
                                 pass
                             _unknown.append(_tx)
+                        # ── EN build：陌生詞其實是「類別詞」→ 類別查詢，不是查無 ──
+                        #   全系統 cat_zh_map 的鍵都是中文，英文類別句
+                        #   （'all Electronics stock' / 'Daily Goods stock'）
+                        #   一處也命中不了 → 類別詞被當商品名 → 這裡誠實拒絕，
+                        #   整條類別查詢功能在英文版是壞的（6 類 5 個掛，
+                        #   GUIDE_MSG 還教訪客這樣問）。改成先問類別表。
+                        if _unknown:
+                            _cat_nx = _category_from_en(user_text)
+                            if _cat_nx:
+                                # 確認陌生詞**全部**來自類別詞本身，不是「類別詞 +
+                                #   真的不存在的商品」（'Electronics unicorn'
+                                #   仍該誠實說沒有 unicorn）。
+                                #   ⚠️ 類別詞可能是**多詞**（daily goods /
+                                #   sporting goods）→ 不能逐詞 fullmatch（配不到），
+                                #   改成把類別 pattern 從原句挖掉後，看還剩哪些
+                                #   陌生詞。
+                                _cat_strip = user_text
+                                for _p in _CAT_WORDS_EN[_cat_nx]:
+                                    _cat_strip = _re.sub(rf"\b{_p}\b", " ",
+                                                         _cat_strip, flags=_re.I)
+                                _cat_left = {
+                                    _w.strip(" ?.!,'\"").lower()
+                                    for _w in _re.split(r"[\s\-/]+", _cat_strip)
+                                    if len(_w.strip(" ?.!,'\"")) >= 3
+                                }
+                                if not (set(_unknown) & _cat_left):
+                                    log.info(f"[oov:noex→cat] vid={vid} 英文類別詞 "
+                                             f"{_unknown} → query_inventory"
+                                             f"{{category:{_cat_nx}}}")
+                                    func_name = "query_inventory"
+                                    func_args = {"category": _cat_nx}
+                                    _unknown = []
                         if _unknown:
                             _nx_name = " ".join(_unknown)
                             log.info(f"[oov:noex] vid={vid} 庫中無此商品 {_nx_name!r} → 誠實回覆")
@@ -11364,9 +11584,13 @@ async def ws_handler(ws: WebSocket):
 
                 # ── dispatch-ws：item_create 分步流程（per-vid）──
                 if _item_create_state_ws.get(vid, {}).get("active"):
-                    if user_text.strip() == "取消":
+                    # EN build：原本寫死 == "取消"，英文訪客講 cancel / never mind
+                    #   出不來＝卡在新增流程裡（_ABORT_WORDS 已含英文，改用共用表）
+                    _ic_t = user_text.strip().lower().rstrip(" .!?")
+                    if (user_text.strip() == "取消"
+                            or _ic_t in {w.lower() for w in _ABORT_WORDS}):
                         _item_create_state_ws.pop(vid, None)
-                        await send({"type": "token", "text": "已取消新增商品。"})
+                        await send({"type": "token", "text": "Item creation cancelled."})
                         await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
                         continue
                     import tools_v2 as _tv2_item_ws
@@ -11516,14 +11740,29 @@ async def ws_handler(ws: WebSocket):
                                             "reason": "rca_no_item"})
                         # 選項用「動作型」而非寫死商品名——展場資料會變動，
                         # 且訪客要查的商品未必在任何固定清單裡（同 6150 行風格）。
-                        _rca_ask = {
-                            "ok": True, "view": "clarify",
-                            "summary": "帳對不上要查哪個商品呢？說商品名我幫你追進出紀錄。",
-                            "question": "是哪個商品的帳對不上？",
-                            "options": ["哪些商品有異常", "採購對帳異常", "哪些商品快缺貨"],
-                            "hint": "直接說商品名也可以，例如「滑鼠的帳對不上」",
-                            "data": {},
-                        }
+                        # EN build：_has_rca_word 已補英文（who moved / count off /
+                        #   dont match…）→ 英文句到得了這裡，訊息與選項要英文。
+                        if _is_mostly_english(user_text):
+                            _rca_ask = {
+                                "ok": True, "view": "clarify",
+                                "summary": ("Which item's count is off? Tell me the item "
+                                            "name and I will trace its movements."),
+                                "question": "Which item's records don't match?",
+                                "options": ["which items have anomalies",
+                                            "purchase reconciliation issues",
+                                            "which items are running low"],
+                                "hint": 'You can just say the item name, e.g. "the mouse count is off"',
+                                "data": {},
+                            }
+                        else:
+                            _rca_ask = {
+                                "ok": True, "view": "clarify",
+                                "summary": "帳對不上要查哪個商品呢？說商品名我幫你追進出紀錄。",
+                                "question": "是哪個商品的帳對不上？",
+                                "options": ["哪些商品有異常", "採購對帳異常", "哪些商品快缺貨"],
+                                "hint": "直接說商品名也可以，例如「滑鼠的帳對不上」",
+                                "data": {},
+                            }
                         await send({"type": "done", "result": _rca_ask})
                         continue
                     if _rescue:
