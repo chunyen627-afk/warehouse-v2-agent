@@ -2712,6 +2712,19 @@ def _en_fuzzy_keyword(core: str) -> str:
                 _a, _b = tok[:_cut], tok[_cut:]
                 _ah = cand.get(_a) or cand.get(_a.rstrip("s"))
                 _bh = cand.get(_b) or cand.get(_b.rstrip("s"))
+                # ⚠️ 合成詞**又打錯字**（pwerbank = powerbank 漏 o）：
+                #   拆成 pwer|bank 時 bank 精確命中、pwer 要靠模糊。
+                #   原本兩段都要求精確 → 這類永遠救不回（守衛 inv 長尾）。
+                #   放寬成允許模糊，但**兩段必須指向同一商品**這個安全條件
+                #   不變——實測 pwer|bank 兩段模糊都指向 Power Bank，
+                #   一致性本身就是很強的證據（亂拆不可能兩段都中同一個）。
+                if not (_ah and _bh):
+                    if len(_a) >= 4 and not _ah:
+                        _fa = difflib.get_close_matches(_a, keys, n=1, cutoff=0.80)
+                        _ah = cand[_fa[0]] if _fa else None
+                    if len(_b) >= 4 and not _bh:
+                        _fb = difflib.get_close_matches(_b, keys, n=1, cutoff=0.80)
+                        _bh = cand[_fb[0]] if _fb else None
                 if _ah and _bh and _ah == _bh:
                     _sp_hit = _ah
                     break

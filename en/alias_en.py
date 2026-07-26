@@ -50,6 +50,14 @@ ALIAS_EN = {
     "small fan":          "Desktop USB Fan",
     "type-c cable":       "USB-C Fast Charging Cable",
     "charger cable":      "USB-C Fast Charging Cable",
+    # ⚠️ 'usbc'（訪客常把 USB-C 連寫）在模糊層對不到——主檔名拆詞後
+    #   'usb' 只有 3 字母，被候選池的 len>=4 濾掉，'usbc' 因此無詞可比。
+    #   加成 alias 是最乾淨的解（不必為此放寬全域長度門檻）。
+    "usbc cable":         "USB-C Fast Charging Cable",
+    "usbc":               "USB-C Fast Charging Cable",
+    "usb c":              "USB-C Fast Charging Cable",
+    "usb cable":          "USB-C Fast Charging Cable",
+    "fast charging cable": "USB-C Fast Charging Cable",
     # appliance / kitchen
     "thermos jar":        "Thermal Food Jar",
     "insulated jar":      "Thermal Food Jar",
