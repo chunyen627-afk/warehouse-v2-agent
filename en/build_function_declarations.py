@@ -84,7 +84,7 @@ DECLARATIONS = [
         "query_inventory",
         "query inventory by keyword or category",
         [
-            ("keyword",   "free text item keyword like 藍牙耳機 or 氣泡水", "STRING"),
+            ("keyword",   "free text item keyword like bluetooth earphones or sparkling water", "STRING"),
             ("category",  "category enum",  "STRING"),
             ("warehouse", "warehouse enum", "STRING"),
         ],
@@ -102,7 +102,7 @@ DECLARATIONS = [
     ),
     make_decl(
         "list_low_stock",
-        "items below safety stock (缺貨)",
+        "items below safety stock (running low / out of stock)",
         [
             ("warehouse", "warehouse enum", "STRING"),
             ("category",  "category enum",  "STRING"),
@@ -121,7 +121,7 @@ DECLARATIONS = [
     ),
     make_decl(
         "list_hot_items",
-        "hot/slow selling items (熱銷/滯銷)",
+        "hot/slow selling items (best sellers / slow movers)",
         [
             ("rank_type", "hot|slow",                  "STRING"),
             ("period",    "this_week|this_month",      "STRING"),
@@ -131,9 +131,9 @@ DECLARATIONS = [
     ),
     make_decl(
         "query_related_items",
-        "items often bought together (連帶備貨)",
+        "items often bought together (related stocking)",
         [
-            ("keyword",  "free text item keyword like 藍牙耳機 or 咖啡機", "STRING"),
+            ("keyword",  "free text item keyword like bluetooth earphones or coffee machine", "STRING"),
             ("category", "category enum (optional)", "STRING"),
         ],
         ["keyword"],
@@ -141,7 +141,7 @@ DECLARATIONS = [
     # ── v2 Agent 進階工具（Agentic 工具）────────────────────────────────
     make_decl(
         "search_log",
-        "root-cause of stock discrepancy (對不上/異常)",
+        "root-cause of stock discrepancy (count off / anomaly)",
         [
             ("keyword",    "item keyword verbatim", "STRING"),
             ("time_range", "today|this_week|this_month", "STRING"),
@@ -162,7 +162,7 @@ DECLARATIONS = [
     ),
     make_decl(
         "run_script",
-        "run a whitelisted script (盤點/匯出/重產)",
+        "run a whitelisted script (stocktake / export / regenerate)",
         [
             ("script_name", "script keyword verbatim", "STRING"),
         ],
@@ -173,7 +173,7 @@ DECLARATIONS = [
     #   但訓練樣本保留讓模型學得會。
     make_decl(
         "generate_report",
-        "write a report file (報告/報表/體檢)",
+        "write a report file (report / health check)",
         [
             ("report_type", "full|low_stock|expiring|rca", "STRING"),
         ],
@@ -181,7 +181,7 @@ DECLARATIONS = [
     ),
     make_decl(
         "list_files",
-        "list data files (有哪些檔)",
+        "list data files (what files are there)",
         [
             ("area", "area name (optional)", "STRING"),
         ],
@@ -189,7 +189,7 @@ DECLARATIONS = [
     ),
     make_decl(
         "set_alert",
-        "set alert rule (缺貨/到期就通知我)",
+        "set alert rule (notify me when low or expiring)",
         [
             ("condition", "below_safety|out_of_stock|expiring", "STRING"),
             ("target", "item keyword (optional)", "STRING"),
@@ -198,7 +198,7 @@ DECLARATIONS = [
     ),
     make_decl(
         "generate_po",
-        "draft purchase order (採購單/補貨)",
+        "draft purchase order (PO / restock)",
         [
             ("source", "low_stock|shortfall", "STRING"),
         ],
