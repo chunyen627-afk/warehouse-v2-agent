@@ -1220,6 +1220,24 @@ _SCHEDULE_SCRIPT_MAP = {
     "進出報表": "export_movements",
     "報表":     "generate_report",
 }
+
+# EN build：英文腳本詞（原表全中文 → 英文排程句抽不到 script_id，
+#   set_schedule 會回「Script "" not found」）。
+#   ⚠️ 順序＝優先權：長片語在前，避免 'movement report' 被單獨的 'report' 先吃掉。
+#   ⚠️ 坑 1：一律詞界，'audit' 不可 substring 撞到別的字。
+_SCHEDULE_SCRIPT_RE_EN = [
+    (r"\b(?:stock ?take|stocktake|month[- ]end (?:stock ?take|audit|count)|"
+     r"stock audit|inventory audit|inventory count|cycle count)\b", "stock_audit"),
+    (r"\b(?:low[- ]stock (?:alert|check|report|list)|stock alert|"
+     r"shortage (?:alert|check)|reorder check)\b", "stock_audit"),
+    (r"\b(?:movement report|movements? export|export movements?|"
+     r"in ?/ ?out report|inbound[- /]outbound report|shipment report|"
+     r"transaction export)\b", "export_movements"),
+    (r"\b(?:health check|full report|weekly report|monthly report|"
+     r"summary report|ops report|report|reports)\b", "generate_report"),
+    (r"\b(?:export)\b", "export_movements"),
+    (r"\b(?:audit)\b", "stock_audit"),
+]
 _SCHEDULE_TIME_MAP = {
     "早上": "09:00", "上午": "09:00", "早": "09:00",
     "中午": "12:00", "下午": "14:00", "傍晚": "17:00",
@@ -1231,6 +1249,29 @@ _SCHEDULE_FREQ_MAP = {
     "每月": "monthly", "每個月": "monthly", "月底": "monthly",
 }
 
+# EN build：英文頻率詞（原表全中文 → 英文排程句 freq 永遠停在預設 daily，
+#   'every monday' / 'weekly' 都會被當每天）。用 regex 是因為要詞界比對，
+#   且 'every monday' 這種多詞片語 substring 比對不可靠。
+_SCHEDULE_FREQ_RE_EN = [
+    (r"\b(?:every\s+(?:month|month\s+end)|monthly|month[- ]end|"
+     r"each\s+month)\b", "monthly"),
+    (r"\b(?:every\s+(?:week|monday|tuesday|wednesday|thursday|friday|"
+     r"saturday|sunday)|weekly|each\s+week)\b", "weekly"),
+    # ⚠️ 'daily goods' 是**類別名**（Daily Goods）不是頻率詞——守衛 low 類
+    #   'low stock daily goods' 曾被判成排程句 → set_schedule 抽不到腳本 → error
+    (r"\b(?:every\s+(?:day|morning|night|evening)|"
+     r"daily(?!\s+(?:goods|necessities))|nightly|each\s+day)\b", "daily"),
+]
+# EN build：英文時段詞（對應 _SCHEDULE_TIME_MAP）
+_SCHEDULE_TIME_RE_EN = [
+    (r"\b(?:early morning|dawn)\b", "02:00"),
+    (r"\b(?:morning|am)\b", "09:00"),
+    (r"\b(?:noon|midday|lunch ?time)\b", "12:00"),
+    (r"\b(?:afternoon)\b", "14:00"),
+    (r"\b(?:evening)\b", "17:00"),
+    (r"\b(?:night|tonight|pm)\b", "20:00"),
+]
+
 _CN_HOUR = {"零": 0, "一": 1, "兩": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
             "七": 7, "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12}
 
@@ -1241,7 +1282,20 @@ def _parse_schedule_intent(text: str) -> dict:
     explicit 旗標讓 set_schedule 知道原句有沒有明講，明講的才覆蓋 LLM 給的參數。"""
     import re as _re
     script_id = next((v for k, v in _SCHEDULE_SCRIPT_MAP.items() if k in text), None)
+    # EN build：中文腳本表沒中 → 試英文（長片語優先，見 _SCHEDULE_SCRIPT_RE_EN）
+    if script_id is None:
+        for _p_s, _v_s in _SCHEDULE_SCRIPT_RE_EN:
+            if _re.search(_p_s, text, _re.I):
+                script_id = _v_s
+                break
     _freq_hit = next((v for k, v in _SCHEDULE_FREQ_MAP.items() if k in text), None)
+    # EN build：中文頻率表沒中 → 試英文（順序已排成 monthly→weekly→daily，
+    #   避免 'every month' 先被 'every' 開頭的 daily 規則吃掉）
+    if _freq_hit is None:
+        for _p_en, _v_en in _SCHEDULE_FREQ_RE_EN:
+            if _re.search(_p_en, text, _re.I):
+                _freq_hit = _v_en
+                break
     freq = _freq_hit or "daily"
     # 解析時間（幾點）——阿拉伯數字或中文數字（「八點」「十一點」，第9輪測試補：
     # 原本只認阿拉伯，「每天早上八點」落到「早上」預設 09:00 跟既有排程撞名）
@@ -1256,8 +1310,31 @@ def _parse_schedule_intent(text: str) -> dict:
             h += 12
         time_str = f"{h:02d}:{mi:02d}"
     else:
-        _t_hit = next((v for k, v in _SCHEDULE_TIME_MAP.items() if k in text), None)
-        time_str = _t_hit
+        # EN build：英文鐘點（9am / 9:30pm / at 15:00）——原本只認中文「點」，
+        #   'at 9am' 解析不到就掉到預設 09:00（碰巧對，但 'at 6pm' 就錯了）
+        _m_en = _re.search(r'\b(?:at\s+)?([0-9]{1,2})(?::([0-9]{2}))?\s*'
+                           r'([ap])\.?m\.?\b', text, _re.I)
+        # ⚠️ 12 小時制要驗範圍：'at 25pm' 的 25 % 12 = 1 → 靜默變成 13:00
+        #   （邊界測試抓到：無效時間被編造成合法值）。超出 1-12 視為沒解析到。
+        if _m_en and 1 <= int(_m_en.group(1)) <= 12 \
+                and (not _m_en.group(2) or int(_m_en.group(2)) < 60):
+            h = int(_m_en.group(1)) % 12
+            mi = int(_m_en.group(2)) if _m_en.group(2) else 0
+            if _m_en.group(3).lower() == "p":
+                h += 12
+            time_str = f"{h:02d}:{mi:02d}"
+        else:
+            _m_24 = _re.search(r'\bat\s+([0-9]{1,2}):([0-9]{2})\b', text, _re.I)
+            if _m_24 and int(_m_24.group(1)) < 24:
+                time_str = f"{int(_m_24.group(1)):02d}:{int(_m_24.group(2)):02d}"
+            else:
+                _t_hit = next((v for k, v in _SCHEDULE_TIME_MAP.items() if k in text), None)
+                if _t_hit is None:
+                    for _p_t, _v_t in _SCHEDULE_TIME_RE_EN:
+                        if _re.search(_p_t, text, _re.I):
+                            _t_hit = _v_t
+                            break
+                time_str = _t_hit
     return {"script_id": script_id, "freq": freq, "time_str": time_str or "09:00",
             "freq_explicit": _freq_hit is not None,
             "time_explicit": (m is not None) or (time_str is not None)}

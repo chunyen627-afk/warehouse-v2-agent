@@ -321,6 +321,19 @@ def is_meaningful_input(text: str) -> bool:
     if re.search(r"(上週|本週|今天|昨天|上個?月|本月).{0,4}退貨"
                  r"|退貨.{0,8}(幾件|多少件|統計|記錄|記在哪)", s):
         return True
+    # ⚠️ EN build：破壞短語 × **合法管理受詞**豁免（邊界測試抓到）。
+    #   黑名單有 'delete the'（防 'delete the database'），但
+    #   'delete the schedule' / 'cancel the alert rule' 是**合法的管理操作**
+    #   （中文版對應的「取消排程/刪除警示」走 Pre-C-Sched 列清單讓訪客選）。
+    #   → 受詞是排程/警示/規則時放行，交給 Pre-C-Sched 處理（它只會**列清單**
+    #   讓訪客指名，不做批量刪除，所以放行是安全的）。
+    #   不含 database/table/everything/all 這類全域破壞受詞。
+    if (re.search(r"\b(?:delete|remove|cancel|clear|drop|turn off|disable|stop)\b"
+                  r".{0,12}\b(?:schedules?|alerts?|alert rules?|reminders?|"
+                  r"rules?|jobs?)\b", s)
+            and not re.search(r"\b(?:database|table|everything|all data|"
+                              r"all items|all stock|system)\b", s)):
+        return True
     # 黑名單：明顯非倉管領域 → 直接擋
     for kw in _GATEKEEPER_BLACKLIST:
         if kw in s:
@@ -5396,7 +5409,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _sched_time_kws_c10 = ("每天", "每日", "每週", "每周", "每月", "每個月", "每星期", "每禮拜",
                            "定時", "排程", "固定時間",
                            "每天早上", "每天晚上", "自動執行", "自動跑")
-    _is_sched_intent = any(w in user_text for w in _sched_time_kws_c10)
+    # EN build：排程時間詞原全中文 → 英文排程句（every morning / daily / at 9am）
+    #   在 C10 也不被視為排程意圖
+    _is_sched_intent = (any(w in user_text for w in _sched_time_kws_c10)
+                        or bool(_re.search(
+                            r"\b(?:schedule|scheduled|scheduling|recurring|"
+                            r"every\s+(?:day|morning|night|week|month|monday|tuesday|"
+                            r"wednesday|thursday|friday|saturday|sunday)|"
+                            r"daily(?!\s+(?:goods|necessities))|weekly|monthly|nightly|"
+                            r"each\s+(?:day|week|month)|"
+                            r"automatically|auto)\b", user_text, _re.I)))
     # r27：查詢語境豁免——「剛剛盤點的時候發現…庫存數字是多少」是查庫存不是要
     # 跑盤點腳本（曾開出 script_confirm 卡）
     _c10_query_ctx = any(w in user_text for w in ("是多少", "多少", "還剩", "剩幾",
@@ -5416,11 +5438,29 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _report_words = ("報告", "報表", "體檢", "健檢", "出個報告", "全倉掃描",
                      "掃一遍", "整理一份", "彙整", "report", "做份報告", "產生報告",
                      "月報", "週報", "年報", "日報", "營運摘要", "匯總")
-    if func_name != "generate_report" and not has_cfgkey \
+    # ⚠️ 排程讓路：「**每天**出缺貨報表」是 set_schedule 不是馬上出一份報表。
+    #   C12 原本沒有這道讓路（`_is_sched_intent` 只用在 C10）→ 'schedule a daily
+    #   low stock report at 9am' 被 C12 搶成 generate_report＝**排程功能對英文
+    #   整條進不去**（實測直接產了一份報表）。中文詞表也一併掛上（共用邏輯）。
+    _sched_let_pass = (_is_sched_intent
+                       or bool(_re.search(
+                           r"\b(?:schedule|scheduled|scheduling|recurring|every\s+"
+                           r"(?:day|morning|night|week|month|monday|tuesday|wednesday|"
+                           r"thursday|friday|saturday|sunday)|"
+                           r"daily(?!\s+(?:goods|necessities))|weekly|monthly|"
+                           r"nightly|each\s+(?:day|week|month)|automatically|auto)\b",
+                           user_text, _re.I)))
+    if func_name != "generate_report" and not has_cfgkey and not _sched_let_pass \
             and any(w in user_text for w in _report_words):
-        rt = ("low_stock" if any(w in user_text for w in ("缺貨", "補貨", "低庫存")) else
-              "expiring" if any(w in user_text for w in ("到期", "效期", "過期")) else
-              "rca" if any(w in user_text for w in ("異常", "對不上", "短收")) else "full")
+        rt = ("low_stock" if (any(w in user_text for w in ("缺貨", "補貨", "低庫存"))
+                              or _re.search(r"\b(?:low stock|running low|restock|"
+                                            r"reorder|shortage)\b", user_text, _re.I)) else
+              "expiring" if (any(w in user_text for w in ("到期", "效期", "過期"))
+                             or _re.search(r"\b(?:expir\w*|shelf life)\b",
+                                           user_text, _re.I)) else
+              "rca" if (any(w in user_text for w in ("異常", "對不上", "短收"))
+                        or _re.search(r"\b(?:anomal\w*|discrepanc\w*|count off|"
+                                      r"shortfall|mismatch)\b", user_text, _re.I)) else "full")
         log.info(f"[校正 C12] 報告意圖 → generate_report{{{rt}}}（原 {func_name}）")
         return "generate_report", {"report_type": rt}, True
 
@@ -5436,7 +5476,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # C14：警示設定意圖 → set_alert（自動化工具）
     #   「就通知我 / 設個提醒 / 警示我 / 低於X就告訴我」
     _alert_words = ("通知我", "提醒我", "警示", "告訴我", "就通知", "設個提醒",
-                    "設定警示", "低於就", "缺貨就", "到期就", "alert", "提醒")
+                    "設定警示", "低於就", "缺貨就", "到期就", "alert", "提醒",
+                    # EN build：第一關原本只有裸 "alert" → 'notify me when X
+                    #   drops below 50' 過不了第一關，C14 救不回 LLM 的誤判
+                    #   （clf 判 set_alert conf=1.00，LLM 吐 search_log → 純查詢）
+                    "notify", "remind", "warn me", "ping me", "heads up")
     # ── EN build：第二個 and 條件原本全中文（通知/提醒/警示/告訴）→ 英文句
     #    命中 _alert_words 的 'alert' 卻過不了第二關，C14 對英文完全失效
     #    （實測 'set alert' 掉到 query_inventory 回全店概覽）。
@@ -5865,18 +5909,67 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _valid_conds = {"below_safety", "below_threshold", "expiring_soon", "overstock"}
         if cond not in _valid_conds:
             # 整句帶數字「低於N/少於N/小於N」→ below_threshold
-            _thr = _re.search(r'(?:低於|少於|小於|不足)\s*(\d+)', user_text)
+            # EN build：門檻正則原只認中文 → 'drop below 30' 抓不到數字＝
+            #   訪客指定的門檻被吞掉，一律變成 below_safety
+            _thr = (_re.search(r'(?:低於|少於|小於|不足)\s*(\d+)', user_text)
+                    or _re.search(r'\b(?:below|under|less than|fewer than|'
+                                  r'drops? (?:to|below)|falls? (?:to|below)|'
+                                  r'goes? (?:to|below)|hits?)\s*(\d+)',
+                                  user_text, _re.I))
             if _thr:
                 cond = "below_threshold"
                 func_args["threshold"] = int(_thr.group(1))
             else:
                 cond = "below_safety"
+        # EN build：LLM 常把商品名放在 **keyword** 而非 target（實測
+        #   'alert me when earphones drop below 30' → keyword:'earphones',
+        #   target:'below safety zone'＝模型亂填的條件描述）。原本只看
+        #   target/item → 商品名被丟掉、target 變成那句廢話 → 全店警示。
+        #   → target 不像商品名時，改用 keyword。
+        _kw_alert = str(func_args.get("keyword", "")).strip()
+        if _kw_alert and _kw_alert not in _valid_conds:
+            try:
+                import warehouse as _W_al
+                _tgt_ok = bool(tgt and _W_al.match_items(tgt)
+                               and _W_al.match_items(tgt)[0].get("score", 0) >= 4)
+                _kw_ok = bool(_W_al.match_items(_kw_alert)
+                              and _W_al.match_items(_kw_alert)[0].get("score", 0) >= 4)
+                if _kw_ok and not _tgt_ok:
+                    log.info(f"[校正 C17b] target {tgt!r} 非商品 → 改用 keyword {_kw_alert!r}")
+                    tgt = _kw_alert
+            except Exception:
+                pass
         # 若 target 是整句話，改用 _extract_sku_keyword
-        if tgt and len(tgt) > 6:
+        # EN build：`len > 6` 是**中文字元**門檻（坑 2）——英文正常商品名
+        #   'earphones'(9) / 'yoga mat'(8) 都 >6 會被無謂重抽。英文改用詞數。
+        _tgt_too_long = (len(tgt.split()) > 3 if _is_mostly_english(tgt)
+                         else len(tgt) > 6)
+        if tgt and _tgt_too_long:
             tgt = _extract_sku_keyword(tgt) or tgt
         # 若 target 為空，嘗試從 user_text 抽 SKU
         if not tgt:
             tgt = _extract_sku_keyword(user_text) or ""
+        # ⚠️ target 接地驗證（邊界測試抓到的**危險破口**）：裸句 'alert me'
+        #   LLM 吐 target:'no item'（它在說「沒有商品」），下游卻拿去 match →
+        #   'no item' 低分(2)比到 Ceramic **No**n-stick Pan → 確認卡上寫著
+        #   訪客從沒提過的商品，而這是**寫入操作**（按確認就真的建規則）。
+        #   → 佔位詞 / 低分噪音一律清空，退回「全店警示」比亂指一個商品安全。
+        #   （符合 user 定調的「不確定不猜」）
+        if tgt:
+            _tgt_placeholder = _re.fullmatch(
+                r"\s*(?:no item|none|n/?a|null|unknown|any|all|all items|"
+                r"item|items|-{1,2}|\?+)\s*", tgt, _re.I)
+            _tgt_low_score = False
+            if not _tgt_placeholder:
+                try:
+                    import warehouse as _W_tg
+                    _m_tg = _W_tg.match_items(tgt)
+                    _tgt_low_score = not (_m_tg and _m_tg[0].get("score", 0) >= 4)
+                except Exception:
+                    _tgt_low_score = False
+            if _tgt_placeholder or _tgt_low_score:
+                log.info(f"[校正 C17b] target {tgt!r} 未接地（佔位詞/低分）→ 清空改全店警示")
+                tgt = ""
         func_args = {"condition": cond, "target": tgt,
                      **({} if "threshold" not in func_args else {"threshold": func_args["threshold"]})}
         log.info(f"[校正 C17b] set_alert args → {func_args}")
@@ -6497,11 +6590,20 @@ _ABORT_WORDS = ("取消", "算了", "不用了", "不要了", "我不要", "先�
 _ABORT_EXEMPT = ("排程", "警示", "提醒", "訂閱", "規則", "訂單", "採購",
                  "照原本", "照舊", "維持")
 
+# EN build：豁免詞的英文版。中文版早有「排程/警示/規則」豁免——
+#   「取消排程」是**管理排程**不是放棄當前卡片。英文沒補 → 'cancel my
+#   schedules' 3 個詞命中 cancel → 判成放棄，回「沒有進行中的操作」，
+#   排程取消功能整條進不去。
+_ABORT_EXEMPT_RE_EN = (r"\b(?:schedules?|alerts?|reminders?|subscriptions?|"
+                       r"rules?|orders?|purchase orders?|pos?)\b")
+
 
 def _abort_intent(text: str) -> bool:
     """短句 + 命中放棄詞 → 視為放棄意圖。長句可能是正常需求（「不要缺貨的商品」）。"""
     t = text.strip().strip("!！。.~ ")
     if any(w in t for w in _ABORT_EXEMPT):
+        return False
+    if _is_mostly_english(t) and _re.search(_ABORT_EXEMPT_RE_EN, t, _re.I):
         return False
     # r73：結尾語放棄（「還很多啊 那不管它」）——結尾錨定放寬到 12 字
     if len(t) <= 12 and _re.search(r"(不管它|不理它|隨它|算了吧)$", t):
@@ -8640,6 +8742,21 @@ async def ws_handler(ws: WebSocket):
             if (_bl_hit_ws in ("退貨", "退換貨")
                     and _re.search(r"(上週|本週|今天|昨天|上個?月|本月).{0,4}退貨"
                                    r"|退貨.{0,8}(幾件|多少件|統計|記錄|記在哪)", user_text)):
+                _bl_hit_ws = None
+            # ⚠️ EN build：破壞短語 × **合法管理受詞**豁免（與 is_meaningful_input
+            #   的同名豁免兩處同步——WS 端有自己一份黑名單檢查，只改那邊沒用）。
+            #   'delete the schedule' / 'cancel the alert rule' 是合法管理操作，
+            #   但黑名單有 'delete the'（防 'delete the database'）→ 被擋成搗蛋。
+            #   放行後由 Pre-C-Sched 接手，它只**列清單**讓訪客指名、不做批量刪除。
+            if (_bl_hit_ws
+                    and _re.search(r"\b(?:delete|remove|cancel|clear|drop|turn off|"
+                                   r"disable|stop)\b.{0,12}\b(?:schedules?|alerts?|"
+                                   r"alert rules?|reminders?|rules?|jobs?)\b",
+                                   user_text, _re.I)
+                    and not _re.search(r"\b(?:database|table|everything|all data|"
+                                       r"all items|all stock|system)\b",
+                                       user_text, _re.I)):
+                log.info(f"[gate] 黑名單 {_bl_hit_ws!r} 豁免：排程/警示管理句 → 放行")
                 _bl_hit_ws = None
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
@@ -10971,25 +11088,62 @@ async def ws_handler(ws: WebSocket):
                                    "排程全部", "全部排程", "有什麼排程", "排程有哪些", "排程有什麼",
                                    # r75：「之前設的排程還在嗎」曾被 rejected
                                    "排程還在", "排程還有", "還有排程", "排程狀態", "我的排程")
-                _is_alert_set_ws = any(w in user_text for w in ("新增", "設定", "加入", "建立", "通知我", "提醒我"))
+                # ── EN build：本區塊 8 個詞表**全中文** → 排程功能（設定/查詢/
+                #    取消）對英文整條進不去（實測 'schedule a daily low stock
+                #    report at 9am' 掉 guide、'every morning send me the low stock
+                #    list' 掉 low_stock 立即查）。LLM 對英文排程句也抽不出
+                #    set_schedule（抽成 manage_config）＝**中文版本來就靠這支
+                #    正則攔截、不靠 LLM**，所以補這裡才是正解。
+                _en_sched = _is_mostly_english(user_text)
+                _en_list_alert = bool(_re.search(
+                    r"\b(?:(?:show|list|view|see|check|what|which|any)\b.{0,20}\b"
+                    r"alerts?\b|alerts?\b.{0,15}\b(?:list|set up|configured|active)\b|"
+                    r"my alerts?|current alerts?|existing alerts?|alert rules?)\b",
+                    user_text, _re.I))
+                _en_list_sched = bool(_re.search(
+                    r"\b(?:(?:show|list|view|see|check|what|which|any)\b.{0,20}\b"
+                    r"schedules?\b|schedules?\b.{0,15}\b(?:list|set up|configured|active)\b|"
+                    r"my schedules?|current schedules?|existing schedules?|"
+                    r"scheduled (?:jobs?|tasks?|reports?))\b", user_text, _re.I))
+                # ⚠️ 坑 1 變體：`drop` 在庫存語境是**數量下降**不是刪除
+                #   （'alert me when earphones drop below 30' 曾被判成取消警示
+                #   → list_alerts）。drop 只在後面不接 below/to/under 時才算刪除動詞。
+                _en_cancel_verb = bool(_re.search(
+                    r"\b(?:cancel|delete|remove|disable|turn off|clear out)\b",
+                    user_text, _re.I))
+                # 設定語在場 → 一律不是取消（'set/notify me/alert me when…'）
+                if _en_cancel_verb and _re.search(
+                        r"\b(?:set|create|add|new|notify me|remind me|alert me|"
+                        r"let me know|when(?:ever)?\b.{0,30}\b(?:below|under|"
+                        r"runs? out|expires?))\b", user_text, _re.I):
+                    _en_cancel_verb = False
+                _is_alert_set_ws = (any(w in user_text for w in ("新增", "設定", "加入", "建立", "通知我", "提醒我"))
+                                    or (_en_sched and bool(_re.search(
+                                        r"\b(?:set|create|add|new|notify me|remind me|"
+                                        r"alert me|let me know)\b", user_text, _re.I))))
                 if (not _is_alert_set_ws and
                         (any(w in user_text for w in _list_alert_kws) or
-                         ("警示規則" in user_text and not _is_alert_set_ws))):
+                         ("警示規則" in user_text and not _is_alert_set_ws) or
+                         (_en_sched and _en_list_alert))):
                     func_name = "list_alerts"
                     func_args = {}
                     log.info("[Pre-C-Sched] 查警示攔截 → list_alerts")
-                elif any(w in user_text for w in _list_sched_kws):
+                elif any(w in user_text for w in _list_sched_kws) or (_en_sched and _en_list_sched):
                     func_name = "list_schedules"
                     func_args = {}
                     log.info("[Pre-C-Sched] 查排程攔截 → list_schedules")
-                elif (any(w in user_text for w in ("警示", "提醒規則")) and
+                elif ((any(w in user_text for w in ("警示", "提醒規則")) and
                         any(w in user_text for w in ("取消", "刪除", "刪掉", "停掉",
-                                                      "關閉", "移除", "停用", "解除"))):
+                                                      "關閉", "移除", "停用", "解除")))
+                       or (_en_sched and _en_cancel_verb
+                           and _re.search(r"\balerts?\b", user_text, _re.I))):
                     # r23：「取消瑜珈墊的警示」「停用所有警示」曾回缺貨清單
                     func_name = "list_alerts"
                     func_args = {}
                     log.info("[Pre-C-Sched] 取消警示意圖 → list_alerts（列出讓訪客選）")
-                elif ("排程" in user_text and any(w in user_text for w in ("取消", "刪除", "刪掉", "停掉", "關閉", "移除", "砍掉"))):
+                elif (("排程" in user_text and any(w in user_text for w in ("取消", "刪除", "刪掉", "停掉", "關閉", "移除", "砍掉")))
+                      or (_en_sched and _en_cancel_verb
+                          and _re.search(r"\bschedules?\b", user_text, _re.I))):
                     # 「取消所有排程」→ 先列排程讓訪客指名（不做批量刪除，conv100-r7）
                     func_name = "list_schedules"
                     func_args = {}
@@ -11008,8 +11162,37 @@ async def ws_handler(ws: WebSocket):
                     # 「報表」入列：「每週三下午三點出貨報表」曾立即產報告（conv100-r9）
                     _sched_act_kws  = ("盤點", "匯出", "報告", "報表", "體檢", "腳本", "跑", "月報", "週報",
                                        "缺貨警示", "警示", "缺貨")
-                    _has_sched_time = any(w in user_text for w in _sched_time_kws)
-                    _has_sched_act  = any(w in user_text for w in _sched_act_kws)
+                    # EN build：頻率詞 + 動作詞都要英文版，否則英文排程句
+                    #   （'schedule a daily low stock report at 9am'）永遠
+                    #   進不到 set_schedule。同樣要求「頻率 + 動作」兩者齊備，
+                    #   避免 'daily sales' 這種純形容詞句被誤攔。
+                    _en_sched_time = bool(_re.search(
+                        r"\b(?:schedule|scheduled|recurring|"
+                        r"every\s+(?:day|morning|night|evening|week|month|monday|"
+                        r"tuesday|wednesday|thursday|friday|saturday|sunday|\d+\s*days?)|"
+                        r"daily(?!\s+(?:goods|necessities))|weekly|monthly|nightly|"
+                        r"each\s+(?:day|week|month)|"
+                        r"automatically|auto)\b", user_text, _re.I))
+                    _en_sched_act = bool(_re.search(
+                        r"\b(?:report|reports|stocktake|stock take|audit|export|"
+                        r"alert|alerts|low stock|expiry|expiring|health check|"
+                        r"script|send me|email me|run)\b", user_text, _re.I))
+                    _has_sched_time = (any(w in user_text for w in _sched_time_kws)
+                                       or (_en_sched and _en_sched_time))
+                    _has_sched_act  = (any(w in user_text for w in _sched_act_kws)
+                                       or (_en_sched and _en_sched_act))
+                    # ⚠️ 保險（守衛 low 類回歸教訓）：攔進 set_schedule 前先確認
+                    #   **抽得到腳本**，否則 tools 會回 `Script "" not found` 的
+                    #   醜錯誤（view=error）。抽不到就不攔，讓原路由正常走。
+                    #   只對英文句加這道（中文詞表磨了三個月、誤攔率已低）。
+                    if _has_sched_time and _has_sched_act and _en_sched:
+                        try:
+                            import tools_v2 as _tv2_sc
+                            if not _tv2_sc._parse_schedule_intent(user_text).get("script_id"):
+                                _has_sched_act = False
+                                log.info(f"[Pre-C-Sched] 英文排程句抽不到腳本 → 不攔截: {user_text!r}")
+                        except Exception:
+                            pass
                     if _has_sched_time and _has_sched_act:
                         if func_name != "set_schedule":
                             func_name = "set_schedule"
