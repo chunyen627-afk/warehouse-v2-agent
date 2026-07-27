@@ -879,6 +879,15 @@ _LOW_STOCK_INTENT_WORDS = (
     "are short", "is short", "short of stock", "low stock list",
     "shortage list", "restock list", "reorder list", "need topping up",
     "top up", "topping up", "needs more", "need more stock",
+    # r9：「minimum / par / threshold」是安全庫存的常見英文同義說法，
+    #   `anything below the minimum` 原本回全店 60 項概覽（既有長尾）。
+    #   ⚠️ **只收帶比較詞的片語**，不收裸 "minimum"——裸詞會把設定句
+    #     `set X minimum stock to 80` 搶成缺貨清單（同坑 8 補充：
+    #     功能詞撞業務詞）。設定句走 _cfg_key_in_text 讓路。
+    "below the minimum", "below minimum", "under the minimum",
+    "under minimum", "below the min", "under the min",
+    "below par", "under par", "below the threshold", "below threshold",
+    "under the threshold", "beneath the minimum",
 )
 
 # 熱銷意圖詞（C4 用）
@@ -4682,7 +4691,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                             "天數", "警戒值", "庫存底線", "存量底線")) \
         or (any(w in text_low for w in
                 ("safety stock", "safety level", "reorder point", "restock target",
-                 "lead time", "safety threshold"))
+                 "lead time", "safety threshold",
+                 # r9：minimum/par 是安全庫存的同義說法 → 設定句
+                 #   （`set X minimum stock to 80`）要讓給 C9。查詢句
+                 #   （`anything below the minimum`）由下面的比較詞排除擋住。
+                 "minimum stock", "min stock", "minimum level", "par level"))
             # ⚠️ 「低於安全庫存的有哪些」是**查缺貨**不是查/改設定——
             #   'items below safety stock' 原本讓路給 C9 回設定表（答非所問）。
             #   有比較詞（below/under/less than）或清單詞＝查缺貨，不讓路。

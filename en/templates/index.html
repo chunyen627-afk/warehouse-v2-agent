@@ -415,6 +415,14 @@
   .exp-badge.red    { background: #fff5f5; color: var(--warning); border: 1px dashed var(--warning); }
   .exp-badge.orange { background: #fffaf0; color: #c05621;        border: 1px dashed #ed8936; }
   .exp-badge.yellow { background: #fffff0; color: #b7791f;        border: 1px dashed #d69e2e; }
+  /* r9：撐天徽章(單品卡)——沿用 exp-badge 的尺寸，配色區分「還能撐多久」*/
+  .cover-badge {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+    background: #f7fafc; color: var(--muted); border: 1px dashed #cbd5e0;
+  }
+  .cover-badge.warn     { background: #fffaf0; color: #c05621; border-color: #ed8936; }
+  .cover-badge.critical { background: #fff5f5; color: var(--warning); border-color: var(--warning); }
 
   /* loading dot */
   .loading-dots { display: inline-flex; gap: 3px; }
@@ -1435,12 +1443,20 @@ function renderViewCard(view, data, topSummary) {
     const isLow = data.is_low_stock;
     const nx = data.next_expiring;
     const expBadge = (nx && ['red','orange','yellow'].includes(nx.level))
-      ? `<span class="exp-badge ${nx.level}" style="margin-left:6px">${nx.level_emoji} ${nx.warehouse_label} ${nx.qty} units · ${nx.days_to_expire}  days to expiry</span>`
+      ? `<span class="exp-badge ${nx.level}" style="margin-left:6px">${nx.level_emoji} ${nx.warehouse_label} ${nx.qty} units · ${nx.days_to_expire} days to expiry</span>`
       : '';
+    // r9：單品「還能撐幾天」——原本 days_left 只有缺貨清單卡有。
+    //   ⚠️ 999 是後端「完全沒消耗」的哨兵值，不是「撐很久」（r7 踩過反向誤判）
+    //   ⚠️ null = 單倉查詢（全倉消耗掛在單倉數字上會誤導）→ 不顯示
+    const dl = data.days_left;
+    const coverBadge = (dl == null) ? ''
+      : (dl >= 999
+          ? `<span class="cover-badge">📅 no recent outbound</span>`
+          : `<span class="cover-badge${dl <= 7 ? ' critical' : (dl <= 14 ? ' warn' : '')}">📅 ~${dl} days of cover${data.daily_burn ? ` · ${data.daily_burn}/day` : ''}</span>`);
     card.innerHTML = `
       <div class="label">${data.name} (${data.category_label})</div>
       <div class="kpi ${isLow ? 'warning' : ''}">${data.total_qty.toLocaleString()} units</div>
-      <div class="sub-label">Total value NT$ ${data.value.toLocaleString()} ${isLow ? ' · ⚠️ below safety stock' : ''} ${expBadge}</div>
+      <div class="sub-label">Total value NT$ ${data.value.toLocaleString()} ${isLow ? ' · ⚠️ below safety stock' : ''} ${expBadge} ${coverBadge}</div>
       <div class="wh-bars">
         ${Object.entries(per).map(([k, v]) => `
           <div class="wh-bar">

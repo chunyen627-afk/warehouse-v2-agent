@@ -817,6 +817,25 @@ def query_inventory(
             f"{next_exp['qty']} units expiring in {next_exp['days_to_expire']} days"
         )
 
+    # ── r9：單品「還能撐幾天」──────────────────────────────────
+    #   `how many days of camping tent left` 原本只回庫存概況——days_left
+    #   只有缺貨清單卡有、單品卡沒有（記憶列為待辦④）。
+    #   ⚠️ 只在**全倉**查詢時算：單倉的日均消耗語意不同（_stock_forecast
+    #     算的是全倉消耗），掛在單倉數字上會誤導。
+    #   ⚠️ 999 是「完全沒消耗」的哨兵值（r7 踩過：把真實值 1570 顯示成
+    #     `-`，語意剛好相反）→ 這裡明講「no recent outbound」而不是省略。
+    days_left = None
+    daily_burn = None
+    if warehouse == "all" and total > 0:
+        _fc = _stock_forecast(it["sku_id"])
+        days_left = _fc["days_left"]
+        daily_burn = _fc["daily_burn"]
+        if days_left >= 999:
+            summary += "\n📅 No recent outbound — stock is not being consumed"
+        else:
+            summary += (f"\n📅 About {days_left} days of cover left "
+                        f"(~{daily_burn}/day)")
+
     return {
         "ok": True,
         "summary": summary,
@@ -834,6 +853,8 @@ def query_inventory(
             "per_warehouse":   per_wh,
             "value":           value,
             "is_low_stock":    is_low,
+            "days_left":       days_left,   # None=單倉查詢不算；>=999=無消耗
+            "daily_burn":      daily_burn,
             "next_expiring":   next_exp,  # 給前端顯示徽章用(None 表示無保存期限)
         },
         "view": "inventory_single",
