@@ -23,7 +23,11 @@
 | **[DEV_NOTES.md](DEV_NOTES.md)** | **踩雷、測試方法論、實測數據** | 要改東西之前 |
 | **[RPI5_RESTORE.md](RPI5_RESTORE.md)** | 從零部署／重灌還原（14 節 + 驗收清單） | RPI5 壞了、換機 |
 | [../TRAINING_BACKLOG.md](../TRAINING_BACKLOG.md) | 待辦與決策紀錄 | 想知道為什麼沒做某件事 |
-| [V2_PLAN.md](V2_PLAN.md) | 架構設計 | 想理解整體設計 |
+
+> 只有這四份，**刻意維持精簡**——文件太多會讓接手的人（或 AI）
+> 讀一堆過時內容、浪費時間還可能被誤導。
+> 2026-07-27 已清掉四份過時文件（收斂總結報告 ×2、V2_PLAN、寫入操作規範），
+> 其中仍有效的結論（寫入契約鐵律、270M 能力邊界）**已併進 DEV_NOTES**。
 
 > 💡 這些文件**不依賴任何 AI 助理的記憶系統**——不管接手的是新同事、
 > Claude Code、Hermes 或別的工具，讀這幾份就能接上。
@@ -464,7 +468,8 @@ warehouse_v2/
 ├── train_intent_clf.py            ← FastText 分類器訓練
 ├── system_prompt.txt              ← System Prompt 主檔
 ├── RPI5_RESTORE.md                ← 🆕 RPI5 完整還原手冊
-└── V2_PLAN.md                     ← 架構設計文件
+├── RPI5_RESTORE.md                ← RPI5 部署／還原手冊
+└── DEV_NOTES.md                   ← 踩雷、測試方法論、實測數據
 ```
 
 ### 測試工具（都在 `test/` 與 `en/`）
