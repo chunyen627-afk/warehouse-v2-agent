@@ -39,6 +39,13 @@ done
 #   --no-first-run 等        關首次執行精靈、預設瀏覽器詢問、崩潰氣泡
 #   --remote-debugging-port  讓維護端可用 DevTools Protocol 檢查畫面/送輸入
 #                            （只綁 127.0.0.1，外部連不到）
+#   --disable-background-networking 等一組：**關掉 Chromium 的對外背景連線**
+#       實測抓到 kiosk 常駐連著 Google 推播（GCM/FCM，108.177.97.188:5228）
+#       ——倉管頁面根本用不到，純粹是 Chromium 預設行為。
+#       ⚠️ 這不是為了省資源（實測 NetworkManager+wpa_supplicant 才 0% CPU、
+#       32MB、開機至今 8MB 流量），而是**離線 demo 的賣點**：
+#       全部本地跑、不跟雲端通訊。關掉後對外連線數應為 0
+#       （維護用的 SSH / ZeroTier 不受影響）。
 # ⚠️ 網址順序 = 分頁順序，而 Chromium **第一個網址會獲得焦點**
 #    （實測：先寫中文的話，開機後前景是中文版）
 #    → **英文寫在前面**，訪客一開機看到的就是英文版（展場主力）。
@@ -59,4 +66,12 @@ exec chromium-browser \
   --disable-popup-blocking \
   --remote-debugging-port=9222 \
   --remote-allow-origins=* \
+  --disable-background-networking \
+  --disable-sync \
+  --disable-component-update \
+  --disable-domain-reliability \
+  --disable-client-side-phishing-detection \
+  --safebrowsing-disable-auto-update \
+  --metrics-recording-only \
+  --no-pings \
   "$EN_URL" "$ZH_URL"

@@ -338,6 +338,28 @@ Type=Application
 | **`--force-device-scale-factor=1.25`** | **15 吋 1920×1080 的最佳縮放**，見下 |
 | `--remote-debugging-port=9222` | 維護用（只綁 127.0.0.1），見 §11 |
 
+### ⚠️ 離線 demo 與 Chromium 背景連線（**已知限制，不要再試**）
+實測發現 kiosk 會常駐連著 Google 推播（GCM `:5228`）與 Google 服務（`:443`）。
+倉管頁面完全用不到，純粹是 Chromium 預設行為。
+
+**兩種方法都試過、都失敗**（2026-07-27，別再重複踩）：
+
+| 方法 | 結果 |
+|---|---|
+| 命令列旗標（`--disable-background-networking` 等 8 個） | 連線數不減反增，**無效** |
+| 企業政策 JSON（`/etc/chromium/`、`/etc/chromium-browser/`、`/etc/opt/chrome/` 三個路徑都放） | `chrome://policy` 顯示「**尚未設定任何值**」，完全沒讀取 |
+
+這版 Chromium（Debian 147.0，Raspberry Pi OS 打包）不吃標準政策路徑。
+
+**結論與現況**：
+- 旗標**保留**（無副作用，確實減少部分背景行為），政策檔**已移除**
+- **影響很小**：實測 NetworkManager + wpa_supplicant 才 0% CPU / 32MB、
+  開機至今 8MB 流量
+- **展場實際情境下不成問題**：開熱點給訪客掃 QR 時 wlan0 被佔用、
+  **本來就沒有外網**，那些連線自然斷掉
+- 真的很在意的話，最可靠的做法是**展場當天不連 WiFi**（一個動作），
+  比跟 Chromium 纏鬥實在
+
 ### 縮放為什麼是 125%
 15 吋 1920×1080（約 147 PPI），訪客站距 50-70cm：
 

@@ -58,4 +58,12 @@ DISPLAY=:0 chromium-browser \
   --disable-popup-blocking \
   --remote-debugging-port=9222 \
   --remote-allow-origins=* \
+  --disable-background-networking \
+  --disable-sync \
+  --disable-component-update \
+  --disable-domain-reliability \
+  --disable-client-side-phishing-detection \
+  --safebrowsing-disable-auto-update \
+  --metrics-recording-only \
+  --no-pings \
   "$URL" &
