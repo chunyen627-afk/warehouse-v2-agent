@@ -5,11 +5,15 @@
 與 ws_convo.py 的差別：那支走 WebSocket 看 JSON，這支**看訪客實際看到的
 渲染畫面**——「審到畫面」的最後一哩。
 
-用法：python3 drive_kiosk.py "句子1" "句子2" ...
+用法：
+    python3 drive_kiosk.py "句子1" "句子2" ...          # 預設英文版 8002
+    python3 drive_kiosk.py --port 8001 "藍牙耳機庫存"    # 中文版
+    python3 drive_kiosk.py --open 8001 "藍牙耳機庫存"    # 沒開頁面時順便開
 截圖存 /tmp/shot_NN.png
 """
 import base64
 import json
+import subprocess
 import sys
 import time
 import urllib.request
@@ -17,12 +21,39 @@ import urllib.request
 import websockets.sync.client as wsc
 
 
-def page_ws():
+def cdp_pages():
     with urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=5) as r:
-        for t in json.load(r):
-            if t["type"] == "page" and "8002" in t.get("url", ""):
+        return [t for t in json.load(r) if t["type"] == "page"]
+
+
+def page_ws(port, auto_open=False):
+    for t in cdp_pages():
+        if f":{port}" in t.get("url", ""):
+            return t["webSocketDebuggerUrl"]
+    if not auto_open:
+        raise SystemExit(f"port {port} 的頁面不在 CDP 裡；"
+                         f"用 --open {port} 讓它開一個分頁")
+    # 用 CDP 開新分頁——**不要**從 SSH 直接起 chromium（缺 X11/Wayland，
+    # 會失敗還會把 kiosk 弄掉）。透過已在跑的瀏覽器開分頁最安全。
+    # ⚠️ 用 Target.createTarget 而非 HTTP /json/new：新版 Chromium 的
+    #   /json/new 只收 PUT，POST 回 405。
+    with urllib.request.urlopen("http://127.0.0.1:9222/json/version",
+                                timeout=5) as r:
+        burl = json.load(r)["webSocketDebuggerUrl"]
+    bws = wsc.connect(burl, max_size=None)
+    bws.send(json.dumps({"id": 1, "method": "Target.createTarget",
+                         "params": {"url": f"https://localhost:{port}/"}}))
+    while True:
+        m = json.loads(bws.recv())
+        if m.get("id") == 1:
+            break
+    bws.close()
+    for _ in range(30):
+        time.sleep(2)
+        for t in cdp_pages():
+            if f":{port}" in t.get("url", ""):
                 return t["webSocketDebuggerUrl"]
-    raise SystemExit("kiosk page not found on 9222")
+    raise SystemExit(f"開 {port} 分頁逾時")
 
 
 class CDP:
@@ -53,11 +84,17 @@ class CDP:
 
 
 def main():
-    sents = sys.argv[1:]
+    args = sys.argv[1:]
+    port, auto_open = 8002, False
+    while args and args[0] in ("--port", "--open"):
+        auto_open = auto_open or args[0] == "--open"
+        port = int(args[1])
+        args = args[2:]
+    sents = args
     if not sents:
-        print("usage: drive_kiosk.py <sentence> ...")
+        print("usage: drive_kiosk.py [--port 8001|--open 8001] <sentence> ...")
         return
-    c = CDP(page_ws())
+    c = CDP(page_ws(port, auto_open))
     c.send("Page.enable")
     c.send("Runtime.enable")
 

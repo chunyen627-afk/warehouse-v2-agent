@@ -668,17 +668,44 @@
   header h1 { font-size: 14px; }
 }
 
-/* ── 精簡頂部（14吋外接螢幕 150% 放大用）──
+/* ── 精簡頂部（15 吋外接螢幕、kiosk 125% 縮放）──
    標題列 / 功能選單 / 異常警示這三條收矮，把垂直空間讓給對話區。
-   由 <body class="compact-top"> 啟用；展場要退回原版，移除該 class 即可。 */
-body.compact-top header { padding: 7px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
-body.compact-top header .icon { font-size: 18px; }
-body.compact-top header h1 { font-size: 15px; }
-body.compact-top #chips-bar { padding: 6px 12px; gap: 6px; }
-body.compact-top #chips-bar .chip { padding: 5px 12px; font-size: 13px; }
-body.compact-top .anomaly-bar { margin: 5px 12px; }
-body.compact-top .ab-head { padding: 6px 12px; font-size: 13px; }
-body.compact-top .ab-b { font-size: 11px; padding: 2px 7px; }
+   由 <body class="compact-top"> 啟用；展場要退回原版，移除該 class 即可。
+
+   ⚠️ 2026-07-27：與英文版同步收窄一輪。收窄前中文版比英文版粗 78%
+   （CDP 量測：header 50 vs 24、chips 50.3 vs 32.2、anomaly 30.4 vs 17.3）。
+   ⚠️ 這段必須放在**所有**基礎樣式之後——同權重下 CSS 後者勝，
+   放前面會被 #chips-bar .chip 之類的規則覆蓋（踩過，改了沒效果）。
+   ⚠️ kiosk 是 --force-device-scale-factor=1.25，**這裡的每個 px 到畫面上
+   都乘 1.25**。訂數值時要用「螢幕實際高度 ÷ 1.25」回推。 */
+body.compact-top header { padding: 2px 12px; gap: 7px;
+                          box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+body.compact-top header .icon { font-size: 13px; }
+body.compact-top header h1 { font-size: 12px; }
+body.compact-top header .sub { font-size: 10px; }
+/* 標題列右側按鈕（鈴鐺/重置/關閉）——**它們才是撐高標題列的元凶**。
+   實測（CDP 量的，不是目測）：header padding 只有 2+2、文字元素都 ≤15px，
+   但 #close-btn 36px 把整條撐到 50px。
+   ⚠️ 必須用 **id 選擇器**覆蓋——那三顆各自用 id 寫死 width/height，
+   id 權重高於 class，`body.compact-top header button` 蓋不掉。 */
+body.compact-top #close-btn { width: 20px; height: 20px; font-size: 11px;
+                              margin-left: 3px; }
+body.compact-top #reset-demo-btn { width: 18px; height: 18px; font-size: 10px;
+                                   margin-left: 3px; }
+body.compact-top #alert-panel-btn { padding: 1px 6px; font-size: 11px;
+                                    border-radius: 6px; }
+body.compact-top header button { line-height: 1.1; min-height: 0; }
+body.compact-top #chips-bar { padding: 2px 8px; gap: 4px; }
+body.compact-top #chips-bar .chip { padding: 2px 7px; font-size: 10px;
+                                    line-height: 1.25; }
+/* 異常警示條：三條裡對訪客價值最低（只是展示「系統有在偵測」）
+   → 壓成一條細帶；展開後的清單不受影響 */
+body.compact-top .anomaly-bar { margin: 2px 8px; }
+body.compact-top .ab-head { padding: 2px 8px; font-size: 11px; gap: 6px; }
+body.compact-top .ab-b { font-size: 9px; padding: 0 5px; line-height: 1.4; }
+/* 對話區起始留白也一起收，否則上面省下的空間被 margin 吃掉
+   （⚠️ 容器 id 是 #messages 不是 #chat——寫錯選擇器等於整條沒作用） */
+body.compact-top #messages { padding-top: 4px; }
 </style>
 </head>
 <body class="compact-top">

@@ -6301,16 +6301,32 @@ async def reset():
     return JSONResponse({"ok": True, "snapshot": snap}, headers=NO_CACHE)
 
 
-# ── 語音辨識（Fun-ASR-Nano 本地跑，展場離線可用）──────────────────
+# ── 語音辨識（whisper.cpp small 本地跑，展場離線可用）──────────────
 #   為何不用瀏覽器 Web Speech API：那會連 Google 雲端，展場沒網路就死。
-#   前端錄音 → POST webm/wav → ffmpeg 轉 16k mono → llama-funasr-cli →
+#   前端錄音 → POST webm/wav → ffmpeg 轉 16k mono → whisper-cli →
 #   簡體 → OpenCC s2twp 轉繁（順便轉台灣用語）→ 回文字給前端送 WS。
 #   缺任一組件（binary/模型/ffmpeg/opencc）→ 回 ok:false + reason，
 #   前端據此回退到瀏覽器內建辨識，不讓展場整組壞掉。
-_VOICE_DIR = Path.home() / "voice_poc"
-_VOICE_CLI = _VOICE_DIR / "src/runtime/llama.cpp/build/bin/llama-funasr-cli"
-_VOICE_ENC = _VOICE_DIR / "gguf/funasr-encoder-f16.gguf"
-_VOICE_LLM = _VOICE_DIR / "gguf/qwen3-0.6b-q4km.gguf"
+#
+#   ── 2026-07-27：Fun-ASR-Nano（阿里）→ whisper small（OpenAI）──────
+#   user 定調**只用歐美模型**，中文版也要換掉阿里的 Fun-ASR。
+#
+#   為什麼是 small 不是 tiny：拿 user 錄的**真人** 8 句實測（不是合成音，
+#   中文版經驗是合成音會嚴重高估——clean 100% vs 真人 35/52）：
+#     | 模型            | 字面完全正確 | 平均延遲 |
+#     | Fun-ASR（原）   | 4/8         | 4.06s   |
+#     | whisper tiny    | 1/8 ❌       | 0.97s   |
+#     | **whisper small**| **3/8**    | 6.83s   |
+#   tiny 中文太差（無線滑鼠→「古仙华属」、瑜珈墊→「于家店」）不能用。
+#   small 字面率看似輸 Fun-ASR，但**端到端 8/8 全綠**——聽錯的
+#   （「盡量啤酒酷醇」「無限滑鼠擴存」「瑜伽店」）全被文字端容錯層救回。
+#   ⚠️ **選型不能只看 WER，要看端到端答對率**（既有教訓，再次驗證）。
+#   代價：6.8s/句（原 2.8s）。中文版是備案、非主力展示，可接受。
+#
+#   ⚠️ whisper 中文會吐**簡體** → OpenCC s2twp 仍然必要（不可比照英文版移除）。
+_VOICE_DIR = Path.home() / "whisper.cpp"
+_VOICE_CLI = _VOICE_DIR / "build/bin/whisper-cli"
+_VOICE_MODEL = _VOICE_DIR / "models/ggml-small.bin"
 
 try:
     from opencc import OpenCC as _OpenCC
@@ -6341,6 +6357,16 @@ _ASR_FIX = [
     #   「藏」是真人聲實測補的（合成音從沒產生過；user 唸「北倉」→「北藏」）。
     #   守衛/sweep 語料含「藏」皆 0 次 → 安全。
     (_re.compile(r"([北南中東西])[昌蒼槍倉艙藏](?=[^庫]|$)"), r"\1倉"),
+    # ── 2026-07-27 換 whisper small 後補：**它的錯法跟 Fun-ASR 不同** ──
+    #   換 ASR 模型 ≠ 沿用舊的同音規則。上面那組（昌/蒼/槍/藏）是為 Fun-ASR
+    #   磨的，whisper 錯成完全不同的字，一條都接不到。真人音檔實測：
+    #     「南倉進30個電動牙刷」→「南**參**進…」  倉別錯 → 開不出卡
+    #     「北倉出十個滑鼠」    →「**被倉**出…」  倉別錯 → 開不出卡
+    #     「北倉入庫五十個…」   →「北倉**陸庫**…」動詞錯 → 掉成查詢
+    #   ⚠️ 三條都先撞過守衛語料(1122句)＋商品主檔(60項)：**零命中**才敢加。
+    (_re.compile(r"([北南中東西])參(?=[^考]|$)"), r"\1倉"),   # 排除「南參考」
+    (_re.compile(r"被倉"), "北倉"),                          # 「被」限定後接倉
+    (_re.compile(rf"陸庫(?={_ASR_NUM})"), "入庫"),           # 限定後接數字
     # r97 真人聲實測：「中」zhong 特別不穩，「中倉」被聽成「總」zong 倉（捲舌
     #   zh/z 混淆）。→「總倉」還原成「中倉」。限定不碰「總倉庫/總倉儲」
     #   （那是「全部倉庫」的合理語意，不是倉別）。
@@ -6380,10 +6406,10 @@ def _asr_normalize(text: str) -> str:
 def _voice_ready() -> tuple[bool, str]:
     if not _VOICE_CLI.exists():
         return False, "ASR binary 未安裝"
-    if not (_VOICE_ENC.exists() and _VOICE_LLM.exists()):
+    if not _VOICE_MODEL.exists():
         return False, "ASR 模型未安裝"
     if _VOICE_CC is None:
-        return False, "OpenCC 未安裝"
+        return False, "OpenCC 未安裝"   # 中文版仍需要（whisper 吐簡體）
     return True, ""
 
 
@@ -6430,20 +6456,24 @@ async def asr_api(req: Request):
 
         try:
             p = subprocess.run(
-                [str(_VOICE_CLI), "--enc", str(_VOICE_ENC), "-m", str(_VOICE_LLM),
-                 "-a", str(wav)],
-                capture_output=True, text=True, timeout=120,
+                # `-nt` = no timestamps：不加的話每行前面都是
+                #   `[00:00:00.000 --> 00:00:02.080]`，取字要剝時間戳。
+                #   加了之後 stdout 只剩辨識文字（載入訊息與計時走 stderr）。
+                # `-l zh` 明確指定中文：small 是 multilingual 模型，
+                #   不指定會做語言偵測，短句容易猜錯語言。
+                [str(_VOICE_CLI), "-m", str(_VOICE_MODEL),
+                 "-f", str(wav), "-nt", "-l", "zh"],
+                capture_output=True, text=True, timeout=180,
             )
         except subprocess.TimeoutExpired:
             return JSONResponse({"ok": False, "reason": "辨識逾時"}, headers=NO_CACHE)
 
-    # CLI 夾雜載入訊息 → 取最後一行含中文的輸出
-    text = ""
-    for ln in reversed([l.strip() for l in p.stdout.splitlines() if l.strip()]):
-        if _re.search(r"[一-鿿]", ln):
-            text = ln
-            break
-    if not text:
+    # whisper -nt 的 stdout 全是辨識文字，接起來即可
+    #   （原本是「取最後一行**含中文**的輸出」，那是為 Fun-ASR 夾雜載入訊息
+    #    寫的；whisper 沒這問題，而且那寫法在中文以外的輸出會整句丟掉）
+    text = " ".join(l.strip() for l in p.stdout.splitlines() if l.strip()).strip()
+    # 無語音/純噪音時 whisper 會輸出空字串或 [BLANK_AUDIO] / (silence) 標記
+    if not text or _re.fullmatch(r"[\[\(][^\]\)]*[\]\)]", text):
         return JSONResponse({"ok": False, "reason": "沒聽出內容"}, headers=NO_CACHE)
 
     text = _VOICE_CC.convert(text).strip(" 。，？！、.,?!~～")
