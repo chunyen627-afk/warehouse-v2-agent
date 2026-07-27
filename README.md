@@ -1,18 +1,17 @@
 # 🏭 Warehouse Agent v2
 
 > **FunctionGemma 270M 微調模型 × 倉管 AI Agent**  
-> 用邊緣級小模型實現生產可用的倉庫管理智慧助理
+> 用邊緣級小模型實現生產可用的倉庫管理智慧助理  
+> **中文版（8001）／英文版（8002）雙語並存，全離線跑在 Raspberry Pi 5**
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
-[![Model](https://img.shields.io/badge/Model-v6_5,849筆訓練-orange)](https://huggingface.co/google/gemma-3-1b-it)
-[![81 Eval](https://img.shields.io/badge/81_Eval-99%25-brightgreen)]()
-[![OOV v1](https://img.shields.io/badge/OOV_v1-98%25-brightgreen)]()
-[![OOV v2](https://img.shields.io/badge/OOV_v2-97.5%25-brightgreen)]()
-[![intent_clf](https://img.shields.io/badge/intent_clf-489MB_主路由-blue)]()
-[![守衛庫](https://img.shields.io/badge/守衛庫_1122句-RPI5_100%25-brightgreen)]()
-[![多輪](https://img.shields.io/badge/多輪劇本_2069情境-斷言失敗0-brightgreen)]()
-[![短句認證](https://img.shields.io/badge/短句全枚舉_953句-雙平台100%25-brightgreen)]()
-[![語音POC](https://img.shields.io/badge/語音輸入-離線ASR全鏈-blueviolet)]()
+[![Model](https://img.shields.io/badge/Model-FunctionGemma_270M-orange)](https://huggingface.co/google/gemma-3-1b-it)
+[![中文守衛](https://img.shields.io/badge/中文守衛_1122句-RPI5_100%25-brightgreen)]()
+[![英文守衛](https://img.shields.io/badge/英文守衛_892句-891_99.9%25-brightgreen)]()
+[![劇情批](https://img.shields.io/badge/劇情批_r1--r5+語音+大小寫-全綠-brightgreen)]()
+[![intent_clf](https://img.shields.io/badge/intent__clf-6MB量化_99.68%25-blue)]()
+[![語音](https://img.shields.io/badge/語音-中文FunASR_/_英文whisper_tiny.en-blueviolet)]()
+[![離線](https://img.shields.io/badge/展場-100%25離線可用-success)]()
 
 ---
 
@@ -29,7 +28,7 @@
 [Query Rewriting]   ← 口語 → 標準句（60+條規則）
     │
     ▼
-[intent_clf 主路由]  ← FastText 512MB 分類器（意圖分類 98.9% 精準）
+[intent_clf 主路由]  ← FastText 分類器（意圖分類 98.9%；英文版量化後僅 6MB）
     │
     ▼
 [FunctionGemma 270M]  ← 輔助參數提取（keyword/倉庫/時間）
@@ -128,7 +127,9 @@ LLM 輸出不穩定是 270M 小模型的先天限制，解法是 **Server 端後
 ```
 
 ### v3 新增（2026-06-30）
-- **intent_clf 主路由**：512MB FastText 分類器先決定 function，LLM 只抽參數
+- **intent_clf 主路由**：FastText 分類器先決定 function，LLM 只抽參數
+  （英文版實測**量化到 6MB 準確率完全不掉**：`quantize(qnorm=True, cutoff=100000)`
+  存成 .ftz 直接命名 `intent_clf.bin` 即可，fasttext 會自動辨識格式）
 - **OOV 引擎重寫**：80+ 雜詞清單 + 多層 fallback fuzzy（threshold 40）
 - **錯字容錯**：汽泡水→氣泡水、悶燒鍋→悶燒罐 全自動修復
 - **庫存排行**：「哪個東西庫存最多」→ 📦 TOP 10
@@ -286,6 +287,115 @@ ASR 整詞聽錯（訪客看辨識文字重講可解），非系統 bug。關鍵
 
 ---
 
+## 🌍 英文版（2026-07-25 ～ 07-27）
+
+老闆要**全英文版**（介面 + 問答 + 語音都英文）。策略：**中文版凍結當基準、
+英文版獨立並存**，兩版可同時跑、可單獨跑。
+
+| | 中文版 | 英文版 |
+|---|---|---|
+| repo 目錄 | `test/` | `en/` |
+| RPI5 目錄 | `~/warehouse_v2/` | `~/warehouse_v2_en/` |
+| Port | 8001 | **8002** |
+| 開機自啟 | ✗（桌面捷徑手動起） | **✓** |
+| 模型 | 中文微調版 | **英文微調版**（獨立訓練） |
+| 語音 | Fun-ASR-Nano | **whisper tiny.en** |
+
+### 為什麼不是「翻譯層」而是重訓一顆
+探針實測（拿現有中文模型餵英文句）：乾淨查詢答得出來，但**招牌能力全滅**
+——英文錯字、模糊描述、寫入/RCA 意圖全部歸零。純翻譯版＝只能乾淨英文查詢、
+容錯 Agent 全失效。三方對照（eval_en 34 句）：
+
+| 模型 | 命中 | 特徵 |
+|---|---|---|
+| base 未微調 | 4/34 (11%) | 看得懂英文，**不懂這套系統的 tool 慣例** |
+| 中文微調版 | 11/34 (32%) | tool 慣例**跨語言遷移**，但搗蛋句會硬湊 |
+| **英文微調版** | **25/34 (73%)** | 基本查詢 12/12、錯字全中、RCA 3/3 |
+
+⇒ 微調買的不只是語言，是**領域判斷**。
+
+### 移植過程的核心教訓
+> 真正的工作量不在模型，在**散落各處的語言相關守衛**。
+> 找法＝**逐句追 log 看實際執行路徑**，不要只看輸入輸出猜。
+
+歸納出 19 類反覆出現的坑（完整清單見開發記憶），最典型的幾類：
+
+| 坑 | 說明 |
+|---|---|
+| **中文鍵的對照表** | dict 的鍵是中文、值才是 slug → 整條功能對英文靜默失效（類別查詢 6 類壞 5 類） |
+| **中文字元制的長度門檻** | 英文字元數是中文 2-3 倍，`len(text) > 30` 之類在英文全部提早觸發 |
+| **短字串 substring 必誤爆** | `"po"` ∈ re**po**rt、`"quit"` ∈ mos**quit**o → 英文一律要求詞界 `\b` |
+| **演算法假設了中文分詞** | `split()[0]` 剝規格尾巴在中文安全、**英文商品名被腰斬**（曾改錯商品的安全庫存） |
+| **ASR 大小寫打穿規則層** | whisper 一律首字大寫，而 21 個英文詞表全小寫 → 校正層根本執行不到 |
+
+### 收斂成果
+- **守衛庫 892 句**：651 → **891/892 (99.9%)**
+  唯一 FAIL `do we have scks` 刻意不修——`scks→socks` 與 `hair→chair`
+  在字元層面完全相同（都是 insert、都是 0.889），要區分需英文詞典依賴。
+  **判斷「該留給補訓」的標準：有沒有可用訊號能區分正例與反例。**
+- **劇情批 r1-r5**（跨句 context）+ **語音批** + **大小寫批** 全綠
+  - r5 補三個未測向量：**並發**（兩訪客同時操作，vid 隔離 / pending 不互踩 /
+    同 SKU 競態無 lost update）、**超長 context**（24 句不漂移）、
+    **資料極值**（出貨清成 0 庫存，無除零/NaN/負數）
+
+---
+
+## 🎤 英文語音（whisper.cpp）
+
+Fun-ASR（阿里）→ **whisper tiny.en**（OpenAI），符合「只用歐美模型」的約束。
+
+| 模型 | 延遲 | WER 乾淨 | 備註 |
+|---|---|---|---|
+| **tiny.en (74MB)** | **0.94s** | **9.3%** | ✅ 選它 |
+| base.en (148MB) | 2.33s | 10.2% | **更大反而沒更準** |
+| Fun-ASR（中文） | 2.45s | — | 換掉 |
+
+倉管查詢句短、句型固定，tiny 容量已夠 ⇒ 比原本**快 2.6 倍**。
+
+**英文語音原本是結構性不可用**：取字邏輯寫死「取最後一行**含中文**的輸出」
+→ 英文結果不含中文字 → 一律回「聽不出內容」。
+
+⚠️ **WER 高估了實際失敗率**——要看端到端答對率：
+`Powerbank Inventory`→✅ 合成詞拆解、`North receive 50 wireless mouse`→✅
+正確開卡（時態/數字不影響路由）。**文字端的容錯層在扛**。
+
+---
+
+## 🖥️ RPI5 部署 / 還原
+
+完整還原手冊：**[`RPI5_RESTORE.md`](RPI5_RESTORE.md)**
+（寫到「新對話拿到就能直接還原」的程度，14 節 + 驗收清單 + 禁止事項）
+
+配套設定檔全部納管在 [`en/rpi5/`](en/rpi5/)：systemd unit、`server_https.py`、
+`launch_warehouse.sh`、桌面捷徑腳本、watchdog、QR 產生器。
+
+手冊裡最容易漏的三件事：
+1. **模型檔不在 git**（`.gitignore` 排除 `*.gguf`/`*.bin`）——要另外復原，
+   且**不要用 ZeroTier 傳**（頻寬低必斷成殘檔，md5 不符還很難查）
+2. **HTTPS 憑證必須帶 SAN**——沒有的話首頁能開但 **wss 靜默拒絕**，
+   畫面卡 Loading 且 server 零連線紀錄（最難查的一種壞法）
+3. **禁止事項那節**——`pkill -f python`、venv 跑 systemd、SSH 直接起
+   chromium，都是踩過才寫進去的
+
+### 展場整備
+- kiosk **125% 縮放**（15 吋 1920×1080 實測最佳：可視高 864px、
+  快捷列一次顯示 11 顆按鈕、寫入確認卡一屏放得下不用捲）
+- **頂部三條收窄 29%**（header 40→24px）——關鍵是用 **id 選擇器**覆蓋
+  標題列按鈕，它們各自寫死 width/height，class 權重蓋不掉
+- **三個中文彈窗清零**（旗標警告 / Google 翻譯 / 崩潰復原）
+- 桌面：中文命名捷徑 ①②③ + 中英兩張 QR
+
+### 遠端維護：像訪客一樣操作畫面
+[`en/drive_kiosk.py`](en/drive_kiosk.py) 透過 CDP（9222，只綁 127.0.0.1）
+填輸入框 → 送出 → 等回答 → **截圖**。
+
+> 補上「審到畫面」的最後一哩：`ws_convo.py` 走 WebSocket 只看得到 JSON，
+> 這支看得到**訪客實際看到的渲染結果**。
+> 而 `getBoundingClientRect()` 量測比截圖更精準——「標題列太粗」用目測
+> 只知道粗，量測直接指出是 `#close-btn`(36px) 撐高的。
+
+---
+
 ## 🗂️ 專案結構
 
 ```
@@ -314,6 +424,22 @@ warehouse_v2/
 │   │   └── scripts/                ← 腳本白名單（manifest.json + stock_audit.py 等）
 │   └── warehouse_data_baseline/   ← 展前建立的乾淨快照（一鍵重置用，已加入版控）
 │
+├── en/                            ← 🌍 英文版（活躍開發，RPI5 8002）
+│   ├── server.py / warehouse.py / tools_v2.py …  ← 與 test/ 同構，可 diff 對照
+│   ├── templates/index.html       ← 英文 UI（含 body.compact-top 精簡頂部）
+│   ├── item_names_en.py           ← 60 商品英文名 + 別名/俗稱
+│   ├── alias_en.py                ← 英文俗稱對照（battery pack → Power Bank…）
+│   ├── descriptor_en.py           ← 功能描述層（訪客講不出商品名時）
+│   ├── gen_en_dataset.py          ← 英文訓練語料生成（6284 筆純英文）
+│   ├── train_intent_clf_en.py     ← 英文 FastText（99.68%，量化後 6MB）
+│   ├── gen_guard_en.py            ← 英文守衛庫生成 → regression_corpus_en.txt
+│   ├── drive_kiosk.py             ← 🆕 CDP 驅動 kiosk（像訪客一樣打字 + 截圖）
+│   ├── _conv_en_r1~r5.txt         ← 劇情批（跨句 context）
+│   ├── _conv_en_voice.txt         ← 🆕 語音回歸批（句子全是 /api/asr 真實輸出）
+│   ├── _conv_en_case.txt          ← 🆕 大小寫回歸批（ASR/手機輸入法產物）
+│   ├── voice/                     ← 英文語音評測工具（whisper 選型）
+│   └── rpi5/                      ← 🆕 RPI5 部署設定檔（systemd/kiosk/桌面腳本）
+│
 ├── data_tools/                    ← 資料維護工具
 │   └── regenerate_seed_from_csv.py← CSV → warehouse_data/ 重生
 │
@@ -321,8 +447,20 @@ warehouse_v2/
 ├── finetune_local.py              ← 本機微調腳本（Unsloth）
 ├── train_intent_clf.py            ← FastText 分類器訓練
 ├── system_prompt.txt              ← System Prompt 主檔
+├── RPI5_RESTORE.md                ← 🆕 RPI5 完整還原手冊
 └── V2_PLAN.md                     ← 架構設計文件
 ```
+
+### 測試工具（都在 `test/` 與 `en/`）
+
+| 工具 | 測什麼 | 抓得到哪類問題 |
+|---|---|---|
+| `regression_ws.py` | 守衛庫全量（單句） | 回歸——**唯一防線**，小批探針看不出 |
+| `ws_convo.py` | 劇情批（同連線跨句） | carry-over、pending 卡互動、並發 vid 隔離 |
+| `check_views.py` | server 發的 view vs 前端渲染器 | summary 承諾了但畫面畫不出來 |
+| `branch_walk.py` | clarify 每個選項 + 序數路實走 | 選項誤配（點 A 得 B） |
+| `drive_kiosk.py` | CDP 真實操作 + 截圖 | 只有渲染才看得到的（文字擠在一起、被截斷） |
+| `check_zombies.sh` | 殘留程序 | 測試前必跑——殘留會拖垮 4 核 8GB 的 RPI5 |
 
 > **注意**：`seed_data.json` 已於 2026-06-30 完全淘汰，資料層改為 `warehouse_data/` 多目錄結構，由 `loader_v2.py` 動態組合成等價 dict 餵給既有業務邏輯，七個查詢工具完全無感。
 
@@ -342,18 +480,33 @@ pip install fastapi uvicorn websockets apscheduler llama-cpp-python
 
 ### 啟動伺服器
 
+**本機開發**（http，前端 WS 走 ws://）：
 ```bash
-cd warehouse_v2/test
-python server.py
-# 瀏覽器開啟 http://localhost:8000
+cd warehouse_v2/test   # 中文版
+python server.py       # → http://localhost:8000
 ```
 
+**本機模擬展場**（https，**語音與 wss 必須走這個**）：
+```bash
+cd warehouse_v2/en && python run_local_https.py   # 英文版 → https://localhost:8002
+```
+> ⚠️ 不能只跑 `server.py`：前端 WS **跟隨頁面協定**（https 頁面發 wss），
+> 純 http server 會**卡 Loading、送不出字**；麥克風權限也只有 https/localhost 才給。
+
+**RPI5 展場**：見 [`RPI5_RESTORE.md`](RPI5_RESTORE.md)（systemd 開機自啟 8002）
+
 ### 模型檔（需自行準備）
-模型權重因超過 GitHub 限制未包含在此 repo。  
-需將微調後的 GGUF 檔放到：
-```
-test/models/functiongemma-270m-it-fine-tune.q8_0.gguf
-```
+模型權重因超過 GitHub 限制未包含在此 repo（`.gitignore` 排除 `*.gguf`/`*.bin`）：
+
+| 檔案 | 大小 | 放哪 |
+|---|---|---|
+| 中文版 GGUF | 291MB | `test/models/functiongemma-270m-it-fine-tune.q8_0.gguf` |
+| **英文版 GGUF** | 291MB | `en/models/en_q8_0.gguf`（md5 `213593b5…`） |
+| 英文 intent_clf | 6MB | `en/intent_clf.bin`（量化版，800MB→6MB 準確率不掉） |
+| whisper tiny.en | 74MB | RPI5 `~/whisper.cpp/models/ggml-tiny.en.bin` |
+
+⚠️ **模型版本一律用 md5 對照**，別靠檔名——中英兩顆檔名相近但能力差很多
+（曾誤判 8002 跑的是中文模型）。
 
 微調流程：
 ```bash
@@ -506,4 +659,11 @@ python finetune_local.py
 
 ---
 
-*最後更新：2026-07-14 | v6 模型 5,849 筆訓練 | intent_clf 489MB 主路由 | 81 eval: 99% | OOV: 98%/97.5%/100% | **35 輪收斂：守衛庫 855＋短句全枚舉 953＋多輪劇本 102 情境 400+輪 五套雙平台（WIN11+RPI5）100%、危險級持續 0***
+*最後更新：2026-07-27*
+
+**中文版**：v6 模型 5,849 筆訓練 | 35 輪收斂：守衛庫 1122＋短句全枚舉 953
+＋多輪劇本 2069 情境，雙平台（WIN11 + RPI5）100%、危險級持續 0 | 語音全鏈離線
+
+**英文版**：獨立微調（6,284 筆純英文語料）| intent_clf **量化 6MB**（800MB→6MB
+準確率完全不掉，99.68%）| 守衛庫 **891/892 (99.9%)** | 劇情批 r1-r5 + 語音批
++ 大小寫批全綠 | 語音 whisper tiny.en **1.1s/句** | RPI5 8002 開機自啟
