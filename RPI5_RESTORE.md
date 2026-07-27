@@ -105,8 +105,15 @@ cp -r ~/_repo/test/* ~/warehouse_v2/
 |---|---|---|---|
 | `en_q8_0.gguf` | 291MB | `~/warehouse_v2_en/models/` | **英文微調版 LLM**，md5 `213593b50f2e5ffe597750aa171034da` |
 | `intent_clf.bin` | 6MB | `~/warehouse_v2_en/` | 英文 FastText 意圖分類器（量化版，800MB→6MB 準確率不掉） |
-| `ggml-tiny.en.bin` | 74MB | `~/whisper.cpp/models/` | 英文語音辨識（**選 tiny 不是 base**，見 §4.3） |
+| `ggml-tiny.en.bin` | 74MB | `~/whisper.cpp/models/` | **英文**語音（選 tiny 不是 base，見 §4.3） |
+| `ggml-base.bin` | 142MB | `~/whisper.cpp/models/` | **中文**語音（multilingual，見 §4.4） |
 | 中文版 gguf | 291MB | `~/warehouse_v2/models/` | md5 `d74848c133b92029f7b88dde0ac6da87`（與英文版**不同**） |
+| 中文 intent_clf | **4.2MB** | `~/warehouse_v2/` | 量化版（512MB→4.2MB，1122 句預測 100% 一致） |
+
+> 🚩 **語音模型硬約束（user 定調）：只用歐美模型，不用大陸模型。**
+> 原本的 Fun-ASR-Nano / SenseVoice（阿里 FunAudioLLM）**已於 2026-07-27
+> 全部刪除**（模型 910MB + runtime + 原始碼，全機掃描零殘留）。
+> 還原時**不要**再裝回去——中英文語音都改用 whisper.cpp。
 
 ### 4.1 從哪裡拿
 - **WIN 備份**：`FunctionGemma_Finetune/warehouse_v2/en/models/en_q8_0.gguf`
@@ -123,13 +130,18 @@ md5sum ~/warehouse_v2_en/models/en_q8_0.gguf
 > 這點曾經誤判過：以為 8002 跑的是中文模型，其實 7/25 就換成英文版了。
 > **談模型版本一律 md5 對照，別靠檔名或記憶。**
 
-### 4.3 whisper.cpp（英文語音）
+### 4.3 whisper.cpp（中英文語音共用同一個 build）
 ```bash
 cd ~ && git clone https://github.com/ggerganov/whisper.cpp
 cd whisper.cpp && cmake -B build && cmake --build build -j2   # 約 5 分鐘
-bash ./models/download-ggml-model.sh tiny.en
+bash ./models/download-ggml-model.sh tiny.en    # 英文用
+bash ./models/download-ggml-model.sh base       # 中文用（multilingual）
 ```
-⚠️ **選 tiny.en 不要 base.en**（RPI5 實測）：
+> ⚠️ `tiny.en` / `base.en` 是**英文專用**版（同尺寸下英文更準，容量全給英文）；
+> 中文沒有專用版，只能用 multilingual 的 `tiny`/`base`/`small`。
+> 這就是中英用不同模型的原因——不是沒統一，是**英文有專用版可用、中文沒有**。
+
+**英文 → `tiny.en`**（⚠️ 不要 base.en，RPI5 實測）：
 
 | 模型 | 延遲 | WER 乾淨 |
 |---|---|---|
@@ -137,6 +149,62 @@ bash ./models/download-ggml-model.sh tiny.en
 | base.en (148MB) | 2.33s | 10.2% |
 
 倉管查詢句短、句型固定，tiny 容量已夠，變大沒收益反而慢 2.5 倍。
+
+### 4.4 中文為什麼是 `base`（不是 tiny 也不是 small）
+拿 user 錄的**真人**音檔實測（⚠️ 不要用合成音判斷——中文版經驗是合成音
+clean 100%、真人首測只有 35/52，會嚴重高估）：
+
+| 模型 | 端到端（查詢/寫入） | 延遲 | |
+|---|---|---|---|
+| Fun-ASR（阿里，已刪） | 78%（歷史） | 2.8s | 來源不合規 |
+| whisper tiny | — | 0.97s | ❌ 中文太差（無線滑鼠→「古仙华属」） |
+| whisper small | 16/20、10/11 | **6.8s** | 準但慢 3 倍 |
+| **whisper base ＋ ASR 規則** | **17/20、11/12** | **2.3s** | ✅ **又快又準** |
+
+**base 的 encode 只要 2.1s、small 要 5.7s**（時間幾乎全花在 encoder，
+decode 只佔 0.1s）。base 字面錯誤較多，但補了同音規則後端到端**反而最高**。
+⚠️ **選型不能只看 WER，要看端到端答對率**——這是這個專案第三次驗證。
+⇒ 最終比原本的阿里模型**更準（85% vs 78%）也更快（2.3s vs 2.8s）**。
+
+`-t` 執行緒調校**無效**：whisper 預設就是 4 執行緒（= RPI5 全部核心）。
+
+### 4.5 intent_clf 量化瘦身（中英都做了）
+FastText 分類器可以量化到 **1/100 大小而準確率不掉**：
+
+| | 原始 | 量化後 | 驗證 |
+|---|---|---|---|
+| 英文 | 800MB | **6MB** | 99.68%（一模一樣） |
+| 中文 | 512MB | **4.2MB** | 1122 句預測 **100% 一致** |
+
+```python
+m = fasttext.load_model("intent_clf.bin")
+m.quantize(qnorm=True, retrain=False, cutoff=100000)
+m.save_model("out.ftz")     # 直接改名回 intent_clf.bin 即可
+```
+> fasttext 會自動辨識格式，**推理端程式碼一行都不用改**。
+> 腳本：`en/rpi5/quant_clf.py`（會先比對量化前後預測，一致率 <99% 就不覆蓋）
+
+🚨 **量化腳本裡不能用 `model.predict()`**——fasttext ≤0.9.3 的 predict()
+末行是 `np.array(probs, copy=False)`，在 **numpy ≥2 直接 ValueError**。
+要走底層 `model.f.predict(text + "\n", 1, 0.0, "strict")`。
+（推理端 `intent_clf.py` 早有同款 workaround，見 §2 的 numpy 警告。）
+
+⚠️ **測 `intent_clf.predict()` 前要先呼叫 `intent_clf.load()`**——
+沒載入時 `_MODEL is None` 會直接回 `("unknown", 1.0)`，
+**看起來就像分類器死掉**（我因此誤判過一次）。
+
+### 4.6 🚨 換 ASR 模型 ≠ 沿用舊的同音規則
+`server.py` 的 `_ASR_FIX` 是**為特定 ASR 的錯誤模式**磨出來的。
+換模型後舊規則可能一條都接不到——實測：
+
+| 舊規則（為 Fun-ASR 調） | whisper 的錯法 |
+|---|---|
+| 昌/蒼/槍/藏 → 倉 | 錯成「南**參**」「**被倉**」，接不到 |
+| 近+數量 → 進 | 沒出現這種錯 |
+| — | 「入庫」→「**陸庫**」（新的） |
+
+補了三條後寫入句 8/12 → **10/11**。
+⚠️ **加任何 ASR 規則前先撞守衛語料 + 商品主檔，零命中才敢加。**
 
 ---
 
@@ -201,11 +269,16 @@ uvicorn.run(server.app, host='0.0.0.0', port=8002,
 ### 6.2 啟用
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now warehouse-v2-en    # 英文版：開機自啟
-sudo systemctl disable warehouse-v2            # 中文版：不自啟（手動用捷徑起）
+sudo systemctl enable --now warehouse-v2-en    # 英文版
+sudo systemctl enable --now warehouse-v2       # 中文版（2026-07-27 起也自啟）
 ```
 
-**user 定調的狀態**：開機只起英文版；要中文版點桌面捷徑②（會自動先啟服務）。
+**user 定調（2026-07-27）：兩版都開機預載**——模型先載好，桌面切換語言時
+不用等模型載入。實測兩版並存記憶體 **2.6G / 7.9G**，很寬裕。
+（原本中文版是 disabled、要用時才手動起，切換要等 20+ 秒載模型。）
+
+桌面捷徑 ①② 都呼叫同一支 `~/switch_lang.sh en|ch`（旗標只有一份，
+避免兩份不同步——原本中文版那支還停在 150% 縮放、缺三個防彈窗旗標）。
 
 ---
 

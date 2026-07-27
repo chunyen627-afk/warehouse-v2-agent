@@ -6326,7 +6326,7 @@ async def reset():
 #   ⚠️ whisper 中文會吐**簡體** → OpenCC s2twp 仍然必要（不可比照英文版移除）。
 _VOICE_DIR = Path.home() / "whisper.cpp"
 _VOICE_CLI = _VOICE_DIR / "build/bin/whisper-cli"
-_VOICE_MODEL = _VOICE_DIR / "models/ggml-small.bin"
+_VOICE_MODEL = _VOICE_DIR / "models/ggml-base.bin"
 
 try:
     from opencc import OpenCC as _OpenCC
@@ -6366,7 +6366,19 @@ _ASR_FIX = [
     #   ⚠️ 三條都先撞過守衛語料(1122句)＋商品主檔(60項)：**零命中**才敢加。
     (_re.compile(r"([北南中東西])參(?=[^考]|$)"), r"\1倉"),   # 排除「南參考」
     (_re.compile(r"被倉"), "北倉"),                          # 「被」限定後接倉
-    (_re.compile(rf"陸庫(?={_ASR_NUM})"), "入庫"),           # 限定後接數字
+    (_re.compile(rf"[陸路]庫(?={_ASR_NUM})"), "入庫"),       # 入庫 ru→lu，限定後接數字
+    # 進 jin→建（「中倉建100箱」）——限定「倉+動詞+數字+量詞」的窄模式，
+    #   不碰「建立/建議/新建」等正常用法
+    (_re.compile(rf"(?<=倉)建(?={_ASR_NUM}+{_ASR_UNIT})"), "進"),
+    # ── whisper 把「庫存」聽錯（**最高頻詞**，幾乎每句查詢都有）──────
+    #   實測：庫存→酷醇/褲蠢/擴存/俄濟…。這類值得修，因為通用性高、
+    #   不是針對特定句客製。⚠️ 全部撞過守衛語料(1122句)+商品主檔：零命中。
+    (_re.compile(r"酷醇|褲蠢|擴存|闊存"), "庫存"),
+    # ── 商品名同音（挑**通用**的：這些字組在正常中文幾乎不出現）─────
+    (_re.compile(r"蘭亞|南亞(?=耳機)"), "藍牙"),
+    (_re.compile(r"雅琳"), "啞鈴"),
+    (_re.compile(r"反昆伊|防瘟疫"), "防蚊液"),
+    (_re.compile(r"漫跑"), "慢跑"),
     # r97 真人聲實測：「中」zhong 特別不穩，「中倉」被聽成「總」zong 倉（捲舌
     #   zh/z 混淆）。→「總倉」還原成「中倉」。限定不碰「總倉庫/總倉儲」
     #   （那是「全部倉庫」的合理語意，不是倉別）。
