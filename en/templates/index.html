@@ -1828,7 +1828,7 @@ function renderViewCard(view, data, topSummary) {
         <div class="hitl-header warn">${dirIcon} Confirm ${data.direction_label}</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>Field</th><th>Details</th></tr>
-            <tr><td>Item</td><td><b>${data.name}</b>(${data.sku})</td></tr>
+            <tr><td>Item</td><td><b>${data.name}</b> (${data.sku})</td></tr>
             <tr><td>Warehouse</td><td>${data.warehouse_label}</td></tr>
             <tr><td>Quantity</td><td style="color:${dirColor};font-weight:600">${data.direction === 'in' ? '+' : '-'}${data.qty} units</td></tr>
             <tr><td>Stock change</td><td>${data.before_qty} units → <b>${data.after_qty}</b> units</td></tr>
@@ -1836,12 +1836,12 @@ function renderViewCard(view, data, topSummary) {
           <div class="hitl-meta">On confirm this is written to stock data; it survives server restarts and page reloads.</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_movement" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm${data.direction_label}</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_movement" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm ${data.direction_label}</button>
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
   } else if (view === 'movement_done') {
-    card.innerHTML = `<div class="label">✅ ${data.direction_label}Done</div>
+    card.innerHTML = `<div class="label">✅ ${data.direction_label} Done</div>
       <div style="padding:8px;font-size:14px">${data.name} ${data.warehouse_label} now has <b>${data.after_qty}</b> units</div>`;
   } else if (view === 'transfer_confirm') {
     card.innerHTML = `
@@ -1849,7 +1849,7 @@ function renderViewCard(view, data, topSummary) {
         <div class="hitl-header warn">🔄 Confirm Transfer</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>Field</th><th>Details</th></tr>
-            <tr><td>Item</td><td><b>${data.name}</b>(${data.sku})</td></tr>
+            <tr><td>Item</td><td><b>${data.name}</b> (${data.sku})</td></tr>
             <tr><td>Transfer qty</td><td style="font-weight:600">${data.qty} units</td></tr>
             <tr><td>${data.from_label}</td><td style="color:var(--accent)">${data.from_before} units → <b>${data.from_after}</b> units</td></tr>
             <tr><td>${data.to_label}</td><td style="color:var(--success)">${data.to_before} units → <b>${data.to_after}</b> units</td></tr>
@@ -1959,7 +1959,7 @@ function renderViewCard(view, data, topSummary) {
           ? `<div class="hitl-diff" style="flex-direction:column;align-items:flex-start;gap:6px">
               ${preview.slice(0,8).map(p=>`
                 <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-                  <span style="min-width:120px;color:var(--text-secondary)">${p.name||p.sku_id}(${p.warehouse})</span>
+                  <span style="min-width:120px;color:var(--text-secondary)">${p.name||p.sku_id} (${p.warehouse})</span>
                   <span class="hitl-before">${p.old}</span>
                   <span class="hitl-arrow">→</span>
                   <span class="hitl-after">${p.new}</span>
@@ -2003,7 +2003,12 @@ function renderViewCard(view, data, topSummary) {
                   font-size:13px;text-decoration:none">⬇ Download ${fname}</a>` : '';
     const summaryLine = tail.match(/SUMMARY:(.+)/);
     const summaryText = summaryLine ? summaryLine[1].trim() : (data.summary || '');
-    card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} script run ${data.ok===false?'failed':'done'}</div>
+    // ⚠️ config_done 與 script_done **共用這個渲染器**，但標題原本寫死
+    //   「script run done」——訪客改完安全庫存後看到的是「腳本執行完成」，
+    //   完全不同的操作（後端其實正確：log 是 `config_set → 3 entries saved`）。
+    //   ⇒ 依 view 顯示對應標題。渲染層 r7 抓到，中英兩版同款。
+    const doneWhat = view === 'config_done' ? 'Setting' : 'Script run';
+    card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} ${doneWhat} ${data.ok===false?'failed':'done'}</div>
       <div style="padding:8px;font-size:14px">${summaryText}</div>
       ${dlHtml}
       ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · logged to audit log</div>`:''}`;

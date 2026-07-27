@@ -2005,7 +2005,12 @@ function renderViewCard(view, data, topSummary) {
                   font-size:13px;text-decoration:none">⬇ 下載 ${fname}</a>` : '';
     const summaryLine = tail.match(/SUMMARY:(.+)/);
     const summaryText = summaryLine ? summaryLine[1].trim() : (data.summary || '');
-    card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} 腳本執行${data.ok===false?'失敗':'完成'}</div>
+    // ⚠️ config_done 與 script_done **共用這個渲染器**，但標題原本寫死
+    //   「腳本執行完成」——訪客改完安全庫存後看到的是腳本訊息，
+    //   完全不同的操作（後端其實正確：log 是 `config_set → 3 筆已儲存`）。
+    //   ⇒ 依 view 顯示對應標題。渲染層 r7 在英文版抓到，中文版同款一起修。
+    const doneWhat = view === 'config_done' ? '設定' : '腳本執行';
+    card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} ${doneWhat}${data.ok===false?'失敗':'完成'}</div>
       <div style="padding:8px;font-size:14px">${summaryText}</div>
       ${dlHtml}
       ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · 已記錄到 audit log</div>`:''}`;
