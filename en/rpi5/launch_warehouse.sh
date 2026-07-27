@@ -1,35 +1,36 @@
 #!/bin/bash
-# 開機自動開倉管網頁：等 server 就緒（模型載入完）才開瀏覽器
-URL="https://localhost:8002"
+# 開機自動開倉管網頁。
+#
+# ── 2026-07-27：**同時開中英兩個分頁**（user 定調）──────────────────
+#   英文 8002 在**前景**（展場主力），中文 8001 開在後面備著。
+#   訪客要切語言 → 點瀏覽器分頁即可，不用等服務啟動或模型載入
+#   （兩個 systemd 服務都 enabled，開機就把模型預載好了）。
+#
+#   為什麼敢雙開——實測數據（RPI5 4 核 8GB）：
+#     記憶體 2.15G/7.9G（中文 880MB + 英文 798MB），load 0.45 幾乎閒置
+#     中英各 1 人同時查 → 最慢 0.28s
+#     中英各 2 人同時查 → 最慢 0.48s
+#     **中文跑語音辨識（吃滿 4 核）時，英文查詢仍 0.42s**
+#   模型閒置時不吃 CPU，而查詢主力是 FastText 分類器（毫秒級），
+#   不是每句都跑 LLM ⇒ 雙開對展場真實負載無感。
+#   （8 人同秒湧入會有一句排到 8s，但展場不現實。）
+EN_URL="https://localhost:8002"
+ZH_URL="https://localhost:8001"
 
-# ── 展場乾淨畫面（2026-07-27）─────────────────────────────────────
-# 「Chromium 未正確關閉。還原」中文彈窗會蓋住畫面右上角。成因是上次
-# chromium 沒有優雅結束（斷電、systemctl reboot、pkill 都算），profile 裡
-# 留下 exit_type=Crashed。命令列旗標關不掉它，只能在啟動前把標記清乾淨。
-PREF="$HOME/.config/chromium/Default/Preferences"
-if [ -f "$PREF" ]; then
-  python3 - "$PREF" <<'PY' 2>/dev/null
-import json, sys
-p = sys.argv[1]
-try:
-    with open(p, encoding="utf-8") as f:
-        d = json.load(f)
-    prof = d.setdefault("profile", {})
-    prof["exit_type"] = "Normal"
-    prof["exited_cleanly"] = True
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False)
-except Exception:
-    pass
-PY
-fi
+# 清 Chromium 崩潰標記，否則開機跳中文彈窗「Chromium 未正確關閉。還原」
+# 蓋住畫面右上角（斷電 / reboot / pkill 都會留下 exit_type=Crashed，
+# 命令列旗標關不掉，只能在啟動前改 profile）。
+# ⚠️ 用獨立腳本不要內嵌 heredoc——巢狀 heredoc 很容易被外層吃掉終止符
+#    導致整支腳本語法錯（踩過）。
+[ -x "$HOME/fix_chromium_exit.py" ] && python3 "$HOME/fix_chromium_exit.py" 2>/dev/null
 
-for i in $(seq 1 120); do
-  code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 2 "$URL/")
-  if [ "$code" = "200" ]; then
-    break
-  fi
-  sleep 2
+# 等**兩個** server 都就緒才開瀏覽器（模型載入要時間，太早開會看到錯誤頁）
+for url in "$EN_URL" "$ZH_URL"; do
+  for i in $(seq 1 120); do
+    code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 2 "$url/")
+    [ "$code" = "200" ] && break
+    sleep 2
+  done
 done
 
 # 旗標說明（都是為了展場不跳任何中文對話框）：
@@ -38,6 +39,9 @@ done
 #   --no-first-run 等        關首次執行精靈、預設瀏覽器詢問、崩潰氣泡
 #   --remote-debugging-port  讓維護端可用 DevTools Protocol 檢查畫面/送輸入
 #                            （只綁 127.0.0.1，外部連不到）
+# ⚠️ 網址順序 = 分頁順序，而 Chromium **第一個網址會獲得焦點**
+#    （實測：先寫中文的話，開機後前景是中文版）
+#    → **英文寫在前面**，訪客一開機看到的就是英文版（展場主力）。
 exec chromium-browser \
   --ozone-platform=x11 \
   --start-maximized \
@@ -55,4 +59,4 @@ exec chromium-browser \
   --disable-popup-blocking \
   --remote-debugging-port=9222 \
   --remote-allow-origins=* \
-  "$URL"
+  "$EN_URL" "$ZH_URL"
