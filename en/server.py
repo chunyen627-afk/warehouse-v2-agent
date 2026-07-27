@@ -602,6 +602,101 @@ GUIDE_MSG = (
 )
 
 
+# ── r10：英文詞典（守衛最後一句 scks 用）────────────────────────────
+#   用途只有一個：區分「英文真詞但庫裡沒有」（hair/shampoo/bicycle → 誠實
+#   查無）與「錯字」（scks/traash → 該修）。兩者在字元相似度上完全相同，
+#   詞典是唯一可用的訊號。
+#   ⚠️ 系統字典（Debian 套件 wamerican，RPI5 已內建 /usr/share/dict/）不是
+#     本專案資產 → **檔案不存在時必須優雅降級**（回 None＝這道容錯不啟用，
+#     其餘行為完全不變），否則違反雷 7「test/ 目錄必須自足」。
+_EN_DICT_CACHE: set | None = None
+_EN_DICT_LOADED = False
+
+
+def _load_en_dict() -> set | None:
+    """載入英文詞典（lazy + 快取；985KB 只讀一次）。沒有就回 None。"""
+    global _EN_DICT_CACHE, _EN_DICT_LOADED
+    if _EN_DICT_LOADED:
+        return _EN_DICT_CACHE
+    _EN_DICT_LOADED = True
+    for _p in ("/usr/share/dict/american-english",
+               "/usr/share/dict/british-english",
+               "/usr/share/dict/words"):
+        try:
+            with open(_p, encoding="utf-8", errors="ignore") as _f:
+                _words = {w.strip().lower() for w in _f
+                          if w.strip() and "'" not in w}
+            if len(_words) > 10000:
+                _EN_DICT_CACHE = _words
+                log.info(f"[en-dict] 載入 {_p}：{len(_words)} 詞")
+                return _EN_DICT_CACHE
+        except Exception:
+            continue
+    log.info("[en-dict] 找不到系統英文詞典 → 單 token 錯字容錯停用（其餘不受影響）")
+    return None
+
+
+def _en_typo_hits_item(tok: str) -> str:
+    """孤立 token 是某商品名的錯字 → 回**商品名**；否則回 ""。
+
+    （呼叫前必須先確認它不是字典真詞——那是這道容錯的前提，見 _load_en_dict）
+    門檻 0.85 是**實測**切出來的，不是拍腦袋：
+      scks→socks 0.889（真錯字）／ stok 最高才 0.667（該留給既有路徑）
+    另要求與第二名有差距，避免平手時亂猜（違反不猜原則）。
+    ⚠️ 回商品名而非布林——守門員只需要「有沒有」，但下游 _extract_sku_keyword
+       需要**拿到名字**才能填 keyword，否則守門員放行了卻回全店概覽（實測過）。
+    """
+    try:
+        import difflib as _dl_t
+        import warehouse as _W_t
+        _cand: dict[str, str] = {}
+        for _it in _W_t.state().items:
+            for _w in _re.split(r"[^a-z0-9]+", _it["name"].lower()):
+                if len(_w) >= 4 and _w.isalpha():
+                    _cand.setdefault(_w, _it["name"])
+        if not _cand:
+            return ""
+        # ②商品自身詞彙豁免——cookware / beanie / onesie 不在字典裡卻是真商品
+        #   詞，不能被當成錯字（它們走上面的精確比對路徑）
+        _t = tok.lower()
+        if _t in _cand or _t.rstrip("s") in _cand:
+            return ""
+        _scored = sorted(
+            ((_dl_t.SequenceMatcher(None, _t, _w).ratio(), _w)
+             for _w in _cand), reverse=True)
+        if not _scored or _scored[0][0] < 0.85:
+            return ""
+        # 與第二名要有差距（≥0.06），平手代表訊號不明確 → 不猜
+        if len(_scored) > 1 and (_scored[0][0] - _scored[1][0]) < 0.06:
+            return ""
+        log.info(f"[en-typo-gate] {tok!r} → {_cand[_scored[0][1]]!r} "
+                 f"(ratio={_scored[0][0]:.3f})")
+        return _cand[_scored[0][1]]
+    except Exception:
+        return ""
+
+
+def _en_typo_keyword(text: str) -> str:
+    """整句掃一遍，找出「非字典真詞的孤立錯字」對應的商品名（找不到回 ""）。
+
+    r10：`do we have scks` 的收尾——守門員放行後，下游還要**真的抽到**
+    Socks，否則回全店概覽（守門員只回布林，不傳遞找到的名字）。
+    """
+    _d = _load_en_dict()
+    if not _d:
+        return ""
+    for _t in _re.split(r"[\s\-/]+", text.lower()):
+        _t = _t.strip(" ?.!,'\"")
+        if len(_t) < 4 or not _t.isalpha():
+            continue
+        if _t in _d or _t.rstrip("s") in _d:      # 真詞 → 誠實查無，不修
+            continue
+        _hit = _en_typo_hits_item(_t)
+        if _hit:
+            return _hit
+    return ""
+
+
 def _text_has_item_name(text: str) -> bool:
     """句中含任一真商品名的 3 字滑窗片段 → 視為具體查詢，不進 guide 導覽。
     r24：「查一下橡膠清潔手套全部加起來有幾雙」「幫我看看看看濕紙巾」的商品
@@ -675,6 +770,25 @@ def _text_has_item_name(text: str) -> bool:
             try:
                 from descriptor_en import descriptor_hit_en as _dsc_gd
                 if _dsc_gd(text):
+                    return True
+            except Exception:
+                pass
+            # ── r10：**詞典把關的單 token 錯字容錯**（守衛最後一句 scks）─────
+            #   `do we have scks` 被守門員擋在門外（19ms，連 keyword 抽取都沒
+            #   進到）。上面的 _en_fuzzy_keyword 對**孤立單 token** 對不到
+            #   （'socks' 單獨餵可以，'scks' 不行），所以這裡補最後一道。
+            #   ⚠️ 為什麼需要英文詞典：`scks→socks` 與 `hair→chair` 在字元層面
+            #     **完全相同**（都是 0.889、都是插入型）。差別只在 hair 是真詞、
+            #     scks 不是。守衛的 noex 反例（hair dryers / shampoo / bicycle /
+            #     microwave / chairs for the office）**全是英文真詞**，錯字
+            #     （scks/traash/powr/coffe/stok）**全不是** → 這就是可用的訊號。
+            #   三重條件缺一不可（同坑 8：放寬英文分支必製造誤配）：
+            #     ①不在字典（排除 hair/chairs/shampoo…真詞查無）
+            #     ②不是商品自身詞彙（cookware/beanie/onesie 非字典卻是真商品詞）
+            #     ③ratio ≥ 0.85 且與第二名有差距（scks→socks 0.889 vs 次名
+            #       0.667；stok 最高才 0.667 → 不修，維持既有路徑處理）
+            try:
+                if _en_typo_keyword(text):
                     return True
             except Exception:
                 pass
@@ -3240,6 +3354,15 @@ def _extract_sku_keyword(text: str) -> str:
                     return _d
             except Exception:
                 pass
+            # ── r10：詞典把關的**孤立單 token** 錯字（守衛最後一句 scks）──
+            #   _en_fuzzy_keyword 處理的是「詞組」錯字（traash bags / powr
+            #   bank），對**孤立單詞**對不到（實測 'socks' 可以、'scks' 不行）。
+            #   這道只在它失敗後才問，且要求 token 不是英文真詞——
+            #   `hair`/`shampoo`/`bicycle`/`chairs` 是真詞 → 維持誠實查無。
+            _tk = _en_typo_keyword(text)
+            if _tk:
+                log.info(f"[EN typo-token] {text!r} → {_tk!r}")
+                return _tk
             return ""
         if len(_m_en) > 1 and _m_en[1].get("score", 0) >= _m_en[0].get("score", 0):
             # 同分並列＝歧義，不猜。但**不能回空字串**——回空的話下游沒 keyword，
