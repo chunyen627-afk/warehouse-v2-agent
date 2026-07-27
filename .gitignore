@@ -31,3 +31,8 @@ test/intent_clf_report.txt
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 雲端金鑰
+*-key.json
+*credentials*.json
+*service-account*.json

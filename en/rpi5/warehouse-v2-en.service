@@ -1,0 +1,22 @@
+[Unit]
+Description=Warehouse V2 AI Agent EN (HTTPS 8002)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=p400
+WorkingDirectory=/home/p400/warehouse_v2_en
+ExecStart=/usr/bin/python3 /home/p400/warehouse_v2_en/server_https.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PORT=8002
+Environment=N_THREADS=4
+Environment=N_CTX=2048
+MemoryMax=3G
+ExecStartPre=/bin/sleep 5
+
+[Install]
+WantedBy=multi-user.target
