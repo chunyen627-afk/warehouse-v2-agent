@@ -1522,7 +1522,14 @@ function renderViewCard(view, data, topSummary) {
           ${warns.slice(0, 50).map(w => {
             const days = w.days_left;
             const daysCls = days <= 3 ? 'critical' : '';
-            const daysTxt = days >= 999 ? '-' : (days >= 60 ? '60+' : (days + '天'));
+            // ⚠️ 999 是後端「**完全沒消耗**」的哨兵值（_wh_burn_days_left
+            //   在 burn<=0 時回 (999, 0)），不是「天數很大」。
+            //   原本寫 `days >= 999` 把真實計算值也吃掉了——實測
+            //   重型垃圾袋：157 件 ÷ 0.1/天 = **1570 天**是真值，
+            //   卻顯示成「-」（訪客看到「撐天數不明」，實際是「撐超久」，語意相反）。
+            //   ⇒ 改用 daily_burn === 0 判斷「沒消耗」，天數大就照常顯示 60+。
+            const noBurn = (w.daily_burn === 0 || w.daily_burn == null);
+            const daysTxt = noBurn ? '-' : (days >= 60 ? '60+' : (days + '天'));
             return `
             <tr class="${days <= 7 ? 'critical' : ''}">
               <td>${w.name}<div style="font-size:11px;color:var(--muted)">${w.category_label}</div></td>
@@ -2826,6 +2833,13 @@ function updatePerfBadge(p) {
 </script>
 
 <style>
+/* ⚠️ 2026-07-27 user 定調：**效能徽章隱藏**（中英兩版同步）。
+   原因：①右下角那顆 ⚡ 展開後會蓋住表格右側欄位（缺貨清單的「撐天/建議補」
+   被遮住）②user：「數據沒用，體感最重要」——訪客看的是回答品質與速度感，
+   不是 tok/s 數字。
+   ⇒ 用 display:none 而非刪程式碼——要恢復晶片 demo 的推論速度展示時，
+   把下面這行拿掉即可（perf 訊息與 P 鍵切換的邏輯都還在）。 */
+#perf-badge { display: none !important; }
 /* bottom 抬到輸入列上方(輸入列約 60px 高)，避免 ⚡ 圓鈕壓到送出鈕 ▶ */
 #perf-badge { position: fixed; right: 14px; bottom: 74px; z-index: 9999;
   font-family: inherit; user-select: none; }

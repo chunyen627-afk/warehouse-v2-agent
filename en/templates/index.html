@@ -1248,8 +1248,8 @@ function handleMessage(msg) {
     // 背景排程掃到警示觸發 → 推一張通知 card
     const banner = document.createElement('div');
     banner.className = 'alert-triggered-banner';
-    banner.innerHTML = `🔔 <b>Alert triggered</b>（${msg.rule_id}）${msg.ts || ''}<br>
-      <span style="color:var(--muted)">${msg.scope_txt}：${msg.condition_label}</span><br>
+    banner.innerHTML = `🔔 <b>Alert triggered</b>(${msg.rule_id})${msg.ts || ''}<br>
+      <span style="color:var(--muted)">${msg.scope_txt}: ${msg.condition_label}</span><br>
       ${msg.detail || ''}`;
     messages.appendChild(banner);
     scrollBottom();
@@ -1269,7 +1269,7 @@ function handleMessage(msg) {
   if (msg.type === 'schedule_triggered') {
     const banner = document.createElement('div');
     banner.className = 'schedule-triggered-banner';
-    banner.innerHTML = `⏰ <b>Schedule ran</b>（${msg.job_id}）${msg.ts || ''}<br>
+    banner.innerHTML = `⏰ <b>Schedule ran</b>(${msg.job_id})${msg.ts || ''}<br>
       <span style="color:var(--muted)">Running: ${msg.script_label}</span>`;
     messages.appendChild(banner);
     scrollBottom();
@@ -1459,10 +1459,10 @@ function renderViewCard(view, data, topSummary) {
       : `<div class="label">🔔 Alert rules (${alRules.length})</div>
          <table class="exp-table"><tr><th>ID</th><th>Condition</th><th>Scope</th><th>Status</th></tr>
          ${alRules.map(r => `<tr><td>${r.id}</td><td>${r.condition_label || r.condition}</td>
-           <td style="font-size:12px">${(r.scope_names || []).join('、') || 'all items'}</td>
+           <td style="font-size:12px">${(r.scope_names || []).join(', ') || 'all items'}</td>
            <td>${r.enabled ? '✅' : '⏸'}</td></tr>`).join('')}
          </table>
-         <div class="rel-baseline-note">To remove, say "delete ${alRules[0]?.id || 'AL001'}」</div>`;
+         <div class="rel-baseline-note">To remove, say "delete ${alRules[0]?.id || 'AL001'}"</div>`;
   } else if (view === 'schedule_list') {
     const scJobs = data.jobs || [];
     card.innerHTML = scJobs.length === 0
@@ -1473,7 +1473,7 @@ function renderViewCard(view, data, topSummary) {
            <td>${j.freq_label || j.freq} ${j.time_str || ''}</td>
            <td>${j.enabled ? '✅' : '⏸'}</td></tr>`).join('')}
          </table>
-         <div class="rel-baseline-note">To cancel, say "delete ${scJobs[0]?.id || 'SCH001'}」</div>`;
+         <div class="rel-baseline-note">To cancel, say "delete ${scJobs[0]?.id || 'SCH001'}"</div>`;
   } else if (view === 'inventory') {
     // r54 修復（user 實測抓到）：「有哪些商品/類別庫存」的概覽清單 server 回
     // view=inventory + rows，前端一直沒有這個 view 的渲染器 → 只顯示一句
@@ -1520,7 +1520,14 @@ function renderViewCard(view, data, topSummary) {
           ${warns.slice(0, 50).map(w => {
             const days = w.days_left;
             const daysCls = days <= 3 ? 'critical' : '';
-            const daysTxt = days >= 999 ? '-' : (days >= 60 ? '60+' : (days + 'd'));
+            // ⚠️ 999 是後端「**完全沒消耗**」的哨兵值（_wh_burn_days_left
+            //   在 burn<=0 時回 (999, 0)），不是「天數很大」。
+            //   原本寫 `days >= 999` 把真實計算值也吃掉了——實測
+            //   Heavy-duty Trash Bags：157 件 ÷ 0.1/天 = **1570 天**是真值，
+            //   卻顯示成「-」（訪客看到「撐天數不明」，實際是「撐超久」，語意相反）。
+            //   ⇒ 改用 daily_burn === 0 判斷「沒消耗」，天數大就照常顯示 60+。
+            const noBurn = (w.daily_burn === 0 || w.daily_burn == null);
+            const daysTxt = noBurn ? '-' : (days >= 60 ? '60+' : (days + 'd'));
             return `
             <tr class="${days <= 7 ? 'critical' : ''}">
               <td>${w.name}<div style="font-size:11px;color:var(--muted)">${w.category_label}</div></td>
@@ -1625,7 +1632,7 @@ function renderViewCard(view, data, topSummary) {
           if (r.need_reorder && r.suggest_qty > 0) {
             const pw = r.per_warehouse_restock || [];
             const whBreak = pw.length
-              ? '（' + pw.map(x => `${x.label.replace('','')}+${x.suggest_qty}`).join(' ') + '）'
+              ? '(' + pw.map(x => `${x.label.replace('','')}+${x.suggest_qty}`).join(' ') + ')'
               : '';
             stockBits.push(`<span class="restock">📦 suggest ordering ${r.suggest_qty} units${whBreak}</span>`);
           }
@@ -1790,7 +1797,7 @@ function renderViewCard(view, data, topSummary) {
         </table>`;
     } else {
       card.innerHTML = `<div class="label">⚙️ Settings</div>
-        <div style="font-size:18px;padding:8px">「${data.label}」is currently set to <b style="color:var(--accent)">${data.current}</b></div>`;
+        <div style="font-size:18px;padding:8px">"${data.label}"is currently set to <b style="color:var(--accent)">${data.current}</b></div>`;
     }
   } else if (view === 'item_confirm') {
     const it = data.item || {};
@@ -1821,7 +1828,7 @@ function renderViewCard(view, data, topSummary) {
         <div class="hitl-header warn">${dirIcon} Confirm ${data.direction_label}</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>Field</th><th>Details</th></tr>
-            <tr><td>Item</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
+            <tr><td>Item</td><td><b>${data.name}</b>(${data.sku})</td></tr>
             <tr><td>Warehouse</td><td>${data.warehouse_label}</td></tr>
             <tr><td>Quantity</td><td style="color:${dirColor};font-weight:600">${data.direction === 'in' ? '+' : '-'}${data.qty} units</td></tr>
             <tr><td>Stock change</td><td>${data.before_qty} units → <b>${data.after_qty}</b> units</td></tr>
@@ -1842,7 +1849,7 @@ function renderViewCard(view, data, topSummary) {
         <div class="hitl-header warn">🔄 Confirm Transfer</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>Field</th><th>Details</th></tr>
-            <tr><td>Item</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
+            <tr><td>Item</td><td><b>${data.name}</b>(${data.sku})</td></tr>
             <tr><td>Transfer qty</td><td style="font-weight:600">${data.qty} units</td></tr>
             <tr><td>${data.from_label}</td><td style="color:var(--accent)">${data.from_before} units → <b>${data.from_after}</b> units</td></tr>
             <tr><td>${data.to_label}</td><td style="color:var(--success)">${data.to_before} units → <b>${data.to_after}</b> units</td></tr>
@@ -1856,7 +1863,7 @@ function renderViewCard(view, data, topSummary) {
       </div>`;
   } else if (view === 'transfer_done') {
     card.innerHTML = `<div class="label">✅ Transfer complete</div>
-      <div style="padding:8px;font-size:14px">${data.name} ${data.qty} units：${data.from_label} now has <b>${data.from_after}</b> units、${data.to_label} now has <b>${data.to_after}</b> units</div>`;
+      <div style="padding:8px;font-size:14px">${data.name} ${data.qty} units: ${data.from_label} now has <b>${data.from_after}</b> units, ${data.to_label} now has <b>${data.to_after}</b> units</div>`;
   } else if (view === 'item_done') {
     // 新增/delete item後即時更新狀態列和異常橫幅
     refreshSnapshot();
@@ -1866,7 +1873,7 @@ function renderViewCard(view, data, topSummary) {
     if (del) {
       card.innerHTML = `<div class="label">✅ Item deleted</div><div style="padding:8px;font-size:14px">${del}</div>`;
     } else if (it) {
-      card.innerHTML = `<div class="label">✅ Item added</div><div style="padding:8px;font-size:14px">「${it.name||''}」 — SKU: ${it.sku||''}</div>`;
+      card.innerHTML = `<div class="label">✅ Item added</div><div style="padding:8px;font-size:14px">"${it.name||''}" — SKU: ${it.sku||''}</div>`;
     } else {
       card.innerHTML = `<div class="label">✅ Done</div>`;
     }
@@ -1952,7 +1959,7 @@ function renderViewCard(view, data, topSummary) {
           ? `<div class="hitl-diff" style="flex-direction:column;align-items:flex-start;gap:6px">
               ${preview.slice(0,8).map(p=>`
                 <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-                  <span style="min-width:120px;color:var(--text-secondary)">${p.name||p.sku_id}（${p.warehouse}）</span>
+                  <span style="min-width:120px;color:var(--text-secondary)">${p.name||p.sku_id}(${p.warehouse})</span>
                   <span class="hitl-before">${p.old}</span>
                   <span class="hitl-arrow">→</span>
                   <span class="hitl-after">${p.new}</span>
@@ -1963,7 +1970,7 @@ function renderViewCard(view, data, topSummary) {
               <span class="hitl-before">${data.old ?? '—'}</span>
               <span class="hitl-arrow">→</span>
               <span class="hitl-after">${data.new ?? '—'}</span>
-              <span style="font-size:12px;color:var(--muted);margin-left:6px">「${data.label||data.canon||''}」</span>
+              <span style="font-size:12px;color:var(--muted);margin-left:6px">"${data.label||data.canon||''}"</span>
             </div>`)
       : `<div class="hitl-diff">
           <span style="font-size:13px">📜 Script: <b>${data.script_id||data.script_name||''}</b></span>
@@ -2072,7 +2079,7 @@ function renderViewCard(view, data, topSummary) {
       <div style="padding:8px;font-size:14px">${data.po_id||''} — ${data.lines||0} lines, saved to PO_draft/</div>
       ${data.trace_id?`<div style="font-size:11px;color:var(--muted)">trace_id: ${data.trace_id} · audit logged</div>`:''}`;
   } else if (view === 'alert_confirm') {
-    const scopeTxt = (data.scope_names||[]).length ? (data.scope_names||[]).join('、') : 'all items';
+    const scopeTxt = (data.scope_names||[]).length ? (data.scope_names||[]).join(', ') : 'all items';
     card.innerHTML = `
       <div class="hitl-card">
         <div class="hitl-header warn">🔔 Set alert</div>
@@ -2826,6 +2833,13 @@ function updatePerfBadge(p) {
 </script>
 
 <style>
+/* ⚠️ 2026-07-27 user 定調：**效能徽章隱藏**（中英兩版同步）。
+   原因：①右下角那顆 ⚡ 展開後會蓋住表格右側欄位（缺貨清單的「撐天/建議補」
+   被遮住）②user：「數據沒用，體感最重要」——訪客看的是回答品質與速度感，
+   不是 tok/s 數字。
+   ⇒ 用 display:none 而非刪程式碼——要恢復晶片 demo 的推論速度展示時，
+   把下面這行拿掉即可（perf 訊息與 P 鍵切換的邏輯都還在）。 */
+#perf-badge { display: none !important; }
 /* bottom 抬到輸入列上方(輸入列約 60px 高)，避免 ⚡ 圓鈕壓到送出鈕 ▶ */
 #perf-badge { position: fixed; right: 14px; bottom: 74px; z-index: 9999;
   font-family: inherit; user-select: none; }

@@ -99,6 +99,8 @@ def main():
     c.send("Runtime.enable")
 
     for n, s in enumerate(sents, 1):
+        # 送出前先記訊息數，等回覆時要比它多才算「開始回覆」
+        before_cnt = c.js("document.querySelectorAll('#messages > *').length") or 0
         # 跟訪客一樣：填輸入框 → 觸發 input 事件 → 點送出鈕
         esc = json.dumps(s)
         c.js(f"""(() => {{
@@ -108,9 +110,27 @@ def main():
             document.getElementById('send-btn').click();
             return box.value;
         }})()""")
-        # 等回答（訊息數不再增加 = 這輪結束）
+        # ⚠️ 等回答的判準不能只用「訊息數不再增加」——那在**送出瞬間就成立**
+        #   （還沒開始回覆、計數當然沒變，連續 3 次就誤判成完成）。
+        #   實測後果：整句根本沒送出，輸入框還留著字，而畫面是**上一句**的
+        #   結果，看起來就像「答非所問」的假 BUG。
+        #   ⇒ 改成三段：①確認輸入框被清空（= 真的送出了）
+        #                ②等訊息數**比送出前多**（= 開始回覆）
+        #                ③再等它穩定（= 串流結束）
+        sent = False
+        for _ in range(20):                      # ① 最多等 6 秒確認送出
+            time.sleep(0.3)
+            if not (c.js("document.getElementById('input-text').value") or ""):
+                sent = True
+                break
+        if not sent:
+            print(f"   ⚠️ [{n}] 送出失敗（輸入框沒被清空）：{s}")
+        for _ in range(80):                      # ② 等回覆出現
+            time.sleep(0.5)
+            if (c.js("document.querySelectorAll('#messages > *').length") or 0) > before_cnt:
+                break
         prev, stable = -1, 0
-        for _ in range(60):
+        for _ in range(80):                      # ③ 等串流穩定
             time.sleep(0.7)
             cnt = c.js("document.querySelectorAll('#messages > *').length") or 0
             if cnt == prev:
