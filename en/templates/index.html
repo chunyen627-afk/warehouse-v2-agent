@@ -1248,7 +1248,7 @@ function handleMessage(msg) {
     // 背景排程掃到警示觸發 → 推一張通知 card
     const banner = document.createElement('div');
     banner.className = 'alert-triggered-banner';
-    banner.innerHTML = `🔔 <b>Alert triggered</b>(${msg.rule_id})${msg.ts || ''}<br>
+    banner.innerHTML = `🔔 <b>Alert triggered</b> (${msg.rule_id}) ${msg.ts || ''}<br>
       <span style="color:var(--muted)">${msg.scope_txt}: ${msg.condition_label}</span><br>
       ${msg.detail || ''}`;
     messages.appendChild(banner);
@@ -1269,7 +1269,7 @@ function handleMessage(msg) {
   if (msg.type === 'schedule_triggered') {
     const banner = document.createElement('div');
     banner.className = 'schedule-triggered-banner';
-    banner.innerHTML = `⏰ <b>Schedule ran</b>(${msg.job_id})${msg.ts || ''}<br>
+    banner.innerHTML = `⏰ <b>Schedule ran</b> (${msg.job_id}) ${msg.ts || ''}<br>
       <span style="color:var(--muted)">Running: ${msg.script_label}</span>`;
     messages.appendChild(banner);
     scrollBottom();
@@ -1672,7 +1672,7 @@ function renderViewCard(view, data, topSummary) {
   } else if (view === 'expiring') {
     const rows = data.rows || [];
     if (rows.length === 0) {
-      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">${data.warehouse_label || ''}no batches expiring within ${data.within_days} days</div>`;
+      card.innerHTML = `<div style="text-align:center;font-size:30px">✅</div><div style="text-align:center;color:var(--success);margin-top:6px">${data.warehouse_label ? data.warehouse_label + ': ' : ''}no batches expiring within ${data.within_days} days</div>`;
     } else {
       const c = data.counts || {};
       const totalValue = data.total_value || 0;
@@ -1811,7 +1811,7 @@ function renderViewCard(view, data, topSummary) {
             <tr><td>Category</td><td>${it.category}</td></tr>
             <tr><td>Unit price</td><td>NT$ ${it.price}</td></tr>
             <tr><td>Safety stock</td><td>${it.safety} units</td></tr>
-            <tr><td>Initial stock</td><td>North${it.stock_north||0} Central${it.stock_central||0} South${it.stock_south||0}</td></tr>
+            <tr><td>Initial stock</td><td>North ${it.stock_north||0} · Central ${it.stock_central||0} · South ${it.stock_south||0}</td></tr>
           </table>
           <div class="hitl-meta">On confirm this is written to items.csv and seed data is regenerated.</div>
         </div>
@@ -1902,7 +1902,7 @@ function renderViewCard(view, data, topSummary) {
         <div class="hitl-header danger">🗑 Delete item</div>
         <div class="hitl-body">
           <table class="exp-table"><tr><th>SKU</th><th>Item</th><th>Status</th></tr>
-            ${items.map(it => `<tr><td>${it.sku}</td><td>${it.name}</td><td>${it.protected ? '🔒 System protected' : 'can be deleted'}</td></tr>`).join('')}
+            ${items.map(it => `<tr><td>${it.sku}</td><td>${it.name}</td><td>${it.protected ? '🔒 System protected' : '🗑 Can be deleted'}</td></tr>`).join('')}
           </table>
           <div class="hitl-meta">⚠ The 60 built-in demo items cannot be deleted. Deleting removes it from items.csv and regenerates seed data.</div>
         </div>
@@ -1912,7 +1912,13 @@ function renderViewCard(view, data, topSummary) {
         </div>
       </div>`;
   } else if (view === 'item_delete_denied') {
-    card.innerHTML = `<div class="label">🔒 cannot be deleted</div><div style="padding:8px">${data.summary || 'This item is system protected and cannot be deleted.'}</div>`;
+    // ⚠️ 後端 denied 路徑把訊息放在**頂層 summary**、data 只有 protected
+    //   （r8 抓到：原本讀 data.summary 永遠 undefined → 一律顯示預設句，
+    //     訪客看不到究竟是哪個商品被擋）。改用 protected 名單，缺才 fallback。
+    card.innerHTML = `<div class="label">🔒 Cannot be deleted</div><div style="padding:8px">${
+      (data.protected || []).length
+        ? `${(data.protected || []).join(', ')} — built-in demo ${(data.protected || []).length > 1 ? 'items' : 'item'}, cannot be deleted.`
+        : 'This item is system protected and cannot be deleted.'}</div>`;
   } else if (view === 'schedule_delete_confirm') {
     const j = data.job || {};
     card.innerHTML = `
@@ -1927,7 +1933,7 @@ function renderViewCard(view, data, topSummary) {
           <div class="hitl-meta">⚠ After deletion this schedule will no longer auto-run. This cannot be undone.</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_schedule" data-payload='${JSON.stringify({job_id:data.job_id})}'>✅ ConfirmDelete</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_schedule" data-payload='${JSON.stringify({job_id:data.job_id})}'>✅ Confirm delete</button>
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
@@ -1945,7 +1951,7 @@ function renderViewCard(view, data, topSummary) {
           <div class="hitl-meta">⚠ After deletion this alert stops notifying. This cannot be undone.</div>
         </div>
         <div class="hitl-btns">
-          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_alert" data-payload='${JSON.stringify({rule_id:data.rule_id})}'>✅ ConfirmDelete</button>
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="delete_alert" data-payload='${JSON.stringify({rule_id:data.rule_id})}'>✅ Confirm delete</button>
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
@@ -2062,7 +2068,7 @@ function renderViewCard(view, data, topSummary) {
               <b style="color:var(--accent);font-size:16px">NT$ ${totalAmt}</b>
             </div>
             <table class="exp-table" style="margin:8px 0">
-              <tr><th>Item</th><th></th><th>Reorder qty</th><th>Amount</th><th>Supplier</th></tr>
+              <tr><th>Item</th><th>WH</th><th>Reorder qty</th><th>Amount</th><th>Supplier</th></tr>
               ${lines.slice(0,12).map(l=>`<tr>
                 <td>${l.name}</td><td>${l.warehouse}</td>
                 <td><b>${l.order_qty}</b></td>
@@ -2147,12 +2153,17 @@ function renderViewCard(view, data, topSummary) {
     const opts = data.options || [];
     // candidates（有的話）帶每個疑似商品的庫存概況，讓訪客一眼分辨
     const _cands = data.candidates || [];
-    card.innerHTML = `
+    // ⚠️ clarify 有**兩種**用法：①帶 options 的歧義反問 ②純文字的誠實拒絕
+    //   （'No item matching "x"'）。r8 抓到②也照畫選單 → 訪客看到一顆孤零零的
+    //   Cancel 鈕 + 「type 1-0」（0 個選項卻叫人輸入 1-0）。無選項時只出文字。
+    card.innerHTML = opts.length === 0
+      ? `<div class="label" style="margin-bottom:2px">❓ ${esc(data.question)}</div>`
+      : `
       <div class="label" style="margin-bottom:8px">❓ ${esc(data.question)}</div>
       <div class="clarify-opts">
         ${opts.map((opt, i) => {
           const c = _cands[i];
-          const sub = c ? `<span class="clarify-sub">${esc(c.category||'')}｜total ${c.qty} ${esc(c.unit||'units')}</span>` : '';
+          const sub = c ? `<span class="clarify-sub">${esc(c.category||'')} · total ${c.qty} ${esc(c.unit||'units')}</span>` : '';
           return `<button class="clarify-row" data-copt="${i}"><span class="clarify-num">${i+1}</span><span class="clarify-text">${esc(opt)}${sub}</span></button>`;
         }).join('')}
         <button class="clarify-row clarify-cancel" data-copt="cancel"><span class="clarify-num">✕</span><span class="clarify-text">Cancel</span></button>
@@ -2160,9 +2171,11 @@ function renderViewCard(view, data, topSummary) {
       <div class="clarify-hint">Tap an option, type 1-${opts.length}, or type your full question</div>
     `;
     // 把選項存到 window，讓送出時能展開數字
-    window._clarifyOpts = opts;
+    //   ⚠️ 無選項的 clarify（誠實拒絕）要存 null 不是 []——留著空陣列會讓
+    //     下一句的數字解析誤以為「還有選單在等你選」
+    window._clarifyOpts = opts.length ? opts : null;
     // actions：實際送出的指令（沒有就 fallback 用 opts）
-    window._clarifyActions = data.actions || opts;
+    window._clarifyActions = opts.length ? (data.actions || opts) : null;
     // 點選項 = 跟打數字走同一條路（解析成實際指令 → sendQuery）
     card.querySelectorAll('.clarify-row').forEach(btn => {
       btn.onclick = () => {

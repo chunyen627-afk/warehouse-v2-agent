@@ -1744,7 +1744,9 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                                 'daily goods / apparel / sports (say "cancel" to exit)'),
                     "view": "item_create_step2",
                     "data": {"step": 2, "name": name,
-                             "prompt": "請選擇類別（或輸入「取消」退出）"}}
+                             # r8：類別填錯時的**重問**路徑（happy path 的
+                             #   1711 早已英文化，這條邊界分支漏了）
+                             "prompt": 'Choose a category (or say "cancel" to exit)'}}
         category = _cat_key
         _cat_lbl2 = W.CATEGORY_LABEL.get(category, category)
         return {"ok": True,
@@ -1753,7 +1755,10 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                            'e.g. "150 100" (say "cancel" to exit)',
                 "view": "item_create_step3",
                 "data": {"step": 3, "name": name, "category": category,
-                         "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
+                         # r8：這行是**前端卡片顯示的提示**（summary 早已英文化，
+                         #   單這個 prompt 漏了）→ 訪客在 step 3 看到整句中文
+                         "prompt": 'Format: unit price, safety stock '
+                                   '(e.g. "150 100", or say "cancel")'}}
     elif step == 3:
         # dispatch 已把 "100 20" 拆成 price=100, safety=20 → 直接取整數
         # 若 safety 沒值 → 從 price 字串再拆一次

@@ -1064,8 +1064,10 @@ def compare_warehouses(
         def _fmt(v):
             return (f"NT$ {v:,}" if metric == "stock_value"
                     else f"{v:,} units" if metric == "item_count" else f"{v:.3f}")
-        lines = [f"三倉{_ml}排名：",
-                 *[f"{i}. {lbl}：{_fmt(_calc3(k))}" for i, (k, lbl) in enumerate(ranked, 1)]]
+        # r8：三倉排名的 summary 是英文化漏網（中文樣板 + 全形冒號），
+        #   實測畫面顯示 `三倉item count排名：` 中英混雜
+        lines = [f"All three warehouses ranked by {_ml}:",
+                 *[f"{i}. {lbl}: {_fmt(_calc3(k))}" for i, (k, lbl) in enumerate(ranked, 1)]]
         return {"ok": True, "summary": "\n".join(lines),
                 "data": {"metric": metric, "metric_label": _ml,
                          "ranked": [{"wh": k, "label": lbl, "value": _calc3(k)}

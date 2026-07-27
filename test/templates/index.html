@@ -1914,7 +1914,13 @@ function renderViewCard(view, data, topSummary) {
         </div>
       </div>`;
   } else if (view === 'item_delete_denied') {
-    card.innerHTML = `<div class="label">🔒 無法刪除</div><div style="padding:8px">${data.summary || '此商品受系統保護，不可刪除。'}</div>`;
+    // ⚠️ 後端 denied 路徑把訊息放在**頂層 summary**、data 只有 protected
+    //   （英文版 r8 抓到：讀 data.summary 永遠 undefined → 一律顯示預設句，
+    //     訪客看不到究竟是哪個商品被擋）。中英同源 → 一起修。
+    card.innerHTML = `<div class="label">🔒 無法刪除</div><div style="padding:8px">${
+      (data.protected || []).length
+        ? `${(data.protected || []).join('、')} — 內建示範商品，不可刪除。`
+        : '此商品受系統保護，不可刪除。'}</div>`;
   } else if (view === 'schedule_delete_confirm') {
     const j = data.job || {};
     card.innerHTML = `
@@ -2149,7 +2155,12 @@ function renderViewCard(view, data, topSummary) {
     const opts = data.options || [];
     // candidates（有的話）帶每個疑似商品的庫存概況，讓訪客一眼分辨
     const _cands = data.candidates || [];
-    card.innerHTML = `
+    // ⚠️ clarify 有**兩種**用法：①帶 options 的歧義反問 ②純文字的誠實拒絕
+    //   （「庫中無此商品」）。英文版 r8 抓到②也照畫選單 → 訪客看到一顆孤零零的
+    //   取消鈕 +「輸入數字 1~0」（0 個選項卻叫人輸入）。中英同源 → 一起修。
+    card.innerHTML = opts.length === 0
+      ? `<div class="label" style="margin-bottom:2px">❓ ${esc(data.question)}</div>`
+      : `
       <div class="label" style="margin-bottom:8px">❓ ${esc(data.question)}</div>
       <div class="clarify-opts">
         ${opts.map((opt, i) => {
@@ -2162,9 +2173,11 @@ function renderViewCard(view, data, topSummary) {
       <div class="clarify-hint">點選項目，或輸入數字 1~${opts.length} / 直接輸入完整問題</div>
     `;
     // 把選項存到 window，讓送出時能展開數字
-    window._clarifyOpts = opts;
+    //   ⚠️ 無選項的 clarify（誠實拒絕）要存 null 不是 []——留著空陣列會讓
+    //     下一句的數字解析誤以為「還有選單在等你選」
+    window._clarifyOpts = opts.length ? opts : null;
     // actions：實際送出的指令（沒有就 fallback 用 opts）
-    window._clarifyActions = data.actions || opts;
+    window._clarifyActions = opts.length ? (data.actions || opts) : null;
     // 點選項 = 跟打數字走同一條路（解析成實際指令 → sendQuery）
     card.querySelectorAll('.clarify-row').forEach(btn => {
       btn.onclick = () => {

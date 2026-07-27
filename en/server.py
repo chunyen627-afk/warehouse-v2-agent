@@ -9819,8 +9819,10 @@ async def ws_handler(ws: WebSocket):
                 _ds_txt = user_text.strip().strip("。.!！?？，, ")
                 _ds_ids = _ds74.get("ids") or []
                 _ds_id = None
+                # EN build：前綴/後綴詞補英文（原本只認中文的「刪掉 AL001 吧」）
                 _m_id74 = _re.fullmatch(
-                    r"(?:刪|刪掉|刪除|移除)?\s*((?:al|sch)\s*\d{1,3})\s*(?:吧|好了|囉)?",
+                    r"(?:刪|刪掉|刪除|移除|delete|remove|drop|kill)?\s*"
+                    r"((?:al|sch)\s*\d{1,3})\s*(?:吧|好了|囉|please|thanks?)?",
                     _ds_txt, _re.IGNORECASE)
                 if _m_id74:
                     _c74 = _m_id74.group(1).replace(" ", "").upper()
@@ -9830,12 +9832,27 @@ async def ws_handler(ws: WebSocket):
                     if _cand74 in _ds_ids:
                         _ds_id = _cand74
                 else:
-                    _m_ord74 = _re.fullmatch(r"(?:第)?([一二三四五12345])(?:個|條|筆)?",
-                                             _ds_txt)
+                    # EN build：序數路原本只認中文（第一個/一二三）→ 英文訪客答
+                    #   'the first one' / '#2' 接不住，clarify 承諾跳票
+                    _m_ord74 = _re.fullmatch(
+                        r"(?:第)?([一二三四五12345])(?:個|條|筆)?"
+                        r"|(?:the\s+)?(first|second|third|fourth|fifth|last)(?:\s+one)?"
+                        r"|#?([12345])(?:st|nd|rd|th)?",
+                        _ds_txt, _re.IGNORECASE)
                     if _m_ord74:
-                        _i74 = ({"一": 1, "二": 2, "三": 3, "四": 4, "五": 5}
-                                .get(_m_ord74.group(1)) or int(_m_ord74.group(1)))
-                        if 1 <= _i74 <= len(_ds_ids):
+                        _g_zh, _g_en, _g_num = _m_ord74.groups()
+                        _i74 = None
+                        if _g_zh:
+                            _i74 = ({"一": 1, "二": 2, "三": 3, "四": 4, "五": 5}
+                                    .get(_g_zh) or int(_g_zh))
+                        elif _g_en:
+                            _e74 = _g_en.lower()
+                            _i74 = (len(_ds_ids) if _e74 == "last" else
+                                    {"first": 1, "second": 2, "third": 3,
+                                     "fourth": 4, "fifth": 5}[_e74])
+                        elif _g_num:
+                            _i74 = int(_g_num)
+                        if _i74 and 1 <= _i74 <= len(_ds_ids):
                             _ds_id = _ds_ids[_i74 - 1]
                 if _ds_id:
                     import tools_v2 as _tv2_ds74
@@ -9843,6 +9860,40 @@ async def ws_handler(ws: WebSocket):
                               if _ds74.get("kind") == "sched"
                               else _tv2_ds74.delete_alert(rule_id=_ds_id))
                     log.info(f"[del-select-r74] {_ds74.get('kind')} 選擇 {_ds_id}")
+                    for ch in result.get("summary", ""):
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": result})
+                    continue
+
+            # ── EN build：「delete AL003 / remove SCH001」明確 ID 直達 ──
+            #   r8 渲染批抓到：alert_list 卡片右下明明寫著
+            #   `To remove, say "delete AL001"`，訪客照打卻回
+            #   `No item matching "delete"`（clf 判 query_inventory → oov:noex）。
+            #   ⚠️ 必須放在黑名單閘門**之前**：`delete the` 在黑名單裡，
+            #     `delete the alert AL003` 會被當破壞句擋掉。
+            #   安全前提（同坑 8 補充「攔進 tool 前先確認參數抽得到」）：
+            #     只有 ID **真的存在於現有規則/排程**才攔，否則放行走原路由——
+            #     所以 `delete all` / `delete AL999` 不會被這條吃掉。
+            _m_delid = _re.search(
+                r"\b(?:delete|remove|drop|cancel|kill|get\s+rid\s+of)\b[^A-Za-z0-9]*"
+                r"(?:the\s+)?(?:alert|rule|schedule|job|reminder)?[^A-Za-z0-9]*"
+                r"\b(al|sch)\s*(\d{1,3})\b",
+                user_text, _re.IGNORECASE)
+            if _m_delid:
+                import tools_v2 as _tv2_delid
+                _pfx_di = _m_delid.group(1).upper()
+                _id_di = f"{_pfx_di}{int(_m_delid.group(2)):03d}"
+                _sched_di = _pfx_di == "SCH"
+                # 接地：ID 必須存在，否則不攔（讓原管線去回它該回的話）
+                _exist_di = _tv2_delid.list_schedules() if _sched_di \
+                    else _tv2_delid.list_alerts()
+                _ids_di = [x["id"] for x in (_exist_di.get("data", {}).get(
+                    "jobs" if _sched_di else "rules") or [])]
+                if _id_di in _ids_di:
+                    result = (_tv2_delid.delete_schedule(job_id=_id_di) if _sched_di
+                              else _tv2_delid.delete_alert(rule_id=_id_di))
+                    log.info(f"[del-id-en] vid={vid} {_id_di} → {result.get('view')}")
                     for ch in result.get("summary", ""):
                         await send({"type": "token", "text": ch})
                         await asyncio.sleep(_TK_DELAY.get())
@@ -12959,6 +13010,42 @@ async def ws_handler(ws: WebSocket):
                                     func_name = "query_inventory"
                                     func_args = {"category": _cat_nx}
                                     _unknown = []
+                        # ── EN build：陌生詞其實是「倉庫比較」的虛詞 → compare_help ──
+                        #   r8 抓到：'which warehouse is better' 的 clf 判**對**
+                        #   （compare_warehouses conf=0.80），但 LLM 幻覺成
+                        #   list_low_stock → C3e 轉概覽 → 這裡把虛詞 'better'
+                        #   當商品名，回「No item matching "better"」。
+                        #   比較意圖缺 slot 的正解是 compare_help（13182 已有
+                        #   同一份文案，但只有 LLM 主動吐 __help__ 才走得到）。
+                        #   接地條件從嚴（同坑 8：放寬英文分支必製造誤配）：
+                        #     ①句中要有 warehouse/wh 這種**比較對象詞**
+                        #     ②要有比較語（compare / which / better / more…）
+                        #     ③陌生詞**全部**是虛詞，不含真的查無的商品名
+                        #       （'which warehouse has more unicorns' 仍要誠實說沒有）
+                        if _unknown and _is_mostly_english(user_text):
+                            _ut_cmp = user_text.lower()
+                            _CMP_FILLER = {"better", "best", "worse", "worst", "bigger",
+                                           "biggest", "larger", "largest", "smaller",
+                                           "more", "most", "less", "fewer", "higher",
+                                           "lower", "stronger", "good", "bad"}
+                            if (_re.search(r"\b(?:warehouses?|wh|sites?|locations?)\b", _ut_cmp)
+                                    and _re.search(r"\b(?:compare|comparison|versus|vs|"
+                                                   r"which|who|whose|better|best|more|most)\b",
+                                                   _ut_cmp)
+                                    and set(_unknown) <= _CMP_FILLER):
+                                _cmp_msg = ("What do you want to compare between two "
+                                            "warehouses?\n"
+                                            'Try: "which has more stock north or south" '
+                                            'or "compare central and south by turnover"')
+                                log.info(f"[oov:noex→cmp] vid={vid} 比較意圖缺 slot "
+                                         f"{_unknown} → compare_help")
+                                for ch in _cmp_msg:
+                                    await send({"type": "token", "text": ch})
+                                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
+                                await send({"type": "done", "result": {
+                                    "ok": True, "summary": _cmp_msg,
+                                    "view": "compare_help", "data": {}}})
+                                continue
                         if _unknown:
                             _nx_name = " ".join(_unknown)
                             log.info(f"[oov:noex] vid={vid} 庫中無此商品 {_nx_name!r} → 誠實回覆")
