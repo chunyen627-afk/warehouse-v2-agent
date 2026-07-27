@@ -13559,7 +13559,23 @@ async def ws_handler(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     except Exception as e:
-        log.error(f"WS error: {e}", exc_info=True)
+        # ── 展場訪客**不會好好關頁面**——直接鎖手機、走出 WiFi 範圍、
+        #   關機，連線就這樣斷掉，不送 WS close frame。那是**正常現象**，
+        #   不是錯誤。原本一律 log.error(exc_info=True)，混沌測試實測
+        #   36 位訪客就洗出 **30 筆 ERROR + 完整 traceback**，
+        #   真正的錯誤會被淹沒在雜訊裡（展場一天下來更嚴重）。
+        #   ⇒ 斷線類降級成 info 單行，只有真錯誤才印 traceback。
+        _msg = str(e)
+        _is_disconnect = (
+            "no close frame" in _msg
+            or "connection closed" in _msg.lower()
+            or isinstance(e, (ConnectionResetError, asyncio.IncompleteReadError))
+            or type(e).__name__ in ("ConnectionClosedError", "ConnectionClosedOK")
+        )
+        if _is_disconnect:
+            log.info(f"訪客連線中斷（未送 close frame）：{type(e).__name__}")
+        else:
+            log.error(f"WS error: {e}", exc_info=True)
     finally:
         all_sockets.discard(ws)
         # 斷線清掉該訪客所有 session state，避免殘留（2026-07-09：新增商品流程
