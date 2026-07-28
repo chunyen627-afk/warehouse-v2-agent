@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![Model](https://img.shields.io/badge/Model-FunctionGemma_270M-orange)](https://huggingface.co/google/gemma-3-1b-it)
 [![中文守衛](https://img.shields.io/badge/中文守衛_1122句-RPI5_100%25-brightgreen)]()
-[![英文守衛](https://img.shields.io/badge/英文守衛_892句-891_99.9%25-brightgreen)]()
+[![英文守衛](https://img.shields.io/badge/英文守衛_892句-892_100%25-brightgreen)]()
 [![劇情批](https://img.shields.io/badge/劇情批_r1--r5+語音+大小寫-全綠-brightgreen)]()
 [![intent_clf](https://img.shields.io/badge/intent__clf-6MB量化_99.68%25-blue)]()
 [![語音](https://img.shields.io/badge/語音-中文FunASR_/_英文whisper_tiny.en-blueviolet)]()
@@ -22,7 +22,7 @@
 | **README.md**（本檔） | 專案是什麼、有什麼功能、怎麼跑 | 第一次接觸 |
 | **[DEV_NOTES.md](DEV_NOTES.md)** | **踩雷、測試方法論、實測數據** | 要改東西之前 |
 | **[RPI5_RESTORE.md](RPI5_RESTORE.md)** | 從零部署／重灌還原（14 節 + 驗收清單） | RPI5 壞了、換機 |
-| [../TRAINING_BACKLOG.md](../TRAINING_BACKLOG.md) | 待辦與決策紀錄 | 想知道為什麼沒做某件事 |
+| **[TRAINING_BACKLOG.md](TRAINING_BACKLOG.md)** | 待辦與決策紀錄（含補訓決策） | 想知道為什麼沒做某件事 |
 
 > 只有這四份，**刻意維持精簡**——文件太多會讓接手的人（或 AI）
 > 讀一堆過時內容、浪費時間還可能被誤導。
@@ -349,14 +349,22 @@ ASR 整詞聽錯（訪客看辨識文字重講可解），非系統 bug。關鍵
 | **ASR 大小寫打穿規則層** | whisper 一律首字大寫，而 21 個英文詞表全小寫 → 校正層根本執行不到 |
 
 ### 收斂成果
-- **守衛庫 892 句**：651 → **891/892 (99.9%)**
-  唯一 FAIL `do we have scks` 刻意不修——`scks→socks` 與 `hair→chair`
-  在字元層面完全相同（都是 insert、都是 0.889），要區分需英文詞典依賴。
-  **判斷「該留給補訓」的標準：有沒有可用訊號能區分正例與反例。**
+- **守衛庫 892 句：651 → 892/892 (100%)**
+  最後一句 `do we have scks` 曾被記為「救不了」（`scks→socks` 與
+  `hair→chair` 字元層面完全相同，都是 0.889），後來發現**那個結論是錯的**
+  ——真正的成因是被守門員擋在門外（19ms，連 keyword 抽取都沒進到），
+  而區分訊號（英文詞典）樹莓派**本來就內建**，零新增依賴。
+  ⇒ **「救不了」要有證據**：先答得出「卡在哪一層／有沒有訊號／環境有沒有
+  現成資產」三題，再說做不到。（同款誤判發生過兩次，見 DEV_NOTES）
 - **劇情批 r1-r5**（跨句 context）+ **語音批** + **大小寫批** 全綠
   - r5 補三個未測向量：**並發**（兩訪客同時操作，vid 隔離 / pending 不互踩 /
     同 SKU 競態無 lost update）、**超長 context**（24 句不漂移）、
     **資料極值**（出貨清成 0 庫存，無除零/NaN/負數）
+- **渲染批 r6-r10**：改用 `drive_kiosk.py` 打字 + 截圖看畫面，
+  **25 個 view 逐一看過**，抓到 JSON 完全看不到的破口
+  （最典型：卡片寫著「說 delete AL001」，訪客照打卻回查無此商品）
+- **r11-r13 換輸入源**：TTS 唸→whisper 聽、多腔調、探針批
+  ——**不是輪數不夠，是輸入源不夠多樣**（見下節）
 
 ---
 
@@ -378,6 +386,54 @@ Fun-ASR（阿里）→ **whisper tiny.en**（OpenAI），符合「只用歐美�
 ⚠️ **WER 高估了實際失敗率**——要看端到端答對率：
 `Powerbank Inventory`→✅ 合成詞拆解、`North receive 50 wireless mouse`→✅
 正確開卡（時態/數字不影響路由）。**文字端的容錯層在扛**。
+
+---
+
+## 🔬 換輸入源測試（2026-07-28，r11-r13）
+
+守衛 892 句全綠、劇情批 5 輪、渲染批 5 輪之後，**還是**抓到 9 個破口。
+原因不是測得不夠多，而是**前面所有句子都是同一個作者打字造的**——
+作者的盲點會系統性重複，再跑 20 輪同樣方式也碰不到。
+
+換兩個「產生源」立刻見效：
+
+| 新輸入源 | 抓到的類型 |
+|---|---|
+| **TTS 唸 → whisper 聽** | 撇號縮寫、黏字、聽錯詞 |
+| **刻意寫「我不會寫的句型」** | 禮貌用語、口語泛問、問展示本身 |
+
+### TTS 端到端基準
+100 句 × 3 噪音層（真實賣場環境音混入）＋ 4 個腔調：
+
+| 維度 | 結果 |
+|---|---|
+| 噪音層 | 乾淨 **92%** / light −18dB **92%** / heavy −8dB **91%** |
+| 腔調 | GB **93%** / US **92%** / AU・IN **90%** / SG **77%** |
+
+**噪音幾乎不影響**——whisper 對環境音的韌性比預期好。
+⚠️ SG 那個數字**可信度有限**（單一合成音，無法驗證像不像真的新加坡腔）。
+**最有價值的是跨腔調共同失敗**——那才是系統問題不是腔調問題。
+
+### 抓到並修掉的（大多數**打字訪客也會遇到**）
+| 破口 | 性質 |
+|---|---|
+| `what's in central warehouse…` | ASR 聽對、LLM 判對，**防幻覺閘門把 `what's` 當陌生商品清掉正解** |
+| `could you tell me the earphone stock` | 禮貌用語整類漏掉 → 回「查無 could 這個商品」 |
+| `steam ironstock`（三個腔調都這樣聽） | 商品詞+功能詞黏字，既有拆解只處理商品詞+商品詞 |
+| `what happened yesterday` | 不帶商品名的口語泛問 → **整片被婉拒** |
+
+### 刻意不修的（沒有可用訊號）
+`mops→mobs` 最像的是 **mouse**(0.667) 而非 mop、`sunheadstock` 最高分是
+elastic(0.526)——硬修會比不修更糟，留給補訓語料。
+
+### ⚠️ 更貴的 TTS 不會更接近真實
+Chirp 3 HD（付費最擬真）vs edge-tts 實測：乾淨層略好（8.4% vs 9.3%），
+**噪音下反而略差**（12.7% vs 12.0%）——擬真度來自自然弱化的音節連音，
+那正是噪音最先蓋掉的。而且中文版經驗：**合成音 clean 100%、同批真人
+首測 35/52**，這個落差換再貴的 TTS 也補不上。
+⇒ **TTS 是下限估計**：全過不代表可用，掛了才是真的不行。
+
+工具全在 [`en/voice/`](en/voice/)（含真人錄音 100 句的完整流程）。
 
 ---
 
