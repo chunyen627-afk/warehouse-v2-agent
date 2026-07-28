@@ -1009,18 +1009,18 @@ pn(s)
 
 # ─── S13a3 語音 POC · 部署架構（單一模型 · 中英雙軌）★ ────────────
 s = slide_blank()
-title_bar(s, "VOICE POC · 部署架構", "一套 runtime，中英各掛一顆模型")
+title_bar(s, "VOICE POC · 部署架構", "從三個模型變成一個：換型順帶把架構砍薄")
 add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.36),
-         "換成 whisper.cpp 後架構反而更簡單：單一模型檔、單一 binary，中英兩版共用同一套 runtime，只換 -m 參數。",
+         "原方案是 VAD＋Encoder＋LLM 解碼器三顆模型（910 MB）。換 whisper 後：端點偵測交給瀏覽器、編碼解碼合成一顆模型檔。",
          size=12.5, color=GREY55)
 # 三張卡：runtime + 英文模型 + 中文模型
 comp = [
-    ("共用 Runtime", "whisper-cli (whisper.cpp)", "RPi5 源碼編譯",
-     "單一 binary 跑完 VAD、聲學編碼、解碼；中英兩版只差 -m 指到哪顆模型", NAVY, "共"),
-    ("英文版模型", "ggml-tiny.en.bin", "74 MB · 0.94s/句",
-     "英文專用、展場主力；短句夠用，比 base.en 更快且 WER 更低", TEALDK, "EN"),
-    ("中文版模型", "ggml-base.bin", "141 MB · 6.8s/句",
-     "多語權重（含中文）；輸出簡體故仍需 OpenCC 轉繁，中文版為備援展示", TEAL, "中"),
+    ("端點偵測移到前端", "Web Audio API · 零模型", "RMS 音量偵測",
+     "瀏覽器即時算音量：靜音 1.2s 自動送出、15s 硬上限；省掉一顆 VAD 模型", NAVY, "偵"),
+    ("編碼＋解碼合一", "ggml-tiny.en.bin", "74 MB · 英文版",
+     "whisper 是端到端 encoder-decoder：聲學編碼與文字解碼在同一個模型檔內", TEALDK, "聲"),
+    ("同一套 runtime", "ggml-base.bin", "141 MB · 中文版",
+     "中英只差 -m 指到哪顆模型；多語權重輸出簡體，故中文版仍需 OpenCC 轉繁", TEAL, "文"),
 ]
 cw = Inches(3.83); ch = Inches(2.55); cgap = Inches(0.19)
 cy = Inches(2.0)
@@ -1045,7 +1045,7 @@ for i, (name, fn, size, desc, col, gl) in enumerate(comp):
 py = Inches(4.85)
 add_text(s, MX, py - Inches(0.06), Inches(11.8), Inches(0.34),
          "實際部署管線（POST /api/asr，全程本機、無網路）", size=13, bold=True, color=TEALDK)
-pipe = ["前端錄音\nwebm/opus", "ffmpeg\n轉 16k mono", "whisper-cli\ntiny.en / base",
+pipe = ["前端錄音 + VAD\n靜音 1.2s 自動停", "ffmpeg\n轉 16k mono", "whisper-cli\ntiny.en / base",
         "OpenCC\n簡→繁（僅中文）", "出口正規化\n大小寫/錯字", "倉管 WS\n回答"]
 pw = Inches(1.78); ph = Inches(0.82); pgap = Inches(0.19)
 px0 = MX
@@ -1064,21 +1064,25 @@ for i, step in enumerate(pipe):
 add_round(s, MX, Inches(6.4), Inches(11.87), Inches(0.78), fill=DARK, shadow=True)
 add_rich(s, MX + Inches(0.35), Inches(6.53), Inches(11.2), Inches(0.52),
          [[{"text": "RPi5 部署  ", "size": 12.5, "bold": True, "color": TEAL},
-           {"text": "whisper.cpp 在機上源碼編譯｜英文 0.94s/句、中文 6.8s/句｜"
-                    "兩顆模型合計僅 215 MB（原方案 910 MB）｜純 CPU、零 GPU、零雲端",
+           {"text": "910 MB 三顆 → 74 MB 一顆｜VAD 零模型｜0.94s/句｜純 CPU、零 GPU、零雲端",
             "size": 11.5, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」）。**2026-07-27 隨 ASR 換型改版**："
-             "原本這頁在講 Fun-ASR 的三元件架構（VAD＋Encoder＋Qwen3 解碼器，合計 910MB），"
-             "換成 whisper.cpp 之後**架構反而更簡單**——單一模型檔、單一 binary。"
-             "三張卡：①共用 runtime＝whisper-cli，一支 binary 內含端點偵測、聲學編碼、解碼，"
-             "中英兩版只差 -m 參數指到哪顆模型，不必維護兩套框架。②英文版 ggml-tiny.en（74MB / "
-             "0.94s），展場主力。③中文版 ggml-base（141MB / 6.8s），多語權重含中文，備援展示。"
-             "管線：前端錄 webm → ffmpeg 轉 16k mono → whisper-cli → OpenCC 轉繁（**只有中文版需要**，"
-             "英文版已移除）→ 出口正規化（英文版做大小寫攤平、中文版做同音錯字修正）→ 交倉管 WS，"
-             "全程本機無網路。值得一提的數字：**模型體積從 910MB 降到 215MB**，延遲英文從 2.5s 降到 "
-             "0.94s——換掉來源不符的模型不但沒有犧牲，反而更輕更快。這頁證明語音不是掛個雲端 API，"
-             "是真的把模型部署在邊緣裝置上離線跑。")
+set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」「VAD 和 Encoder 現在怎麼做」）。"
+             "**2026-07-27 隨 ASR 換型改版**：原本是 Fun-ASR 的三顆模型串起來跑——VAD（fsmn-vad "
+             "1.6MB，判斷何時在講話）＋Encoder（447MB，聲學編碼）＋Qwen3-0.6B 解碼器（461MB，"
+             "生成文字），合計 910MB。換成 whisper 之後這三塊各自的去向如下，這是評審會追問的重點：\n"
+             "① **VAD → 移到前端瀏覽器，不用模型了**。whisper.cpp 本身有 VAD 支援（--vad 搭配 "
+             "Silero 模型），但我們**沒有啟用**；改用 Web Audio API 在瀏覽器即時算 RMS 音量："
+             "偵測到開始講話後，靜音持續 1.2 秒就自動送出，另有 15 秒硬上限（展場吵雜時 VAD 可能"
+             "永遠不收尾）。好處是零模型負擔、零延遲、麥克風端就地判斷；也是訪客體感「Siri 式"
+             "點一下自動結束」的來源。\n"
+             "② **Encoder 與解碼器 → 合併成同一個模型檔**。whisper 是端到端的 encoder-decoder "
+             "架構，聲學編碼與文字解碼本來就在同一份權重裡，不像 Fun-ASR 要三個檔案分開載入。"
+             "所以現在只有一顆 .bin，中英兩版只差 -m 參數指到 tiny.en 還是 base。\n"
+             "管線：前端錄 webm（含 VAD 自動停）→ ffmpeg 轉 16k mono → whisper-cli → OpenCC 轉繁"
+             "（**只有中文版需要**，英文版已移除）→ 出口正規化（英文做大小寫攤平、中文做同音錯字"
+             "修正）→ 交倉管 WS，全程本機無網路。**模型體積 910MB → 215MB、英文延遲 2.5s → 0.94s**"
+             "——換掉來源不符的模型不但沒犧牲，反而更輕更快、架構更薄。")
 pn(s)
 
 
