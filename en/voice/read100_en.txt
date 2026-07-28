@@ -1,0 +1,129 @@
+# 真人語音測試 100 句（英文版）—— 展場情境全覆蓋
+# 格式：編號 | 唸的句子 | 期望view | 必含關鍵字（空=不檢查） | 中文意思
+#   ⚠️ 第 5 欄的中文**只顯示給人看**，不會送進系統——英文版後端擋中文，
+#      混進查詢字串會整句被 reject。腳本讀 SENT 只取第 2 欄。
+# 用法：bash read100_en.sh          （依序唸，每句錄完自動判定）
+#       bash read100_en.sh 30       （從第 30 句開始，中斷可續）
+#       bash read100_en.sh 1 heavy  （混入吵雜背景音，模擬展場）
+#
+# 唸的時候：正常語速、正常音量，就像在展場對機器講話。
+# ⚠️ **不用刻意模仿標準腔**——展場訪客本來就不是母語者，
+#    測到「非母語腔 + 吵雜環境」才是真實下限。示範音檔只是讓你知道唸什麼字。
+#
+# 每句都有對應示範音檔：audio/read100_en_demo/NNN.mp3（先聽再唸）
+
+# ── A. 基本庫存查詢（20 句，最高頻）──
+1|bluetooth earphones stock|inventory_single|Earphones|藍牙耳機庫存
+2|how many electric toothbrushes are left|inventory_single|Toothbrush|電動牙刷還剩幾支
+3|wireless mouse count|inventory_single|Mouse|無線滑鼠數量
+4|power bank inventory|inventory_single|Power Bank|行動電源庫存
+5|whats the stock of yoga mat|inventory_single|Yoga Mat|瑜珈墊庫存多少
+6|do we have camping tent|inventory_single|Tent|有露營帳篷嗎
+7|how many sports towels do we have|inventory_single|Towel|運動毛巾有幾條
+8|check the coffee machine stock|inventory_single|Coffee Machine|查咖啡機庫存
+9|laptop bag inventory|inventory_single|Laptop Bag|筆電包庫存
+10|how much sparkling water is left|inventory_single|Sparkling Water|氣泡水還剩多少
+11|mechanical keyboard stock|inventory_single|Keyboard|機械鍵盤庫存
+12|bluetooth speaker count|inventory_single|Speaker|藍牙喇叭數量
+13|how many trash bags left|inventory_single|Trash Bags|垃圾袋還剩幾包
+14|facial tissue stock|inventory_single|Tissue|面紙庫存
+15|show me the electric mop inventory|inventory_single|Mop|看電動拖把庫存
+16|steam iron stock in north|inventory_single|Iron|北倉蒸氣熨斗庫存
+17|whats in central warehouse for wireless mouse|inventory_single|Mouse|中倉的無線滑鼠有多少
+18|sun hat stock|inventory_single|Sun Hat|遮陽帽庫存
+19|hiking water bottle count|inventory_single|Bottle|登山水壺數量
+20|how many down jackets do we have|inventory_single|Jacket|羽絨外套有幾件
+
+# ── B. 進出貨寫入（20 句，最重要——會寫資料）──
+21|north received 50 wireless mouse|movement_confirm|Mouse|北倉進了 50 個無線滑鼠
+22|central shipped 20 bluetooth earphones|movement_confirm|Earphones|中倉出了 20 個藍牙耳機
+23|south got 100 sparkling water|movement_confirm|Sparkling Water|南倉收到 100 瓶氣泡水
+24|add 30 yoga mats to north|movement_confirm|Yoga Mat|北倉加 30 個瑜珈墊
+25|ship out 15 power banks from central|movement_confirm|Power Bank|中倉出貨 15 個行動電源
+26|north warehouse received 40 sports towels|movement_confirm|Towel|北倉收到 40 條運動毛巾
+27|take 25 camping tents out of south|movement_confirm|Tent|從南倉出 25 頂露營帳篷
+28|central received 60 facial tissue|movement_confirm|Tissue|中倉收到 60 包面紙
+29|transfer 20 wireless mouse from north to south|transfer_confirm|Mouse|20 個無線滑鼠從北倉調到南倉
+30|move 10 coffee machines from central to north|transfer_confirm|Coffee Machine|10 台咖啡機從中倉調到北倉
+31|send 30 yoga mats from south to central|transfer_confirm|Yoga Mat|30 個瑜珈墊從南倉送到中倉
+32|north got a delivery of 80 trash bags|movement_confirm|Trash Bags|北倉到貨 80 包垃圾袋
+33|we shipped 12 laptop bags from north|movement_confirm|Laptop Bag|我們從北倉出了 12 個筆電包
+34|south received 45 sun hats|movement_confirm|Sun Hat|南倉收到 45 頂遮陽帽
+35|remove 18 steam irons from central|movement_confirm|Iron|中倉扣掉 18 台蒸氣熨斗
+36|add 200 hiking water bottles to north|movement_confirm|Bottle|北倉加 200 個登山水壺
+37|central sent out 35 mechanical keyboards|movement_confirm|Keyboard|中倉出了 35 個機械鍵盤
+38|north received 55 bluetooth speakers|movement_confirm|Speaker|北倉收到 55 個藍牙喇叭
+39|transfer 15 electric mops from north to central|transfer_confirm|Mop|15 台電動拖把從北倉調到中倉
+40|south shipped 22 down jackets|movement_confirm|Jacket|南倉出貨 22 件羽絨外套
+
+# ── C. 缺貨與警示（10 句）──
+41|what is running low|low_stock||哪些快沒了
+42|show me the low stock list|low_stock||給我缺貨清單
+43|which items need restocking|low_stock||哪些商品需要補貨
+44|anything below safety stock|low_stock||有低於安全庫存的嗎
+45|whats about to run out|low_stock||什麼快要用完了
+46|alert me when earphones drop below 30|alert_confirm|Earphones|耳機低於 30 個時通知我
+47|set an alert for yoga mat|alert_confirm|Yoga Mat|幫瑜珈墊設個警示
+48|what alerts do i have|alert_list||我有哪些警示
+49|show my alert rules|alert_list||顯示我的警示規則
+50|which products are short|low_stock||哪些商品短缺
+
+# ── D. 排行與比較（15 句）──
+51|best sellers this week|hot_items||本週熱銷
+52|what sold the most this month|hot_items||這個月賣最多的是什麼
+53|show me the top sellers|hot_items||給我熱銷排行
+54|which items are slow movers|hot_items||哪些商品滯銷
+55|compare north and south|compare_warehouses||比較北倉和南倉
+56|compare central and south by turnover|compare_warehouses||用週轉率比較中倉和南倉
+57|which warehouse has more stock north or south|compare_warehouses||北倉和南倉哪個庫存多
+58|compare all three warehouses|compare_warehouses||比較三個倉庫
+59|what came in today|movement||今天進了什麼
+60|show me todays inbound|movement||顯示今天的進貨
+61|what went out this week|movement||這週出了什麼
+62|movements for wireless mouse this month|movement||無線滑鼠這個月的進出
+63|which items expire soon|expiring||哪些商品快到期
+64|show me expiring batches|expiring||顯示到期批次
+65|whats expiring in the next 30 days|expiring||未來 30 天內到期的
+
+# ── E. 帳務追查 RCA（10 句）──
+66|why is the toothbrush count off|agent_rca||為什麼牙刷數量對不上
+67|who moved the wireless mouse|agent_rca||誰動了無線滑鼠
+68|the earphone numbers dont match|agent_rca||耳機的數字對不起來
+69|explain the yoga mat shortfall|agent_rca||說明瑜珈墊的短缺
+70|check the coffee machine discrepancy|agent_rca||查咖啡機的差異
+71|generate a full inventory report|report_done||產一份完整庫存報表
+72|create a purchase order for low stock items|po_confirm||幫缺貨商品開採購單
+73|run the month end stocktake|script_confirm||執行月底盤點
+74|what files do you have|file_list||你有哪些檔案
+75|what scripts can you run|file_list||你能跑哪些腳本
+
+# ── F. 多輪追問（10 句，要連續唸才有意義）──
+76|bluetooth earphones stock|inventory_single|Earphones|藍牙耳機庫存
+77|what about north|inventory_single|Earphones|那北倉呢
+78|how about central|inventory_single|Earphones|中倉呢
+79|is it below safety stock|*||它低於安全庫存嗎
+80|show me its movements|movement||顯示它的進出紀錄
+81|wireless mouse stock|inventory_single|Mouse|無線滑鼠庫存
+82|and south|*|Mouse|那南倉呢
+83|set its safety stock to 100|config_confirm|Mouse|把它的安全庫存設成 100
+84|cancel|*||取消
+85|what else do coffee beans buyers get|related||買咖啡豆的人還會買什麼
+
+# ── G. 澄清與口語確認（8 句）──
+86|coffee stock|clarify||咖啡庫存
+87|the second one|*||第二個
+88|mosquito repellent stock|clarify||防蚊液庫存
+89|the first one|*||第一個
+90|north received 50 wireless mouse|movement_confirm|Mouse|北倉進了 50 個無線滑鼠
+91|confirm|movement_done|Mouse|確認
+92|central shipped 20 yoga mats|movement_confirm|Yoga Mat|中倉出了 20 個瑜珈墊
+93|never mind|*||算了不用
+
+# ── H. 招呼閒聊與邊界（7 句）──
+94|hello|guide||哈囉
+95|what can you do|guide||你會做什麼
+96|help|guide||求助
+97|do you have hair dryers|*||你們有吹風機嗎
+98|whats the wifi password|*||wifi 密碼是什麼
+99|tell me a joke|rejected||講個笑話
+100|thanks bye|guide||謝謝掰掰
