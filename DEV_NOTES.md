@@ -62,8 +62,10 @@ r4 修完當下四批看似全綠，**複驗 r1/r2/r3 才發現回歸 4/2/3**。
 **這個專案驗證過三次**：
 - 英文 ASR：SG 腔 WER 23% 看似很差，但 `Powerbank Inventory`、
   `North receive 50 wireless mouse` 端到端**都答對**（容錯層在扛）
-- 中文 ASR：Fun-ASR 字面率 4/8 > whisper small 3/8，但 small 端到端 8/8
-- 中文 ASR 二選：whisper base 字面比 small 差，**補規則後端到端反而最高**
+- 中文 ASR：Fun-ASR 字面率 4/8 > whisper base 3/8，但 **base 端到端 8/8**
+  （聽錯的「盡量啤酒酷醇」「無限滑鼠擴存」全被文字端容錯層救回）
+- ⚠️ 中文版實際載入的是 **`ggml-base.bin`**（141MB）——早期註解誤寫 small，
+  已更正；tiny 中文太差（無線滑鼠→「古仙华属」）不能用
 
 ### 合成音會嚴重高估
 中文版經驗：合成音 clean **100%**、真人首測只有 **35/52**。

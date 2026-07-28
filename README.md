@@ -8,9 +8,10 @@
 [![Model](https://img.shields.io/badge/Model-FunctionGemma_270M-orange)](https://huggingface.co/google/gemma-3-1b-it)
 [![中文守衛](https://img.shields.io/badge/中文守衛_1122句-RPI5_100%25-brightgreen)]()
 [![英文守衛](https://img.shields.io/badge/英文守衛_892句-892_100%25-brightgreen)]()
-[![劇情批](https://img.shields.io/badge/劇情批_r1--r5+語音+大小寫-全綠-brightgreen)]()
+[![劇情批](https://img.shields.io/badge/劇情批_r1--r13-全綠-brightgreen)]()
+[![渲染批](https://img.shields.io/badge/view畫面覆蓋-25個-brightgreen)]()
 [![intent_clf](https://img.shields.io/badge/intent__clf-6MB量化_99.68%25-blue)]()
-[![語音](https://img.shields.io/badge/語音-中文FunASR_/_英文whisper_tiny.en-blueviolet)]()
+[![語音](https://img.shields.io/badge/語音-whisper_base(中)_/_tiny.en(英)-blueviolet)]()
 [![離線](https://img.shields.io/badge/展場-100%25離線可用-success)]()
 
 ---
@@ -263,16 +264,19 @@ category 幻覺（真商品被錯類別濾成找不到 → `_drop_ungrounded_cat
 訪客講話（前端 Siri 式：點一下 → 講 → 靜音自動結束）
     │
     ▼
-[瀏覽器 MediaRecorder 錄音 + AudioContext VAD 靜音偵測]
+[瀏覽器 MediaRecorder 錄音 + Web Audio API 算 RMS 音量]
+    ※ 端點偵測**不用模型**：靜音 1.2s 自動送出、15s 硬上限
+      （whisper.cpp 本身的 --vad 沒啟用；瀏覽器就地判斷零延遲）
     │
     ▼
-[/api/asr]  ffmpeg 轉 16k mono → Fun-ASR-Nano（GGUF, llama.cpp）
+[/api/asr]  ffmpeg 轉 16k mono → whisper.cpp（中文 base / 英文 tiny.en）
     │
     ▼
-[OpenCC s2twp]  簡體 → 繁體（順便轉台灣用語）
+[OpenCC s2twp]  簡體 → 繁體（順便轉台灣用語）※ **只有中文版需要**
     │
     ▼
-[同音修正層 _asr_normalize]  倉別/動詞/量詞/異體字（掛 /api/asr 出口，不碰倉管核心）
+[出口正規化 _asr_normalize]  中文：同音字/倉別/量詞　英文：大小寫攤平
+                             （掛 /api/asr 出口，打字路徑零影響）
     │
     ▼
 [倉管 WS]  ← 既有守衛庫 + 發音容錯層接手
@@ -317,9 +321,10 @@ ASR 整詞聽錯（訪客看辨識文字重講可解），非系統 bug。關鍵
 | repo 目錄 | `test/` | `en/` |
 | RPI5 目錄 | `~/warehouse_v2/` | `~/warehouse_v2_en/` |
 | Port | 8001 | **8002** |
-| 開機自啟 | ✗（桌面捷徑手動起） | **✓** |
+| 開機自啟 | **✓**（訪客點瀏覽器分頁切語言） | **✓**（前景分頁＝展場主力） |
 | 模型 | 中文微調版 | **英文微調版**（獨立訓練） |
-| 語音 | Fun-ASR-Nano | **whisper tiny.en** |
+| 語音 | **whisper base**（141MB，多語含中文） | **whisper tiny.en**（74MB） |
+| 守衛 | 1122 句 100% | **892 句 100%** |
 
 ### 為什麼不是「翻譯層」而是重訓一顆
 探針實測（拿現有中文模型餵英文句）：乾淨查詢答得出來，但**招牌能力全滅**
@@ -736,11 +741,13 @@ python finetune_local.py
 
 ---
 
-*最後更新：2026-07-27*
+*最後更新：2026-07-28*
 
 **中文版**：v6 模型 5,849 筆訓練 | 35 輪收斂：守衛庫 1122＋短句全枚舉 953
-＋多輪劇本 2069 情境，雙平台（WIN11 + RPI5）100%、危險級持續 0 | 語音全鏈離線
+＋多輪劇本 2069 情境，雙平台（WIN11 + RPI5）100%、危險級持續 0 |
+語音 whisper **base**（141MB，多語含中文）全鏈離線 | RPI5 8001 開機自啟
 
 **英文版**：獨立微調（6,284 筆純英文語料）| intent_clf **量化 6MB**（800MB→6MB
-準確率完全不掉，99.68%）| 守衛庫 **891/892 (99.9%)** | 劇情批 r1-r5 + 語音批
-+ 大小寫批全綠 | 語音 whisper tiny.en **1.1s/句** | RPI5 8002 開機自啟
+準確率完全不掉，99.68%）| 守衛庫 **892/892 (100%)** | 劇情批 r1-r5 + 語音批
++ 大小寫批 + **渲染批 r6-r10（25 個 view 看過畫面）** + **換輸入源 r11-r13**
+全綠 | 語音 whisper **tiny.en 0.94s/句** | RPI5 8002 開機自啟（展場主力）
