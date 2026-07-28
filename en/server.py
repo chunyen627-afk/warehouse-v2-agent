@@ -318,6 +318,18 @@ def is_meaningful_input(text: str) -> bool:
     # 閒聊（「放音樂給我聽」描述命中但無查詢語氣 → 不放行、續走黑名單擋下）。
     if _descriptor_hit(text) and any(c in s for c in _DESC_GATE_CUES):
         return True
+    # r12（探針批）：**引導類問句**在守門員就該放行——它們是合理提問不是搗蛋。
+    #   實測 `how does this work` 被擋成 rejected（12ms，連 guide 判定都沒到），
+    #   訪客第一句問「這怎麼用」卻收到婉拒。`what can you do` 能過是碰巧
+    #   命中別的詞，不是有意為之 → 這裡明確化。
+    #   ⚠️ 全部用片語（坑 1）：裸 work/this/demo 會撞合法查詢。
+    if any(w in s for w in (
+            "how does this work", "how do i use this", "how does it work",
+            "what can you do", "what can i ask", "what do you do",
+            "what is this demo", "what's this demo", "whats this demo",
+            "what is this system", "what's this system",
+            "is this real data", "how does this demo")):
+        return True
     # r81 寫入契約：破壞動詞 × 全稱詞的組合一律擋（不枚舉個案）。
     # 「全部商品歸零」曾漏黑名單→吐 60 項清單。破壞語意 + 全稱範圍 = 搗蛋。
     # 查詢語（「快歸零的有哪些」）不含全稱詞、或含查詢語尾，不會誤中。
@@ -568,6 +580,14 @@ GUIDE_KEYWORDS = {
     "how does the transfer work", "how does transfer work",
     "teach me", "tutorial", "what else can you", "anything else you can",
     "capabilities", "getting started", "how do i start", "where do i start",
+    # r12（探針批）：**問展示本身**——展場訪客站到機器前，第一句常常是
+    #   「這是什麼」而不是查商品。實測 `what's this demo about` 回**熱銷榜**
+    #   （demo 撞到什麼詞就路由過去），訪客第一印象就是答非所問。
+    #   ⚠️ 一律用片語：裸 this/about/demo 會撞到合法查詢。
+    "this demo", "the demo", "about this demo", "what is this demo",
+    "what's this demo", "whats this demo", "what is this system",
+    "what's this system", "whats this system", "what is this thing",
+    "real data", "is this real", "fake data", "demo data",
 }
 
 GUIDE_MSG = (
@@ -1613,6 +1633,13 @@ _ALL_INTENT_WORDS = (
     "stock", "inventory", "how many", "how much", "left", "in stock", "available",
     "availability", "quantity", "count", "on hand", "remaining", "got any", "do we have",
     "check", "show", "list", "look up", "find", "situation", "overview",
+    # r12（TTS 基準批抓到）：「倉庫裡有什麼」型的查詢——句中沒有 stock/
+    #   inventory 這些詞，靠 `what's in ... warehouse` 表達意圖。
+    #   實測 `what's in central warehouse for wireless mouse`（ASR **完全聽對**）
+    #   → has_intent=False → 判成「只有商品名沒動作」→ 反問「你想知道滑鼠的什麼」，
+    #   但商品和倉庫訪客都給了。用**片語**避免裸 what/in 誤爆。
+    "what's in", "whats in", "what is in", "what do we have in",
+    "what's at", "whats at", "anything in",
     # 進出貨
     "movement", "movements", "came in", "come in", "shipped", "shipment", "shipments",
     "inbound", "outbound", "received", "goods in", "goods out", "went out", "moved",
@@ -2346,7 +2373,13 @@ def _detect_clarify(user_text: str) -> dict | None:
     #   實測：同一句小寫開卡成功、大寫回「你想知道耳機的什麼？」。
     #   打字訪客不會打大寫，所以文字端 r1-r5 五輪收斂都沒暴露這條。
     _t_low_intent = t.lower()
-    has_intent = any(w in t or w in _t_low_intent for w in _ALL_INTENT_WORDS)
+    # r12（TTS 基準批）：**撇號也要攤平**——同大小寫那條的道理。
+    #   ASR 輸出 `what's in central warehouse…`（帶撇號），詞表寫的是
+    #   `whats in` → 比不到 → has_intent=False → 又掉進 clarify。
+    #   ⚠️ 彎引號 U+2019 也要收：whisper 兩種都會產，肉眼看不出差別。
+    _t_noapos = _t_low_intent.replace("'", "").replace("’", "")
+    has_intent = any(w in t or w in _t_low_intent or w in _t_noapos
+                     for w in _ALL_INTENT_WORDS)
 
     # 剝通用填充詞，避免「幫我查」的「幫我」誤觸商品 match
     _FILLER = ("幫我", "幫忙", "請問", "麻煩", "請", "幫", "給我", "看一下",
@@ -5584,6 +5617,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          # r1：'whats worth watching in stock' 的 watching /
                         #   worth 被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
+                        # r12（探針批）：**禮貌用語**——展場訪客很常客氣地問，
+                        #   而 r1-r11 的造句全是命令式（'earphone stock'），
+                        #   整類漏掉。實測 'could you tell me the earphone
+                        #   stock' → No item matching "could"；
+                        #   'i'd like to know the tent stock' → matching "like"。
+                        #   這些是純功能詞、不可能是商品名，收進來很安全。
+                        "could", "would", "should", "shall", "might", "may",
+                        "like", "ask", "asking", "know", "knowing", "want",
+                        "wanted", "wish", "hoping", "hope", "kindly", "mind",
+                        "possible", "possibly", "maybe", "perhaps", "just",
+                        "quick", "quickly", "question",
                         # r1：確認語（did it take effect / put it back）不是商品名
                         "effect", "effective", "applied", "apply", "back",
                         "take", "takes", "took", "put", "puts", "get", "gets",
@@ -5680,6 +5724,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 for _t in _re.split(r"[\s\-/]+", user_text.lower()):
                     _t = _t.strip(" ?.!,'\"")
                     if len(_t) < 4 or _t in _oov_stop or any(c.isdigit() for c in _t):
+                        continue
+                    # r12（TTS 基準批）：**句中帶撇號的是英文縮寫，不是商品修飾詞**。
+                    #   `what's in central warehouse for wireless mouse`——
+                    #   LLM 判**全對**（keyword=mouse, warehouse=central），
+                    #   卻因 "what's" 被當陌生修飾詞 → 這道閘門清掉 keyword
+                    #   → C17a-pre 再丟掉 warehouse → 回全店概覽（坑 3 典型）。
+                    #   ⚠️ 上面 strip 只剝**頭尾**標點，撇號在字中間剝不掉。
+                    #   ⚠️ 商品名 `Men's` 系列不受影響：那是 keyword 本身，
+                    #     不會走到這個「修飾詞」迴圈（實測 men's jeans 正常）。
+                    if "'" in _t or "’" in _t:
                         continue
                     if _t in _oov_words or _t.rstrip("s") in _oov_words:
                         continue
@@ -13005,6 +13059,13 @@ async def ws_handler(ws: WebSocket):
                         #   被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
                         "interesting", "important", "urgent", "attention",
+                        # r12（探針批）：禮貌用語——與上面 _oov_stop 同步
+                        #   （兩處必須一致，否則修一層下一層再擋一次）
+                        "could", "would", "should", "shall", "might", "may",
+                        "like", "ask", "asking", "know", "knowing", "want",
+                        "wanted", "wish", "hoping", "hope", "kindly", "mind",
+                        "possible", "possibly", "maybe", "perhaps", "just",
+                        "quick", "quickly", "question",
                         # r1：確認語（did it take effect / put it back）不是商品名
                         "effect", "effective", "applied", "apply", "back",
                         "done", "changed", "change", "updated", "saved",
@@ -13159,6 +13220,15 @@ async def ws_handler(ws: WebSocket):
                                     continue
                             except Exception:
                                 pass
+                            # r12（TTS 基準批）：**帶撇號的縮寫一律不是商品名**。
+                            #   ASR 產出 `what's in central warehouse…` →
+                            #   `what's` 被當成「庫裡沒有的商品」→ 誠實回覆
+                            #   「No item matching "what's"」。
+                            #   這是結構性判準不是逐詞列舉：**主檔零商品名含撇號**，
+                            #   所以帶撇號的 token 必然是縮寫（what's/where's/
+                            #   there's/it's/don't…），逐個列進停用詞表列不完。
+                            if "'" in _tx or "’" in _tx:
+                                continue
                             _unknown.append(_tx)
                         # ── EN build：陌生詞其實是「類別詞」→ 類別查詢，不是查無 ──
                         #   全系統 cat_zh_map 的鍵都是中文，英文類別句
