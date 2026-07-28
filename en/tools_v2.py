@@ -671,6 +671,37 @@ def _match_script(script_name: str) -> dict | None:
         label_q = sc.get("label", "").replace(" ", "")
         if label_q in q or q in label_q:
             return sc
+    # ── r11：**詞級**比對——substring 對付不了「LLM 換字」──────────────
+    #   `run the month end stocktake` → LLM 抽成 `month_end_result`
+    #   → 'monthendresult' vs alias 'monthendstocktake' 互不包含 → 落空
+    #   → 訪客看到「不在白名單」還被列出內部腳本清單。
+    #   ⚠️ **字元相似度行不通**（實測後放棄，別再試）：
+    #     monthendresult→正解 0.581／次名 0.500（差 0.081，該中）
+    #     northwarehouse→誤配 0.621／次名 0.375（差 0.246，不該中）
+    #     分數與差距都跟正確性**相反**，取任何門檻都會兩者擇一犧牲。
+    #   ⇒ 改用**詞級**：要求「LLM 抽的詞」與候選有 ≥2 個**實詞**重疊。
+    #     month+end 命中 stocktake 的 alias（2 詞）；north+warehouse 與
+    #     任何腳本都只重疊 0 個實詞 → 安全。
+    _q_words = {w for w in re.split(r"[^a-z0-9]+", script_name.lower())
+                if len(w) >= 3 and w not in {
+                    "the", "run", "this", "that", "and", "for", "please",
+                    "month", "week", "day", "year", "last", "next"}}
+    # 'month' 在停用詞裡（時間詞），但 month-end 是腳本名的一部分 →
+    #   單獨把 monthend 當一個詞補回，避免時間詞被剝光後無詞可比
+    if re.search(r"month[\s_-]*end", script_name, re.I):
+        _q_words.add("monthend")
+    if len(_q_words) >= 2:
+        for sc in _load_manifest().get("scripts", []):
+            _cand_words = set()
+            for cand in ([sc["id"], sc.get("label", "")]
+                         + list(sc.get("aliases", []))):
+                for w in re.split(r"[^a-z0-9]+", (cand or "").lower()):
+                    if len(w) >= 3:
+                        _cand_words.add(w)
+                if re.search(r"month[\s_-]*end", cand or "", re.I):
+                    _cand_words.add("monthend")
+            if len(_q_words & _cand_words) >= 2:
+                return sc
     return None
 
 

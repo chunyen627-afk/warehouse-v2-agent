@@ -1337,7 +1337,11 @@ _TOOL_INTENT_GUARD = {
                             "upsell", "complement"),
     "search_log":       _RCA_INTENT_WORDS,
     "list_files":       ("檔", "資料夾", "目錄", "紀錄檔", "有哪些資料",
-                         "file", "files", "folder", "directory", "what data"),
+                         "file", "files", "folder", "directory", "what data",
+                         # r11：C13 已把「你能跑哪些腳本」轉成 list_files，
+                         #   但這道意圖閘門沒有對應詞 → 又被擋成 rejected
+                         #   （坑 3：修一層、下一層再擋一次，兩處要同步）
+                         "script", "scripts", "report", "reports"),
     # run_script：需含腳本動作詞，否則閒聊句「一起吃飯」被 LLM 幻覺成
     # run_script{一起吃飯} → 執行時回「不在白名單，可用：月底盤點…」把內部
     # 腳本清單暴露給訪客（RPI5 v21 抓到）。沒動作詞 → 閘門擋成 rejected 婉拒。
@@ -5766,7 +5770,25 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _c2c_bad = bool(_re.search(r"進出|異動|流水|紀錄", _c2c_kw))
         if not _c2c_kw or _c2c_bad:
             cleaned = _extract_sku_keyword(_c2c_src)
-            if cleaned and len(cleaned) >= 2 and not _re.search(r"進出|異動|流水|紀錄", cleaned):
+            # r11（真人語音批乾跑抓到）：英文純追問句要驗接地才可補。
+            #   `and south` 剝尾巴的 regex 全中文、對英文剝不掉東西 → 整句拿去
+            #   match → 亂配 **Smart Fitness Band**（"s" 開頭硬湊），訪客問的是
+            #   上一個商品的南倉庫存，卻收到不相干商品的進出紀錄。
+            #   同坑 4：上游（C4-mvg）才剛把幻覺 keyword 'shoes' 丟棄，
+            #   這裡又補一個回來——補 keyword 的規則都要尊重接地。
+            _c2c_ok = True
+            if cleaned and _is_mostly_english(user_text):
+                _core = {w.strip(" ?.!,'\"").lower()
+                         for w in _re.split(r"[\s\-/]+", user_text.lower())}
+                # 商品名任一實詞要真的出現在原句（別名/錯字路已在上游處理過）
+                _c2c_ok = any(
+                    w.lower() in _core or w.lower().rstrip("s") in
+                    {t.rstrip("s") for t in _core}
+                    for w in _re.split(r"[\s\-/]+", cleaned) if len(w) >= 3)
+                if not _c2c_ok:
+                    log.info(f"[校正 C2c] 英文補 keyword {cleaned!r} 不接地 → 不補")
+            if (cleaned and len(cleaned) >= 2 and _c2c_ok
+                    and not _re.search(r"進出|異動|流水|紀錄", cleaned)):
                 log.info(f"[校正 C2c] query_movement 補 keyword: {cleaned!r}（剝尾巴後）")
                 func_args = dict(func_args)
                 func_args["keyword"] = cleaned
@@ -6246,10 +6268,28 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
 
     # C13：檔案列表意圖 → list_files（B 波：動態找檔）
     _listfile_words = ("有哪些檔", "有什麼檔", "有哪些資料", "列出檔案", "看一下檔案",
-                       "有哪些紀錄檔", "資料夾", "有哪些目錄", "列檔", "list files", "有什麼資料可以查")
+                       "有哪些紀錄檔", "資料夾", "有哪些目錄", "列檔", "list files", "有什麼資料可以查",
+                       # r11（真人語音批乾跑）：「你能跑哪些腳本」是合理提問，
+                       #   原本 LLM 判成 query_related_items → 意圖閘門發現沒搭售詞
+                       #   → **整句 rejected 婉拒**（訪客看到「這是倉管助理」教學文）。
+                       #   ⚠️ 用**片語**不用裸 "script"（坑 1：短字串在英文必誤爆——
+                       #     'run the script' 是執行、不是列清單）。
+                       "what scripts", "which scripts", "list scripts",
+                       "available scripts", "scripts can you", "scripts are there",
+                       "what reports", "which reports", "list reports",
+                       "what files", "which files")
     if func_name != "list_files" and any(w in user_text for w in _listfile_words):
+        # r11：英文要認單複數（'what scripts' 的 area 是 scripts；原本只比對
+        #   單數 'script' 之類的鍵，複數句反而抽不到 area → 列成預設區域）
+        _lf_low = user_text.lower()
         area = next((k for k in ("transactions", "orders", "master", "audit", "reports", "scripts",
-                                 "交易", "採購", "主檔", "異動", "報告", "腳本") if k in user_text), "")
+                                 "交易", "採購", "主檔", "異動", "報告", "腳本") if k in _lf_low), "")
+        if not area:
+            for _sg, _pl in (("script", "scripts"), ("report", "reports"),
+                             ("order", "orders"), ("transaction", "transactions")):
+                if _re.search(rf"\b{_sg}s?\b", _lf_low):
+                    area = _pl
+                    break
         log.info(f"[校正 C13] 檔案列表意圖 → list_files（原 {func_name}）")
         return "list_files", ({"area": area} if area else {}), True
 
@@ -6901,6 +6941,12 @@ _CTX_FOLLOWUP_RE_EN = _re.compile(
     # 裸倉別追問：'north' / 'and central' / 'whats in south' / 'in north'
     r"and\s+(?:north|central|south)|^(?:north|central|south)$|"
     r"(?:in|at|for)\s+(?:north|central|south)|"
+    # r11（真人語音批乾跑抓到）：'what about north' / 'how about central'
+    #   ——英文最自然的追問講法，卻是漏的。`about` 沒在上面的介系詞清單裡，
+    #   整句對不到任何追問樣式 → carry-over 沒觸發 → 回全店 60 商品概覽。
+    #   ⚠️ 這兩個詞在**守門員**的放行判斷裡早就有（~10338 行），
+    #     所以句子進得了門、卻在 carry-over 這層落空——兩處詞表不同步。
+    r"(?:what|how)\s+about\b|"
     # 承接副詞：'then' / 'also' / 'too' / 'again' / 'now' / 'each'
     r"then|also|too|again|now|each|"
     # 序數指代：'the first one' / 'the second'
