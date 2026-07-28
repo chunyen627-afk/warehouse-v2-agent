@@ -6,13 +6,17 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![Model](https://img.shields.io/badge/Model-FunctionGemma_270M-orange)](https://huggingface.co/google/gemma-3-1b-it)
-[![中文守衛](https://img.shields.io/badge/中文守衛_1122句-RPI5_100%25-brightgreen)]()
-[![英文守衛](https://img.shields.io/badge/英文守衛_892句-892_100%25-brightgreen)]()
-[![劇情批](https://img.shields.io/badge/劇情批_r1--r13-全綠-brightgreen)]()
-[![渲染批](https://img.shields.io/badge/view畫面覆蓋-25個-brightgreen)]()
-[![intent_clf](https://img.shields.io/badge/intent__clf-6MB量化_99.68%25-blue)]()
-[![語音](https://img.shields.io/badge/語音-whisper_base(中)_/_tiny.en(英)-blueviolet)]()
-[![離線](https://img.shields.io/badge/展場-100%25離線可用-success)]()
+![中文守衛](https://img.shields.io/badge/中文守衛_1122句-RPI5_100%25-brightgreen)
+![英文守衛](https://img.shields.io/badge/英文守衛_892句-892_100%25-brightgreen)
+![劇情批](https://img.shields.io/badge/劇情批_r1--r13-全綠-brightgreen)
+![渲染批](https://img.shields.io/badge/view畫面覆蓋-25個-brightgreen)
+![intent_clf](https://img.shields.io/badge/intent__clf-6MB量化_99.68%25-blue)
+![語音](https://img.shields.io/badge/語音-whisper_base%28中%29_/_tiny.en%28英%29-blueviolet)
+![離線](https://img.shields.io/badge/展場-100%25離線可用-success)
+
+> 📖 **測試方法論與踩雷** → [DEV_NOTES.md](DEV_NOTES.md)　
+> 🛠️ **部署／還原** → [RPI5_RESTORE.md](RPI5_RESTORE.md)　
+> 📋 **待辦與決策** → [TRAINING_BACKLOG.md](TRAINING_BACKLOG.md)
 
 ---
 
