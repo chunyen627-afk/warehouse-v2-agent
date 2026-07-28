@@ -1,0 +1,66 @@
+# 探針批 #2：繼續挑「我的造句習慣之外」的句型
+# 第一批（_probe_en.txt）抓到禮貌用語、撇號。這批換別的角度。
+# 格式：句子|期望view（* = 不限，只要不出錯/不誤導）
+
+# ── ⑩ 否定與反問——訪客確認狀況時會這樣講 ──
+we don't have any yoga mats do we|*
+isn't the earphone stock low|*
+aren't we running out of tissue|*
+no more camping tents right|*
+the mouse isn't below safety stock is it|*
+didn't we just receive some power banks|*
+
+# ── ⑪ 比較級/最高級——排行類的口語講法 ──
+which one sells better|*
+what's the most popular item|hot_items
+which is cheaper|*
+what's our biggest seller|hot_items
+which warehouse is fullest|compare_warehouses
+what moves fastest|hot_items
+
+# ── ⑫ 時間口語——不是 this week/this month 這種標準講法 ──
+what sold well lately|hot_items
+anything come in recently|movement
+what happened yesterday|movement
+how about last month|*
+sales over the past week|hot_items
+what's been moving|movement
+
+# ── ⑬ 代名詞開頭——訪客省略主詞 ──
+got any earphones|inventory_single
+need to restock anything|low_stock
+any yoga mats left|inventory_single
+running low on anything|low_stock
+seen the coffee machine numbers|*
+
+# ── ⑭ 複合請求——一句問兩件事 ──
+earphone stock and mouse stock|*
+show me low stock and best sellers|*
+compare north and south by value|compare_warehouses
+yoga mat stock in north and central|*
+
+# ── ⑮ 單位/量詞——訪客會帶單位講 ──
+how many boxes of tissue|inventory_single
+how many pieces of yoga mat|inventory_single
+how many units of earphones left|inventory_single
+north received 50 pcs of mouse|movement_confirm
+
+# ── ⑯ 品牌/俗稱混用——訪客不知道正式品名 ──
+airpods stock|*
+the wireless ones stock|*
+those bluetooth things|*
+the charging thing inventory|*
+
+# ── ⑰ 錯字（打字訪客會打錯，不只 ASR）──
+earphon stock|inventory_single
+yoga mta stock|inventory_single
+wireles mouse count|inventory_single
+powr bank inventory|inventory_single
+cofee machine stock|inventory_single
+
+# ── ⑱ 展場實境——訪客邊玩邊問 ──
+can i try something|*
+give me an example|*
+show me what you can do|guide
+surprise me|*
+anything cool|*

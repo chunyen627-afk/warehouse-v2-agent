@@ -1425,6 +1425,33 @@ def _intent_guard_rescue(func_name: str, func_args: dict, user_text: str):
         m = _WR.match_items(cand)
         return bool(m) and m[0].get("score", 0) >= 3
 
+    # ── r13（探針批 #2）：**不帶商品名的口語泛問**整片被婉拒 ──────────
+    #   `what happened yesterday` / `anything come in recently` /
+    #   `what moves fastest` / `what's the most popular item` 都是合理提問，
+    #   卻因 LLM 判錯 tool（多半判成 search_log）＋現有救援都要求「有商品名」
+    #   → 全部落到 rejected。**婉拒是最糟的回應**：訪客問了正常問題卻被打槍。
+    #   ⇒ 看句子本身的意圖詞導向正解，不看有沒有商品名。
+    #   ⚠️ 只在**閘門已經要 reject** 時才跑（這裡是 reject 前的最後一站），
+    #     不會搶走正常路由；且要求句中有明確意圖詞，不是無條件放行。
+    if _is_mostly_english(user_text):
+        _rt = user_text.lower().replace("'", "").replace("’", "")
+        _has_period = bool(_re.search(
+            r"\b(?:yesterday|today|this week|last week|this month|last month|"
+            r"recently|lately|past week|past month|so far)\b", _rt))
+        # ①期間 + 泛問（沒商品名）→ 進出貨紀錄
+        if _has_period and _re.search(
+                r"\b(?:what|anything|any|whats)\b.*\b(?:happen|happened|"
+                r"come in|came in|coming in|went out|go out|move|moved|"
+                r"moving|arrive|arrived|new)\b", _rt):
+            log.info(f"[gate-rescue] 期間泛問 → query_movement: {user_text!r}")
+            return "query_movement", {}
+        # ②最高級 + 銷售語 → 熱銷榜（`what moves fastest` / `biggest seller`）
+        if _re.search(r"\b(?:fastest|quickest|most popular|best selling|"
+                      r"biggest seller|top seller|hottest|sells best|"
+                      r"sells better|sold best|moves fastest|sells the most)\b", _rt):
+            log.info(f"[gate-rescue] 最高級銷售語 → list_hot_items: {user_text!r}")
+            return "list_hot_items", {}
+
     # Bug1: search_log 缺 RCA 意圖詞、但帶到有效商品名 → 其實是查庫存，降級 query_inventory
     if func_name == "search_log":
         # 幻覺 kw 要接地（r23：「哪些貨在苟延殘喘」LLM 幻覺 藍牙耳機 被
@@ -5735,6 +5762,32 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     #     不會走到這個「修飾詞」迴圈（實測 men's jeans 正常）。
                     if "'" in _t or "’" in _t:
                         continue
+                    # r13（多腔調批）：**商品詞 + 功能詞黏在一起**也不是陌生詞。
+                    #   ASR 穩定地把 `steam iron stock` 聽成 `steam ironstock`
+                    #   ——GB/AU/IN **三個腔調都一樣**，是固定行為不是隨機。
+                    #   結果：keyword 早就抽對（Steam Iron），卻被這道閘門
+                    #   當「ironstock 是陌生商品」清掉 → 誠實回覆「查無」。
+                    #   ⚠️ 既有的黏字拆解只處理「商品詞+商品詞」（yogamat /
+                    #     powerbank），「商品詞+功能詞」沒人管。
+                    #   ⚠️ **剝完要再驗**：剝掉尾綴後必須是認得的商品詞才放行，
+                    #     不是無條件跳過（否則 'xyzstock' 也會被放過）。
+                    _GLUE_SFX = ("stock", "stocks", "inventory", "count",
+                                 "counts", "qty", "quantity", "level", "levels")
+                    _glued = None
+                    for _sfx in _GLUE_SFX:
+                        if len(_t) > len(_sfx) + 2 and _t.endswith(_sfx):
+                            _glued = _t[:-len(_sfx)]
+                            break
+                    if _glued:
+                        try:
+                            if (_glued in _oov_words
+                                    or _glued.rstrip("s") in _oov_words
+                                    or _en_fuzzy_keyword(_glued)):
+                                log.info(f"[C1g-oov] 黏字還原 {_t!r} → {_glued!r}"
+                                         f"（商品詞+功能詞）")
+                                continue
+                        except Exception:
+                            pass
                     if _t in _oov_words or _t.rstrip("s") in _oov_words:
                         continue
                     # 模糊層（合成詞/錯字）認得的不算陌生修飾詞
@@ -13229,6 +13282,22 @@ async def ws_handler(ws: WebSocket):
                             #   there's/it's/don't…），逐個列進停用詞表列不完。
                             if "'" in _tx or "’" in _tx:
                                 continue
+                            # r13：黏字（商品詞+功能詞）——與上面 C1g-oov 同步
+                            #   （坑 3：只修一層，下一層還是會擋掉）
+                            _gl = None
+                            for _sf in ("stock", "stocks", "inventory", "count",
+                                        "counts", "qty", "quantity", "level",
+                                        "levels"):
+                                if len(_tx) > len(_sf) + 2 and _tx.endswith(_sf):
+                                    _gl = _tx[:-len(_sf)]
+                                    break
+                            if _gl:
+                                try:
+                                    if (_gl in _nx_words or _gl.rstrip("s") in _nx_words
+                                            or _en_fuzzy_keyword(_gl)):
+                                        continue
+                                except Exception:
+                                    pass
                             _unknown.append(_tx)
                         # ── EN build：陌生詞其實是「類別詞」→ 類別查詢，不是查無 ──
                         #   全系統 cat_zh_map 的鍵都是中文，英文類別句

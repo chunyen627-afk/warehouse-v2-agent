@@ -17,12 +17,14 @@ import urllib.request
 import websockets
 
 HERE = Path(__file__).parent
-AUD = HERE / "audio" / "read100_en_demo"
+# r13：支援多腔調——第 2 參數指定 tag（demo/GB-male/AU-female/IN-male/SG-male）
+ACC = sys.argv[2] if len(sys.argv) > 2 else "demo"
+AUD = HERE / "audio" / f"read100_en_{ACC}"
 NOISE = HERE / "noise" / "mall_ambience.mp3"
 CORPUS = HERE / "read100_en.txt"
 LV = sys.argv[1] if len(sys.argv) > 1 else ""
 DB = {"heavy": "-8", "light": "-18"}.get(LV)
-OUT = HERE / f"_tts_bench_{LV or 'clean'}.txt"
+OUT = HERE / f"_tts_bench_{ACC}_{LV or 'clean'}.txt"
 
 rows = []
 for line in CORPUS.read_text(encoding="utf-8").splitlines():
@@ -109,7 +111,7 @@ async def main():
     OUT.write_text("\n".join(lines), encoding="utf-8")
     n = ok + bad
     print(f"\n{'='*58}")
-    print(f"TTS 基準（{LV or 'clean'}）：PASS {ok} / FAIL {bad}"
+    print(f"TTS 基準（{ACC} / {LV or 'clean'}）：PASS {ok} / FAIL {bad}"
           f"　通過率 {ok/n*100:.0f}%" if n else "")
     print(f"結果：{OUT}")
 
