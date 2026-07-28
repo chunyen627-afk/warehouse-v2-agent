@@ -741,11 +741,11 @@ add_round(s, MX, Inches(4.45), Inches(11.87), Inches(2.1), fill=DARK, shadow=Tru
 add_text(s, MX + Inches(0.4), Inches(4.68), Inches(11.0), Inches(0.4),
          "29 個破口 → 兩個根因 → 兩處修補", size=15, bold=True, color=TEAL)
 add_rich(s, MX + Inches(0.4), Inches(5.2), Inches(11.2), Inches(0.55),
-         [{"text": "28 個  ", "font": FONT_EN, "size": 15, "bold": True, "color": WHITE},
+         [{"text": "28 個  ", "size": 15, "bold": True, "color": WHITE},
           {"text": "共用字的商品（USB風扇 / 素T…）進出查詢把別的品項也算進去 → 加分數門檻，一修全清",
            "size": 13.5, "color": GREYBB}])
 add_rich(s, MX + Inches(0.4), Inches(5.78), Inches(11.2), Inches(0.55),
-         [{"text": "1 個   ", "font": FONT_EN, "size": 15, "bold": True, "color": WHITE},
+         [{"text": "1 個   ", "size": 15, "bold": True, "color": WHITE},
           {"text": "「清潔手套」的「清潔」被誤當類別詞 → 商品名優先，讓給完整比對",
            "size": 13.5, "color": GREYBB}])
 add_text(s, MX + Inches(0.4), Inches(6.28), Inches(11.0), Inches(0.3),
@@ -802,7 +802,7 @@ add_text(s, Inches(7.4), Inches(3.15), Inches(5.0), Inches(1.0),
          "這反而證明：光靠隨機測不夠，必須全枚舉。", size=13, color=GREY44, line_spacing=1.35)
 add_rich(s, Inches(7.4), Inches(4.35), Inches(5.0), Inches(0.7),
          [{"text": "全枚舉修完：", "size": 14, "color": GREY55},
-          {"text": "  1980 / 1980 全綠", "font": FONT_EN, "size": 15, "bold": True,
+          {"text": "  1980 / 1980 全綠", "size": 15, "bold": True,
            "color": TEALDK}])
 # 底部一句話
 add_round(s, MX, Inches(5.7), Inches(11.87), Inches(0.95), fill=TEALBG)
@@ -861,7 +861,7 @@ add_round(s, MX, Inches(2.1), Inches(5.55), Inches(3.9), fill=LIGHT, shadow=True
 add_text(s, MX + Inches(0.35), Inches(2.35), Inches(4.9), Inches(0.4),
          "現在 · 已實測", size=16, bold=True, color=TEALDK)
 add_text(s, MX + Inches(0.35), Inches(2.8), Inches(4.9), Inches(0.5),
-         "RPi5 CPU（純軟體）", font=FONT_EN, size=17, bold=True, color=DARK)
+         "RPi5 CPU（純軟體）", size=17, bold=True, color=DARK)
 now_pts = [("模型", "FunctionGemma 270M"),
            ("速度", "~30 tokens/s"),
            ("品質", "六套回歸雙平台 100%"),
@@ -880,7 +880,7 @@ _fut = add_round(s, rx, Inches(2.1), Inches(5.35), Inches(3.9), fill=WHITE,
 add_text(s, rx + Inches(0.35), Inches(2.35), Inches(4.7), Inches(0.4),
          "下一階段 · Roadmap 目標", size=16, bold=True, color=TEAL)
 add_text(s, rx + Inches(0.35), Inches(2.8), Inches(4.7), Inches(0.5),
-         "RPi5 + 自研晶片加速", font=FONT_EN, size=17, bold=True, color=DARK)
+         "RPi5 + 自研晶片加速", size=17, bold=True, color=DARK)
 fut_pts = [("模型", "跳階到 3B / 7B 更大 LLM"),
            ("能力", "從「查詢路由」→ 真正的推理對話"),
            ("架構", "軟體不動，換算力即可放大"),
@@ -911,8 +911,8 @@ add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
 # 縱向全鏈流程
 vchain = [
     ("前端錄音", "Siri 式：點一下 → 講 → 靜音自動結束（瀏覽器 VAD 偵測）", TEAL, "🎙️"),
-    ("Fun-ASR-Nano", "GGUF + llama.cpp，RPi5 CPU 純離線辨識（~2.8s / 句）", TEALDK, "🧠"),
-    ("OpenCC 轉繁", "簡體 → 繁體，順便轉台灣用語（滑鼠 / 藍牙）", NAVY, "🔄"),
+    ("whisper.cpp", "OpenAI whisper，RPi5 CPU 純離線辨識（英文 0.94s / 句）", TEALDK, "🧠"),
+    ("OpenCC 轉繁", "簡體 → 繁體，順便轉台灣用語（僅中文版需要）", NAVY, "🔄"),
     ("同音修正層", "倉別 / 動詞 / 量詞 / 異體字——只掛 ASR 出口，不碰倉管核心", AMBER, "🔧"),
     ("倉管 WS", "既有守衛庫 + 發音容錯層接手，回答與打字完全一致", TEALDK, "📦"),
 ]
@@ -929,22 +929,22 @@ for i, (t, d, col, ic) in enumerate(vchain):
     if i < len(vchain) - 1:
         add_arrow(s, Inches(6.5), y + Inches(0.78), Inches(0.36), Inches(0.14), fill=GREYBB)
 set_notes(s, "語音 POC 全鏈架構（2026-07 新增）。核心設計：語音只是新入口，倉管後端"
-             "完全不動。前端 Siri 式點一下自動結束；Fun-ASR-Nano 在 RPi5 純 CPU 離線"
-             "辨識（展場無網路也能跑）；OpenCC 轉繁 + 同音修正層清理 ASR 錯字；最後交回"
+             "完全不動。前端 Siri 式點一下自動結束；whisper.cpp 在 RPi5 純 CPU 離線"
+             "辨識（展場無網路也能跑）；OpenCC 轉繁（僅中文版）+ 出口修正層清理 ASR 錯字；最後交回"
              "既有倉管 WS。同音修正層刻意只掛 /api/asr 出口——打字訪客零影響、守衛零風險。")
 pn(s)
 
 
-# ─── S13a2 語音 POC · 為何選 Fun-ASR-Nano（選型對照表）★ ──────────
+# ─── S13a2 語音 POC · ASR 選型（全面改用歐美模型）★ ────────────────
 s = slide_blank()
-title_bar(s, "VOICE POC · 選型", "為什麼是 Fun-ASR-Nano，不是 Whisper")
+title_bar(s, "VOICE POC · 選型", "全面改用歐美模型：中英各選最適尺寸")
 add_text(s, MX, Inches(1.38), Inches(11.8), Inches(0.4),
-         "選型鐵律：能在 RPi5 CPU 純離線跑、且能沿用倉管既有的 llama.cpp / GGUF runtime——不必為語音再扛一套框架。",
+         "選型鐵律：① 供應鏈來源可控（歐美模型）② RPi5 CPU 純離線跑 ③ 中英共用同一套 whisper.cpp runtime。",
          size=13, color=GREY55)
-# 對照表：欄位 = 模型 / 參數 / Runtime / 離線RPi5 / 中文CER / 判定
-col_x = [MX, Inches(3.05), Inches(4.55), Inches(6.75), Inches(8.55), Inches(10.25)]
-col_w = [Inches(2.25), Inches(1.45), Inches(2.15), Inches(1.75), Inches(1.65), Inches(2.35)]
-headers = ["模型", "參數", "Runtime / 部署", "RPi5 離線", "中文 CER", "本專案判定"]
+# 對照表：欄位 = 模型 / 體積 / 語言 / RPi5 延遲 / 準確度 / 判定
+col_x = [MX, Inches(3.05), Inches(4.35), Inches(6.05), Inches(7.95), Inches(10.05)]
+col_w = [Inches(2.25), Inches(1.45), Inches(1.85), Inches(2.05), Inches(2.25), Inches(2.55)]
+headers = ["模型", "體積", "語言", "RPi5 延遲", "實測準確度", "本專案判定"]
 ty = Inches(1.95); th = Inches(0.5)
 # 表頭
 add_round(s, MX, ty, Inches(11.87), th, fill=DARK)
@@ -952,11 +952,11 @@ for i, hd in enumerate(headers):
     add_text(s, col_x[i] + Inches(0.12), ty + Inches(0.09), col_w[i] - Inches(0.2), Inches(0.36),
              hd, size=12, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
 rows = [
-    ("Fun-ASR-Nano", "~800M", "llama.cpp / GGUF", "✓ 2.5s/句", "低", "★ 採用", True),
-    ("Whisper small", "244M", "whisper.cpp 另一套", "可但中文弱", "~20%", "中文 CER 高", False),
-    ("Whisper large-v3", "1.55B", "太重 / 需 GPU", "✕ RPi5 跑不動", "~20%", "太大＋雲端傾向", False),
-    ("SenseVoice-Small", "234M", "sherpa-onnx 另整合", "✓ 快", "~8%", "要重整合，展前風險", False),
-    ("Paraformer", "~220M", "sherpa-onnx 另整合", "✓ 輕", "~10%", "同上，備援方案", False),
+    ("whisper tiny.en", "74 MB", "英文專用", "0.94s", "WER 9.3%", "★ 英文版採用", True),
+    ("whisper base", "141 MB", "多語（含中文）", "6.8s", "端到端 8/8", "★ 中文版採用", True),
+    ("whisper base.en", "67 MB", "英文專用", "2.33s", "WER 10.2%", "比 tiny.en 慢又沒更準", False),
+    ("whisper tiny（多語）", "74 MB", "多語", "0.97s", "中文 1/8 ×", "中文太差不能用", False),
+    ("Fun-ASR-Nano（原用）", "~800M", "中文強", "2.5s", "真人 4/8", "× 來源不符，已汰換", False),
 ]
 ry = ty + th
 rh = Inches(0.68)
@@ -971,53 +971,56 @@ for r, (m, p, rt, off, cer, verd, chosen) in enumerate(rows):
     add_text(s, col_x[2] + Inches(0.12), y + Inches(0.1), col_w[2] - Inches(0.2), Inches(0.48),
              rt, size=11, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
     add_text(s, col_x[3] + Inches(0.12), y + Inches(0.1), col_w[3] - Inches(0.2), Inches(0.48),
-             off, size=11, color=(TEALDK if chosen else GREY55), bold=chosen, anchor=MSO_ANCHOR.MIDDLE)
+             off, font=FONT_EN, size=11.5, color=(TEALDK if chosen else GREY55), bold=chosen,
+             anchor=MSO_ANCHOR.MIDDLE)
     add_text(s, col_x[4] + Inches(0.12), y + Inches(0.1), col_w[4] - Inches(0.2), Inches(0.48),
-             cer, font=FONT_EN, size=11.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
+             cer, size=11.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
     add_text(s, col_x[5] + Inches(0.12), y + Inches(0.1), col_w[5] - Inches(0.2), Inches(0.48),
              verd, size=11.5, bold=chosen, color=(TEALDK if chosen else GREY55), anchor=MSO_ANCHOR.MIDDLE)
-# 底部：關鍵選型理由 + 版本時效性
+# 底部：兩個關鍵洞見
 add_round(s, MX, Inches(5.98), Inches(11.87), Inches(1.18), fill=DARK, shadow=True)
 add_rich(s, MX + Inches(0.4), Inches(6.12), Inches(11.1), Inches(0.5),
-         [[{"text": "決勝點  ", "font": FONT_EN, "size": 13, "bold": True, "color": TEAL},
-           {"text": "與倉管 LLM 共用同一套 llama.cpp / GGUF runtime", "size": 13, "bold": True, "color": WHITE},
-           {"text": "——不必另裝 sherpa-onnx；GLIBC 不合就在 RPi5 源碼編；輸出簡體用 OpenCC 完美轉繁。",
+         [[{"text": "反直覺  ", "size": 13, "bold": True, "color": TEAL},
+           {"text": "模型越大不一定越準：base.en 比 tiny.en 大、慢 2.5 倍，WER 反而略差",
+            "size": 13, "bold": True, "color": WHITE},
+           {"text": "——倉管查詢句短、句型固定，tiny 容量已足夠。",
             "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 add_rich(s, MX + Inches(0.4), Inches(6.63), Inches(11.1), Inches(0.42),
-         [[{"text": "最前沿  ", "font": FONT_EN, "size": 13, "bold": True, "color": AMBER},
-           {"text": "模型權重 2025Q4（Fun-ASR-Nano-2512），llama.cpp GGUF runtime 2026 年 6 月才釋出",
-            "size": 12, "bold": True, "color": WHITE},
-           {"text": "——發布一個多月即導入，非舊模型。", "size": 12, "color": GREYBB}]],
+         [[{"text": "選型準則  ", "size": 13, "bold": True, "color": AMBER},
+           {"text": "不能只看 WER，要看端到端答對率", "size": 12, "bold": True, "color": WHITE},
+           {"text": "——中文 base 字面只對 3/8，但端到端 8/8 全綠，聽錯的都被文字端容錯層救回。",
+            "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "★語音選型頁（技術評審向）。選型鐵律：必須能在 RPi5 CPU 純離線跑，且盡量沿用"
-             "倉管既有的 llama.cpp / GGUF runtime。對照四個候選：Whisper small 中文 CER 高（~20%，"
-             "英文強中文弱）；Whisper large-v3 1.55B 太大、RPi5 純 CPU 跑不動、且偏雲端；"
-             "SenseVoice-Small / Paraformer 中文 CER 其實更漂亮（~8%/~10%），但走 sherpa-onnx 生態、"
-             "要重新整合一套框架，展前時間風險高，列為備援方案。Fun-ASR-Nano 決勝點＝跟倉管 LLM 共用"
-             "同一套 llama.cpp / GGUF runtime，語音不用再扛一套框架、部署面最省；官方 arm64 binary 要"
-             "GLIBC 2.38 而 RPi5 是 2.36，直接在機上源碼編 4.5 分鐘解決；輸出簡體用 OpenCC s2twp 完美"
-             "轉繁並順帶轉台灣用語。誠實補一句：SenseVoice 若展後有時間值得回頭評估換裝，CER 更低。"
-             "版本時效性（加分點）：模型是 Fun-ASR-Nano-2512（2025 年 12 月權重），能跑 llama.cpp GGUF "
-             "的 runtime 是 2026 年 6 月才釋出，我們 7 月就導入——是最前沿的邊緣 ASR 方案，不是拿舊模型湊。"
-             "CER 數字為公開 benchmark 概估、佐證量級，非本專案實測，評審追問據實說明。")
+set_notes(s, "★語音選型頁（技術評審向）。**這一頁 2026-07-27 全面改版**：原本用阿里的 "
+             "Fun-ASR-Nano，後來定調**只用歐美模型**（供應鏈來源可控），中英兩版都換成 "
+             "OpenAI whisper.cpp。換完的額外好處：中英共用同一套 runtime，不必維護兩套框架。"
+             "選型結果：英文版 tiny.en（74MB / 0.94s / WER 9.3%）、中文版 base（141MB / 6.8s）。"
+             "兩個值得講的洞見——①**反直覺**：base.en 比 tiny.en 更大更慢，WER 反而略差（10.2% vs "
+             "9.3%），因為倉管查詢句短、句型固定，tiny 的容量已經夠用，變大的收益顯現不出來；"
+             "這推翻『模型越大越好』的直覺，也呼應整個專案『選對尺寸勝過選大尺寸』的主張。"
+             "②**選型不能只看 WER**：中文版 base 真人 8 句字面只對 3 句，但端到端 8/8 全部答對——"
+             "聽錯的『盡量啤酒酷醇』『無限滑鼠擴存』『瑜伽店』全被文字端容錯層救回。這正好證明"
+             "前面幾頁講的容錯層是真的在扛事情。代價誠實講：中文 base 6.8s/句比原本慢，但中文版"
+             "是備案、英文版才是展場主力（tiny.en 0.94s 很順）。英文數據為 TTS 合成音實測"
+             "（5 腔調×20 句×3 噪音層），中文為 user 錄的真人音——TTS 是下限估計，評審追問據實說明。")
 pn(s)
 
 
-# ─── S13a3 語音 POC · 部署架構（三元件）★ ─────────────────────────
+# ─── S13a3 語音 POC · 部署架構（單一模型 · 中英雙軌）★ ────────────
 s = slide_blank()
-title_bar(s, "VOICE POC · 部署架構", "一支語音，其實是三個模型串起來跑")
+title_bar(s, "VOICE POC · 部署架構", "一套 runtime，中英各掛一顆模型")
 add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.36),
-         "「Fun-ASR-Nano」不是單一模型——是 VAD＋Encoder＋LLM 解碼器三件套，由一支 llama.cpp binary 統合，全在 RPi5 CPU 離線跑。",
+         "換成 whisper.cpp 後架構反而更簡單：單一模型檔、單一 binary，中英兩版共用同一套 runtime，只換 -m 參數。",
          size=12.5, color=GREY55)
-# 三元件卡（橫向三張）
+# 三張卡：runtime + 英文模型 + 中文模型
 comp = [
-    ("VAD 語音端點偵測", "fsmn-vad.gguf", "1.6 MB",
-     "抓「何時在講話」：切掉前後靜音與雜音，只把真正的語音段送進辨識", NAVY, "偵"),
-    ("Encoder 聲學編碼器", "funasr-encoder-f16.gguf", "447 MB · F16",
-     "把聲音波形轉成語意特徵向量；精度敏感故不量化，保留半精度 F16", TEALDK, "聲"),
-    ("LLM 解碼器", "qwen3-0.6b-q4km.gguf", "461 MB · Q4_K_M",
-     "Qwen3-0.6B 讀特徵、生成文字；4-bit 量化壓到最小，RPi5 CPU 跑得動", TEAL, "文"),
+    ("共用 Runtime", "whisper-cli (whisper.cpp)", "RPi5 源碼編譯",
+     "單一 binary 跑完 VAD、聲學編碼、解碼；中英兩版只差 -m 指到哪顆模型", NAVY, "共"),
+    ("英文版模型", "ggml-tiny.en.bin", "74 MB · 0.94s/句",
+     "英文專用、展場主力；短句夠用，比 base.en 更快且 WER 更低", TEALDK, "EN"),
+    ("中文版模型", "ggml-base.bin", "141 MB · 6.8s/句",
+     "多語權重（含中文）；輸出簡體故仍需 OpenCC 轉繁，中文版為備援展示", TEAL, "中"),
 ]
 cw = Inches(3.83); ch = Inches(2.55); cgap = Inches(0.19)
 cy = Inches(2.0)
@@ -1042,8 +1045,8 @@ for i, (name, fn, size, desc, col, gl) in enumerate(comp):
 py = Inches(4.85)
 add_text(s, MX, py - Inches(0.06), Inches(11.8), Inches(0.34),
          "實際部署管線（POST /api/asr，全程本機、無網路）", size=13, bold=True, color=TEALDK)
-pipe = ["前端錄音\nwebm/opus", "ffmpeg\n轉 16k mono", "llama-funasr-cli\nVAD→Enc→LLM",
-        "OpenCC\n簡→繁", "同音修正\n出口清理", "倉管 WS\n回答"]
+pipe = ["前端錄音\nwebm/opus", "ffmpeg\n轉 16k mono", "whisper-cli\ntiny.en / base",
+        "OpenCC\n簡→繁（僅中文）", "出口正規化\n大小寫/錯字", "倉管 WS\n回答"]
 pw = Inches(1.78); ph = Inches(0.82); pgap = Inches(0.19)
 px0 = MX
 for i, step in enumerate(pipe):
@@ -1060,21 +1063,22 @@ for i, step in enumerate(pipe):
 # 底部部署事實條
 add_round(s, MX, Inches(6.4), Inches(11.87), Inches(0.78), fill=DARK, shadow=True)
 add_rich(s, MX + Inches(0.35), Inches(6.53), Inches(11.2), Inches(0.52),
-         [[{"text": "RPi5 部署  ", "font": FONT_EN, "size": 12.5, "bold": True, "color": TEAL},
-           {"text": "官方 arm64 binary 要 GLIBC 2.38、RPi5 是 2.36 → 在機上源碼編（4.5 分）｜"
-                    "冷啟 15s、熱快取 2.5s/句｜總模型約 910 MB｜純 CPU、零 GPU、零雲端",
+         [[{"text": "RPi5 部署  ", "size": 12.5, "bold": True, "color": TEAL},
+           {"text": "whisper.cpp 在機上源碼編譯｜英文 0.94s/句、中文 6.8s/句｜"
+                    "兩顆模型合計僅 215 MB（原方案 910 MB）｜純 CPU、零 GPU、零雲端",
             "size": 11.5, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」）。核心澄清：使用者以為「Fun-ASR-Nano」"
-             "是一顆模型，其實是三件套串起來跑。① VAD（fsmn-vad，1.6MB）＝語音端點偵測，判斷「何時"
-             "在講話」，切掉前後靜音雜音，只把真語音送進去。② Encoder（funasr-encoder-f16，447MB）"
-             "＝聲學編碼器，把聲音波形轉成語意特徵向量；因為精度敏感所以保留 F16 半精度不量化。"
-             "③ LLM 解碼器（qwen3-0.6b-q4km，461MB）＝Qwen3-0.6B 讀特徵生成文字，用 Q4_K_M 4-bit "
-             "量化壓到最小、RPi5 CPU 才跑得動。這三顆由一支 llama-funasr-cli binary 統合載入。"
-             "部署管線：前端錄 webm → ffmpeg 轉 16k mono → cli 跑三元件 → OpenCC 轉繁 → 同音修正 → "
-             "交倉管 WS，全程本機無網路。RPi5 落地細節：官方 arm64 binary 要 GLIBC 2.38 但 RPi5 是 "
-             "2.36，直接在機上源碼編 4.5 分鐘解決；冷啟 15s、熱快取後 2.5s/句；三顆模型合計約 910MB；"
-             "純 CPU、零 GPU、零雲端。這頁證明語音不是掛個 API，是真的把三個模型部署在邊緣裝置上跑。")
+set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」）。**2026-07-27 隨 ASR 換型改版**："
+             "原本這頁在講 Fun-ASR 的三元件架構（VAD＋Encoder＋Qwen3 解碼器，合計 910MB），"
+             "換成 whisper.cpp 之後**架構反而更簡單**——單一模型檔、單一 binary。"
+             "三張卡：①共用 runtime＝whisper-cli，一支 binary 內含端點偵測、聲學編碼、解碼，"
+             "中英兩版只差 -m 參數指到哪顆模型，不必維護兩套框架。②英文版 ggml-tiny.en（74MB / "
+             "0.94s），展場主力。③中文版 ggml-base（141MB / 6.8s），多語權重含中文，備援展示。"
+             "管線：前端錄 webm → ffmpeg 轉 16k mono → whisper-cli → OpenCC 轉繁（**只有中文版需要**，"
+             "英文版已移除）→ 出口正規化（英文版做大小寫攤平、中文版做同音錯字修正）→ 交倉管 WS，"
+             "全程本機無網路。值得一提的數字：**模型體積從 910MB 降到 215MB**，延遲英文從 2.5s 降到 "
+             "0.94s——換掉來源不符的模型不但沒有犧牲，反而更輕更快。這頁證明語音不是掛個雲端 API，"
+             "是真的把模型部署在邊緣裝置上離線跑。")
 pn(s)
 
 
@@ -1358,6 +1362,203 @@ set_notes(s, "★極限與對策頁（誠實加分）。技術評審最怕看到
 pn(s)
 
 
+# ─── S14a 英文版 · 為何不是翻譯（路線決策）★ ──────────────────────
+s = slide_blank()
+title_bar(s, "ENGLISH BUILD · 路線", "做英文版不是翻譯——翻譯會讓招牌能力全滅")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "老闆要全英文版。動工前先用探針餵分級英文句給現有模型，量出「翻譯路線」到底會壞在哪——結論決定了整條路線。",
+         size=13, color=GREY55)
+# 左：探針結果（翻譯路線會壞的地方）
+add_round(s, MX, Inches(1.95), Inches(5.82), Inches(3.5), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(0.3), Inches(2.1), Inches(5.2), Inches(0.36),
+         "探針實測：純翻譯會壞在哪", size=14, bold=True, color=DARK)
+probe = [
+    ("✓", "乾淨查詢", "how many bluetooth earphones left → 答對", TEALDK),
+    ("×", "英文錯字", "earphon → 完全對不到", CORAL),
+    ("×", "模糊描述", "the thing that charges phone → 不懂", CORAL),
+    ("×", "寫入 / 調貨 / RCA", "add / move / why → 全歸零查詢", CORAL),
+]
+for i, (mk, tag, ex, col) in enumerate(probe):
+    y = Inches(2.55) + Inches(0.68) * i
+    add_text(s, MX + Inches(0.3), y, Inches(0.3), Inches(0.3), mk,
+             font=FONT_EN, size=14, bold=True, color=col)
+    add_text(s, MX + Inches(0.66), y - Inches(0.02), Inches(1.9), Inches(0.32),
+             tag, size=12.5, bold=True, color=col)
+    add_text(s, MX + Inches(0.66), y + Inches(0.28), Inches(4.8), Inches(0.32),
+             ex, size=11, color=GREY55)
+# 右：三條路線比較
+add_round(s, MX + Inches(6.05), Inches(1.95), Inches(5.82), Inches(3.5), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(6.35), Inches(2.1), Inches(5.2), Inches(0.36),
+         "三條路線，選了中間那條", size=14, bold=True, color=DARK)
+routes = [
+    ("翻譯層", "最省事，但容錯層先崩就輪不到後面——等於白費版", GREY77, False),
+    ("補英文語料微調", "Gemma 英文底子還在，教它這套系統的 tool 慣例", TEALDK, True),
+    ("全部重訓", "成本最高，但 base 英文能力本來就在，沒必要", GREY77, False),
+]
+for i, (nm, desc, col, pick) in enumerate(routes):
+    y = Inches(2.6) + Inches(0.92) * i
+    add_round(s, MX + Inches(6.35), y, Inches(5.22), Inches(0.78),
+              fill=(TEALBG if pick else WHITE), line=(TEAL if pick else GREYE6),
+              line_w=(1.3 if pick else 0.6))
+    add_text(s, MX + Inches(6.55), y + Inches(0.06), Inches(1.85), Inches(0.32),
+             ("★ " if pick else "") + nm, size=12.5, bold=True, color=col)
+    add_text(s, MX + Inches(6.55), y + Inches(0.38), Inches(4.85), Inches(0.34),
+             desc, size=10.5, color=GREY55)
+# 底部：微調效益數字
+add_round(s, MX, Inches(5.62), Inches(11.87), Inches(1.54), fill=DARK, shadow=True)
+add_text(s, MX + Inches(0.4), Inches(5.78), Inches(11.1), Inches(0.34),
+         "三方對照：同一份 34 句英文評測集（本機 llama.cpp 實跑）",
+         size=12.5, bold=True, color=TEAL)
+tri = [("base 未微調", "11%", "看得懂英文，但不知道該叫哪個 tool"),
+       ("中文微調版", "32%", "tool 慣例**跨語言遷移**——用中文學的可套到英文"),
+       ("英文微調版", "73%", "基本查詢 12/12、錯字全中、RCA 3/3")]
+for i, (nm, sc, note) in enumerate(tri):
+    x = MX + Inches(0.4) + Inches(3.85) * i
+    add_text(s, x, Inches(6.18), Inches(1.5), Inches(0.42), sc,
+             font=FONT_EN, size=22, bold=True,
+             color=(TEAL if i == 2 else (WHITE if i == 1 else GREY77)))
+    add_text(s, x + Inches(1.45), Inches(6.2), Inches(2.3), Inches(0.36),
+             nm, size=11.5, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, x, Inches(6.66), Inches(3.6), Inches(0.34),
+             note.replace("**", ""), size=10.5, color=GREYBB)
+set_notes(s, "★英文版路線決策頁。老闆要全英文版，我沒有直接開始翻譯——先用探針餵分級英文句"
+             "給現有的中文微調模型，量出「純翻譯路線」會壞在哪。結果很清楚：乾淨查詢答得對"
+             "（Gemma 的英文底子還在），但**招牌能力全滅**——英文錯字、模糊描述、寫入/調貨/RCA "
+             "意圖全部救不到。而容錯層正是這個 demo 的賣點，翻譯層先崩就輪不到後面，等於做出一個"
+             "「白費版」。所以路線選**補英文語料微調**：不必全部重訓（base 英文能力本來就在），"
+             "但要教它這套系統的 tool 慣例。右下三方對照是實測數字：base 未微調只有 11%（看得懂"
+             "英文、不知道叫哪個 tool）；有趣的是**中文微調版跑英文有 32%**——證明 tool 慣例會"
+             "跨語言遷移，用中文學的可以套到英文，這是微調買到的『領域判斷』而不只是語言；"
+             "英文專訓版 73%。這頁的重點是：**決策有數據支撐，不是拍腦袋選路線**。")
+pn(s)
+
+
+# ─── S14b 英文版 · 19 類移植坑（真正的工作量）★ ────────────────────
+s = slide_blank()
+title_bar(s, "ENGLISH BUILD · 真正的工作量", "移植的難處不在模型，在散落各處的語言假設")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "模型換好只是開始。真正吃時間的是三個月為中文磨出來的規則層——每一條都藏著「這是中文」的隱含假設。",
+         size=13, color=GREY55)
+traps = [
+    ("詞表是中文", "`_ALL_INTENT_WORDS` 等 21 個詞表全中文 → 英文句一個都不命中",
+     "英文句被判成「只有商品名沒動作」，整批轉 clarify", NAVY),
+    ("對照表的**鍵**是中文", "`{\"電子\": \"electronics\"}` ——值是英文、鍵是中文",
+     "6 個類別 5 個查不到，整條類別查詢功能靜默失效", TEALDK),
+    ("門檻用中文字元數", "長句判定 >30 字元；英文字元數是中文的 2-3 倍",
+     "正常英文句被當長句，幾乎全部繞過 LLM", TEAL),
+    ("演算法假設中文形態", "`split()[0]` 剝規格尾巴——中文沒空白所以安全",
+     "`Wireless Mouse` 被腰斬成 `Wireless` → **改到錯的商品**", CORAL),
+    ("英文撇號炸掉 JS", "`'Didn't catch that'` ——英文化產生的撇號沒跳脫",
+     "整份 JS 停擺：畫面正常但 WebSocket 從沒建立", CORAL),
+]
+ty2 = Inches(1.92); rh2 = Inches(0.94)
+for i, (tag, what, effect, col) in enumerate(traps):
+    y = ty2 + rh2 * i
+    add_round(s, MX, y, Inches(11.87), Inches(0.84), fill=(LIGHT if i % 2 == 0 else WHITE),
+              line=GREYE6, line_w=0.6)
+    add_rect(s, MX, y, Inches(0.07), Inches(0.84), fill=col)
+    add_text(s, MX + Inches(0.28), y + Inches(0.08), Inches(2.55), Inches(0.32),
+             tag.replace("**", ""), size=12.5, bold=True, color=col)
+    add_text(s, MX + Inches(0.28), y + Inches(0.44), Inches(2.55), Inches(0.32),
+             f"坑 {i + 1}", size=10, color=GREY77)
+    add_text(s, MX + Inches(3.0), y + Inches(0.08), Inches(4.4), Inches(0.34),
+             what.replace("`", "").replace("**", ""), size=11, color=GREY44)
+    add_text(s, MX + Inches(3.0), y + Inches(0.44), Inches(4.4), Inches(0.32),
+             "↓", font=FONT_EN, size=9, color=GREYBB)
+    add_text(s, MX + Inches(7.55), y + Inches(0.2), Inches(4.1), Inches(0.5),
+             effect.replace("**", ""), size=11, bold=True,
+             color=(CORAL if col == CORAL else GREY44), anchor=MSO_ANCHOR.MIDDLE)
+add_round(s, MX, Inches(6.62), Inches(11.87), Inches(0.62), fill=DARK, shadow=True)
+add_rich(s, MX + Inches(0.4), Inches(6.72), Inches(11.1), Inches(0.42),
+         [[{"text": "找法  ", "size": 12.5, "bold": True, "color": TEAL},
+           {"text": "逐句追 log 看實際執行路徑，不要只看輸入輸出猜",
+            "size": 12, "bold": True, "color": WHITE},
+           {"text": "——log 常見 clf 判對、模型也判對，卻被中文導向的守衛改掉。共歸納 19 類坑。",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★這頁是給技術評審看的「移植的真實成本」。一般人以為做英文版＝翻譯 UI + 換模型，"
+             "實際上**真正的工作量在散落各處的語言假設**——三個月為中文磨出來的規則層，每一條都"
+             "藏著隱含假設。列五個最有代表性的（共歸納 19 類）：①21 個詞表全中文，英文句一個都不"
+             "命中，被判成「只有商品名沒動作」全部轉 clarify。②更隱形的一類：對照表的**鍵**是中文"
+             "（值反而是英文 slug），6 個類別 5 個查不到，而系統的導覽訊息還在教訪客這樣問。"
+             "③門檻用中文字元數：英文字元數是中文 2-3 倍，'alert me when earphones drop below 30' "
+             "才 7 個詞卻 31 字元，正常句被當長句。④最危險的一類——**演算法本身假設中文形態**："
+             "用 split()[0] 剝規格尾巴，中文沒空白所以取第一段＝取全名，英文商品名全用空白分隔，"
+             "`Wireless Mouse` 被腰斬成 `Wireless`，下一句追問就改到耳機的安全庫存＝**寫錯資料**。"
+             "這種 bug 讀程式碼很難看出來（邏輯本身沒錯），只有跨句對話測試會暴露。⑤英文獨有的："
+             "英文化產生的撇號沒跳脫，整份 JS 語法錯誤停擺，但 HTML/CSS 照常渲染——畫面看起來正常、"
+             "實際 WebSocket 從沒建立過。中文版永遠不會有這個 bug（中文沒撇號）。"
+             "方法論：**逐句追 log 看實際執行路徑**，不要從症狀猜成因。")
+pn(s)
+
+
+# ─── S14c 英文版 · 收斂成果（守衛 100%）★ ─────────────────────────
+s = slide_blank()
+title_bar(s, "ENGLISH BUILD · 收斂", "從 651 到 892/892：把「可靠」再證明一次")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "英文版建了獨立的 892 句守衛庫（不是翻譯中文守衛——英文有自己的邊界：錯字型態、俗稱、閒聊搗蛋）。",
+         size=13, color=GREY55)
+kpi_row(s, Inches(1.9), [
+    ("892/892", "英文守衛通過率 100%"),
+    ("19 類", "移植坑歸納"),
+    ("25 個", "view 逐一看過畫面"),
+    ("0", "已知未修破口"),
+])
+# 收斂曲線（分數演進）
+add_text(s, MX, Inches(3.35), Inches(11.8), Inches(0.34),
+         "收斂過程：每一次跳動都是一批結構性 bug 被找出來", size=13, bold=True, color=TEALDK)
+steps = [("651", "首跑"), ("873", "13 輪規則層英文化"), ("891", "錯字長尾靠修復層"),
+         ("892", "詞典把關收尾")]
+bw = Inches(2.72); bgap = Inches(0.32)
+for i, (sc, lb) in enumerate(steps):
+    x = MX + (bw + bgap) * i
+    last = (i == len(steps) - 1)
+    add_round(s, x, Inches(3.78), bw, Inches(1.12),
+              fill=(TEALBG if last else LIGHT), line=(TEAL if last else GREYE6),
+              line_w=(1.4 if last else 0.6), shadow=True)
+    add_text(s, x, Inches(3.92), bw, Inches(0.5), sc, font=FONT_EN,
+             size=26, bold=True, color=(TEALDK if last else GREY44),
+             align=PP_ALIGN.CENTER)
+    add_text(s, x + Inches(0.12), Inches(4.46), bw - Inches(0.24), Inches(0.36),
+             lb, size=10.5, color=GREY55, align=PP_ALIGN.CENTER)
+    if not last:
+        add_text(s, x + bw - Inches(0.04), Inches(4.16), Inches(0.34), Inches(0.4),
+                 "›", font=FONT_EN, size=17, bold=True, color=GREYBB,
+                 align=PP_ALIGN.CENTER)
+# 底部：兩個方法論收穫
+add_round(s, MX, Inches(5.15), Inches(5.82), Inches(1.42), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(0.28), Inches(5.28), Inches(5.3), Inches(0.32),
+         "「救不了」要有證據", size=13, bold=True, color=TEALDK)
+add_text(s, MX + Inches(0.28), Inches(5.62), Inches(5.3), Inches(0.82),
+         "兩次把「試過一種做法沒成功」寫成「這類問題無解」。"
+         "最後一句錯字靠系統內建英文詞典區分「真詞 vs 錯字」修掉——"
+         "訊號一直都在，只是沒接上。",
+         size=11, color=GREY44, line_spacing=1.25)
+add_round(s, MX + Inches(6.05), Inches(5.15), Inches(5.82), Inches(1.42), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(6.33), Inches(5.28), Inches(5.3), Inches(0.32),
+         "看畫面才算審完", size=13, bold=True, color=TEALDK)
+add_text(s, MX + Inches(6.33), Inches(5.62), Inches(5.3), Inches(0.82),
+         "守衛全綠不等於畫面對。改用截圖逐一看 25 個 view，"
+         "抓到 JSON 完全看不到的破口：卡片承諾「說 delete AL001」，"
+         "照打卻回查無此商品。",
+         size=11, color=GREY44, line_spacing=1.25)
+add_text(s, MX, Inches(6.76), Inches(11.87), Inches(0.4),
+         "中英雙版並存：RPi5 同時跑 8002（英文，展場主力）與 8001（中文備援），開機自啟、訪客點分頁切換",
+         size=12, bold=True, color=GREY55, align=PP_ALIGN.CENTER)
+set_notes(s, "★英文版收斂成果頁。重點一：英文守衛庫是**重新建的 892 句**，不是把中文守衛翻譯過來"
+             "——中文守衛大量測注音、同音字，英文沒有對應物；英文有自己的邊界（錯字型態、俗稱別名、"
+             "英文閒聊搗蛋）。重點二：收斂曲線 651→873→891→892，每次跳動都是一批結構性 bug 被找出來，"
+             "不是慢慢磨上去的。左下角這個教訓值得講：過程中**兩次**把『試過一種做法沒成功』寫成"
+             "『這類問題無解』——第一次是 19 句雙錯字長尾，後來拆解發現是 8 個獨立的結構性 bug；"
+             "第二次是最後那一句 `do we have scks`，記錄成『需要英文詞典依賴、救不了』，"
+             "實際上樹莓派系統**內建**英文詞典，而且真正的成因根本不是字元相似度，是被守門員擋在"
+             "門外。訊號一直都在，只是沒接上。右下角：守衛全綠≠畫面對，改用截圖逐一看過 25 個 view，"
+             "抓到 JSON 看不到的破口——最典型的是卡片上明明寫著『To remove, say delete AL001』，"
+             "訪客照打卻回『查無此商品』。最後一行：中英雙版在同一台樹莓派上並存，開機都自啟，"
+             "訪客點瀏覽器分頁就能切語言。")
+pn(s)
+
+
 # ─── S13 總結（深底）─────────────────────────────────────
 s = slide_blank()
 add_rect(s, 0, 0, SLIDE_W, SLIDE_H, fill=DARK)
@@ -1369,24 +1570,26 @@ add_text(s, MX, Inches(1.15), Inches(11.8), Inches(0.7),
 cards = [
     ("價值", "🎯", "自然語言問倉管，一秒回答；手機掃碼、離線可用、硬體成本極低"),
     ("技術", "🧠", "270M 小模型當路由器 + 規則層當決策者，業界邊緣 Agent 的正解"),
-    ("品質", "🛡️", "六套回歸雙平台 100%；守衛庫 1122 句把「可靠」變成數字，不靠祈禱"),
-    ("語音", "🎙️", "全離線 ASR 展場可用；三環境噪音實測，現有硬體 + 正常音量就夠"),
+    ("品質", "🛡️", "中文 1122 句雙平台 100%、英文 892 句 100%；「可靠」是數字不是祈禱"),
+    ("語音", "🎙️", "全離線 whisper；英文 0.94s / 句，中英共用一套 runtime"),
+    ("雙語", "🌐", "中英雙版同機並存，訪客點分頁切換；移植 19 類坑已歸納成方法論"),
 ]
-y0 = Inches(1.95)
+y0 = Inches(1.92)
 for i, (tag, ic, desc) in enumerate(cards):
-    y = y0 + Inches(1.08) * i
-    add_round(s, MX, y, Inches(11.87), Inches(0.92), fill=NAVY)
-    add_icon_circle(s, MX + Inches(0.3), y + Inches(0.24), Inches(0.58), tag[0],
-                    circle=TEAL, gcolor=DARK, gsize=17)
-    add_text(s, MX + Inches(1.15), y + Inches(0.15), Inches(1.6), Inches(0.75),
-             tag, size=18, bold=True, color=TEAL, anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, MX + Inches(2.75), y + Inches(0.15), Inches(8.8), Inches(0.75),
-             desc, size=14, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
-add_text(s, MX, Inches(6.4), Inches(11.8), Inches(0.5),
-         "下一步：展前待辦（demo 基準日對齊、展前真機全量驗收）——重置鈕 / 開機自啟 / Wi-Fi 自癒已完成",
+    y = y0 + Inches(0.93) * i
+    add_round(s, MX, y, Inches(11.87), Inches(0.79), fill=NAVY)
+    add_icon_circle(s, MX + Inches(0.3), y + Inches(0.18), Inches(0.52), tag[0],
+                    circle=TEAL, gcolor=DARK, gsize=16)
+    add_text(s, MX + Inches(1.15), y + Inches(0.12), Inches(1.6), Inches(0.62),
+             tag, size=17, bold=True, color=TEAL, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, MX + Inches(2.75), y + Inches(0.12), Inches(8.8), Inches(0.62),
+             desc, size=13.5, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+add_text(s, MX, Inches(6.66), Inches(11.8), Inches(0.5),
+         "下一步：展前真機全量驗收、demo 基準日對齊——重置鈕 / 開機自啟 / Wi-Fi 自癒 / 中英雙版並存已完成",
          size=13, color=GREYBB)
-set_notes(s, "總結三張卡：價值、技術、品質。收尾一句下一步。整份簡報的主軸——"
-             "用最小的模型、最便宜的硬體，做到可以用數字證明的品質。")
+set_notes(s, "總結五張卡：價值、技術、品質、語音、雙語。收尾一句下一步。整份簡報的主軸——"
+             "用最小的模型、最便宜的硬體，做到可以用數字證明的品質。"
+             "品質那張卡的兩個數字要記熟：中文守衛 1122 句雙平台 100%、英文守衛 892 句 100%。")
 pn(s)
 
 # ─── 存檔 ────────────────────────────────────────────────
