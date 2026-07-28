@@ -1563,6 +1563,90 @@ set_notes(s, "★英文版收斂成果頁。重點一：英文守衛庫是**重�
 pn(s)
 
 
+# ─── S14d 換輸入源測試（TTS 基準批 + 探針批）★ ────────────────────
+s = slide_blank()
+title_bar(s, "TESTING · 換輸入源", "測了 11 輪還有破口？因為造句的人一直是同一個")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "守衛 892 句全綠、劇情批 5 輪、渲染批 5 輪——但那些句子都是同一個作者打字造的，盲點會系統性重複。",
+         size=13, color=GREY55)
+# 上排：兩種新輸入源
+srcs = [
+    ("① TTS 唸 → whisper 聽", "100 句 × 3 噪音層 = 300 次辨識",
+     "產物型態跟打字完全不同：撇號縮寫、黏字、聽錯詞", TEALDK),
+    ("② 刻意寫「我不會寫的句型」", "47 句探針（禮貌用語 / 口語省略 / 填充詞）",
+     "換作者視角：展場訪客會客氣地問，不是打命令式", NAVY),
+]
+for i, (nm, sub, desc, col) in enumerate(srcs):
+    x = MX + Inches(6.05) * i
+    add_round(s, x, Inches(1.92), Inches(5.82), Inches(1.32), fill=LIGHT, shadow=True)
+    add_text(s, x + Inches(0.28), Inches(2.04), Inches(5.3), Inches(0.34),
+             nm, size=13.5, bold=True, color=col)
+    add_text(s, x + Inches(0.28), Inches(2.38), Inches(5.3), Inches(0.3),
+             sub, size=11, color=GREY77)
+    add_text(s, x + Inches(0.28), Inches(2.7), Inches(5.3), Inches(0.44),
+             desc, size=11.5, color=GREY44, line_spacing=1.2)
+# 中間：TTS 三層結果
+add_text(s, MX, Inches(3.42), Inches(11.8), Inches(0.32),
+         "TTS 基準批結果：噪音幾乎不影響（真實賣場環境音混入）",
+         size=13, bold=True, color=TEALDK)
+lvl = [("乾淨", "92%"), ("一般展場 −18dB", "92%"), ("尖峰吵雜 −8dB", "91%")]
+for i, (nm, sc) in enumerate(lvl):
+    x = MX + Inches(3.99) * i
+    add_round(s, x, Inches(3.8), Inches(3.78), Inches(0.92), fill=TEALBG,
+              line=TEAL, line_w=1.1)
+    add_text(s, x + Inches(0.2), Inches(3.94), Inches(1.5), Inches(0.5), sc,
+             font=FONT_EN, size=24, bold=True, color=TEALDK)
+    add_text(s, x + Inches(1.75), Inches(3.98), Inches(1.9), Inches(0.42),
+             nm, size=11.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
+# 下方：抓到什麼
+add_text(s, MX, Inches(4.92), Inches(11.8), Inches(0.32),
+         "抓到的破口——**大多數打字訪客也會遇到**，只是先前造句時沒想到".replace("**", ""),
+         size=13, bold=True, color=TEALDK)
+finds = [
+    ("撇號縮寫", "what's in central warehouse…",
+     "ASR 聽對、LLM 判對，卻被防幻覺閘門當「陌生商品」清掉 → 全店概覽", CORAL),
+    ("禮貌用語", "could you tell me the earphone stock",
+     "回「查無 could 這個商品」——訪客客氣問反而失敗", CORAL),
+    ("英文追問", "what about north / how about central",
+     "最自然的追問講法，carry-over 詞表偏偏漏了 about", AMBER),
+    ("問展示本身", "what's this demo about",
+     "回熱銷榜——訪客第一句就答非所問", AMBER),
+]
+fy = Inches(5.3)
+for i, (tag, ex, eff, col) in enumerate(finds):
+    y = fy + Inches(0.44) * i
+    add_rect(s, MX, y, Inches(0.06), Inches(0.38), fill=col)
+    add_text(s, MX + Inches(0.22), y + Inches(0.02), Inches(1.5), Inches(0.32),
+             tag, size=11.5, bold=True, color=col)
+    add_text(s, MX + Inches(1.85), y + Inches(0.02), Inches(3.7), Inches(0.32),
+             ex, font=FONT_EN, size=10.5, color=GREY44)
+    add_text(s, MX + Inches(5.7), y + Inches(0.02), Inches(6.1), Inches(0.32),
+             eff, size=11, color=GREY55)
+add_round(s, MX, Inches(7.08), Inches(11.87), Inches(0.34), fill=DARK)
+add_rich(s, MX + Inches(0.35), Inches(7.1), Inches(11.2), Inches(0.3),
+         [[{"text": "結論  ", "size": 11.5, "bold": True, "color": TEAL},
+           {"text": "不是「測不夠多輪」，是「輸入源不夠多樣」——換一個產生源，"
+                    "立刻抓到 11 輪都沒碰到的類型。守衛全程維持 892/892。",
+            "size": 11, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★這頁回答一個很自然的質疑：「你們測了 11 輪、守衛 892 句全綠，怎麼還有破口？」"
+             "答案是——**不是輪數不夠，是輸入源不夠多樣**。前面 11 輪的句子全是同一個作者"
+             "（我）打字造的，作者的盲點會系統性重複，再跑 20 輪同樣方式也抓不到。"
+             "所以換了兩個產生源：①**TTS 唸出來、whisper 聽回去**——產物型態跟打字完全不同"
+             "（撇號縮寫、黏字、聽錯詞）；②**刻意寫「我自己不會寫的句型」**——換作者視角，"
+             "展場訪客會客氣地問（could you tell me…）而不是打命令式（earphone stock）。"
+             "TTS 基準批跑 100 句 × 3 噪音層共 300 次辨識，用的是真實賣場環境音混入："
+             "乾淨 92%、一般展場 92%、尖峰吵雜 91%——**噪音幾乎不影響**，whisper 對環境音"
+             "的韌性比預期好。抓到的破口裡最值得講的是撇號那個：ASR **完全聽對**、LLM 也"
+             "**完全判對**（keyword=mouse、warehouse=central 都抽對了），卻被防幻覺閘門把"
+             "`what's` 當成「庫裡沒有的商品修飾詞」，於是清掉正確的 keyword，回了全店概覽。"
+             "根因是閘門剝標點時只剝頭尾，撇號在字中間剝不掉。**這類破口打字訪客也會遇到**"
+             "——撇號、禮貌用語、what about 追問都是，只是先前造句時沒想到。真正語音專屬的"
+             "只有黏字（sunheadstock）和聽錯詞（mops→mobs）那兩類，那兩句實測**沒有可用訊號**"
+             "能區分正確與誤配（mobs 最像的是 mouse 不是 mop），硬修會更糟，誠實留給補訓語料。")
+pn(s)
+
+
 # ─── S13 總結（深底）─────────────────────────────────────
 s = slide_blank()
 add_rect(s, 0, 0, SLIDE_W, SLIDE_H, fill=DARK)
