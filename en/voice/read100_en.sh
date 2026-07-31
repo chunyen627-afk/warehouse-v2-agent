@@ -55,12 +55,25 @@ case "$ARG3" in
 esac
 
 SEC=5
+# ── VAD 模式（2026-07-31 新增，預設開啟）─────────────────────────
+#   VAD=1：模擬**網頁前端**的錄音行為——講完靜音 1.2s 自動停，不用等滿 5 秒。
+#          參數對齊 templates/index.html 的 startVAD()（HANG=1200/MAXLEN=12000）。
+#          好處：①測起來跟展場訪客走的路徑一致 ②順便驗證語音擷取區段對不對
+#          ③音檔長度＝實際語音長度，不會前後帶一堆靜音
+#   VAD=0：舊行為（arecord 固定錄 SEC 秒）
+#   用法：VAD=0 bash read100_en.sh   → 切回固定秒數
+VAD="${VAD:-1}"
+MAXSEC=12   # 硬上限，配合 whisper -ac 640 的 12.8s 容量
 NOISE="noise/mall_ambience.mp3"
 API="https://127.0.0.1:8002/api/asr"
 WS_HELPER="_read100_en_ws.py"
-OUT="_read100_en_result.txt"
+RUN_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+RUN_DIR="runs/${RUN_TIMESTAMP}"
+mkdir -p "${RUN_DIR}/audio"
+OUT="${RUN_DIR}/result.log"
 
-[ "$START" = "1" ] && [ "$REPEAT" = "1" ] && : > "$OUT"
+MAIN_OUT="_read100_en_result.txt"
+[ "$START" = "1" ] && : > "$MAIN_OUT"
 
 cat > "$WS_HELPER" <<'PYEOF'
 import asyncio, json, ssl, sys, websockets
@@ -87,7 +100,51 @@ PYEOF
 record_once() {
     local RAW MIX SEND DB _num="${1:-}"
     RAW=$(mktemp /tmp/r100XXXX.wav)
-    arecord -f S16_LE -r 16000 -c 1 -d "$SEC" "$RAW" 2>/dev/null
+    if [ "$VAD" = "1" ]; then
+        # ⚠️ 不用 sox 的 silence 等前導——實測在安靜房間會**無限等待**
+        #   （timeout 124、0 bytes 檔案）或判定無內容不寫檔。改成：
+        #   arecord 錄滿上限（行為可預期）→ ffmpeg 裁掉尾端靜音。
+        #   結果等同前端 VAD：音檔長度＝實際語音長度。
+        _rawfull=$(mktemp /tmp/r100fXXXX.wav)
+        arecord -f S16_LE -r 16000 -c 1 -d "$MAXSEC" "$_rawfull" 2>/dev/null &
+        _arec_pid=$!
+        # 邊錄邊偵測：每 0.3s 取樣，連續 1.2s 低於門檻就提早結束
+        _quiet=0
+        for _i in $(seq 1 $((MAXSEC * 10 / 3))); do
+            sleep 0.3
+            kill -0 $_arec_pid 2>/dev/null || break
+            _sz=$(stat -c%s "$_rawfull" 2>/dev/null || echo 0)
+            [ "$_sz" -lt 16000 ] && continue    # 還沒錄到 0.5s，先不判
+            _lvl=$(timeout 2 ffmpeg -sseof -0.35 -i "$_rawfull" -af volumedetect -f null /dev/null 2>&1                    | grep mean_volume | sed -E 's/.*mean_volume: (-?[0-9.]+).*//')
+            if [ -n "$_lvl" ] && awk "BEGIN{exit !($_lvl < -42)}" 2>/dev/null; then
+                _quiet=$((_quiet + 1))
+                [ "$_quiet" -ge 4 ] && { kill $_arec_pid 2>/dev/null; break; }
+            else
+                _quiet=0
+            fi
+        done
+        wait $_arec_pid 2>/dev/null
+        # 裁掉尾端靜音（保留 0.3s 尾巴，避免切掉最後一個音節）
+        ffmpeg -y -loglevel error -i "$_rawfull"             -af "areverse,silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.3,areverse"             "$RAW" 2>/dev/null || cp "$_rawfull" "$RAW"
+        # ⚠️ 全靜音（訪客按了沒講話）裁切後會是**空檔**——退回原始檔，
+        #   讓下游 ASR 正常回「聽不出內容」，而不是拿空檔去辨識。
+        _cut=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$RAW" 2>/dev/null)
+        if [ -z "$_cut" ] || awk "BEGIN{exit !(${_cut:-0} < 0.3)}" 2>/dev/null; then
+            cp "$_rawfull" "$RAW"
+            printf "     [VAD] ⚠️ 沒偵測到語音（沒講話？太小聲？）
+" > /dev/tty
+        fi
+        rm -f "$_rawfull"
+        _vdur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$RAW" 2>/dev/null)
+        printf "     [VAD] 錄到 %.1fs（講完自動停）
+" "${_vdur:-0}" > /dev/tty
+    else
+        arecord -f S16_LE -r 16000 -c 1 -d "$SEC" "$RAW" 2>/dev/null
+    fi
+    # 每次都保存原始錄音到本次 run 的資料夾
+    if [ -n "$_num" ]; then
+        cp "$RAW" "${RUN_DIR}/audio/${_num}_raw.wav"
+    fi
     # 保存乾淨錄音（只在非混噪模式存，避免存到已混噪的）
     if [ -z "$NOISE_LV" ] && [ -n "$_num" ]; then
         mkdir -p audio/user_clean_en
@@ -102,6 +159,10 @@ record_once() {
              [0:a][bg]amix=inputs=2:duration=first:dropout_transition=0,\
              aecho=0.8:0.7:6:0.15,aresample=16000" \
             -ac 1 -c:a pcm_s16le "$MIX" 2>/dev/null && SEND="$MIX"
+        # 保存混入噪音後的音檔
+        if [ -n "$_num" ]; then
+            cp "$MIX" "${RUN_DIR}/audio/${_num}_mixed.wav"
+        fi
     fi
     # 量錄音音量並回饋——小聲是辨識失敗的常見隱因（訊噪比低、摩擦音糊掉）。
     #   讓使用者即時看到夠不夠大聲，排除「音量太小」這個變數。
@@ -139,6 +200,12 @@ for LINE in "${LINES[@]}"; do
     # 第 5 欄 ZH = 中文意思（只顯示給人看，**不會**送進系統——
     #   英文版後端擋中文，混進查詢字串會整句被 reject）
     IFS='|' read -r NUM SENT WANT KW ZH <<< "$LINE"
+    
+    # 確保 NUM 是純數字，過濾掉含有 BOM (Byte Order Mark) 或格式錯誤的行
+    if ! [[ "$NUM" =~ ^[0-9]+$ ]]; then
+        continue
+    fi
+    
     [ "$NUM" -lt "$START" ] 2>/dev/null && continue
     [ "$NUM" -gt "$END" ] 2>/dev/null && break
 
@@ -146,9 +213,8 @@ for LINE in "${LINES[@]}"; do
     echo "[$NUM/100] 請唸：$SENT"
     [ -n "${ZH:-}" ] && echo "          （中文意思：$ZH）"
 
-    for ((rep=1; rep<=REPEAT; rep++)); do
-        [ "$REPEAT" -gt 1 ] && printf "  第 %d/%d 次 — " "$rep" "$REPEAT"
-        printf "按 Enter 準備..." > /dev/tty
+    while true; do
+        printf "按 Enter 準備錄音..." > /dev/tty
         # ⚠️ 關鍵修正：從終端機讀，不是從語料檔；先清 stdin 殘留
         read -r < /dev/tty
         # 倒數，讓使用者反應過來
@@ -158,62 +224,64 @@ for LINE in "${LINES[@]}"; do
 
         if [ -z "$REC_ASR" ]; then
             echo "   ❌ ASR 無輸出（音量太小？沒對準錄音時機？）"
-            [ "$REPEAT" = "1" ] && echo "$NUM|$SENT|ASR空||FAIL" >> "$OUT"
-            [ "$REPEAT" = "1" ] && { BAD=$((BAD+1)); N=$((N+1)); }
-            continue
-        fi
-
-        MARK=""
-        [ "$REC_ASR" != "$SENT" ] && MARK="  [聽成：$REC_ASR]"
-
-        if [ "$REPEAT" -gt 1 ]; then
-            # 診斷模式：只顯示每次辨識結果，不送 WS、不判定
-            [ "$REC_ASR" = "$SENT" ] && echo "     ✓ 「$REC_ASR」" || echo "     ✗ 「$REC_ASR」"
-            continue
-        fi
-
-        # 正常模式：送倉管判定
-        RES=$(python3 "$WS_HELPER" "$REC_ASR" 2>/dev/null)
-        VIEW=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('view',''))" 2>/dev/null)
-        SUMM=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('summary','')[:60])" 2>/dev/null)
-
-        HIT=1
-        if [ "$WANT" = "*" ]; then
-            { [ "$VIEW" = "error" ] || [ -z "$VIEW" ]; } && HIT=0
         else
-            echo "$VIEW" | grep -q "$WANT" || HIT=0
-        fi
-        if [ -n "$KW" ] && [ "$HIT" = "1" ]; then
-            echo "$SUMM" | grep -q "$KW" || HIT=0
+            MARK=""
+            [ "$REC_ASR" != "$SENT" ] && MARK="  [聽成：$REC_ASR]"
+
+            # 正常模式：送倉管判定
+            RES=$(python3 "$WS_HELPER" "$REC_ASR" 2>/dev/null)
+            VIEW=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('view',''))" 2>/dev/null)
+            SUMM=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('summary','')[:60])" 2>/dev/null)
+
+            HIT=1
+            if [ "$WANT" = "*" ]; then
+                { [ "$VIEW" = "error" ] || [ -z "$VIEW" ]; } && HIT=0
+            else
+                echo "$VIEW" | grep -q "$WANT" || HIT=0
+            fi
+            if [ -n "$KW" ] && [ "$HIT" = "1" ]; then
+                echo "$SUMM" | grep -q "$KW" || HIT=0
+            fi
+
+            if [ "$HIT" = "1" ]; then
+                echo "   ✅ $VIEW$MARK"
+            else
+                echo "   ❌ $VIEW（期望 $WANT）$MARK"
+                echo "      回答：$SUMM"
+            fi
         fi
 
-        if [ "$HIT" = "1" ]; then
-            echo "   ✅ $VIEW$MARK"
-            echo "$NUM|$SENT|$REC_ASR|$VIEW|PASS" >> "$OUT"
-            OK=$((OK+1))
+        printf "滿意這次結果嗎？(輸入 y 儲存並換下一題 / 直接按 Enter 重錄)：" > /dev/tty
+        read -r SATISFIED < /dev/tty
+        if [ "$SATISFIED" = "y" ] || [ "$SATISFIED" = "Y" ]; then
+            # 使用者滿意，將最後一次結果存入 log
+            if [ -z "$REC_ASR" ]; then
+                echo "$NUM|$SENT|ASR空||FAIL|" >> "$OUT"
+                echo "$NUM|$SENT|ASR空||FAIL" >> "$MAIN_OUT"
+                BAD=$((BAD+1))
+            elif [ "$HIT" = "1" ]; then
+                echo "$NUM|$SENT|$REC_ASR|$VIEW|PASS|${REC_MEAN:-}" >> "$OUT"
+                echo "$NUM|$SENT|$REC_ASR|$VIEW|PASS" >> "$MAIN_OUT"
+                OK=$((OK+1))
+            else
+                echo "$NUM|$SENT|$REC_ASR|$VIEW|FAIL|${REC_MEAN:-}" >> "$OUT"
+                echo "$NUM|$SENT|$REC_ASR|$VIEW|FAIL" >> "$MAIN_OUT"
+                BAD=$((BAD+1))
+            fi
+            N=$((N+1))
+            break # 進入下一題
         else
-            echo "   ❌ $VIEW（期望 $WANT）$MARK"
-            echo "      回答：$SUMM"
-            echo "$NUM|$SENT|$REC_ASR|$VIEW|FAIL" >> "$OUT"
-            BAD=$((BAD+1))
+            echo "   🔁 重錄..."
         fi
-        N=$((N+1))
     done
 
-    if [ "$REPEAT" -gt 1 ]; then
-        echo "   → 上面 $REPEAT 次若「錯法都一樣」＝模型極限（考慮換大模型）；"
-        echo "     「錯法不同/時好時壞」＝收音不穩（考慮升級麥克風）。"
-    fi
+
 done
 
 rm -f "$WS_HELPER"
 echo ""
 echo "=========================================================="
-if [ "$REPEAT" -gt 1 ]; then
-    echo "診斷模式結束（未計分，重點看上面同句多次的錯法一致性）"
-else
-    echo "本次錄了 $N 句：通過 $OK、未過 $BAD"
-    [ "$N" -gt 0 ] && echo "通過率 $(awk "BEGIN{printf \"%.0f\", $OK/$N*100}")%"
-    echo "完整結果：$OUT"
-fi
+echo "本次錄了 $N 句：通過 $OK、未過 $BAD"
+[ "$N" -gt 0 ] && echo "通過率 $(awk "BEGIN{printf \"%.0f\", $OK/$N*100}")%"
+echo "完整結果：$OUT"
 echo "=========================================================="

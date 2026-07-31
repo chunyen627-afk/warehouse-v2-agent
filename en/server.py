@@ -9077,9 +9077,36 @@ async def reset():
 #   ③ **實測 tiny.en 勝過 base.en**（RPI5 選型：0.94s/WER 9.3% vs
 #      2.33s/WER 10.2%）——倉管查詢句短、句型固定，tiny 容量已夠，
 #      模型變大的收益顯現不出來。比舊的 Fun-ASR（2.45s）快 2.6 倍。
+#   ④ **2026-07-31：非母語腔實測後改用 small-q5_0 + audio-ctx**
+#      user 錄 15 句真人英文（台灣口音）實測，同一批句子：
+#        | 模型                  | 通過 | ASR 延遲 |
+#        | tiny.en（原）         | 27% | 0.95s   |
+#        | base 多語             | 33% | 2.07s   |
+#        | small.en              | 40% | 6.69s   |
+#        | small 多語            | 53% | 6.66s   |
+#        | **small-q5_0 + ac640**| **60%** | **3.45s** |
+#      **兩個反直覺發現**：
+#      ⓐ **多語版打敗英文專用版**（small 53% vs small.en 40%）——多語模型
+#        訓練時看過大量非母語者講的英文，對台灣口音反而更寬容。
+#      ⓑ **量化單獨用會變慢**（6.66→8.30s，ARM 無對應加速指令、即時解量化
+#        費時；官方說法「量化只加速 decoder、encoder 反而更慢」），但
+#        **搭配 -ac 就變成加分**——ac 削掉 encoder 成本後，decoder 的優勢
+#        才顯現出來。
+#   ⑤ **`-ac`（audio-ctx）是速度關鍵**：whisper 預設處理 **30 秒**上下文
+#      （1500 token），但倉管查詢句只有 1.3-2.9 秒，其餘全是浪費的 encoder
+#      運算。ac=640 → 6.66s 降到 2.86s（快 2.3 倍）且準確度零損失。
+#      ⚠️ **ac 不能太小**：ac=256 雖只要 1.64s，但上下文太短會讓模型
+#        **循環重複輸出**（'Wireless mouse counter' 重複 9 次）。640 是安全下限。
+#      ⚠️ **超過容量會靜默截斷**（不報錯）：容量 = ac × 30/1500 秒，
+#        ac=640 → **12.8 秒**。前端 MAXLEN 已配合改為 12 秒（見 index.html）。
+#   ⚠️ 切回舊模型：`WAREHOUSE_ASR_MODEL=tiny.en systemctl restart ...`
+#      或直接改下面的預設值。ac 用 `WAREHOUSE_ASR_AC`（0 = 不限，走完整 30 秒）。
 _VOICE_DIR = Path.home() / "whisper.cpp"
 _VOICE_CLI = _VOICE_DIR / "build/bin/whisper-cli"
-_VOICE_MODEL = _VOICE_DIR / "models/ggml-tiny.en.bin"
+_ASR_MODEL_NAME = os.getenv("WAREHOUSE_ASR_MODEL", "small-q5_0")
+_VOICE_MODEL = _VOICE_DIR / f"models/ggml-{_ASR_MODEL_NAME}.bin"
+#   audio-ctx：0 或空 = 不加 -ac（完整 30 秒上下文，最慢）
+_ASR_AUDIO_CTX = os.getenv("WAREHOUSE_ASR_AC", "640").strip()
 
 # EN build：不再需要 OpenCC（s2twp 是簡轉繁+台灣用語，對英文無意義）。
 #   舊版把它列進 _voice_ready 的必要條件 → 沒裝 opencc 會讓英文語音
@@ -9230,8 +9257,13 @@ async def asr_api(req: Request):
                 #   都走 stderr）→ 取字邏輯可以極簡、不必猜格式。
                 # `-l en` 明確指定英文：tiny.en 本就是英文專用模型，
                 #   指定後不會浪費時間做語言偵測。
+                # `-ac N` audio-ctx：只處理 N 個上下文 token 而非預設 1500
+                #   （=30 秒）。倉管句只有 1-3 秒，削掉的全是浪費的 encoder
+                #   運算 → 快 2.3 倍且準確度不掉。詳見 _ASR_AUDIO_CTX 上方註解。
                 [str(_VOICE_CLI), "-m", str(_VOICE_MODEL),
-                 "-f", str(wav), "-nt", "-l", "en"],
+                 "-f", str(wav), "-nt", "-l", "en"]
+                + (["-ac", _ASR_AUDIO_CTX]
+                   if _ASR_AUDIO_CTX and _ASR_AUDIO_CTX != "0" else []),
                 capture_output=True, text=True, timeout=120,
             )
         except subprocess.TimeoutExpired:

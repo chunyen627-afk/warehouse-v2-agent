@@ -2611,7 +2611,10 @@ function startVAD(stream) {
     src.connect(analyser);
     const buf = new Uint8Array(analyser.frequencyBinCount);
     let spoke = false;              // require speech before silence-stop kicks in (avoids cutting off before you start)
-    const SILENCE = 0.015, HANG = 1200, MAXLEN = 15000;
+    // ⚠️ MAXLEN 12s 不是隨便取的：後端 whisper 用 -ac 640，容量 =
+    //   640 × 30/1500 = **12.8 秒**，超過會**靜默截斷**（不報錯、安靜丟掉
+    //   後面的話）。留 0.8 秒餘裕。改 ac 的話這裡要一起改。
+    const SILENCE = 0.015, HANG = 1200, MAXLEN = 12000;
 
     const t_start = Date.now();
     const tick = () => {
