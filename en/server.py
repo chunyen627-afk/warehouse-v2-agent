@@ -5656,6 +5656,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          # r1：'whats worth watching in stock' 的 watching /
                         #   worth 被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
+                        # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
+                        "ahead", "proceed", "submit", "confirm", "confirmed",
+                        "approve", "approved", "accept", "agreed", "sure",
+                        "okay", "yep", "yeah", "yup", "fine", "alright",
                         # r12（探針批）：**禮貌用語**——展場訪客很常客氣地問，
                         #   而 r1-r11 的造句全是命令式（'earphone stock'），
                         #   整類漏掉。實測 'could you tell me the earphone
@@ -7903,6 +7907,14 @@ def _pending_reply(vid, text: str) -> str:
     # r57：FIX 先於 ASK——「等等 改15個」同時含暫停詞(等等)與修改詞(改)，
     # 訪客要的是改內容，修改引導比按鈕引導對
     if any(w in text for w in _PEND_FIX) or any(w in t for w in _PEND_FIX):
+        # ⚠️ r15：**這句本身可能已經是完整查詢**——`show me the earphone
+        #   stock instead` 剛好 6 詞（沒超過上面的門檻）、又含 'instead'
+        #   命中 _PEND_FIX → 回「請說完整的請求」，但訪客**已經說了**，
+        #   於是卡在那張卡片出不來（展場會卡死的體感）。
+        #   ⇒ 有具體商品名就放行走正常路由，別回引導語。
+        #   （只認**英文**：中文的「還是80好了」本來就該走引導，那是改數量）
+        if _is_en_pend and _text_has_item_name(text):
+            return ""
         eg = _PEND_EXAMPLE.get(view, "north received 100 wireless mouse")
         return (f'To change it, please say the full request again '
                 f'(e.g. "{eg}"), or just tap the "✅ {btn}" button on the '
@@ -13181,6 +13193,13 @@ async def ws_handler(ws: WebSocket):
                         #   被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
                         "interesting", "important", "urgent", "attention",
+                        # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話
+                        #   清掉後，訪客才說 'ok go ahead' → 'ahead' 被當商品
+                        #   查 → 回「查無 ahead 這個商品」（訪客一頭霧水）。
+                        #   正解是回「目前沒有進行中的操作」那類引導。
+                        "ahead", "proceed", "submit", "confirm", "confirmed",
+                        "approve", "approved", "accept", "agreed", "sure",
+                        "okay", "yep", "yeah", "yup", "fine", "alright",
                         # r12（探針批）：禮貌用語——與上面 _oov_stop 同步
                         #   （兩處必須一致，否則修一層下一層再擋一次）
                         "could", "would", "should", "shall", "might", "may",
