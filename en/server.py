@@ -5726,6 +5726,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         "watching", "watch", "worth", "noting", "note",
                         # r22：Agent 功能詞（不是商品名）——`show me the scripts`
                         #   回「查無 scripts 這個商品」；errors/export 同款
+                                                # r24：到期/搭售的功能詞（不是商品名）——
+                        #   `check expiry dates` → 查無 dates、
+                        #   `show me pairings` → 查無 pairings、
+                        #   `whats going off soon` → 查無 "off soon"
+                        "date", "dates", "expiry", "expiration", "pairing",
+                        "pairings", "bundle", "bundles", "combo", "combos",
+                        "off", "soon", "bad", "spoiled",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
@@ -13439,6 +13446,13 @@ async def ws_handler(ws: WebSocket):
                         "interesting", "important", "urgent", "attention",
                         # r22：Agent 功能詞（不是商品名）——`show me the scripts`
                         #   回「查無 scripts 這個商品」；errors/export 同款
+                                                # r24：到期/搭售的功能詞（不是商品名）——
+                        #   `check expiry dates` → 查無 dates、
+                        #   `show me pairings` → 查無 pairings、
+                        #   `whats going off soon` → 查無 "off soon"
+                        "date", "dates", "expiry", "expiration", "pairing",
+                        "pairings", "bundle", "bundles", "combo", "combos",
+                        "off", "soon", "bad", "spoiled",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話
@@ -13760,6 +13774,51 @@ async def ws_handler(ws: WebSocket):
                             continue
                     except Exception:
                         pass
+
+                # ── r24：**keyword 本身就是類別名** → 類別查詢，別當商品歧義 ──
+                #   `sports stock` 六個類別裡**只有它掛**：sports 同時出現在
+                #   4 個商品名裡（Sports Drink / Sports Bra / Sports Towel /
+                #   Sports Compression Sleeve）→ 先當商品名比對命中 4 個 →
+                #   反問「你要哪一個」。但訪客講 `sports stock` 明顯是問類別。
+                #   ⚠️ 只在 keyword **整個就是類別詞**時才轉（`sports towel`
+                #     仍要當商品查）——用 `_category_from_en` 對 keyword 本身
+                #     比對，不是對整句。
+                if (func_name == "query_inventory" and func_args.get("keyword")
+                        and not func_args.get("category")
+                        and _is_mostly_english(user_text)):
+                    #   ⚠️ 第一版用 `_category_from_en(keyword)` 太寬——
+                    #     keyword='sports towel' 也會命中 sports → 毛巾查詢
+                    #     變成類別總覽（實測回歸）。改成**整個 keyword 必須
+                    #     just 是類別詞**：先確認它對不到任何商品，才轉類別。
+                    _kw_raw = str(func_args["keyword"]).strip()
+                    _kw_cat = _category_from_en(_kw_raw)
+                    if _kw_cat:
+                        try:
+                            import warehouse as _W_ck
+                            _ck_m = _W_ck.match_items(_kw_raw)
+                            # ⚠️ 判準是**分數分布**不是絕對分數（實測數據）：
+                            #     sports        → 11, 11, 11（平手＝類別詞，
+                            #                     只是撞到多個商品名的共同詞）
+                            #     sports towel  → 16, 6（差 10＝有明確贏家，
+                            #                     是商品名）
+                            #     sports drink  → 16, 6（同上）
+                            #   用絕對門檻會兩邊都錯（8 會擋掉 sports、
+                            #   12 會放行 sports towel）。改看「第一名是否
+                            #   明顯勝出」。
+                            if len(_ck_m) >= 1:
+                                _s1 = _ck_m[0].get("score", 0)
+                                _s2 = _ck_m[1].get("score", 0) if len(_ck_m) > 1 else 0
+                                if _s1 >= 8 and _s1 - _s2 >= 4:
+                                    _kw_cat = None   # 有明確贏家＝商品名
+                        except Exception:
+                            pass
+                    if _kw_cat:
+                        log.info(f"[cat-kw] vid={vid} keyword "
+                                 f"{func_args['keyword']!r} 本身是類別詞 → "
+                                 f"category={_kw_cat}")
+                        func_args = {k: v for k, v in func_args.items()
+                                     if k != "keyword"}
+                        func_args["category"] = _kw_cat
 
                 # ── OOV 偵測：keyword 不在 SKU 清單時推測候選 ──
                 oov = _detect_oov(func_name, func_args)
