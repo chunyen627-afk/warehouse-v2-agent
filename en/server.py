@@ -13387,6 +13387,55 @@ async def ws_handler(ws: WebSocket):
                                 except Exception:
                                     pass
                             _unknown.append(_tx)
+                        # ── r16：**句中另有真商品詞 → 不是查無，是抽錯 keyword** ──
+                        #   `is the earphone stock healthy` 句中明明有
+                        #   earphone，卻抽出 healthy 當 keyword → 回
+                        #   「查無 healthy 這個商品」（訪客問的根本不是商品）。
+                        #   同批還有 situation / accurate / space / expensive /
+                        #   overstocked / balanced / data source… 16 個抽象詞。
+                        #   ⚠️ 逐詞加停用詞表**列不完**（這張表已累積 60+ 個、
+                        #     每輪都在加）→ 用結構性判準取代：
+                        #     句中若有**真商品詞**，那陌生詞就是形容詞/修飾語，
+                        #     不該拿它去宣告「查無此商品」。
+                        #   ⚠️ 不影響真 OOV：`do you have hair dryers` 句中
+                        #     沒有任何真商品詞 → 照常誠實回覆查無。
+                        if _unknown:
+                            #   ⚠️ 要做**單複數正規化**：主檔是 `Earphones`
+                            #     （複數），訪客常打 `earphone`（單數）→ 直接
+                            #     用集合交集比不到（實測第一版就漏了這句）。
+                            _nx_sing = {_w.rstrip("s") for _w in _nx_words}
+                            _real_prod = set()
+                            for _w in _re.split(r"[\s\-/]+", user_text):
+                                _w = _w.strip(" ?.!,'\"").lower()
+                                if len(_w) < 3:
+                                    continue
+                                if _w in _nx_words or _w.rstrip("s") in _nx_sing:
+                                    _real_prod.add(_w)
+                            #   ⚠️ **只在陌生詞是「形容詞式修飾語」時才放行**。
+                            #     第一版寫成「句中有真商品詞就放行」→ 立刻回歸：
+                            #     `how many chairs for the office` 的 chairs 在
+                            #     主檔（Folding Camping Chair）→ office 被當修飾語
+                            #     放行 → 回全店概覽，但守衛要求這句誠實查無。
+                            #     （記憶教訓：放寬條件必製造誤配，要收窄範圍。）
+                            #   判準：陌生詞若是**形容詞/狀態詞**（-y/-ed/-ic 結尾
+                            #     或已知抽象詞），才視為修飾語；具體名詞
+                            #     （office/microwave/bicycle）仍照常宣告查無。
+                            _ADJ_LIKE = {
+                                "healthy", "accurate", "reliable", "normal",
+                                "situation", "status", "condition", "level",
+                                "expensive", "cheap", "balanced", "overstocked",
+                                "understocked", "stocked", "space", "capacity",
+                                "recommend", "recommended", "suggestion",
+                            }
+                            _mod_only = _unknown and all(
+                                _u in _ADJ_LIKE
+                                or _re.search(r"(?:ic|ed|able|ible|ful|ous)$", _u)
+                                for _u in _unknown)
+                            if _real_prod and _mod_only:
+                                log.info(f"[oov:noex] vid={vid} 句中有真商品詞 "
+                                         f"{sorted(_real_prod)}、陌生詞 {_unknown} "
+                                         f"是修飾語 → 不宣告查無")
+                                _unknown = []
                         # ── EN build：陌生詞其實是「類別詞」→ 類別查詢，不是查無 ──
                         #   全系統 cat_zh_map 的鍵都是中文，英文類別句
                         #   （'all Electronics stock' / 'Daily Goods stock'）
