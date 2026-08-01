@@ -6586,6 +6586,30 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         log.info(f"[校正 C16] 跨期比較 → compare_periods（原 {func_name}）")
         return "compare_periods", {"metric": "out"}, True
 
+    # ── C16b（r21）：**反向修正**——clf 把單純的期間查詢誤判成跨期比較 ──
+    #   `movements last week` / `what happened last week` / `last week
+    #   movements` 全被 clf 判成 compare_periods（conf 0.97）→ 回「近兩個月
+    #   出貨變化榜」，訪客問的是上週進出貨。
+    #   成因：clf 把 `last week` 當成 compare 的強訊號（語料裡跨期比較句
+    #   多半帶 last/previous），但「上週的進出」跟「這月比上月」是兩回事。
+    #   ⚠️ C16 是 `func_name != "compare_periods"` 才跑 → clf 直接判成
+    #     compare_periods 時**根本進不到 C16**，得在這裡反向攔。
+    #   判準：有明確**進出貨詞**且**沒有比較詞** → 退回 query_movement。
+    if (func_name == "compare_periods" and _is_mostly_english(user_text)
+            and _re.search(r"\b(?:movements?|came in|come in|went out|go out|"
+                           r"shipped|received|inbound|outbound|deliveries|"
+                           r"happened|activity)\b", text_low)
+            and not _re.search(r"\b(?:compare|versus|\bvs\b|change[ds]?|growth|"
+                               r"decline|trend|most|biggest|month[- ]over)\b",
+                               text_low)):
+        _p16b = _period_from_en(user_text) or "this_week"
+        _d16b = ("in" if _re.search(r"\b(?:came in|come in|received|inbound)\b", text_low)
+                 else "out" if _re.search(r"\b(?:went out|go out|shipped|outbound)\b", text_low)
+                 else "both")
+        log.info(f"[校正 C16b] clf 誤判跨期比較 → query_movement "
+                 f"period={_p16b} direction={_d16b}")
+        return "query_movement", {"period": _p16b, "direction": _d16b}, True
+
     # C11-pre0：manage_config action 修正 — 含「改成/設成/調成/改為/設為」→ set
     # 也涵蓋「降低/提升/提高/調低/調高」這類不帶「成/為/到」的直接動詞（2026-07-02
     # 實測「北倉安全水位降低15」抓到：LLM 把 action 判成 read，這類詞沒被
