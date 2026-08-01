@@ -422,6 +422,22 @@ GATEKEEPER_REJECT_MSG = (
     "Or type \"help\" to see everything I can do!"
 )
 
+# ── r16/r17：**形容詞式修飾語**（不是商品名，也不是「庫裡沒有的商品」）──
+#   `is the earphone stock healthy` / `whats the situation` 這類，訪客問的是
+#   狀態評估不是商品。它們同時被兩層誤判：
+#     ① C1g-oov：把**已抽對**的 keyword 清掉 → 回全店 60 項概覽
+#     ② oov:noex：宣告「查無 healthy 這個商品」
+#   ⇒ 兩處共用這張表（改一邊要改兩邊——提成模組常數就是為了避免走味）。
+#   ⚠️ **不逐詞列舉**是刻意的：`_NOEX_STOP` 已累積 60+ 個、每輪都在加，
+#     那是結構性問題的徵兆。這裡靠「已知抽象詞 + 形容詞字尾規則」涵蓋，
+#     具體名詞（office/microwave/bicycle）不在其中，照常誠實查無。
+_ADJ_LIKE_OOV = {
+    "healthy", "accurate", "reliable", "normal", "situation", "status",
+    "condition", "level", "expensive", "cheap", "balanced", "overstocked",
+    "understocked", "stocked", "space", "capacity", "recommend",
+    "recommended", "suggestion",
+}
+
 # 明顯非倉管領域的黑名單（股市/天氣/電影…）— 就算含「查」也不放行
 # 第17輪「訪客閒聊輪」大擴充：展場訪客會把系統當聊天機器人（問身份/閒聊/
 # 嗆聲）甚至下搗蛋指令（刪全部/要密碼/套 system prompt），這些句子常夾帶
@@ -5823,6 +5839,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                             _t, _oov_keys, n=1, cutoff=0.80):
                         continue
                     if not _dloov.get_close_matches(_t, _oov_keys, n=1, cutoff=0.85):
+                        # ── r17：**形容詞式修飾語不該清掉正解**（同 oov:noex 判準）──
+                        #   `is the earphone stock healthy` 的 keyword 已經
+                        #   **抽對**（Wireless Bluetooth Earphones、clf conf=0.99），
+                        #   卻因 healthy 不在主檔 → 這裡清掉 → 回全店 60 項概覽。
+                        #   r16 只修了下游「不宣告查無」，沒擋住上游清 keyword，
+                        #   結果是「不說查無了，但答案還是錯的」（坑 3：修一層
+                        #   不夠，同一個判準要用在所有相關層）。
+                        #   ⚠️ 判準與 oov:noex 那處一致，改一邊要改兩邊。
+                        if (_t in _ADJ_LIKE_OOV
+                                or _re.search(r"(?:ic|ed|able|ible|ful|ous)$", _t)):
+                            log.info(f"[校正 C1g-oov] {_t!r} 是形容詞式修飾語 "
+                                     f"→ 保留 kw {func_args['keyword']!r}")
+                            continue
                         log.info(f"[校正 C1g-oov] 陌生修飾詞 {_t!r} → 清除 kw "
                                  f"{func_args['keyword']!r}")
                         func_args = {k: v for k, v in func_args.items()
@@ -13420,15 +13449,8 @@ async def ws_handler(ws: WebSocket):
                             #   判準：陌生詞若是**形容詞/狀態詞**（-y/-ed/-ic 結尾
                             #     或已知抽象詞），才視為修飾語；具體名詞
                             #     （office/microwave/bicycle）仍照常宣告查無。
-                            _ADJ_LIKE = {
-                                "healthy", "accurate", "reliable", "normal",
-                                "situation", "status", "condition", "level",
-                                "expensive", "cheap", "balanced", "overstocked",
-                                "understocked", "stocked", "space", "capacity",
-                                "recommend", "recommended", "suggestion",
-                            }
                             _mod_only = _unknown and all(
-                                _u in _ADJ_LIKE
+                                _u in _ADJ_LIKE_OOV
                                 or _re.search(r"(?:ic|ed|able|ible|ful|ous)$", _u)
                                 for _u in _unknown)
                             if _real_prod and _mod_only:
