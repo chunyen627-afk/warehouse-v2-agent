@@ -1647,6 +1647,91 @@ set_notes(s, "★這頁回答一個很自然的質疑：「你們測了 11 輪�
 pn(s)
 
 
+# ─── S14e 真人語音實測（誠實面對落差）★ ────────────────────────────
+s = slide_blank()
+title_bar(s, "VOICE · 真人實測", "合成音 92%，真人 55%——這個落差才是真相")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "先前所有英文語音數據都來自 TTS。這次請真人（非母語者）錄 38 句，"
+         "用展場實際會部署的模型與麥克風測完整語音鏈。",
+         size=13, color=GREY55)
+
+# 三段對照
+steps = [
+    ("TTS 合成音", "92%", "US 腔 99 句 · 咬字標準、無語速變化", GREY77),
+    ("真人（非母語）", "55%", "台灣腔 38 句 · 同一支麥克風、同一顆模型", CORAL),
+    ("＋ ASR 容錯層", "79%", "**同一批音檔**，沒重錄、只加規則", TEALDK),
+]
+for i, (nm, pct, desc, col) in enumerate(steps):
+    x = MX + Inches(4.02) * i
+    add_round(s, x, Inches(1.95), Inches(3.8), Inches(1.5), fill=LIGHT, shadow=True)
+    add_text(s, x + Inches(0.25), Inches(2.08), Inches(3.3), Inches(0.32),
+             nm, size=13, bold=True, color=DARK)
+    add_text(s, x + Inches(0.25), Inches(2.4), Inches(3.3), Inches(0.6),
+             pct, font=FONT_EN, size=34, bold=True, color=col)
+    add_text(s, x + Inches(0.25), Inches(3.02), Inches(3.3), Inches(0.38),
+             desc.replace("**", ""), size=10.5, color=GREY55, line_spacing=1.15)
+
+add_text(s, MX, Inches(3.62), Inches(11.8), Inches(0.32),
+         "為什麼落差這麼大——這正是「合成音會嚴重高估」的又一次驗證",
+         size=13, bold=True, color=TEALDK)
+
+gaps = [
+    ("詞尾被吞掉", "shipped → shed｜send → sen｜received → receive",
+     "非母語者通病，母語者也有只是頻率低", TEALDK),
+    ("連音黏成一詞", "sun hat → some heat｜sun hats → some headers",
+     "母語者講快時更容易發生", AMBER),
+    ("整詞被替換", "trash bags → trespass life｜mop → monk's",
+     "無可用訊號可修——硬修會誤傷正常查詢", CORAL),
+]
+gy = Inches(4.0)
+for i, (tag, ex, note, col) in enumerate(gaps):
+    y = gy + Inches(0.52) * i
+    add_rect(s, MX, y, Inches(0.06), Inches(0.44), fill=col)
+    add_text(s, MX + Inches(0.24), y + Inches(0.02), Inches(2.0), Inches(0.36),
+             tag, size=12, bold=True, color=col)
+    add_text(s, MX + Inches(2.4), y + Inches(0.02), Inches(4.6), Inches(0.36),
+             ex, font=FONT_EN, size=10.5, color=GREY44)
+    add_text(s, MX + Inches(7.3), y + Inches(0.02), Inches(4.5), Inches(0.36),
+             note, size=11, color=GREY55)
+
+add_round(s, MX, Inches(5.72), Inches(11.87), Inches(1.5), fill=DARK, shadow=True)
+add_rich(s, MX + Inches(0.4), Inches(5.86), Inches(11.1), Inches(0.44),
+         [[{"text": "容錯層買到什麼  ", "size": 13, "bold": True, "color": TEAL},
+           {"text": "55% → 79%（+24 個百分點），完全沒有重錄", "size": 13,
+            "bold": True, "color": WHITE},
+           {"text": "——只在 ASR 出口加三類規則：動詞詞尾、商品名固定錯法、倉別。",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+add_rich(s, MX + Inches(0.4), Inches(6.34), Inches(11.1), Inches(0.44),
+         [[{"text": "誠實揭露  ", "size": 13, "bold": True, "color": AMBER},
+           {"text": "79% 是「重錄挑最好那次」的結果，一次命中率更低",
+            "size": 12, "bold": True, "color": WHITE},
+           {"text": "——展場只有一次機會。母語者預估 75-85%。",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+add_rich(s, MX + Inches(0.4), Inches(6.82), Inches(11.1), Inches(0.34),
+         [[{"text": "設計取捨  ", "size": 12, "bold": True, "color": TEAL},
+           {"text": "答不出來時誠實反問、不亂猜——錯的時候不會給出錯誤數字。",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★真人語音實測頁（誠實面對落差，技術評審會問「你們測過真人嗎」）。"
+             "**這是英文版第一份真人語音數據**——先前所有英文語音數字都來自 TTS 合成音。"
+             "三段對照：①TTS 92%（US 腔 99 句）②真人非母語 55%（台灣腔 38 句，同一支 C930 "
+             "麥克風、同一顆 whisper small-q5_0 模型、走完整語音鏈到倉管判定）"
+             "③加 ASR 容錯層後 **79%**——關鍵是**同一批音檔、沒有重錄**，只在 ASR 出口加規則。"
+             "**TTS 高估了 37 個百分點**，這與中文版的經驗一致（當時合成音 clean 100%、"
+             "真人首測只有 35/52）——所以這個專案的鐵則是：合成音只能當下限篩檢，"
+             "**掛了肯定不行，過了不代表可用**。三類錯法要分清楚：詞尾被吞（shipped→shed）"
+             "是非母語者通病但母語者也有；連音（sun hat→some heat）母語者講快時更容易發生；"
+             "整詞被替換（trash bags→trespass life）則**沒有可用訊號能修**，硬修會誤傷正常查詢，"
+             "誠實留著。容錯層只收「有規律且驗證過不誤傷」的三類，並在真人音檔上驗證 +24%。"
+             "⚠️ 評審若追問可靠度，要主動說明：79% 是 user 重錄挑最好那次的結果，**一次命中率"
+             "更低**；展場訪客只有一次機會。母語者預估 75-85%（TTS 測五個腔調 GB93/US92/"
+             "AU90/IN90/SG77，但 TTS 不等於真人）。最後一句是設計取捨：答不出來時系統會"
+             "**誠實反問**而不是亂猜，所以錯的時候不會給出錯誤數字——這比硬湊一個答案安全。")
+pn(s)
+
+
 # ─── S13 總結（深底）─────────────────────────────────────
 s = slide_blank()
 add_rect(s, 0, 0, SLIDE_W, SLIDE_H, fill=DARK)

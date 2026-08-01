@@ -9410,6 +9410,27 @@ _ASR_FIX = [
 ]
 
 
+# ── 英文 ASR 出口修正表（真人錄音批建立）──────────────────────────
+#   user 錄 38 句真人英文（台灣腔）實測歸納出的**穩定錯法**。
+#   ⚠️ 只收「有規律 + 不會誤傷」的三類，音近詞（south→sauce、
+#     mop→monk's）**刻意不收**——那要靠上下文判斷，硬修會誤配。
+#   ⚠️ 一律用詞界 \b：坑 1 的教訓（短字串在英文必誤爆）。
+_ASR_FIX_EN = [
+    # ① 寫入動詞的**詞尾被吃掉**（最高頻、最有規律）
+    #    shipped→shed / received→receive / send→sen
+    (_re.compile(r"\bshed\b", _re.I), "shipped"),
+    (_re.compile(r"\bsen\b", _re.I), "send"),
+    (_re.compile(r"\breceive\b(?=\s+\d)", _re.I), "received"),
+    (_re.compile(r"\bship\b(?=\s+out\b)", _re.I), "ship"),   # 保留（本來就對）
+    # ② 商品名的固定聽錯（**已驗證主檔有對應商品**才收）
+    (_re.compile(r"\bpower bands\b", _re.I), "power banks"),
+    (_re.compile(r"\byoga mess\b", _re.I), "yoga mats"),
+    (_re.compile(r"\belectric mass\b", _re.I), "electric mops"),
+    # ③ 倉別聽錯（三個倉名是封閉集合，可安全修）
+    (_re.compile(r"\bsauce\b(?=\s+got|\s+received|\s+shipped)", _re.I), "south"),
+]
+
+
 def _asr_normalize(text: str) -> str:
     """語音專用正規化。回修正後文字（沒命中則原樣回傳）。
 
@@ -9419,9 +9440,26 @@ def _asr_normalize(text: str) -> str:
     """
     if _is_mostly_english(text):
         out = text.strip().lower()
+        # ── 真人錄音批抓到：**句中逗號要拿掉**（user 實測回報）────────
+        #   whisper 對「唸得慢／中間停頓」會插逗號，把一句話拆成好幾段：
+        #     `send 30 yoga mats from south to central`
+        #     → `sen, 30, yoga mess from south to central`
+        #   兩個問題：①逗號本身是雜訊（**語音查詢不會有逗號**）
+        #             ②它還會**切斷詞彙**——`send` 被切成 `sen`
+        #   ⚠️ 只拿掉逗號/分號，**連字號要留**（`14-inch`、`usb-c` 是商品名
+        #     的一部分，剝掉會對不到主檔）。
+        out = _re.sub(r"\s*[,;]\s*", " ", out)
+        out = _re.sub(r"\s{2,}", " ", out).strip()
         # 句末標點：whisper 一定會加 . ? !，訪客打字通常沒有。
-        #   句中的標點保留（`14-inch` 的連字號、`usb-c` 都要留）。
-        return out.rstrip(" .?!,;:")
+        out = out.rstrip(" .?!,;:")
+        # 出口修正（真人錄音批歸納的穩定錯法）——**逗號拿掉之後**才跑，
+        #   否則 `sen, 30,` 的 sen 帶著逗號比對不到 \bsen\b。
+        for _pat, _rep in _ASR_FIX_EN:
+            _new = _pat.sub(_rep, out)
+            if _new != out:
+                log.info(f"[asr-fix-en] {out!r} → {_new!r}")
+                out = _new
+        return out
     out = text
     for pat, rep in _ASR_FIX:
         out = pat.sub(rep, out)
