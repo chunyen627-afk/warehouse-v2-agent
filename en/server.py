@@ -5847,6 +5847,22 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     _t = _t.strip(" ?.!,'\"")
                     if len(_t) < 4 or _t in _oov_stop or any(c.isdigit() for c in _t):
                         continue
+                    # ── DEMO 演練抓到：**打錯的功能詞**也要當停用詞 ─────────
+                    #   `powr bank invntory`（訪客同時打錯兩個詞）→ keyword
+                    #   已**抽對** Power Bank，卻因 `invntory`（inventory 的
+                    #   錯字）不在停用詞表 → 被當陌生修飾詞清掉正解 →
+                    #   「查無 invntory 這個商品」。
+                    #   **這剛好落在招牌賣點（容錯）的展示上**，最尷尬。
+                    #   ⚠️ 停用詞表列的是正確拼法，錯字版列不完 → 用模糊比對：
+                    #     很像某個停用詞（≥0.85）就一樣跳過。
+                    #     門檻取 0.85 而非更低：invntory→inventory 是 0.94，
+                    #     而真商品詞不會這麼像功能詞。
+                    try:
+                        if _dloov.get_close_matches(_t, list(_oov_stop),
+                                                    n=1, cutoff=0.85):
+                            continue
+                    except Exception:
+                        pass
                     # r12（TTS 基準批）：**句中帶撇號的是英文縮寫，不是商品修飾詞**。
                     #   `what's in central warehouse for wireless mouse`——
                     #   LLM 判**全對**（keyword=mouse, warehouse=central），
