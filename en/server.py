@@ -588,6 +588,18 @@ GUIDE_KEYWORDS = {
     "what's this demo", "whats this demo", "what is this system",
     "what's this system", "whats this system", "what is this thing",
     "real data", "is this real", "fake data", "demo data",
+    # ── r14（展場開場白批）：訪客站到機器前的第一句。實測整類被**黑名單
+    #   婉拒**或路由到全店概覽——第一印象就是答非所問／被打槍。
+    #   ⚠️ 一律片語：裸 what/who/explain 會撞掉大量合法查詢。
+    "what is this", "what's this", "whats this",
+    "what is this thing", "what are you", "who are you",
+    "what do you do", "what does this do", "what can this do",
+    "tell me about yourself", "tell me about this",
+    "explain this", "explain the system", "explain this system",
+    "what should i ask", "what can i ask", "what questions",
+    "give me some examples", "give me an example", "show me an example",
+    "how do i use", "help me get started", "what do i do",
+    "introduce yourself", "what is this demo about",
 }
 
 GUIDE_MSG = (
@@ -10277,6 +10289,25 @@ async def ws_handler(ws: WebSocket):
                 #   （實測 'delete the one i just made' 豁免通過後仍被
                 #   守門員拒絕）。既然已判定是合法管理句，直接標記放行。
                 _gk_admin_pass = True
+            # ── r14：**導覽句豁免**（展場開場白，最高頻的第一句）─────────
+            #   `what is this thing` / `who are you` **同時在黑名單和
+            #   GUIDE_KEYWORDS 裡**，兩張表互相打架、黑名單先執行就贏了
+            #   → 訪客站到機器前問「這是什麼」直接被婉拒（第一印象就是打槍）。
+            #   ⚠️ 用 `_is_guide_request()` 當判準、不另建詞表——它本身已含
+            #     「含具體商品名 → 當查詢不當導覽」的排除，不會誤放行
+            #     `delete all items` 這種（那句沒有導覽詞、也不會命中）。
+            #   ⚠️ 破壞類黑名單詞永不豁免（同 _BL_NEVER_EXEMPT 的道理）：
+            #     `what is this database` 這種要照擋。
+            if (_bl_hit_ws
+                    and _is_guide_request(user_text)
+                    and not _re.search(r"\b(?:database|table|everything|all data|"
+                                       r"password|credential|token|api key|"
+                                       r"system prompt|ignore)\b",
+                                       user_text, _re.I)):
+                log.info(f"[gate] 黑名單 {_bl_hit_ws!r} 豁免：導覽句 → 放行")
+                _bl_hit_ws = None
+                _gk_admin_pass = True   # 同排程豁免：後面還有守門員，要一起放行
+
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",
@@ -10468,7 +10499,13 @@ async def ws_handler(ws: WebSocket):
                 for ch in GUIDE_MSG:
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(0.006)
-                await send({"type": "done", "result": {"ok": True, "view": "guide"}})
+                # ⚠️ r14：這裡原本**沒帶 summary**（同檔另外五處 view=guide 都有）
+                #   → done 事件的 summary 是空字串。畫面靠串流 token 顯示看似
+                #   正常，但任何讀 summary 的地方（歷史、複製、ws_inspect、
+                #   測試工具判定）全部拿到空值，而且串流一中斷內容就沒了
+                #   （實測畫面最後一行被截成 'what else do diaper'）。
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": GUIDE_MSG, "data": {}}})
                 continue
 
             # ── 刪除模式中 → 優先處理，不進守門員 ──
@@ -13628,7 +13665,11 @@ async def ws_handler(ws: WebSocket):
                             or _ic_t in {w.lower() for w in _ABORT_WORDS}):
                         _item_create_state_ws.pop(vid, None)
                         await send({"type": "token", "text": "Item creation cancelled."})
-                        await send({"type": "done", "result": {"ok": True, "view": "item_cancelled", "data": {}}})
+                        # r14：同 guide 那處——done 要帶 summary，否則讀 summary
+                        #   的地方（歷史/複製/測試判定）拿到空字串
+                        await send({"type": "done", "result": {
+                            "ok": True, "view": "item_cancelled",
+                            "summary": "Item creation cancelled.", "data": {}}})
                         continue
                     import tools_v2 as _tv2_item_ws
                     st2 = _item_create_state_ws.get(vid, {})
