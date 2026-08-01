@@ -522,6 +522,16 @@ _GATEKEEPER_BLACKLIST = (
     "wipe all", "wipe the", "delete all", "delete the", "drop table",
     "drop the database", "clear everything", "clear all", "erase all",
     "reset everything", "shutdown", "shut down", "format the",
+    # ── DEMO 情境 B（不配合的訪客）抓到的破壞句缺口 ──────────────────
+    #   `delete everything` → 回「查無 delete 這個商品」（該 rejected）
+    #   `set all stock to zero` → 回「我可以調整庫存設定，試試 set north
+    #     safety stock to 50」＝**在指導破壞操作**，比不擋更糟。
+    #   ⚠️ 這類永不豁免（同 _BL_NEVER_EXEMPT 的道理）。
+    "delete everything", "remove everything", "erase everything",
+    "wipe everything", "destroy everything", "delete it all",
+    "set all stock", "stock to zero", "all to zero", "zero out",
+    "set everything to", "empty the warehouse", "empty all",
+    "make it all zero", "clear the stock", "clear the warehouse",
     "developer mode", "ignore your", "ignore previous", "ignore all",
     "reveal your", "show your prompt", "your instructions",
     "system prompt", "jailbreak", "sudo ", "admin password",
