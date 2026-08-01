@@ -431,6 +431,39 @@ GATEKEEPER_REJECT_MSG = (
 #   ⚠️ **不逐詞列舉**是刻意的：`_NOEX_STOP` 已累積 60+ 個、每輪都在加，
 #     那是結構性問題的徵兆。這裡靠「已知抽象詞 + 形容詞字尾規則」涵蓋，
 #     具體名詞（office/microwave/bicycle）不在其中，照常誠實查無。
+def _period_from_en(text: str) -> str | None:
+    """r20：從英文句抽期間。抽不到回 None（讓呼叫端決定預設值）。
+
+    ⚠️ 為什麼需要這支：`query_movement` 的 period 只認 6 個值，
+      **不在清單裡就靜默 fallback 成 today**（warehouse.py:869）。
+      加上 clf 快路徑寫死 `this_month`、rescue 路徑的判定**全是中文**
+      （昨天/上週/本月）→ 英文訪客問什麼期間都被吃掉：
+        `what came in yesterday`      → 回 **Today** 816 units
+        `movements in the last 7 days` → 回 **Today**
+        `what came in on may 20`       → 回 **Today**
+      數字看起來很正常，但答的是錯的期間——**誤導級**，訪客不會發現。
+    ⚠️ 順序有意義：先比長片語（last week 要贏過 week）。
+    """
+    t = text.lower()
+    if _re.search(r"\bday before yesterday\b", t):
+        return "day_before_yesterday"
+    if _re.search(r"\byesterday(?:'s)?\b", t):
+        return "yesterday"
+    if _re.search(r"\blast\s+week\b|\bprevious\s+week\b|\bpast\s+week\b", t):
+        return "last_week"
+    if _re.search(r"\blast\s+month\b|\bprevious\s+month\b|\bpast\s+month\b", t):
+        # tool 沒有 last_month（只到 this_month）——回 None 讓上游別硬塞，
+        #   免得靜默 fallback 成 today 給出錯的數字
+        return None
+    if _re.search(r"\bthis\s+week\b|\bcurrent\s+week\b", t):
+        return "this_week"
+    if _re.search(r"\bthis\s+month\b|\bcurrent\s+month\b|\bmonth to date\b", t):
+        return "this_month"
+    if _re.search(r"\btoday(?:'s)?\b|\bso far today\b", t):
+        return "today"
+    return None
+
+
 _ADJ_LIKE_OOV = {
     "healthy", "accurate", "reliable", "normal", "situation", "status",
     "condition", "level", "expensive", "cheap", "balanced", "overstocked",
@@ -5258,6 +5291,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             and not _kw_grounded(func_args["keyword"], user_text):
         log.info(f"[校正 C4-mvg] movement kw 不接地丟棄: {func_args['keyword']!r}")
         func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+
+    # ── C4-mvp（r20）：**期間也要接地**（同 C4-mvg 的道理）────────────
+    #   `what came in yesterday` LLM 吐 period='today' → 回「Today 816 units」。
+    #   數字看起來很正常，但**答的是錯的期間**——訪客不會發現（誤導級）。
+    #   成因：①clf 快路徑寫死 this_month ②rescue 的期間判定全中文
+    #   ③tool 對不認得的 period **靜默 fallback 成 today**（warehouse.py:869）
+    #   ⇒ 句子明講了期間就以句子為準，覆蓋 LLM 的值。
+    if func_name == "query_movement" and _is_mostly_english(user_text):
+        _p_en = _period_from_en(user_text)
+        if _p_en and func_args.get("period") != _p_en:
+            log.info(f"[校正 C4-mvp] 期間接地 {func_args.get('period')!r} → {_p_en!r}")
+            func_args = {**func_args, "period": _p_en}
 
     if (is_hot or is_slow) and not _c4_related_block \
             and not any(w in user_text for w in ("類", "用品")):
@@ -12734,7 +12779,21 @@ async def ws_handler(ws: WebSocket):
                             if _mw_clf:
                                 func_args["warehouse"] = _mw_clf.group(1).lower()
                     elif func_name == "query_movement":
-                        func_args["period"] = "this_month"; func_args["direction"] = "both"
+                        # r20：期間原本**寫死 this_month** → 問昨天/上週都被
+                        #   吃掉（而且 tool 對不認得的值靜默 fallback 成 today，
+                        #   回答看起來很正常但期間是錯的＝誤導級）。
+                        func_args["period"] = _period_from_en(user_text) or "this_month"
+                        # 方向也從句子抽（原本一律 both）
+                        _dir_clf = ("in" if _re.search(
+                                        r"\b(?:came in|come in|coming in|received|"
+                                        r"receive|inbound|arrived|delivered)\b",
+                                        user_text, _re.I)
+                                    else "out" if _re.search(
+                                        r"\b(?:went out|go out|going out|shipped|"
+                                        r"ship|outbound|sold|dispatched)\b",
+                                        user_text, _re.I)
+                                    else "both")
+                        func_args["direction"] = _dir_clf
                         # movement 不從 user_text 抽 keyword（容易誤抽時間/動作詞）
                     _clf_skip_llm_ws = True
                     raw_call = f"{func_name}({func_args})"
