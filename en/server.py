@@ -9747,6 +9747,49 @@ async def ws_handler(ws: WebSocket):
                                  f"{_restated!r}")
                         user_text = _restated
                         _pending_by_vid.pop(vid, None)   # 舊卡作廢，走正常流程開新卡
+                # ── r18：**改倉別 / 改商品**（原本只有改數量）─────────────
+                #   `no i meant 30`（改量）能 work，但 `sorry i meant south`
+                #   （改倉別）/ `actually i meant the tent`（改商品）只回引導語
+                #   ——系統認得這是修改意圖（命中 _PEND_FIX），卻沒去解析新值。
+                #   展場口誤講錯倉別/商品比講錯數量更常見，而且**改不掉就得
+                #   整句重講**，體感很差。
+                #   ⚠️ 沿用改量同一套「重述整句 → 重開卡」機制，不另闢路徑：
+                #     重開卡會走完整的既有驗證（庫存夠不夠、倉別合法…），
+                #     比直接改 pending 的欄位安全。
+                elif _re.search(r"\b(?:i meant|imeant|meant|actually|"
+                                r"sorry|no|rather|instead)\b", user_text, _re.I):
+                    _pd = _pend_cur.get("data") or {}
+                    _pend_item = _pd.get("name")
+                    _pend_wh = _pd.get("warehouse")
+                    _pend_dir = _pd.get("direction")
+                    _pend_qty = _pd.get("qty")
+                    if _pend_item and _pend_qty:
+                        _verb = "received" if _pend_dir == "in" else "shipped"
+                        # ①改倉別：句中出現另一個倉名
+                        _mw = _re.search(r"\b(north|central|south)\b",
+                                         user_text, _re.I)
+                        _new_wh = _mw.group(1).lower() if _mw else None
+                        # ②改商品：句中出現另一個真商品
+                        _new_item = None
+                        try:
+                            _cand_item = _extract_sku_keyword(user_text)
+                            if (_cand_item
+                                    and _cand_item.lower() != str(_pend_item).lower()):
+                                _new_item = _cand_item
+                        except Exception:
+                            pass
+                        if _new_wh or _new_item:
+                            _wh_txt = _new_wh or str(_pend_wh).lower()
+                            _it_txt = _new_item or _pend_item
+                            _restated = (f"{_wh_txt} {_verb} {_pend_qty} "
+                                         f"{_it_txt}").strip()
+                            log.info(
+                                f"[pending-fix] 改"
+                                f"{'倉別' if _new_wh else ''}"
+                                f"{'商品' if _new_item else ''} "
+                                f"{user_text!r} → 重開卡 {_restated!r}")
+                            user_text = _restated
+                            _pending_by_vid.pop(vid, None)
             if not _item_create_state_ws.get(vid, {}).get("active"):
                 _pend_msg = _pending_reply(vid, user_text)
                 if _pend_msg:
