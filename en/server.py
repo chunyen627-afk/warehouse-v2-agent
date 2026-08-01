@@ -5717,6 +5717,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                          # r1：'whats worth watching in stock' 的 watching /
                         #   worth 被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
+                        # r22：Agent 功能詞（不是商品名）——`show me the scripts`
+                        #   回「查無 scripts 這個商品」；errors/export 同款
+                        "script", "scripts", "error", "errors", "export",
+                        "exports", "backup", "backups", "audit", "audits",
                         # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
                         "ahead", "proceed", "submit", "confirm", "confirmed",
                         "approve", "approved", "accept", "agreed", "sure",
@@ -6456,7 +6460,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                            r"daily(?!\s+(?:goods|necessities))|weekly|monthly|"
                            r"nightly|each\s+(?:day|week|month)|automatically|auto)\b",
                            user_text, _re.I)))
+    # ⚠️ r22：**檢視讓路**——`show me the reports` / `list the report files`
+    #   訪客想「看已經有哪些報表」，C12 卻**真的產生一份新報表**
+    #   （裸詞 `report` 命中 _report_words）。展場訪客只是想看看，
+    #   系統卻寫了檔案＝**做了訪客沒要求的事**，比答錯更糟。
+    #   ⚠️ 判準要收窄：只有「檢視動詞 + 複數/檔案詞」才讓路，
+    #     `generate a report` / `make me a report` 仍照常產生。
+    _view_let_pass = bool(_re.search(
+        r"\b(?:show|list|see|view|open|find|where(?:'s| is| are)?|"
+        r"what)\b[^.?!]{0,20}\b(?:reports|report files?|files|scripts)\b",
+        user_text, _re.I))
     if func_name != "generate_report" and not has_cfgkey and not _sched_let_pass \
+            and not _view_let_pass \
             and any(w in user_text for w in _report_words):
         rt = ("low_stock" if (any(w in user_text for w in ("缺貨", "補貨", "低庫存"))
                               or _re.search(r"\b(?:low stock|running low|restock|"
@@ -6481,7 +6496,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                        "what scripts", "which scripts", "list scripts",
                        "available scripts", "scripts can you", "scripts are there",
                        "what reports", "which reports", "list reports",
-                       "what files", "which files")
+                       "what files", "which files",
+                       # r22：`show me the reports` / `show me the scripts`
+                       #   ——最自然的講法反而漏了（讓路 C12 之後掉到全店概覽）。
+                       #   ⚠️ 仍用片語：裸 show/see 會撞掉大量商品查詢。
+                       "show me the reports", "show me the scripts",
+                       "show me the files", "show the reports", "show the scripts",
+                       "see the reports", "see the scripts", "view the reports",
+                       "report files", "script files", "list the reports",
+                       "list the scripts", "list the files")
     if func_name != "list_files" and any(w in user_text for w in _listfile_words):
         # r11：英文要認單複數（'what scripts' 的 area 是 scripts；原本只比對
         #   單數 'script' 之類的鍵，複數句反而抽不到 area → 列成預設區域）
@@ -13384,6 +13407,10 @@ async def ws_handler(ws: WebSocket):
                         #   被當商品名（訪客問的是「有什麼要注意的」）
                         "watching", "watch", "worth", "noting", "note",
                         "interesting", "important", "urgent", "attention",
+                        # r22：Agent 功能詞（不是商品名）——`show me the scripts`
+                        #   回「查無 scripts 這個商品」；errors/export 同款
+                        "script", "scripts", "error", "errors", "export",
+                        "exports", "backup", "backups", "audit", "audits",
                         # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話
                         #   清掉後，訪客才說 'ok go ahead' → 'ahead' 被當商品
                         #   查 → 回「查無 ahead 這個商品」（訪客一頭霧水）。
