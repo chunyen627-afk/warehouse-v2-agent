@@ -1684,19 +1684,59 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
     if raw_text and step == 1:
         import re as _re
         # 嘗試解析：名稱 + 類別 + 價格 + 安全庫存 + 倉庫庫存
+        # ⚠️ r23（中文詞表掃描）：**這段原本全中文** → 英文的「老手一句話」
+        #   完全不支援：`add item Bluetooth Keyboard electronics price 800`
+        #   整串被當成商品名（Name recorded: "Bluetooth Keyboard electronics
+        #   price 800 safety 30"），走完流程會建出名字荒謬的商品。
         _cat_map = {"電子": "electronics", "家電": "appliance_kitchen", "食品": "food_beverage",
-                     "飲料": "food_beverage", "日用": "daily_goods", "服飾": "apparel", "運動": "sports"}
-        _found_cat = next((v for k, v in _cat_map.items() if k in raw_text), "")
-        _price_m = _re.search(r'(\d+)\s*元', raw_text)
-        _safety_m = _re.search(r'安全\s*(\d+)', raw_text)
-        _north_m = _re.search(r'北\S*\s*(\d+)', raw_text)
-        _south_m = _re.search(r'南\S*\s*(\d+)', raw_text)
-        _central_m = _re.search(r'中\S*\s*(\d+)', raw_text)
+                     "飲料": "food_beverage", "日用": "daily_goods", "服飾": "apparel", "運動": "sports",
+                     # EN：類別英文說法（含底線值本身與常見口語）
+                     "electronics": "electronics", "electronic": "electronics",
+                     "appliance": "appliance_kitchen", "kitchen": "appliance_kitchen",
+                     "appliance_kitchen": "appliance_kitchen",
+                     "food": "food_beverage", "beverage": "food_beverage",
+                     "drink": "food_beverage", "food_beverage": "food_beverage",
+                     "daily": "daily_goods", "daily_goods": "daily_goods",
+                     "household": "daily_goods",
+                     "apparel": "apparel", "clothing": "apparel", "clothes": "apparel",
+                     "sports": "sports", "sport": "sports", "outdoor": "sports"}
+        _rt_low = raw_text.lower()
+        _found_cat = next(
+            (v for k, v in _cat_map.items()
+             if ((k in raw_text) if not k.isascii()
+                 else bool(_re.search(rf"\b{k}\b", _rt_low)))), "")
+        # 價格：中文「500元」／英文 price 800 / $800 / 800 dollars
+        _price_m = (_re.search(r'(\d+)\s*元', raw_text)
+                    or _re.search(r'\bprice\s*(?:is|:)?\s*(\d+)', _rt_low)
+                    or _re.search(r'\$\s*(\d+)', raw_text)
+                    or _re.search(r'(\d+)\s*(?:dollars?|nt\$?|twd)\b', _rt_low))
+        # 安全庫存：中文「安全50」／英文 safety 50 / safety stock 50 / min 50
+        _safety_m = (_re.search(r'安全\s*(\d+)', raw_text)
+                     or _re.search(r'\bsafety(?:\s*stock)?\s*(?:is|:)?\s*(\d+)', _rt_low)
+                     or _re.search(r'\bmin(?:imum)?\s*(?:is|:)?\s*(\d+)', _rt_low))
+        _north_m = (_re.search(r'北\S*\s*(\d+)', raw_text)
+                    or _re.search(r'\bnorth\s*:?\s*(\d+)', _rt_low))
+        _south_m = (_re.search(r'南\S*\s*(\d+)', raw_text)
+                    or _re.search(r'\bsouth\s*:?\s*(\d+)', _rt_low))
+        _central_m = (_re.search(r'中\S*\s*(\d+)', raw_text)
+                      or _re.search(r'\bcentral\s*:?\s*(\d+)', _rt_low))
         # 去掉已知欄位後剩下的當名稱
         _name = raw_text
         for pat in [r'電子\S*', r'家電\S*', r'食品\S*', r'日用\S*', r'服飾\S*', r'運動\S*',
-                     r'\d+元', r'安全\d+', r'北\S*\d+', r'南\S*\d+', r'中\S*\d+', r'新增商品\s*']:
+                     r'\d+元', r'安全\d+', r'北\S*\d+', r'南\S*\d+', r'中\S*\d+', r'新增商品\s*',
+                     # EN：把英文欄位詞剝掉，剩下的才是商品名
+                     r'(?i)\b(?:add|new|create)\s+(?:an?\s+)?item\s*',
+                     r'(?i)\bprice\s*(?:is|:)?\s*\d+', r'\$\s*\d+',
+                     r'(?i)\d+\s*(?:dollars?|nt\$?|twd)\b',
+                     r'(?i)\bsafety(?:\s*stock)?\s*(?:is|:)?\s*\d+',
+                     r'(?i)\bmin(?:imum)?\s*(?:is|:)?\s*\d+',
+                     r'(?i)\bnorth\s*:?\s*\d+', r'(?i)\bsouth\s*:?\s*\d+',
+                     r'(?i)\bcentral\s*:?\s*\d+',
+                     r'(?i)\b(?:electronics?|appliance(?:_kitchen)?|kitchen|'
+                     r'food(?:_beverage)?|beverage|drink|daily(?:_goods)?|'
+                     r'household|apparel|clothing|clothes|sports?|outdoor)\b']:
             _name = _re.sub(pat, '', _name).strip()
+        _name = _re.sub(r'\s{2,}', ' ', _name).strip(' ,:;-')
         if _name and _found_cat:
             # 防呆：檢查同名
             if any(it["name"] == _name for it in W.state().items):
