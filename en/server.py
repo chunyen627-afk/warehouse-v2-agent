@@ -6137,13 +6137,20 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     _c13_args.pop("warehouse", None)
                 _whv13 = _c13_args.get("warehouse")
             if _whv13:
-                _zh13 = {"north": ("北倉", "北區", "北邊", "北部"),
-                         "central": ("中倉", "中區"),
-                         "south": ("南倉", "南區", "南邊", "南部")}[_whv13]
-                if not any(z in user_text for z in _zh13):
+                # ⚠️ r19（坑 7）：同 C17a-pre——原本只認中文倉名，
+                #   英文句的 warehouse 全被當幻覺丟掉。兩處要一起改。
+                _zh13 = {"north": ("北倉", "北區", "北邊", "北部", "north"),
+                         "central": ("中倉", "中區", "central"),
+                         "south": ("南倉", "南區", "南邊", "南部", "south")}[_whv13]
+                _ut13 = user_text.lower()
+                if not any((z in user_text)
+                           or (z.isascii() and _re.search(rf"\b{z}\b", _ut13))
+                           for z in _zh13):
                     _c13_args.pop("warehouse", None)
                     log.info("[校正 C13] 丟棄幻覺 warehouse")
             _c13_whs = {z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text}
+            _c13_whs |= {_w for _w in ("north", "central", "south")
+                         if _re.search(rf"\b{_w}\b", user_text.lower())}
             if len(_c13_whs) >= 2:
                 # 「智慧手環中倉北倉哪邊存量多」「北中南倉的滑鼠各有幾個」是
                 # 多倉比較語意 → 丟單倉 filter 回三倉分佈（conv100-r12）
@@ -6759,17 +6766,33 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             func_args["warehouse"] = _whn24
     # 多倉分佈意圖（三個倉/各剩/每倉…）→ 單倉 filter 一律丟棄回三倉分佈（r24）
     if (func_name == "query_inventory" and func_args.get("warehouse")
-            and any(w in user_text for w in ("三個倉", "三倉", "每個倉", "每倉",
-                                              "各剩", "各多少", "各有多少", "各還", "各倉"))):
+            and (any(w in user_text for w in ("三個倉", "三倉", "每個倉", "每倉",
+                                              "各剩", "各多少", "各有多少", "各還", "各倉"))
+                 # r19：英文的多倉分佈講法（原本只有中文 → 英文訪客問
+                 #   'across all warehouses' 會被硬塞單倉 filter）
+                 or _re.search(r"\b(?:all (?:three )?warehouses|each warehouse|"
+                               r"every warehouse|per warehouse|across warehouses|"
+                               r"by warehouse|in each|breakdown)\b",
+                               user_text, _re.I))):
         func_args = {k: v for k, v in func_args.items() if k != "warehouse"}
         log.info("[校正 C17a-pre] 多倉分佈意圖 → 丟 warehouse")
 
     if func_name == "query_inventory" and func_args.get("warehouse") in ("north", "central", "south"):
-        _wh_zh_names = {"north": ("北倉", "北區", "北邊", "北部"),
-                        "central": ("中倉", "中區"),
-                        "south": ("南倉", "南區", "南邊", "南部")}
+        # ⚠️ r19（坑 7）：這張接地表**原本只有中文倉名** → 英文句
+        #   `earphones in central` 的 warehouse 一律被判幻覺丟掉 →
+        #   回全三倉概況（數字沒錯，但訪客問「中倉多少」得自己挑）。
+        #   query_inventory 本來就收 warehouse（warehouse.py:650），
+        #   帶了就回「in Central: 42 units」精準回答。
+        _wh_zh_names = {"north": ("北倉", "北區", "北邊", "北部", "north"),
+                        "central": ("中倉", "中區", "central"),
+                        "south": ("南倉", "南區", "南邊", "南部", "south")}
+        _ut_c17 = user_text.lower()
         _c17ap_whs = {z[0] for z in ("北倉", "北區", "中倉", "中區", "南倉", "南區") if z in user_text}
-        if not any(z in user_text for z in _wh_zh_names[func_args["warehouse"]]):
+        # 英文倉名也要納入「提了幾個倉」的計算（多倉＝比較語意，丟單倉 filter）
+        _c17ap_whs |= {_w for _w in ("north", "central", "south")
+                       if _re.search(rf"\b{_w}\b", _ut_c17)}
+        if not any((z in user_text) or (z.isascii() and _re.search(rf"\b{z}\b", _ut_c17))
+                   for z in _wh_zh_names[func_args["warehouse"]]):
             func_args = {k: v for k, v in func_args.items() if k != "warehouse"}
             log.info("[校正 C17a-pre] query_inventory 丟棄幻覺 warehouse")
         elif len(_c17ap_whs) >= 2:
@@ -12697,6 +12720,19 @@ async def ws_handler(ws: WebSocket):
                             _clf_m = _W_clf.match_items(func_args["keyword"])
                             if not _clf_m or _clf_m[0].get("score", 0) < 3:
                                 func_args.pop("keyword", None)
+                        # ── r19：**倉別參數**（clf 快路徑原本只填 keyword）──
+                        #   `north bluetooth earphones stock` 問的是北倉，
+                        #   卻回全三倉概況——數字沒錯（North 141 有列出來），
+                        #   但訪客得自己從三個數字裡挑，等於沒回答問題。
+                        #   query_inventory **本來就收 warehouse 參數**
+                        #   （warehouse.py:650），只是這條快路徑沒填。
+                        #   ⚠️ 只在**明確講了倉名**時填；沒講就維持 all，
+                        #     不要自作主張挑一個倉。
+                        if func_name == "query_inventory":
+                            _mw_clf = _re.search(r"\b(north|central|south)\b",
+                                                 user_text, _re.I)
+                            if _mw_clf:
+                                func_args["warehouse"] = _mw_clf.group(1).lower()
                     elif func_name == "query_movement":
                         func_args["period"] = "this_month"; func_args["direction"] = "both"
                         # movement 不從 user_text 抽 keyword（容易誤抽時間/動作詞）
