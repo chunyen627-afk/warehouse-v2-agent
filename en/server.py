@@ -469,6 +469,13 @@ _ADJ_LIKE_OOV = {
     "condition", "level", "expensive", "cheap", "balanced", "overstocked",
     "understocked", "stocked", "space", "capacity", "recommend",
     "recommended", "suggestion",
+    # r23：**疑問詞**——`where is the mouse stock` 的 where 被當商品名 →
+    #   「查無 where 這個商品」。
+    #   ⚠️ 不能加進 `_oov_stop`／`_NOEX_STOP`：那三個詞（why/when/where）
+    #     是 RCA（why is X off）與期間查詢的關鍵意圖詞，剝掉會傷下游判斷
+    #     （見 server.py 該處註解）。放這裡只影響「句中已有真商品詞」時的
+    #     判定——那種情況它必然是修飾語，不是商品名。
+    "where", "when", "why", "who", "how",
 }
 
 # 明顯非倉管領域的黑名單（股市/天氣/電影…）— 就算含「查」也不放行
@@ -6434,7 +6441,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _c10_query_ctx = any(w in user_text for w in ("是多少", "多少", "還剩", "剩幾",
                                                    "數字", "對不對", "的時候", "發現",
                                                    # r29：「盤點表在哪」是找檔案不是要跑腳本
-                                                   "在哪", "哪裡", "哪邊"))
+                                                   "在哪", "哪裡", "哪邊")) \
+        or bool(_re.search(
+            # ── r23（中文詞表掃描）：這道**查詢語境豁免原本全中文** →
+            #   `where is the stocktake file`（盤點表在哪）被當成「要跑腳本」
+            #   攔下 → rejected；`where are the audit files` → agent_rca。
+            #   中文「盤點表在哪」有豁免、英文沒有＝同一個問題兩種答案。
+            #   ⚠️ 只認**查詢語境**（在哪/多少/找得到嗎），不含 run/execute
+            #     ——`run the stocktake` 仍要正常開腳本卡。
+            r"\b(?:where(?:'s| is| are)?|which file|what file|find|locate|"
+            r"how many|how much|what(?:'s| is)? the (?:number|count|result)|"
+            r"saved|stored|located|results? of)\b",
+            user_text, _re.I))
     if not _is_sched_intent and not _c10_query_ctx and \
             (func_name not in ("run_script", "set_schedule") or not func_args.get("script_name")) \
             and not has_cfgkey and any(w in user_text for w in _script_strong):
@@ -6504,7 +6522,19 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                        "show me the files", "show the reports", "show the scripts",
                        "see the reports", "see the scripts", "view the reports",
                        "report files", "script files", "list the reports",
-                       "list the scripts", "list the files")
+                       "list the scripts", "list the files",
+                       # r23（中文詞表掃描）：「檔案在哪」型——中文「盤點表在哪」
+                       #   有豁免走 list_files，英文 `where is the stocktake file`
+                       #   卻被 clf 判 search_log → 意圖閘門擋成 **rejected**。
+                       #   `where are the audit files` 則回 agent_rca（答非所問）。
+                       #   ⚠️ **不能只寫 `where is the`**——會撞掉
+                       #     `where is the mouse stock` 這種正常查詢。
+                       #     必須是「位置詞 + 檔案類名詞」的完整片語。
+                       "audit files", "audit file", "stocktake file",
+                       "log files", "log file", "saved reports",
+                       "report file", "where are the files",
+                       "where are the reports", "where is the report",
+                       "where are the logs", "where is the file")
     if func_name != "list_files" and any(w in user_text for w in _listfile_words):
         # r11：英文要認單複數（'what scripts' 的 area 是 scripts；原本只比對
         #   單數 'script' 之類的鍵，複數句反而抽不到 area → 列成預設區域）
