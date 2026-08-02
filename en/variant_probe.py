@@ -31,7 +31,9 @@ CASES = [
     # ── ① 功能詞單複數（已知 4/10 破口）────────────────────────
     ("what files do you have", ["what file do you have"], "plural"),
     ("what scripts can you run", ["what script can you run"], "plural"),
-    ("show me the reports", ["show me the report"], "plural"),
+    # ⚠️ reports/report **刻意不測**：語意本就不同——
+    #   (複數)=列出報表檔案 file_list、(單數)=產生一份報表
+    #   report_done。要求兩者一致是**測試設計錯誤**（2026-08-02 修正）。
     ("show me the top sellers", ["show me the top seller"], "plural"),
     ("what alerts do i have", ["what alert do i have"], "plural"),
     ("show my schedules", ["show my schedule"], "plural"),

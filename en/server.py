@@ -9890,6 +9890,18 @@ async def ws_handler(ws: WebSocket):
             #   v1 只餵給 intent_clf，下游 C18／keyword 抽取／gate
             #   仍拿原文，log 顯示有修但結果照樣 rejected。
             user_text = _en_funcword_fix(user_text)
+            # EN：句中逗號/分號 → 空白。**whisper 會自己插逗號**
+            #   （真人錄音第 31 句 `sen, 30, yoga mess`），而
+            #   `north received 50, wireless mouse` 的逗號會讓 LLM 抽不到
+            #   qty（實測 create_movement qty=''）→ 反問「幾個？」。
+            #   `/api/asr` 出口本來就有剝，但**打字路徑沒有** → 補在這。
+            #   ⚠️ 只碰逗號/分號，**連字號要留**（14-inch／usb-c 是商品名）。
+            if _is_mostly_english(user_text):
+                _cm = _re.sub(r"\s*[,;]\s*", " ", user_text)
+                _cm = _re.sub(r"\s{2,}", " ", _cm).strip()
+                if _cm != user_text:
+                    log.info(f"[en-comma] {user_text!r} → {_cm!r}")
+                    user_text = _cm
             # EN build（r4 S9）：英文數字詞 → 阿拉伯數字，**必須在寫入意圖
             #   判定（C13b/C13c 抽數量）之前**，否則 'five hundred yoga mat'
             #   抽不到數量 → 被當查詢回庫存數字（實測）。
@@ -10846,7 +10858,10 @@ async def ws_handler(ws: WebSocket):
                  or any(w in user_text.lower() for w in
                         ("item list", "items list", "product list", "full list",
                          "list of items", "list all items", "list the items",
-                         "list everything", "all item names", "show all items")))
+                         "list everything", "all item names", "show all items",
+                         # 2026-08-02：單數形（ASR 最易吞字尾 s；打字也會漏）
+                         "item lists", "list all item", "list the item",
+                         "all item name", "show all item", "list of item")))
                     # r30：「全部商品裡最貴的前五名」讓給價格直答
                     and not any(w in user_text for w in ("最貴", "最便宜", "前三", "前五", "前十"))
                     and not any(w in user_text for w in _CONFIG_KEY_WORDS)
@@ -12974,6 +12989,14 @@ async def ws_handler(ws: WebSocket):
                     #   conf=1.00 skip LLM（clf 語料 files 6 句、file **0 句**）。
                     #   英文字尾 s 是 ASR 最容易吞的音，單複數一律要一起收。
                     _en_admin = "list_files"
+                elif _re.search(r"\b(?:top|best)\s+(?:seller|sellers|selling)\b|"
+                                r"\bbest[\s-]?sellers?\b|\bhot\s+items?\b",
+                                _ul_adm):
+                    # 2026-08-02：`show me the top seller`（**單數**）被 clf
+                    #   判 query_inventory(0.83) + skip LLM → 把 "top seller"
+                    #   當商品名查 → clarify「查無此商品」。
+                    #   複數形正常（hot_items）。單複數一起收。
+                    _en_admin = "list_hot_items"
                 elif _re.search(r"\bwhat\s+scripts?\b|\bwhich\s+scripts?\b|"
                                 r"\b(?:list|show)\s+(?:the\s+)?scripts?\b|"
                                 r"\bwhat\s+scripts?\s+can\s+you\s+run\b", _ul_adm) \
