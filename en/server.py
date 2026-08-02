@@ -4156,6 +4156,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             r'months?\b|years?\b|hours?\b|minutes?\b|oclock\b))',
             user_text, flags=_re13a.I)
     _qty13a_int = _cn_to_int(_qty13a_m.group(1)) if _qty13a_m else None
+    # ── 小數保護-en-13a（2026-08-02）：調撥走本分支、有自己的數量抽取，
+    #   `transfer 3.5 wireless mouse …` 會被截成 3（訪客講的與要寫的不符）。
+    #   同 C13b 的處理：小數 → 當模糊量，讓下游追問實際件數。
+    if _qty13a_int is not None and _re13a.search(
+            r'\b[0-9]+\.[0-9]+\s+[A-Za-z]', user_text):
+        _qty13a_int = None
+        log.info(f'[qty-decimal-en-13a] 調撥小數數量 → 追問: {user_text!r}')
     # 動詞跟介系詞被商品隔開的句型：「北倉送20個藍牙耳機到南倉」的「送…到」
     # 子字串比對不到（第11輪抓到）。兩倉名+數量的前提下跨距比對安全。
     _sep_verb_m = _re13a.search(r'[送運搬移調撥挪轉勻分抓撤].{0,18}?[到去給回]', user_text)
@@ -4620,6 +4627,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _qty13b_int = None
         if not _qty13b_m:
             _qty13b_m = _re13b_pre.search(r'[0-9]+\.[0-9]+\s*' + _qunit, user_text)
+    # ── 小數保護-en（2026-08-02）：上面那道要求接**中文量詞**，英文句沒有
+    #   → 保護失效，而英文裸數字分支 `\b([0-9]{1,6})\s+[A-Za-z]` 會匹配到
+    #   `.5` 的 5 → **`1.5`/`10.5`/`0.5` 一律抽成 5 並開確認卡**（數值錯誤級，
+    #   訪客不細看按下去就寫錯資料；超大數量有 9,999 上限、小數卻沒有）。
+    #   ⚠️ 只認「數字.數字 + 空白 + 英文字」＝數量位置，不碰型號/版本號。
+    if _re13b_pre.search(r'\b[0-9]+\.[0-9]+\s+[A-Za-z]', user_text):
+        _qty13b_int = None
+        log.info(f"[qty-decimal-en] 小數數量 → 當模糊量追問: {user_text!r}")
     # r25：中文模糊範圍量（一兩百包/兩三箱/三五十個）→ 不可硬猜單一數字開卡，追問
     if _re13b_pre.search(r'[一二兩三四五六七八九十][二兩三四五六七八九](?=[十百千])', user_text):
         _qty13b_int = None
