@@ -28,6 +28,37 @@ user 定調（2026-07-26）：**語音模型只用歐美、拒絕大陸**。
 | `check_mic_en.sh` | 錄音前體檢（⚠️ 中文版 `check_mic.sh` 寫死 8001，驗英文要用這支） |
 | `noise_retest_en.sh` | 拿已錄的乾淨音**自動混噪重測**，不用重念 |
 | `gen_read100_demo.py` | 產 100 句示範朗讀（edge-tts），讓 user 知道唸什麼字 |
+
+### 2026-08-02 新增：100 句錄完 + 收斂日工具
+
+| 檔案 | 用途 |
+|---|---|
+| **`rerun_en_v2.sh`** | ⭐**混噪一律用這支**（校準參數 -30/-22、已移除 aecho）。拿已錄音檔重跑整條鏈，`SRC=tts` 切合成音對照組 |
+| `vad_repro_en.sh` | 把「固定 5 秒」的舊錄音後製 VAD 裁切後補跑判定（救回第 1-14 句，不用重錄）|
+| `asr_replay.py` | 重放 **102 條真實 ASR 錯法**（含 whisper 自加引號、句首編號）|
+| `convo_asr.py` | **多輪 × ASR 聽錯**（單句測不出的連鎖失效）|
+| `session_en.py` | 同一條 WS 連續送多句——**代稱句/confirm 一律用它測** |
+| `denoise_probe.sh`／`denoise_sweep.sh` | 軟體降噪參數掃描 ⚠️**結論是雷**，留著當反例 |
+| `venue_matrix.sh`／`gen_ir.py` | 展場條件矩陣（噪音×殘響）⚠️ 殘響結論已收掉，**別信那些數字** |
+
+### ⚠️ 用這些工具前必看
+
+1. **測 ASR 規則要走語音路徑**：`_asr_normalize`（`_ASR_FIX_EN` 的載體）
+   **只掛在 `/api/asr`**。走 WS 送純文字會繞過它 →
+   測到的是打字路徑（曾因此低估救回率 7 個百分點）。
+   `asr_replay.py`／`convo_asr.py` 內含 `preload_asr_fix` 已處理。
+2. **改完 ASR 規則要重跑**：`_read100_en_result.txt` 存的是**錄音當下**的判定，
+   不會自動反映新規則（實測第 22/25/31 句舊記錄 FAIL、現在已完全正確）。
+3. **`read100_en.sh` 回放已預設關閉**（`PLAY=0`，每句省 2-3 秒）。
+   要聽回放：`PLAY=1 bash read100_en.sh <起始句>`。
+4. **中文版工具需要 `--rpi5`**：`regression_ws.py`／`context_fuzz.py`
+   不加會連到 8000（本機開發 port），在 RPI5 上**卡住不報錯**。
+
+### 📼 音檔備份（不可重現資產）
+
+100 句真人錄音已備份到 WIN：`FunctionGemma_Finetune/voice_poc/audio/`
+（`user_clean_en` 101 檔／`user_clean_en_vad` 14 檔／`user_clean_en_orig_backup` 14 檔，
+md5 已對照驗證）。**音檔不進 git**（16MB），靠 OneDrive 同步。
 | `practice_en.py` | 本機練唸（Enter 播放示範、r 重播、s 跳過） |
 | `tts_bench.py` | **TTS 端到端基準**：示範音檔 → ASR → 倉管 → 判定 |
 | `_probe_en.txt` | 探針批 47 句（刻意寫「作者不會寫的句型」） |
