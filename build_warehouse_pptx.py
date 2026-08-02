@@ -1732,6 +1732,153 @@ set_notes(s, "★真人語音實測頁（誠實面對落差，技術評審會問
 pn(s)
 
 
+# ─── S14f 真人 100 句最終實測 ★（2026-08-02）────────────────────
+s = slide_blank()
+title_bar(s, "VOICE · 100 句最終實測", "錄滿 100 句 + 修 13 個破口，展場噪音下 84%")
+add_text(s, MX, Inches(1.32), Inches(11.8), Inches(0.4),
+         "上一頁的 38 句版本有兩個問題必須修正：①樣本只有 38 句 "
+         "②混噪參數失真，把數據壓得過度悲觀。這頁是修正後的完整結果。",
+         size=13, color=GREY55)
+
+# 三層通過率
+tiers = [
+    ("安靜環境", "87%", "SNR 31.4 dB", TEALDK),
+    ("展場一般噪音", "84%", "SNR 27.1 dB · 真實賣場人潮音", TEAL),
+    ("尖峰吵雜", "76%", "SNR 22.7 dB", GREY77),
+]
+for i, (nm, pct, desc, col) in enumerate(tiers):
+    x = MX + Inches(4.02) * i
+    add_round(s, x, Inches(1.92), Inches(3.8), Inches(1.5), fill=LIGHT, shadow=True)
+    add_text(s, x + Inches(0.25), Inches(2.05), Inches(3.3), Inches(0.32),
+             nm, size=13, bold=True, color=DARK)
+    add_text(s, x + Inches(0.25), Inches(2.37), Inches(3.3), Inches(0.6),
+             pct, font=FONT_EN, size=34, bold=True, color=col)
+    add_text(s, x + Inches(0.25), Inches(2.99), Inches(3.3), Inches(0.38),
+             desc, size=10.5, color=GREY55, line_spacing=1.15)
+
+add_text(s, MX, Inches(3.58), Inches(11.8), Inches(0.32),
+         "噪音只讓通過率掉 3 個百分點（87 → 84）",
+         size=13, bold=True, color=TEALDK)
+
+# 為何要修正舊數據
+rows = [
+    ("樣本從 38 句補到 100 句",
+     "涵蓋查詢 / 寫入 / 多輪對話 / 對話邊界七大段", TEALDK),
+    ("混噪參數重新校準",
+     "舊參數換算 SNR 只有 19.7 dB，比使用者家中最吵時還嚴苛 12 dB——那不是展場", CORAL),
+    ("修掉三個量測工具的 bug",
+     "amix 未設 normalize=0（人聲被砍 12dB）、aecho 再砍 54%、噪音音量過大", CORAL),
+    ("13 項系統修正",
+     "同一批錄音、沒有重錄任何一句，通過率從 74% 提升到 83%", TEALDK),
+]
+y = Inches(4.02)
+for nm, desc, col in rows:
+    add_round(s, MX, y, Inches(11.8), Inches(0.62), fill=WHITE, line=GREYE6)
+    add_text(s, MX + Inches(0.28), y + Inches(0.07), Inches(3.5), Inches(0.34),
+             nm, size=12, bold=True, color=col)
+    add_text(s, MX + Inches(3.95), y + Inches(0.07), Inches(7.6), Inches(0.46),
+             desc, size=11, color=GREY55, line_spacing=1.12)
+    y += Inches(0.72)
+
+add_rect(s, MX, Inches(6.98), Inches(11.8), Inches(0.44), fill=DARK)
+add_rich(s, MX + Inches(0.4), Inches(7.02), Inches(11.1), Inches(0.34),
+         [[{"text": "多輪對話  ", "size": 12, "bold": True, "color": TEAL},
+           {"text": "代稱追問、確認落地在同一條連線下實測 100%——展場訪客走的正是這條路。",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★真人 100 句最終實測（2026-08-02）。**這頁取代上一頁的 38 句數據，"
+             "但刻意兩頁都留著**——因為修正的理由本身就是可講的內容。"
+             "為何舊數據要修正，兩個原因：①樣本不足（38 句）②**混噪參數失真**。"
+             "舊參數 light/heavy 換算成訊噪比只有 19.7 / 10.4 dB，而使用者在家用手機"
+             "開 100% 音量（本人形容『蠻吵』）實測是 31.5 dB——**測試條件比真實環境嚴苛 "
+             "12 到 21 分貝**，那已經不是展場而是施工現場。加上量測工具本身三個 bug"
+             "（amix 預設把每路衰減一半、aecho 把人聲能量分散到回音尾巴、噪音音量設定過大），"
+             "三者疊加讓 heavy 從真值 63% 一路被壓到 16%。**教訓：數據反常時要先查量測工具，"
+             "不要先解釋現象。** 新參數以使用者實際環境的訊噪比實測值當錨點反推，"
+             "light 定 27.1 dB、heavy 22.7 dB。修正後：安靜 87%、展場一般 84%、尖峰 76%，"
+             "噪音只掉 3 個百分點。另外 13 項系統修正讓**同一批錄音**（沒有重錄任何一句）"
+             "從 74% 提升到 83%——這比重錄更有說服力，因為變的是系統不是人。"
+             "⚠️ 評審若問母語者會不會更高：**不敢保證**，我們只有 TTS 腔調數據，"
+             "而 TTS 已證實高估 21 到 55 個百分點，真人母語者從未實測。")
+pn(s)
+
+
+# ─── S14g 收斂日：換 9 個角度測 ★（2026-08-02）──────────────────
+s = slide_blank()
+title_bar(s, "QUALITY · 換角度測試", "同一批錄音當輸入源，換 9 個角度找破口")
+add_text(s, MX, Inches(1.32), Inches(11.8), Inches(0.4),
+         "守衛全綠不代表沒問題——換一個角度就抓到一批。守衛庫全程維持 892/892。",
+         size=13, color=GREY55)
+
+# 左：測試角度與成果
+add_text(s, MX, Inches(1.86), Inches(5.7), Inches(0.3),
+         "測試角度（依抓到破口數排序）", size=12, bold=True, color=DARK)
+angles = [
+    ("真實 ASR 錯法 / 拼字變體", "10 項", CORAL),
+    ("寫入資料正確性 · 惡意輸入", "1 項", CORAL),
+    ("跨查詢介面一致性", "1 項", CORAL),
+    ("UI 提示句實際照打", "1 項", CORAL),
+    ("前端互動（真的用滑鼠點）", "0", TEALDK),
+    ("狀態污染（訪客不照劇本走）", "0", TEALDK),
+]
+y = Inches(2.2)
+for nm, cnt, col in angles:
+    add_round(s, MX, y, Inches(5.7), Inches(0.52), fill=WHITE, line=GREYE6)
+    add_text(s, MX + Inches(0.24), y + Inches(0.09), Inches(4.2), Inches(0.34),
+             nm, size=11.5, color=DARK)
+    add_text(s, MX + Inches(4.6), y + Inches(0.09), Inches(0.9), Inches(0.34),
+             cnt, font=FONT_EN, size=13, bold=True, color=col)
+    y += Inches(0.6)
+add_text(s, MX, y + Inches(0.06), Inches(5.7), Inches(0.34),
+         "最後兩輪零破口 → 收斂訊號", size=11.5, bold=True, color=TEALDK)
+
+# 右：最嚴重的三個破口
+rx = MX + Inches(6.1)
+add_text(s, rx, Inches(1.86), Inches(5.7), Inches(0.3),
+         "最嚴重的三個（都會影響資料正確性）", size=12, bold=True, color=DARK)
+bugs = [
+    ("小數數量被抽成錯值",
+     "「進 1.5 個滑鼠」開出 +5 的確認卡，整數部分完全丟失"),
+    ("一句兩商品只記第一筆",
+     "第二個商品默默消失、卡片毫無提示——訪客以為兩筆都記了"),
+    ("寫入後查不到那筆",
+     "庫存有變但進出紀錄查不到 → 訪客以為沒成功、可能重複進貨"),
+]
+y = Inches(2.2)
+for nm, desc in bugs:
+    add_round(s, rx, y, Inches(5.7), Inches(1.16), fill=LIGHT, shadow=True)
+    add_text(s, rx + Inches(0.26), y + Inches(0.12), Inches(5.2), Inches(0.32),
+             nm, size=12, bold=True, color=CORAL)
+    add_text(s, rx + Inches(0.26), y + Inches(0.46), Inches(5.2), Inches(0.6),
+             desc, size=11, color=GREY55, line_spacing=1.15)
+    y += Inches(1.26)
+
+add_text(s, rx, y + Inches(0.02), Inches(5.7), Inches(0.56),
+         "共同模式：中文版有保護、英文版判準沒英文化——"
+         "移植時要優先掃「數值保護」類的機制",
+         size=11, bold=True, color=TEALDK, line_spacing=1.2)
+
+add_rect(s, MX, Inches(6.98), Inches(11.8), Inches(0.44), fill=DARK)
+add_rich(s, MX + Inches(0.4), Inches(7.02), Inches(11.1), Inches(0.34),
+         [[{"text": "為什麼重要  ", "size": 12, "bold": True, "color": TEAL},
+           {"text": "路由錯訪客看得出來，數字錯不會——所以數值正確性的破口最該優先修。",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★收斂日測試方法頁（2026-08-02）。核心訊息：**守衛全綠不代表沒問題**，"
+             "換一個角度就抓到一批。這天用同一批 100 句真人錄音當輸入源，換了九個角度："
+             "真實 ASR 錯法重放、拼字變體、寫入資料正確性、惡意邊界輸入、跨查詢介面一致性、"
+             "UI 提示句實際照打、多輪長對話、並發壓測、前端真實點擊、狀態污染。"
+             "前四個角度各抓到破口，**最後兩輪（前端互動、狀態污染）零破口＝收斂訊號**。"
+             "最嚴重的三個都跟資料正確性有關：①小數數量『進 1.5 個』開出 +5 的卡"
+             "（中文版有保護、英文版判準要求中文量詞所以失效）②一句兩商品只記第一筆"
+             "（中文版有攔截、英文版判準是中文量詞與連接詞）③寫入後查不到那筆"
+             "（熱更新只更新庫存、漏了進出紀錄，中英文版都中）。"
+             "**共同模式是「中文版有保護、英文版判準沒英文化」**——移植時要優先掃"
+             "數值保護類的機制（上限、負數、零、小數），因為**路由錯訪客看得出來、"
+             "數字錯不會**。整天守衛庫維持 892/892 零回歸。")
+pn(s)
+
+
 # ─── S13 總結（深底）─────────────────────────────────────
 s = slide_blank()
 add_rect(s, 0, 0, SLIDE_W, SLIDE_H, fill=DARK)
