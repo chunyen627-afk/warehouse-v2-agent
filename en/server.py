@@ -10168,6 +10168,21 @@ async def ws_handler(ws: WebSocket):
                 _tf80_bare = _re.search(r"[調撥挪搬移]\s*[0-9]{1,4}", user_text)
                 _tf80_whs = {z for z in "北中南" if z + "倉" in user_text
                              or z + "區" in user_text}
+                # ── EN build：上面兩個判準**都是中文**（調撥挪搬移／北中南倉）
+                #   → 英文調貨句整段進不來，掉到 C13a 反問「要調哪個商品」，
+                #   代稱式調撥（上一句才鎖定商品）接不上脈絡。
+                #   長對話測 2026-08-02 抓到；⚠️ 第一次只改區塊內部的剝詞邏輯，
+                #   但**進入條件沒改** → 那段從沒執行（同坑：要追執行路徑）。
+                if not _tf80_bare and _is_mostly_english(user_text):
+                    _tf80_bare_en = _re.search(
+                        r"\b(?:transfer|move|send|ship|shift|relocate)\b"
+                        r"[^0-9]{0,20}[0-9]{1,4}", user_text, _re.I)
+                    _tf80_whs_en = {w for w in ("north", "central", "south")
+                                    if _re.search(r"\b" + w + r"\b",
+                                                  user_text, _re.I)}
+                    if _tf80_bare_en and len(_tf80_whs_en) >= 2:
+                        _tf80_bare = _tf80_bare_en
+                        _tf80_whs = _tf80_whs_en
                 if (_tf80_bare and len(_tf80_whs) >= 2
                         and _ctx_for(vid).get("last_sku")
                         and vid not in _pending_by_vid):
@@ -10195,10 +10210,34 @@ async def ws_handler(ws: WebSocket):
                     _tf80_named = (len(_tf80_stem) >= 1
                                    and _tf80_stem not in ("那", "這", "它", "他", "個",
                                                           "些", "它的", "那個", "這個"))
+                    # ── EN build：上面整段剝詞表**全是中文**（調/撥/北倉/個件…），
+                    #   英文句一個都剝不掉 → 殘詞恆非空 → 永遠判定「有講商品」
+                    #   → 代稱式調撥（`transfer 10 from north to south`）接不上
+                    #   脈絡，害訪客要再講一次商品名（長對話測 2026-08-02 抓到）。
+                    #   契約鐵律不變：**剝掉調撥結構後殘詞為空**才補 ctx；
+                    #   `transfer 10 umbrellas from…` 的 umbrellas 是明確講出
+                    #   但查無 → 誠實查無，絕不頂替。
+                    if _is_mostly_english(user_text):
+                        _tfen = user_text.lower()
+                        _tfen = _re.sub(
+                            r"\b(?:transfer|move|send|ship|shift|relocate|"
+                            r"from|to|into|out of|the|a|an|of|please|"
+                            r"north|central|south|warehouse|units?|pcs|pieces?|"
+                            r"item|items|some|all)\b", " ", _tfen)
+                        _tfen = _re.sub(r"[0-9]+", " ", _tfen)
+                        _tfen = _re.sub(r"[^a-z]+", " ", _tfen).strip()
+                        _tf80_named = bool(_tfen)
+                        if not _tf80_named:
+                            log.info(f"[ctx-tf-en] 剝完殘詞為空＝省略商品名: {user_text!r}")
+
                     if (not (_tf80_m and _tf80_m[0].get("score", 0) >= 3)
                             and not _tf80_named):
                         # 句中確實沒講商品 → 注入 ctx 商品名到句首
-                        user_text = f"{_ctx_for(vid)['last_sku']}{user_text}"
+                        _sku_ctx = _ctx_for(vid)['last_sku']
+                        # EN：英文要用空格接，不能像中文直接黏（黏了對不到主檔）
+                        user_text = (f"{_sku_ctx} {user_text}"
+                                     if _is_mostly_english(user_text)
+                                     else f"{_sku_ctx}{user_text}")
                         log.info(f"[ctx-tf] 純調貨補商品 → {user_text!r}")
 
                 # ── r82 危險級：代詞寫入句（「北倉那個補一下 進20」）——「那個」
