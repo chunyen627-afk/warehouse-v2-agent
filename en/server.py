@@ -9534,6 +9534,12 @@ _ASR_FIX_EN = [
     (_re.compile(r"\bapproaches\b(?=\s+order\b)", _re.I), "a purchase"),
     # ⑥ alert 被聽成 error（限定「set an X for」句型，避免碰真正的錯誤訊息）
     (_re.compile(r"(?<=\bset\san\s)error\b(?=\s+for\b)", _re.I), "alert"),
+    # ── asr-fix-en batch3：撇號變形（2026-08-02）────────────────────
+    #   batch2 只收了 `ships`，漏掉 whisper 的另一種寫法 `ship's`
+    #   （撇號讓 \bships\b 對不到）⇒ **同一個音有兩種寫法時要一起收**。
+    #   ⚠️ 限定「後接數字」——`today's inbound` 這種所有格是正常英文，不能碰。
+    (_re.compile(r"\bship'?s\b(?=\s+\d)", _re.I), "shipped"),
+    (_re.compile(r"\breceive'?s\b(?=\s+\d)", _re.I), "received"),
 ]
 
 
