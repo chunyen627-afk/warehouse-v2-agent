@@ -9517,6 +9517,23 @@ _ASR_FIX_EN = [
     #    ② 誤傷檢查：守衛 931 句 allow=0 / lock=0、商品主檔全 0 命中
     #    ⚠ other **不收**——守衛第 851 行有 `vague|and the other one`
     (_re.compile(r"\b(?:allow|lock)\b(?=\s+me\s+when\b)", _re.I), "alert"),
+    # ── asr-fix-en batch2：102 條真實錯法重放歸納（2026-08-02）──────
+    #   只收「**功能詞**被聽成近音詞」——商品名被聽成完全不同的詞無解。
+    #   每條都撞過守衛 931 句 + 商品主檔（全部 0 命中，sales 唯一 1 句
+    #   是 `hot|sales ranking`，與本規則方向一致）。
+    # ① stock 的近音：low stack list / safety stark
+    (_re.compile(r"\b(?:stack|stark)\b(?=\s+list\b)", _re.I), "stock"),
+    (_re.compile(r"(?<=\bsafety\s)(?:stack|stark)\b", _re.I), "stock"),
+    # ② 排行意圖：top sales → top sellers
+    (_re.compile(r"(?<=\btop\s)sales\b", _re.I), "sellers"),
+    # ③ inbound 被拆成兩個字（whisper 對複合詞常見）
+    (_re.compile(r"\bin\s+bond\b", _re.I), "inbound"),
+    # ④ 寫入動詞 shipped 的變形（ship's 已被撇號處理，這裡收 ships）
+    (_re.compile(r"\bships\b(?=\s+\d)", _re.I), "shipped"),
+    # ⑤ purchase order：a purchase → approaches（連音黏成一個詞）
+    (_re.compile(r"\bapproaches\b(?=\s+order\b)", _re.I), "a purchase"),
+    # ⑥ alert 被聽成 error（限定「set an X for」句型，避免碰真正的錯誤訊息）
+    (_re.compile(r"(?<=\bset\san\s)error\b(?=\s+for\b)", _re.I), "alert"),
 ]
 
 
