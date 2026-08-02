@@ -795,6 +795,87 @@ def _en_typo_keyword(text: str) -> str:
     return ""
 
 
+# ── 功能詞錯字容錯（2026-08-02）────────────────
+#   既有 `_en_typo_hits_item` 的候選集**只掃商品名主檔** ⇒ 拼錯商品名
+#   救得到、拼錯**功能詞**完全裸奔。variant_probe.py 實測 typo 類 6/6 全破：
+#     invetory / inventry → rejected（訪客拼錯一個字就被當閒聊趕走）
+#     recieved → 判成查詢而非寫入（**語意翻轉**，最嚴重）
+#     wearhouse / warehose / stok → clarify
+#   ⇒ 容錯原本只保護了「查什麼」，沒保護「做什麼」。
+#   ⚠️ 候選集已撞商品主檔：51 詞中僅 `hot` 衝突 → 已排除。
+_EN_FUNC_WORDS = (
+    "inventory", "warehouse", "warehouses", "received", "receive",
+    "shipped", "stock", "stocks", "report", "reports",
+    "script", "scripts", "file", "files", "alert", "alerts",
+    "schedule", "schedules", "movement", "movements", "transfer",
+    "expiring", "restock", "restocking", "safety", "items",
+    "compare", "history", "record", "records", "purchase",
+    "order", "orders", "supplier", "category", "seller", "sellers",
+    "confirm", "cancel", "delete", "between", "below", "above",
+)
+
+
+def _en_funcword_fix(text: str) -> str:
+    """拼錯的**功能詞**還原（掛入口，整條鍵都吃到）。
+
+    判準與 `_en_typo_hits_item` 一致：非字典真詞才修、門檻 0.85、
+    與第二名要有 0.06 差距（平手不猜）。
+    候選以**詞幹**聚合，避免 warehouse/warehouses 互相稀釋分數。
+    """
+    if not _is_mostly_english(text):
+        return text
+    try:
+        import difflib as _dl_f
+        import warehouse as _W_f
+        _d = _load_en_dict()
+        _pw = set()
+        for _it_f in _W_f.state().items:
+            for _w_f in _re.split(r"[^a-z0-9]+", _it_f["name"].lower()):
+                if len(_w_f) >= 4 and _w_f.isalpha():
+                    _pw.add(_w_f)
+        out = []
+        changed = False
+        for _tok in _re.split(r"(\s+)", text):
+            _bare = _tok.strip(" ?.!,'\"").lower()
+            if len(_bare) < 4 or not _bare.isalpha():
+                out.append(_tok)
+                continue
+            if _bare in _EN_FUNC_WORDS:
+                out.append(_tok)
+                continue
+            if _d and (_bare in _d or _bare.rstrip("s") in _d):
+                out.append(_tok)
+                continue
+            # ⚠️ **商品名優先**：像商品名就別碰（門檻放寬到 0.75）。
+            #   `filtes`→filter 只有 0.833，商品名層自己救不到，
+            #   但「do we have coffue filtes」原本靠別條路徑 PASS；
+            #   功能詞層若把它改成 files(0.909) 就把那條路堵死了
+            #   （守衛 891/892 的成因）。
+            if _pw and max(_dl_f.SequenceMatcher(None, _bare, _w_f).ratio()
+                           for _w_f in _pw) >= 0.75:
+                out.append(_tok)
+                continue
+            _best = {}
+            for _w_f in _EN_FUNC_WORDS:
+                _stem = _w_f.rstrip("s")
+                _r = _dl_f.SequenceMatcher(None, _bare, _w_f).ratio()
+                if _r > _best.get(_stem, (0, ""))[0]:
+                    _best[_stem] = (_r, _w_f)
+            _sc = sorted(_best.values(), reverse=True)
+            if not _sc or _sc[0][0] < 0.85:
+                out.append(_tok)
+                continue
+            if len(_sc) > 1 and (_sc[0][0] - _sc[1][0]) < 0.06:
+                out.append(_tok)
+                continue
+            out.append(_tok.lower().replace(_bare, _sc[0][1]))
+            changed = True
+            log.info(f"[en-funcword] {_bare!r} → {_sc[0][1]!r} "
+                     f"(ratio={_sc[0][0]:.3f})")
+        return "".join(out) if changed else text
+    except Exception:
+        return text
+
 def _text_has_item_name(text: str) -> bool:
     """句中含任一真商品名的 3 字滑窗片段 → 視為具體查詢，不進 guide 導覽。
     r24：「查一下橡膠清潔手套全部加起來有幾雙」「幫我看看看看濕紙巾」的商品
@@ -8630,6 +8711,7 @@ async def api_query(req: Request):
         return JSONResponse({"ok": True, "summary": "已取消。", "view": "item_cancelled", "data": {}})
 
     user_text = _rewrite_query(user_text)
+    user_text = _en_funcword_fix(user_text)   # EN 功能詞拼錯還原（同 WS 入口）
 
     # ── 刪除模式中 → 直接處理，跳過守門員 ──
     if _item_delete_state.get("active"):
@@ -9428,6 +9510,13 @@ _ASR_FIX_EN = [
     (_re.compile(r"\belectric mass\b", _re.I), "electric mops"),
     # ③ 倉別聽錯（三個倉名是封閉集合，可安全修）
     (_re.compile(r"\bsauce\b(?=\s+got|\s+received|\s+shipped)", _re.I), "south"),
+    # ④ alert 的**詞首**被聽錯（真人錄音 2026-08-02，第 46 句連唸 5 次全錯）
+    #    5 次分別聽成：allow(2) / lock / other / and-the-microphone，
+    #    但句尾 `earphones drop below 30` **每次都對** ⇒ 只有第一個字錯。
+    #    ① 限定「後接 me when」——該句型在倉管語境只有 alert 一種合理解釋
+    #    ② 誤傷檢查：守衛 931 句 allow=0 / lock=0、商品主檔全 0 命中
+    #    ⚠ other **不收**——守衛第 851 行有 `vague|and the other one`
+    (_re.compile(r"\b(?:allow|lock)\b(?=\s+me\s+when\b)", _re.I), "alert"),
 ]
 
 
@@ -9797,6 +9886,10 @@ async def ws_handler(ws: WebSocket):
                 continue
             _raw_text = user_text
             user_text = _normalize_typos(user_text)   # 同音錯字正規化（r17，最早套用）
+            # EN：功能詞拼錯還原。**必須在入口做**——
+            #   v1 只餵給 intent_clf，下游 C18／keyword 抽取／gate
+            #   仍拿原文，log 顯示有修但結果照樣 rejected。
+            user_text = _en_funcword_fix(user_text)
             # EN build（r4 S9）：英文數字詞 → 阿拉伯數字，**必須在寫入意圖
             #   判定（C13b/C13c 抽數量）之前**，否則 'five hundred yoga mat'
             #   抽不到數量 → 被當查詢回庫存數字（實測）。
@@ -12873,9 +12966,23 @@ async def ws_handler(ws: WebSocket):
                                     r"\b(?:create|set|add|new|notify me|remind me|"
                                     r"alert me|below|under|drops?)\b", _ul_adm):
                     _en_admin = "list_alerts"
-                elif _re.search(r"\bwhat\s+files\b|\bwhich\s+files\b|"
-                                r"\b(?:list|show)\s+(?:the\s+)?files\b|"
+                elif _re.search(r"\bwhat\s+files?\b|\bwhich\s+files?\b|"
+                                r"\b(?:list|show)\s+(?:the\s+)?files?\b|"
                                 r"\bwhat\s+(?:data\s+)?can\s+you\s+read\b", _ul_adm):
+                    # ⚠️ files? 的 `?` 是 2026-08-02 補的：真人錄音第 74 句
+                    #   whisper 把 files 聽成 file → 漏出去被 clf 判 query_inventory
+                    #   conf=1.00 skip LLM（clf 語料 files 6 句、file **0 句**）。
+                    #   英文字尾 s 是 ASR 最容易吞的音，單複數一律要一起收。
+                    _en_admin = "list_files"
+                elif _re.search(r"\bwhat\s+scripts?\b|\bwhich\s+scripts?\b|"
+                                r"\b(?:list|show)\s+(?:the\s+)?scripts?\b|"
+                                r"\bwhat\s+scripts?\s+can\s+you\s+run\b", _ul_adm) \
+                        and not _re.search(r"\b(?:run|execute|start)\s+(?:the\s+)?"
+                                           r"(?:month|stocktake|export|report)", _ul_adm):
+                    # 2026-08-02 新增：scripts **原本完全沒有規則**（第 75 句）
+                    #   `what script can you run` 被判成要**執行**腳本
+                    #   → run_script({'script_name': 'run_script_one'}) 白名單錯誤。
+                    #   「問有哪些」是列表意圖，排除明確的執行句（run the month end…）。
                     _en_admin = "list_files"
                 # 'expiry alerts' / 'expiry warnings'：clf 判 query_inventory
                 #   conf=1.00 skip LLM → 根本進不到 C7 的到期規則
