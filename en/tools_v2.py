@@ -2279,6 +2279,18 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
 
         # 4. 熱更新記憶體
         s.stock.setdefault(wh_key, {})[sku] = after_qty
+        # mv-hot-sync（2026-08-02）：**同時補一筆 movements**——
+        #   原本只熱更新 s.stock，導致「查庫存有變、查進出紀錄查不到那筆」
+        #   （query_movement 讀的是 s.movements，全檔只讀不寫）。
+        #   展場風險：訪客查不到剛記的那筆 → 以為沒成功 → **重複進貨**。
+        #   date 用 snap_date（demo 基準日），與 transactions CSV 一致，
+        #   否則查「today」仍對不上。
+        try:
+            s.movements.append({"date": snap_date, "sku_id": sku,
+                                "warehouse": wh_key, "direction": dir_key,
+                                "qty": qty_val})
+        except Exception:
+            pass
 
     _done = {**p, "before_qty": current, "after_qty": after_qty}
     return {"ok": True,
@@ -2498,6 +2510,17 @@ def commit_transfer(pending: dict, actor: str = "user_confirmed",
         # 4. 熱更新記憶體
         s.stock.setdefault(from_key, {})[sku] = from_after
         s.stock.setdefault(to_key, {})[sku] = to_after
+        # mv-hot-sync（2026-08-02）：調撥同樣要補 movements，且**記兩筆**
+        #   （來源倉 out、目標倉 in），與 transactions CSV 的寫法一致。
+        try:
+            s.movements.append({"date": snap_date, "sku_id": sku,
+                                "warehouse": from_key, "direction": "out",
+                                "qty": qty_val})
+            s.movements.append({"date": snap_date, "sku_id": sku,
+                                "warehouse": to_key, "direction": "in",
+                                "qty": qty_val})
+        except Exception:
+            pass
 
     _done = {**p, "from_before": from_cur, "from_after": from_after,
              "to_before": to_cur, "to_after": to_after}
