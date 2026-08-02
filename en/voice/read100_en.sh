@@ -18,7 +18,8 @@
 #   bash read100_en.sh 5 5 x3       第 5 句連錄 3 次，比對錯法穩不穩定
 #                                （診斷「該換模型還是換麥克風」）
 #
-# 操作：看到句子 → 按 Enter → 「開始錄音」後才出聲 → 錄 4 秒 → 顯示結果。
+# 操作：看到句子 → 按 Enter → 「開始錄音」後才出聲 → 講完停頓一下自動結束 → 顯示結果。
+#       （VAD=0 時才是固定秒數 SEC）
 #       中途按 Ctrl+C 可停，結果已存 _read100_result.txt
 #
 # ⚠️ 修正（2026-07-20）：舊版 read 從語料檔讀 stdin，導致「不按 Enter 也
@@ -63,6 +64,15 @@ SEC=5
 #   VAD=0：舊行為（arecord 固定錄 SEC 秒）
 #   用法：VAD=0 bash read100_en.sh   → 切回固定秒數
 VAD="${VAD:-1}"
+# 錄完自動回放（讓你聽自己錄了什麼）。**預設關閉**，要聽用 PLAY=1。
+#   ⚠️ RPI5 只有 HDMI 音訊輸出——聲音從螢幕出來，需要螢幕有喇叭。
+PLAY="${PLAY:-0}"   # 預設關閉（2026-08-02 user 要求，每句省 2-3 秒）；要聽回放用 PLAY=1
+# ── 按 y 存檔後自動回傳本機（user 要在自己電腦聽，判斷截得好不好）──
+#   ⚠️ 背景傳 + 15s timeout：ZeroTier 實測一天斷三次，前景等待會卡住
+#     錄音節奏；失敗只警告，檔案仍在 RPI5，可用 sync_recordings.sh 補傳。
+#   SYNC=0 關閉。
+SYNC="${SYNC:-1}"
+SYNC_TO="${SYNC_TO:-pjunm@10.35.219.64:/c/Users/pjunm/OneDrive/Desktop/FunctionGemma_Finetune/voice_poc/audio/from_rpi5/}"
 MAXSEC=12   # 硬上限，配合 whisper -ac 640 的 12.8s 容量
 NOISE="noise/mall_ambience.mp3"
 API="https://127.0.0.1:8002/api/asr"
@@ -109,17 +119,40 @@ record_once() {
         arecord -f S16_LE -r 16000 -c 1 -d "$MAXSEC" "$_rawfull" 2>/dev/null &
         _arec_pid=$!
         # 邊錄邊偵測：每 0.3s 取樣，連續 1.2s 低於門檻就提早結束
+        # ⚠️ **必須先偵測到說話**才啟動靜音判定（_spoke）——
+        #   網頁 startVAD() 有這個保護（`let spoke = false`），腳本原本漏了
+        #   → 訪客還在準備、還沒開口，_quiet 就一路累加到 4 → **1.5 秒就切掉**，
+        #   話根本沒講完（user 實測踩到）。
         _quiet=0
+        _spoke=0
         for _i in $(seq 1 $((MAXSEC * 10 / 3))); do
             sleep 0.3
             kill -0 $_arec_pid 2>/dev/null || break
             _sz=$(stat -c%s "$_rawfull" 2>/dev/null || echo 0)
             [ "$_sz" -lt 16000 ] && continue    # 還沒錄到 0.5s，先不判
-            _lvl=$(timeout 2 ffmpeg -sseof -0.35 -i "$_rawfull" -af volumedetect -f null /dev/null 2>&1                    | grep mean_volume | sed -E 's/.*mean_volume: (-?[0-9.]+).*//')
-            if [ -n "$_lvl" ] && awk "BEGIN{exit !($_lvl < -42)}" 2>/dev/null; then
-                _quiet=$((_quiet + 1))
-                [ "$_quiet" -ge 4 ] && { kill $_arec_pid 2>/dev/null; break; }
+            # ⚠️ 用 sox stat 不用 ffmpeg：後者單次 0.20s，每 0.3s 呼叫一次
+            #   等於迴圈週期變 0.5s+，偵測「連續靜音」要 3 秒以上
+            #   ——訪客講完要等好久才收尾。sox 單次僅 ~0.02s。
+            # ⚠️ **不能用 sox trim -0.35**——邊寫邊讀時永遠回 0.0000：
+            #   arecord 預先在 WAV 檔頭宣告總長，sox 依檔頭算位置會跑到
+            #   還沒寫入的區域。實測證實：_spoke 永遠是 0、提早停從未生效。
+            #   改用 tail 取檔尾原始位元組當 raw PCM（繞過檔頭）。
+            #   16kHz/16bit/mono = 32000 bytes/秒 → 0.35s = 11200 bytes
+            _lvl=$(tail -c 11200 "$_rawfull" 2>/dev/null                    | sox -t raw -r 16000 -e signed -b 16 -c 1 - -n stat 2>&1                    | awk -F: '/Maximum amplitude/{printf "%.4f", $2}')
+            # ⚠️ sox 回的是**振幅**(0-1) 不是 dB——門檻要跟著換：
+            #   安靜實測 0.0012、正常講話 0.1~0.9 → 0.02 切得很開
+            #   （0.02 約等於 -34dB）
+            if [ -n "$_lvl" ] && awk "BEGIN{exit !($_lvl < 0.02)}" 2>/dev/null; then
+                # 靜音——但只有「已經開口過」才算收尾訊號
+                if [ "$_spoke" = "1" ]; then
+                    _quiet=$((_quiet + 1))
+                    # ⚠️ 6 次 = 1.8s（原 4 次 = 1.2s）——唸長句中間
+                    #   換氣容易超過 1.2s 被誤判成「講完了」。
+                    #   錄音腳本放寬即可，網頁維持 1.2s（訪客句子短）。
+                    [ "$_quiet" -ge 6 ] && { kill $_arec_pid 2>/dev/null; break; }
+                fi
             else
+                _spoke=1        # 偵測到說話
                 _quiet=0
             fi
         done
@@ -218,9 +251,37 @@ for LINE in "${LINES[@]}"; do
         # ⚠️ 關鍵修正：從終端機讀，不是從語料檔；先清 stdin 殘留
         read -r < /dev/tty
         # 倒數，讓使用者反應過來
-        printf "\r  🔴 開始錄音（%s 秒）——請唸！          \n" "$SEC" > /dev/tty
+        # ⚠️ VAD 模式沒有固定秒數（講完靜音 1.2s 自動停）——
+        #   原本寫死「錄 5 秒」會讓人以為要講滿 5 秒、或急著在 5 秒內講完。
+        if [ "$VAD" = "1" ]; then
+            printf "
+  🔴 開始錄音——請唸！（講完停頓一下自動結束，最長 %s 秒）
+" "$MAXSEC" > /dev/tty
+        else
+            printf "\r  🔴 開始錄音（%s 秒）——請唸！          \n" "$SEC" > /dev/tty
+        fi
 
         record_once "$NUM"   # 設定 REC_ASR，並存乾淨錄音供事後混噪
+
+        # 回放剛錄的內容（聽得出有沒有被切、音量夠不夠）
+        # ⚠️ RPI5 只有 HDMI 音訊，螢幕沒喇叭時 aplay **靜默失敗**
+        #   （exit=0 但沒聲音，PipeWire 的 sink 是 Dummy Output）
+        #   → 不論有沒有聲音，都印出「可用眼睛判斷」的診斷數據。
+        _pf="$RUN_DIR/audio/${NUM}_raw.wav"
+        if [ -f "$_pf" ]; then
+            _pdur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$_pf" 2>/dev/null)
+            # 語音實際結束的時間點（判斷有沒有被切在句中）
+            _pend=$(ffmpeg -i "$_pf" -af silencedetect=n=-35dB:d=0.25 -f null /dev/null 2>&1                     | grep -oE 'silence_start: [0-9.]+' | tail -1 | awk '{print $2}')
+            _pamp=$(sox "$_pf" -n stat 2>&1 | awk -F: '/Maximum amplitude/{printf "%.2f", $2}')
+            if [ -n "$_pend" ]; then
+                printf "     📊 錄到 %.1fs｜語音結束於 %.1fs｜振幅 %s（尾端有靜音＝講完了）
+"                        "${_pdur:-0}" "$_pend" "${_pamp:-?}" > /dev/tty
+            else
+                printf "     📊 錄到 %.1fs｜振幅 %s ⚠️ 尾端沒偵測到靜音——可能被切在句中
+"                        "${_pdur:-0}" "${_pamp:-?}" > /dev/tty
+            fi
+            [ "$PLAY" = "1" ] && timeout 20 aplay -q "$_pf" 2>/dev/null
+        fi
 
         if [ -z "$REC_ASR" ]; then
             echo "   ❌ ASR 無輸出（音量太小？沒對準錄音時機？）"
@@ -243,9 +304,16 @@ for LINE in "${LINES[@]}"; do
                 echo "$SUMM" | grep -q "$KW" || HIT=0
             fi
 
+            # 失敗時區分「ASR 聽錯」與「ASR 對但判定失敗」
+            #   （user 2026-08-02：第 83 句 ASR 一字不差卻顯示 ❌，
+            #    舊版什麼都不印→誤以為是辨識問題。
+            #    實際是代稱句缺上下文，因為本腳本每句開新 WS 連線。）
             if [ "$HIT" = "1" ]; then
                 echo "   ✅ $VIEW$MARK"
             else
+                if [ "$REC_ASR" = "$SENT" ]; then
+                    MARK="  [ASR正確→判定問題]"
+                fi
                 echo "   ❌ $VIEW（期望 $WANT）$MARK"
                 echo "      回答：$SUMM"
             fi
@@ -268,6 +336,9 @@ for LINE in "${LINES[@]}"; do
                 echo "$NUM|$SENT|$REC_ASR|$VIEW|FAIL" >> "$MAIN_OUT"
                 BAD=$((BAD+1))
             fi
+            # ⚠️ 回傳改由**本機** watch_pull.sh 主動拉——
+            #   Windows 沒跑 SSH server，RPI5 推不過去（實測 timeout）。
+            #   本機開一個視窗跑 `bash voice_poc/watch_pull.sh` 即可。
             N=$((N+1))
             break # 進入下一題
         else
