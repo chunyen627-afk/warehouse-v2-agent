@@ -11144,6 +11144,43 @@ async def ws_handler(ws: WebSocket):
                 r'(?:件|個|條|支|台|箱|包|瓶|罐|組|雙|套|盒|對|頂|張|把|副|顆|粒|袋|桶|杯|塊|片)',
                 user_text))
             _mpw_conn = any(w in user_text for w in ("和", "跟", "還有", "與", "、", "，", ",", "以及", "同時", "外加"))
+            # ── EN build（mpw-gate-en，2026-08-02）：上面三個判準全中文
+            #   （量詞/連接詞）→ 英文句一個都不中，
+            #   `north received 50 wireless mouse and 30 yoga mats`
+            #   **只開第一個商品的卡、第二個默默消失**，訪客以為兩筆都記了。
+            #   （中文版 r40 原註解：比查錯庫存嚴重，因為他以為完成了。）
+            if _is_mostly_english(user_text):
+                _ul_mpw = user_text.lower()
+                _mpw_has_mv_en = bool(_re.search(
+                    r"\b(?:received|receive|got|shipped|ship|sent|send|"
+                    r"add|added|returned|restock)\b", _ul_mpw)) and bool(
+                        _re.search(r"\d", _ul_mpw))
+                # 「數字 + 英文字」出現兩組以上＝兩個商品（英文無量詞）
+                #   排除數字後接單位/時間詞的假計數
+                _mpw_qty_n_en = len(_re.findall(
+                    r"\b\d+\s+(?!units?\b|pcs\b|pieces?\b|days?\b|weeks?\b|"
+                    r"months?\b|years?\b|hours?\b|am\b|pm\b|percent\b)[a-z]",
+                    _ul_mpw))
+                _mpw_conn_en = bool(_re.search(
+                    r"\b(?:and|plus|also|as well as)\b|[,&]", _ul_mpw))
+                _mpw_is_tf_en = bool(_re.search(
+                    r"\b(?:transfer|move|shift|relocate|reallocate)\b", _ul_mpw))
+                if (_mpw_has_mv_en and _mpw_qty_n_en >= 2 and _mpw_conn_en
+                        and not _mpw_is_tf_en):
+                    _mpw_msg_en = ("I can only take one item per inbound/outbound. "
+                                   "Please say them one at a time, e.g. "
+                                   "\"north received 50 bluetooth earphones\" first, "
+                                   "then \"north received 30 wireless mouse\".")
+                    log.info(f"[mpw-gate-en] 英文多商品寫入 → clarify: {user_text!r}")
+                    for ch in _mpw_msg_en:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _mpw_msg_en,
+                        "data": {"question": _mpw_msg_en, "options": [],
+                                 "hint": ""}}})
+                    continue
+
             if (_mpw_has_mv and _mpw_qty_n >= 2 and _mpw_conn
                     and not any(w in user_text for w in ("調", "撥", "挪", "移到", "轉倉"))):
                 _mpw_msg = ("一次幫你進/出一種商品喔。請分開說，例如先講"
