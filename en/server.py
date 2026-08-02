@@ -13294,6 +13294,13 @@ async def ws_handler(ws: WebSocket):
                     _en_sched_act = bool(_re.search(
                         r"\b(?:report|reports|stocktake|stock take|audit|export|"
                         r"alert|alerts|low stock|expiry|expiring|health check|"
+                        # 2026-08-02：UI 排程頁教訪客打 "run a stock count
+                        #   every day at 9am"。`run …` 靠 run 這個動作詞
+                        #   才進得來，但 `schedule a stock count …` 不含
+                        #   任何動作詞 → Pre-C-Sched 整段跳過 → clf 的
+                        #   run_script(1.00) 一路到底，C18 把 LLM 亂填的
+                        #   period='today' 當 script_name → 回「today 不在白名單」。
+                        r"stock count|inventory count|cycle count|"
                         r"script|send me|email me|run)\b", user_text, _re.I))
                     _has_sched_time = (any(w in user_text for w in _sched_time_kws)
                                        or (_en_sched and _en_sched_time))

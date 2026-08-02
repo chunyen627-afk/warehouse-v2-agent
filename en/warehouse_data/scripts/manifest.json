@@ -3,27 +3,56 @@
   "scripts": [
     {
       "id": "stock_audit",
-      "label": "月底盤點",
-      "description": "掃全倉庫存，和安全庫存比較，產出 CSV 報告",
+      "label": "Month-end Stocktake",
+      "description": "Scan all warehouses, compare against safety stock, output a CSV report",
       "timeout_s": 60,
       "output_type": "csv",
-      "output_dir": "audit"
+      "output_dir": "audit",
+      "label_zh": "月底盤點",
+      "description_zh": "掃全倉庫存，和安全庫存比較，產出 CSV 報告",
+      "aliases": [
+        "audit",
+        "count stock",
+        "inventory count",
+        "month end stocktake",
+        "stock audit",
+        "stock take",
+        "stocktake"
+      ]
     },
     {
       "id": "export_movements",
-      "label": "匯出進出記錄",
-      "description": "合併最近 30 天進出記錄，產出 CSV",
+      "label": "Export Movement Log",
+      "description": "Merge the last 30 days of inbound/outbound records into a CSV",
       "timeout_s": 60,
       "output_type": "csv",
-      "output_dir": "audit"
+      "output_dir": "audit",
+      "label_zh": "匯出進出記錄",
+      "description_zh": "合併最近 30 天進出記錄，產出 CSV",
+      "aliases": [
+        "export log",
+        "export movements",
+        "export transactions",
+        "movement export",
+        "movement log"
+      ]
     },
     {
       "id": "generate_report",
-      "label": "產出體檢報告",
-      "description": "產出全倉 Markdown 體檢報告（缺貨 + 熱銷 + 總覽）",
+      "label": "Generate Health Report",
+      "description": "Produce a full Markdown warehouse health report (low stock + best sellers + overview)",
       "timeout_s": 60,
       "output_type": "markdown",
-      "output_dir": "reports"
+      "output_dir": "reports",
+      "label_zh": "產出體檢報告",
+      "description_zh": "產出全倉 Markdown 體檢報告（缺貨 + 熱銷 + 總覽）",
+      "aliases": [
+        "full report",
+        "generate report",
+        "health report",
+        "report",
+        "warehouse report"
+      ]
     }
   ]
 }

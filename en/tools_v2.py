@@ -1269,7 +1269,11 @@ _SCHEDULE_SCRIPT_MAP = {
 #   ⚠️ 坑 1：一律詞界，'audit' 不可 substring 撞到別的字。
 _SCHEDULE_SCRIPT_RE_EN = [
     (r"\b(?:stock ?take|stocktake|month[- ]end (?:stock ?take|audit|count)|"
-     r"stock audit|inventory audit|inventory count|cycle count)\b", "stock_audit"),
+     r"stock audit|inventory audit|inventory count|cycle count|"
+     # 2026-08-02：UI 排程頁教訪客打 "run a stock count every day at 9am"，
+     #   但表裡只有 inventory/cycle count，**沒有 stock count** →
+     #   script_id=None → Pre-C-Sched 不攔截 → 排程句被當立即執行。
+     r"stock count|daily count|counting stock)\b", "stock_audit"),
     (r"\b(?:low[- ]stock (?:alert|check|report|list)|stock alert|"
      r"shortage (?:alert|check)|reorder check)\b", "stock_audit"),
     (r"\b(?:movement report|movements? export|export movements?|"
