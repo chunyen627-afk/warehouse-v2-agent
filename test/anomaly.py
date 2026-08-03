@@ -25,6 +25,7 @@ import warehouse as W
 # ════════════════════════════════════════════════════════════
 class AnomalyConfig:
     scan_interval_s = 300          # 背景掃描間隔（預設 5 分鐘，可設）
+    log_max_bytes = 5 * 1024 * 1024  # alerts.log 輪替上限（超過就轉存 .1）
     days_left_critical = 7          # 撐天 ≤ 此 → critical
     days_left_warning = 14          # 撐天 ≤ 此 → warning
     expiry_warning_days = 14        # 效期 ≤ 此天還有量 → warning
@@ -280,11 +281,34 @@ class Notifier:
         self.ws_push = ws_push       # async function(payload) — server 注入
         self._log_path = None
 
+    @staticmethod
+    def _rotate_if_needed(log_path: Path):
+        """檔案超過上限就轉存 .1（只留一份舊檔）。
+
+        ⚠️ 為何需要：`_seen`（告警抑制狀態）是**記憶體 dict**，服務一重啟就清空
+        → 重啟後第一次掃描把當前全部告警重寫一遍。穩態下抑制窗運作正常
+        （實測整晚零重複），但檔名綁 `snapshot_date`（固定 2026-05-26）
+        ⇒ **永遠不換檔、只會單調增長**。機器交客戶後若每天開關機，
+        一年約 6.5MB；量不大，但沒人能 SSH 進去清 ⇒ 加保險。
+        ⚠️ **刻意不做**：①不把 `_seen` 持久化——重啟後訪客**本來就該**重新看到
+        當前告警（那正是 banner 的用途），持久化會讓重開機後 banner 空白＝退步。
+        ②不改檔名綁真實日期——會與 transactions/ 的 demo 基準日不一致。
+        """
+        try:
+            if log_path.exists() and log_path.stat().st_size >= AnomalyConfig.log_max_bytes:
+                bak = log_path.with_suffix(log_path.suffix + ".1")
+                if bak.exists():
+                    bak.unlink()
+                log_path.rename(bak)
+        except Exception:
+            pass   # 輪替失敗不能影響告警本身（留底是次要職責）
+
     def _log(self, alerts: list[dict]):
         s = W.state()
         dd = Path(s.v2_data_dir)
         log_path = dd / "audit" / f"{s.snapshot_date or 'unknown'}_alerts.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._rotate_if_needed(log_path)
         import datetime
         ts = datetime.datetime.now().isoformat(timespec="seconds")
         with open(log_path, "a", encoding="utf-8") as f:
