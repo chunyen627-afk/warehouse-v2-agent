@@ -16,7 +16,7 @@ RFID、電商訂單等**多個來源即時更新**，絕大多數變動沒有人
 4. **預設關閉**——守衛 892 句與所有寫入測試都假設「除非我寫入否則數字不動」，
    背景一直改資料會讓它們隨機 FAIL。跑測試前務必關掉。
 
-## 節奏依據（實測這份 seed 的真實模式，`_churn.py`（英文版量測，中文版同一份 seed 結構））
+## 節奏依據（實測這份 seed 的真實模式，`_churn.py`）
 | | 入庫 | 出庫 |
 |---|---|---|
 | 筆數占比 | 21% | **79%** |
@@ -35,9 +35,18 @@ import warehouse as W
 
 class LiveConfig:
     # ── 節奏 ──
-    speedup = 20                  # 時間加速倍率（真實每 9 分鐘一筆 → 約 27 秒）
-    base_interval_s = 9 * 60      # 真實世界的平均間隔（實測值）
+    #   ⚠️ 2026-08-03 改版：原本「每輪動 1 筆」＝180 個(商品,倉別)組合
+    #   平均 **81 分鐘**才輪到同一個 ⇒ 訪客盯著某商品看幾乎不會動。
+    #   改成**每輪同時動多筆**（`batch`），讓畫面上大量商品一起跳。
+    #   實測單筆 `_do_one` 只要 **2ms**（含真實寫檔），一輪幾十筆零壓力。
+    speedup = 20                  # 時間加速倍率（可現場調，1-200）
+    base_interval_s = 9 * 60      # 真實世界的平均間隔（實測 seed 真值）
     jitter = 0.45                 # 間隔隨機抖動 ±45%，避免機械感
+    batch = 8                     # 每輪同時動幾筆（可現場調，1-60）
+    tick_s = 2.0                  # 最短輪詢間隔（速度拉到最大時的下限）
+    # 預設**每輪 60 個商品全動**（user 定調 2026-08-03）：真實倉庫是所有商品
+    # 同時各自進出，不是一次只動一個。展場視覺也需要「整片在動」。
+    sweep_all = True
 
     # ── 進出比例（實測：出庫 79% / 入庫 21%）──
     out_ratio = 0.79
@@ -60,6 +69,7 @@ _state = {
     "task": None,
     "count": 0,
     "last": "",
+    "wake": None,          # asyncio.Event —— 調速時打斷睡眠，讓新間隔**立即生效**
 }
 _lock = threading.Lock()
 
@@ -70,55 +80,99 @@ def is_on() -> bool:
 
 def status() -> dict:
     return {"on": _state["on"], "count": _state["count"], "last": _state["last"],
-            "speedup": LiveConfig.speedup}
+            "speedup": LiveConfig.speedup, "batch": LiveConfig.batch,
+            "sweep_all": LiveConfig.sweep_all,
+            "interval_s": round(_avg_interval(), 1)}
 
 
-def _pick_move():
+def _avg_interval() -> float:
+    """一輪的間隔（秒）。
+
+    ⚠️ 2026-08-03 修：原本把 batch 乘進間隔（想維持「真實的每分鐘筆數」），
+    結果 sweep 模式變成 **270 秒才跑一輪** ⇒ 測試 60 秒一格都沒動。
+    但那個設計本來就跟需求衝突——展場要的是「所有商品同時在動」，
+    不是「維持真實筆數」。
+    ⇒ 改成：**間隔只由 speedup 決定**，batch/sweep 決定「一輪動多少商品」。
+      speedup 20× → 27 秒一輪；120× → 4.5 秒一輪；200× → 2.7 秒一輪。
+    """
+    return max(LiveConfig.tick_s,
+               LiveConfig.base_interval_s / max(1, LiveConfig.speedup))
+
+
+def tune(speedup=None, batch=None, sweep_all=None) -> dict:
+    """現場調速（滑桿用）。立即生效，不需重開模擬。"""
+    if speedup is not None:
+        try:
+            LiveConfig.speedup = max(1, min(400, int(speedup)))
+        except Exception:
+            pass
+    if batch is not None:
+        try:
+            LiveConfig.batch = max(1, min(60, int(batch)))
+        except Exception:
+            pass
+    if sweep_all is not None:
+        LiveConfig.sweep_all = bool(sweep_all)
+    # 🚨 打斷正在睡的迴圈，讓新速度**立刻生效**。
+    #   （user 2026-08-03 回報：改速度後要先暫停再執行才會動——因為背景
+    #    正 `await sleep(舊間隔)`，20× 要等 27 秒才睡醒，看起來像沒反應。）
+    ev = _state.get("wake")
+    if ev is not None:
+        try:
+            ev.set()
+        except Exception:
+            pass
+    return status()
+
+
+def _pick_move(only_sku: str = ""):
     """挑一筆合理的異動：回 (sku, wh_key, direction, qty, item) 或 None。
 
     護欄邏輯：先看這個 (商品,倉別) 目前落在安全區間的哪裡，
     低了就補、高了就出，區間內才照真實比例隨機。
+    `only_sku`：指定商品（sweep_all 模式用，確保每個商品都輪到）。
     """
     s = W.state()
     items = [it for it in s.items if it.get("safety_stock")]
+    if only_sku:
+        items = [it for it in items if it["sku_id"] == only_sku]
     if not items:
         return None
     random.shuffle(items)
     whs = [w["key"] for w in s.warehouses]
 
-    for it in items[:25]:                      # 抽樣找一個可動的，不掃全表
+    for it in (items if only_sku else items[:25]):
         sku = it["sku_id"]
         ss = it.get("safety_stock") or 0
         if ss <= 0:
             continue
-        wh = random.choice(whs)
-        cur = s.stock.get(wh, {}).get(sku, 0)
-
         floor = max(LiveConfig.min_qty_floor, int(ss * LiveConfig.floor_ratio))
         ceil = int(ss * LiveConfig.ceil_ratio)
 
-        if cur < floor:
-            direction = "in"
-        elif cur > ceil:
-            direction = "out"
-        else:
-            direction = "out" if random.random() < LiveConfig.out_ratio else "in"
+        # ⚠️ sweep 模式要保證這個商品真的動得到 → 試過**所有倉別**才放棄
+        #   （單抽一個倉別可能剛好卡在地板，那個商品這輪就靜止不動）
+        for wh in random.sample(whs, len(whs)):
+            cur = s.stock.get(wh, {}).get(sku, 0)
+            if cur < floor:
+                direction = "in"
+            elif cur > ceil:
+                direction = "out"
+            else:
+                direction = "out" if random.random() < LiveConfig.out_ratio else "in"
 
-        if direction == "out":
-            qty = random.randint(*LiveConfig.out_qty_range)
-            # 不讓它出到低於地板（護欄優先於「照比例」）
-            if cur - qty < LiveConfig.min_qty_floor:
-                continue
-        else:
-            qty = random.randint(*LiveConfig.in_qty_range)
-
-        return sku, wh, direction, qty, it
+            if direction == "out":
+                qty = random.randint(*LiveConfig.out_qty_range)
+                if cur - qty < LiveConfig.min_qty_floor:
+                    continue                    # 這倉出不動，換下一個倉
+            else:
+                qty = random.randint(*LiveConfig.in_qty_range)
+            return sku, wh, direction, qty, it
     return None
 
 
-def _do_one() -> dict | None:
+def _do_one(only_sku: str = "") -> dict | None:
     """執行一筆異動（走現成 commit_movement，含鎖與熱更新）。"""
-    picked = _pick_move()
+    picked = _pick_move(only_sku)
     if not picked:
         return None
     sku, wh, direction, qty, it = picked
@@ -146,26 +200,58 @@ def _do_one() -> dict | None:
 
 
 def _next_delay() -> float:
-    base = LiveConfig.base_interval_s / max(1, LiveConfig.speedup)
+    """一輪的間隔（帶隨機抖動，避免機械感）。見 `_avg_interval` 的說明。"""
     j = LiveConfig.jitter
-    return max(3.0, base * random.uniform(1 - j, 1 + j))
+    return max(LiveConfig.tick_s,
+               _avg_interval() * random.uniform(1 - j, 1 + j))
+
+
+def _do_batch() -> list:
+    """一輪動一批。回實際成功的清單。
+
+    兩種模式：
+    - `sweep_all=True`：**每個商品都動一次**（隨機挑倉別）——訪客要的
+      「所有商品同時獨立變動」。60 筆 × 2ms ≈ 120ms，零效能壓力。
+    - 否則：隨機挑 `batch` 筆（比較貼近真實：不是每個商品每分鐘都在動）。
+    """
+    out = []
+    if LiveConfig.sweep_all:
+        s = W.state()
+        items = [it for it in s.items if it.get("safety_stock")]
+        random.shuffle(items)
+        for it in items:
+            mv = _do_one(only_sku=it["sku_id"])
+            if mv:
+                out.append(mv)
+        return out
+    for _ in range(max(1, LiveConfig.batch)):
+        mv = _do_one()
+        if mv:
+            out.append(mv)
+    return out
 
 
 async def _loop(push):
-    """背景迴圈：跑一筆 → 推畫面 → 睡一個隨機間隔。"""
+    """背景迴圈：跑一批 → 推畫面 → 睡一個隨機間隔（可被調速打斷）。"""
+    _state["wake"] = asyncio.Event()
     while _state["on"]:
         try:
-            mv = await asyncio.get_event_loop().run_in_executor(None, _do_one)
-            if mv and push:
-                await push(mv)
+            mvs = await asyncio.get_event_loop().run_in_executor(None, _do_batch)
+            if mvs and push:
+                await push(mvs)                 # 一次推整批（前端只刷一次畫面）
         except asyncio.CancelledError:
             raise
         except Exception:
-            pass                                # 單筆失敗不能中斷整條模擬
+            pass                                # 單批失敗不能中斷整條模擬
+        # 睡到「時間到」或「有人調速」為止 —— 調速後不必等這輪睡完
         try:
-            await asyncio.sleep(_next_delay())
+            _state["wake"].clear()
+            await asyncio.wait_for(_state["wake"].wait(), timeout=_next_delay())
+        except asyncio.TimeoutError:
+            pass                                # 正常睡滿一輪
         except asyncio.CancelledError:
             raise
+    _state["wake"] = None
 
 
 def start(loop, push=None) -> dict:

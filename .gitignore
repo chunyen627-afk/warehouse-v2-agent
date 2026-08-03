@@ -36,3 +36,7 @@ desktop.ini
 *-key.json
 *credentials*.json
 *service-account*.json
+
+# 動態日期平移的「看過的最大日期」記錄（每台機器各自狀態，不進版控）
+en/.last_demo_date
+test/.last_demo_date

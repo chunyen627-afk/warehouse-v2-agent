@@ -542,8 +542,11 @@
     font-size: 11px; line-height: 1.5; max-height: 260px; overflow: auto;
     white-space: pre-wrap; margin: 6px 0; font-family: 'Microsoft JhengHei', monospace; }
   /* ── 主動異常偵測橫幅 ── */
+  /* ⚠️ overflow 原本是 hidden（為了圓角），但它**把子層 .ab-list 的縱向捲動吃掉**
+     → 展開後只看得到前幾筆、捲不動。改成只裁切橫向，縱向交給子層自己捲。 */
   .anomaly-bar { background: linear-gradient(135deg,#7a2020,#a13030); color:#fff;
-    border-radius:8px; margin:8px 12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+    border-radius:8px; margin:8px 12px; overflow-x:hidden; overflow-y:visible;
+    box-shadow:0 2px 8px rgba(0,0,0,.2); }
   .ab-head { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; font-size:14px; }
   .ab-badges { display:flex; gap:6px; margin-left:auto; }
   .ab-b { padding:2px 8px; border-radius:10px; font-size:12px; font-weight:700; }
@@ -551,14 +554,17 @@
   .ab-b.warn { background:rgba(255,200,80,.95); color:#5a3a00; }
   .ab-b.info { background:rgba(255,255,255,.25); color:#fff; }
   .ab-toggle { font-size:11px; opacity:.8; }
-  .ab-list { display:none; padding:0 14px 12px; }
+  /* 展開後可捲動看完全部（原本寫死只顯示前 5 筆）；每筆壓成一行 */
+  .ab-list { display:none; padding:0 14px 12px; max-height:38vh; overflow-y:auto; }
   .anomaly-bar.open .ab-list { display:block; }
-  .ab-item { display:flex; gap:8px; padding:8px; background:rgba(0,0,0,.18); border-radius:6px; margin-top:6px; font-size:13px; }
+  .ab-item { display:flex; gap:8px; align-items:baseline; padding:5px 8px;
+             background:rgba(0,0,0,.18); border-radius:5px; margin-top:4px; font-size:12px;
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ab-item .ab-txt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ab-dot { width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; }
   .ab-item.critical .ab-dot { background:#ff5252; }
   .ab-item.warning .ab-dot { background:#ffc850; }
   .ab-detail { font-size:11px; opacity:.85; }
-  .ab-more { font-size:11px; opacity:.7; margin-top:6px; text-align:center; }
   /* ── 能力地圖（教使用者能問什麼）── */
   .capmap { margin:10px 0; display:flex; flex-direction:column; gap:8px; }
   .cap-row { background:rgba(120,160,255,.07); border-radius:8px; padding:8px 10px; }
@@ -679,14 +685,46 @@
   animation: lbBlink 1.6s ease-in-out infinite;
 }
 @keyframes lbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+#live-bar .lb-ctl {
+  display: flex; align-items: center; gap: 5px;
+  color: var(--muted); font-size: 11px; cursor: pointer;
+}
+#live-bar .lb-ctl input[type=range] { width: 90px; cursor: pointer; }
+#live-bar .lb-toggle {
+  font-size: 11px; padding: 3px 8px; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.18);
+  border-radius: 5px; color: var(--text);
+}
+/* 60 商品清單 —— 一列一商品，北/中/南三倉各自的量獨立跳動 */
+#live-grid {
+  padding: 0; max-height: 46vh; overflow-y: auto;
+  background: rgba(0,0,0,.16); border-bottom: 1px solid rgba(72,187,120,.2);
+}
+.lg-head, .lg-row {
+  display: grid; grid-template-columns: 1fr 62px 62px 62px 66px;
+  gap: 4px; align-items: baseline; padding: 4px 12px;
+}
+.lg-head {
+  position: sticky; top: 0; z-index: 2;
+  background: #1a2130; color: var(--muted); font-size: 10.5px;
+  letter-spacing: .4px; text-transform: uppercase;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.lg-row { font-size: 11.5px; border-bottom: 1px solid rgba(255,255,255,.05); }
+.lg-row:nth-child(odd) { background: rgba(255,255,255,.025); }
+.lg-row .lg-name {
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lg-row .lg-q {
+  text-align: right; font-weight: 700; font-size: 13px; color: var(--text);
+  transition: color .25s, transform .25s; display: inline-block;
+}
+.lg-row .lg-tot { text-align: right; font-weight: 700; font-size: 13px; color: #90cdf4; }
+.lg-row .lg-q.low { color: #fc8181; }         /* 該倉低於安全庫存 */
+.lg-row .lg-q.up   { color: #68d391; transform: scale(1.35); }
+.lg-row .lg-q.down { color: #fc8181; transform: scale(1.35); }
 #live-btn { font-size: 12px; padding: 4px 8px; white-space: nowrap; }
 #live-btn.on { background: rgba(72,187,120,.20); border-color: #48bb78; color: #9ae6b4; }
-.live-move {
-  font-size: 12px; color: var(--muted); padding: 3px 10px; margin-bottom: 4px;
-  border-left: 2px solid #4a5568; opacity: .85;
-}
-.live-move .in  { color: #9ae6b4; }
-.live-move .out { color: #fbb6ce; }
 .alert-ok-banner {
   background: rgba(72,187,120,.10); border: 1px solid #48bb78; border-radius: 8px;
   padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #9ae6b4;
@@ -804,11 +842,21 @@ body.compact-top #messages { padding-top: 4px; }
   <div class="lb-item"><span class="lb-label">North</span><span class="lb-val" id="lb-north">—</span></div>
   <div class="lb-item"><span class="lb-label">Central</span><span class="lb-val" id="lb-central">—</span></div>
   <div class="lb-item"><span class="lb-label">South</span><span class="lb-val" id="lb-south">—</span></div>
-  <div class="lb-sep"></div>
-  <div class="lb-item"><span class="lb-label">Total value</span><span class="lb-val" id="lb-value">—</span></div>
   <div class="lb-item"><span class="lb-label">Low stock</span><span class="lb-val warn" id="lb-low">—</span></div>
+  <div class="lb-sep"></div>
+  <label class="lb-ctl">Speed
+    <input type="range" id="lb-speed" min="5" max="200" step="5" value="20"
+           oninput="tuneLive()" title="Simulation speed (x real time)">
+    <span id="lb-speed-v">20x</span>
+  </label>
+  <label class="lb-ctl" title="Move every product each round">
+    <input type="checkbox" id="lb-sweep" onchange="tuneLive()" checked> All 60 items
+  </label>
+  <button class="lb-toggle" id="lb-grid-btn" onclick="toggleGrid()">▾ Show all items</button>
   <div class="lb-pulse" id="lb-pulse">● LIVE</div>
 </div>
+<!-- 60 商品即時網格（展開才顯示）-->
+<div id="live-grid" style="display:none"></div>
 <div id="messages"></div>
 
 <!-- calculation popup shown when tapping the bundle rate -->
@@ -845,6 +893,7 @@ function toggleLive() {
     b.textContent = _liveOn ? '⏸ Live' : '▶ Live';
     const bar = document.getElementById('live-bar');
     if (bar) bar.style.display = _liveOn ? 'flex' : 'none';
+    if (!_liveOn && _gridOpen) toggleGrid();   // 關 Live 一併收起網格
     if (_liveOn) refreshSnapshot();          // 開啟時先填一次目前數字當基準
     b.title = _liveOn
       ? `Live simulation running (${st.speedup}x speed) - background inbound/outbound`
@@ -1090,7 +1139,9 @@ function renderAnomalyBanner(data) {
   }
   const crit = counts.critical || 0, warn = counts.warning || 0, info = counts.info || 0;
   if (crit + warn + info === 0) { bar.style.display = 'none'; return; }
-  const top = all.filter(a => a.level !== 'info').slice(0, 5);
+  // 全部列出（原本寫死 slice(0,5)，其餘只顯示「… and N more」看不到）
+  // 清單本身可捲動（CSS max-height + overflow-y），一筆一行。
+  const top = all.filter(a => a.level !== 'info');
   bar.style.display = 'block';
   bar.innerHTML = `
     <div class="ab-head" onclick="this.parentNode.classList.toggle('open')">
@@ -1103,15 +1154,26 @@ function renderAnomalyBanner(data) {
       <span class="ab-toggle">Expand ▼</span>
     </div>
     <div class="ab-list">
-      ${top.map(a => `<div class="ab-item ${a.level}">
+      ${top.map(a => `<div class="ab-item ${a.level}" title="${(a.title + ' — ' + (a.detail || '')).replace(/"/g, '&quot;')}">
         <span class="ab-dot"></span>
-        <span><b>${a.title}</b><br><span class="ab-detail">${a.detail || ''}</span></span>
+        <span class="ab-txt"><b>${a.title}</b> <span class="ab-detail">${a.detail || ''}</span></span>
       </div>`).join('')}
-      ${all.filter(a=>a.level!=='info').length > 5 ? `<div class="ab-more">… and ${all.filter(a=>a.level!=='info').length - 5}  more</div>` : ''}
     </div>`;
 }
 function pullAnomalies() {
   fetch('/anomalies').then(r => r.json()).then(renderAnomalyBanner).catch(() => {});
+}
+
+// 動態模擬跑著時，異常橫幅也要跟著更新（原本只在載入時抓一次 →
+// 訪客看到的永遠是開頁那一刻的數字，要重整才會變）。
+// ⚠️ 節流：/anomalies 要跑 5 個偵測器約 190ms，200x 下每 2.7s 一批
+//   若每批都打會佔 ~7% CPU；訪客也看不出 3 秒與 8 秒的差別。
+let _anomLast = 0;
+function pullAnomaliesThrottled() {
+  const now = Date.now();
+  if (now - _anomLast < 8000) return;
+  _anomLast = now;
+  pullAnomalies();
 }
 setTimeout(pullAnomalies, 1200);   // auto-detect on load (without the user asking)
 
@@ -1344,20 +1406,12 @@ function handleMessage(msg) {
     applySnapshot(msg.snapshot);
     return;
   }
-  if (msg.type === 'live_movement') {
-    // 背景模擬的異動 —— 刻意標示來源（pda_scan / wms_sync / ecom_order），
-    // 不偽裝成訪客操作。訪客看得出「整個倉庫都在動，Agent 都看得到」。
-    const row = document.createElement('div');
-    row.className = 'live-move';
-    const isIn = msg.direction === 'in';
-    const sign = isIn ? '+' : '-';
-    row.innerHTML = `${msg.ts || ''} <span class="${isIn ? 'in' : 'out'}">${sign}${msg.qty}</span> `
-      + `${msg.name} @ ${msg.warehouse_label} <span style="opacity:.6">via ${msg.actor}</span>`;
-    messages.appendChild(row);
-    // 只留最近 12 筆，避免洗版蓋掉對話
-    const rows = messages.querySelectorAll('.live-move');
-    if (rows.length > 12) rows[0].remove();
-    scrollBottom();
+  if (msg.type === 'live_batch') {
+    // 只更新網格，**不往對話區塞異動列**（user 定調 2026-08-03）：
+    // 例行進出貨洗版會稀釋真正該被看到的東西——對話區只留
+    // 缺貨警示 / 排程觸發 / 訪客自己的問答。想看細節就展開商品清單。
+    if (msg.grid) renderGrid(msg.grid);
+    pullAnomaliesThrottled();      // 缺貨警示橫幅跟著動
     return;
   }
   if (msg.type === 'alert_checked_ok') {
@@ -2903,9 +2957,98 @@ function applySnapshot(s) {
   (s.warehouse_summary || []).forEach(w => {
     _lbSet('lb-' + w.warehouse, w.item_count, n);
   });
-  const totVal = (s.warehouse_summary || []).reduce((a, w) => a + (w.stock_value || 0), 0);
-  _lbSet('lb-value', totVal, v => 'NT$ ' + n(v));
   if (typeof s.low_stock_count === 'number') _lbSet('lb-low', s.low_stock_count, n);
+}
+
+// ─── 60 商品即時網格 ───────────────────────────────────────
+// user 要的是「每個商品的數量各自跳動、而且同時看得到」。
+// 看板列只有三倉合計＝看不出單一商品在動；這裡一格一個商品。
+let _gridOpen = false;
+const _gridPrev = {};
+
+const _WH = ['north', 'central', 'south'];
+const _WH_LABEL = {north: 'North', central: 'Central', south: 'South'};
+
+function _bump(el, val, prevKey) {
+  // 數字更新 + 變動時閃色（上綠下紅）。回傳新值供記錄。
+  if (!el) return val;
+  const prev = _gridPrev[prevKey];
+  el.textContent = val.toLocaleString();
+  if (prev !== undefined && prev !== val) {
+    const cls = val > prev ? 'up' : 'down';
+    el.classList.remove('up', 'down');
+    void el.offsetWidth;                      // 強制 reflow 才會重播動畫
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), 900);
+  }
+  _gridPrev[prevKey] = val;
+  return val;
+}
+
+function renderGrid(rows) {
+  const host = document.getElementById('live-grid');
+  if (!host || !rows) return;
+
+  if (!host.dataset.built) {
+    // 一列一商品：品名 + 北/中/南各自的量 + 合計
+    host.innerHTML =
+      `<div class="lg-head">
+         <span>Item</span>
+         ${_WH.map(w => `<span style="text-align:right">${_WH_LABEL[w]}</span>`).join('')}
+         <span style="text-align:right">Total</span>
+       </div>` +
+      rows.map(r =>
+        `<div class="lg-row" id="lg-${r.sku}" title="${r.name}">
+           <span class="lg-name">${r.name}</span>
+           ${_WH.map(w =>
+             `<span class="lg-q" id="lgq-${r.sku}-${w}">${(r.per[w] || 0).toLocaleString()}</span>`
+           ).join('')}
+           <span class="lg-tot" id="lgt-${r.sku}">${r.total.toLocaleString()}</span>
+         </div>`).join('');
+    host.dataset.built = '1';
+    rows.forEach(r => {
+      _WH.forEach(w => { _gridPrev[r.sku + '-' + w] = r.per[w] || 0; });
+      _gridPrev[r.sku] = r.total;
+    });
+    return;
+  }
+
+  rows.forEach(r => {
+    // 每個倉別各自跳動、各自判斷是否低於安全庫存
+    _WH.forEach(w => {
+      const el = document.getElementById('lgq-' + r.sku + '-' + w);
+      if (!el) return;
+      const v = r.per[w] || 0;
+      _bump(el, v, r.sku + '-' + w);
+      el.classList.toggle('low', (r.safety || 0) > 0 && v < r.safety);
+    });
+    const tel = document.getElementById('lgt-' + r.sku);
+    if (tel) {
+      tel.textContent = r.total.toLocaleString();
+      _gridPrev[r.sku] = r.total;
+    }
+  });
+}
+
+function toggleGrid() {
+  _gridOpen = !_gridOpen;
+  const host = document.getElementById('live-grid');
+  const btn = document.getElementById('lb-grid-btn');
+  host.style.display = _gridOpen ? 'grid' : 'none';
+  btn.textContent = _gridOpen ? '▴ Hide items' : '▾ Show all items';
+  if (_gridOpen && !host.dataset.built) {
+    fetch('/api/live_grid').then(r => r.json()).then(d => renderGrid(d.grid));
+  }
+}
+
+function tuneLive() {
+  const sp = parseInt(document.getElementById('lb-speed').value, 10);
+  const sweep = document.getElementById('lb-sweep').checked;
+  document.getElementById('lb-speed-v').textContent = sp + 'x';
+  fetch('/api/live_mode', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'tune', speedup: sp, sweep_all: sweep})
+  }).catch(() => {});
 }
 refreshSnapshot();
 

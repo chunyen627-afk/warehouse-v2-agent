@@ -8778,23 +8778,48 @@ async def get_audit_file(fname: str):
     return Response(content=ap.read_bytes(), media_type=media, headers=headers)
 
 
-async def _live_push(mv: dict):
-    """模擬產生一筆異動 → 刷新看板數字 + 推一條輕量訊息（訪客看得到來源）。"""
+def _live_grid() -> list:
+    """60 商品 × 3 倉的當下數量（給前端網格用）。"""
+    s = finance.state()
+    out = []
+    for it in s.items:
+        sku = it["sku_id"]
+        per = {w["key"]: s.stock.get(w["key"], {}).get(sku, 0) for w in s.warehouses}
+        out.append({"sku": sku, "name": it["name"],
+                    "total": sum(per.values()), "per": per,
+                    "safety": it.get("safety_stock") or 0})
+    return out
+
+
+async def _live_push(mvs):
+    """模擬跑完一批 → 推整批（前端只刷一次畫面，避免 60 筆刷 60 次）。"""
+    if isinstance(mvs, dict):
+        mvs = [mvs]
     await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
+    # ⚠️ 2026-08-03：**不再送 moves 明細**——前端已不把例行進出貨塞進對話區
+    #   （user 定調：版面只留缺貨警示這類該被看到的東西）。
+    #   sweep 模式一輪 60 筆，送了也沒人渲染，純浪費頻寬。
+    #   `n` 只是給前端/除錯知道這輪動了幾筆。
     await push_display({
-        "type": "live_movement",
-        "name": mv.get("name", ""),
-        "warehouse_label": mv.get("warehouse_label", ""),
-        "direction": mv.get("direction", ""),
-        "qty": mv.get("qty", 0),
-        "actor": mv.get("actor", ""),
+        "type": "live_batch",
         "ts": datetime.now().strftime("%H:%M:%S"),
+        "n": len(mvs),
+        "grid": _live_grid(),
     })
+
+
+@app.get("/api/live_grid")
+async def live_grid():
+    """60 商品當下數量（開啟網格時先填一次基準）。"""
+    return JSONResponse({"grid": _live_grid()}, headers=NO_CACHE)
 
 
 @app.post("/api/live_mode")
 async def live_mode(req: Request):
-    """動態倉庫模擬開關（展場用；**預設關閉**）。
+    """動態倉庫模擬開關 + 現場調速（展場用；**預設關閉**）。
+
+    body: {"action": "start"|"stop"|"tune",
+           "speedup": 1-400, "batch": 1-60, "sweep_all": bool}
 
     ⚠️ 開著跑會持續改資料 ⇒ 守衛 892 句與所有寫入測試會隨機 FAIL，
        跑測試前務必關掉（或別開）。
@@ -8806,9 +8831,16 @@ async def live_mode(req: Request):
     except Exception:
         pass
     act = (body.get("action") or "").lower()
+    # 調速可以跟 start 同時送，也可以單獨 tune（跑的時候即時生效）
+    if any(k in body for k in ("speedup", "batch", "sweep_all")):
+        live_sim.tune(speedup=body.get("speedup"), batch=body.get("batch"),
+                      sweep_all=body.get("sweep_all"))
     if act == "start":
         live_sim.start_in_loop(push=_live_push)
-        log.info(f"[live] 動態倉庫模擬 **開啟**（{live_sim.LiveConfig.speedup}× 速）")
+        st = live_sim.status()
+        log.info(f"[live] 動態倉庫模擬 **開啟**（{st['speedup']}× 速、"
+                 f"每輪 {'全部商品' if st['sweep_all'] else st['batch']} 筆、"
+                 f"間隔 {st['interval_s']}s）")
     elif act == "stop":
         live_sim.stop()
         log.info("[live] 動態倉庫模擬 **關閉**")

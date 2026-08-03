@@ -108,7 +108,7 @@ def load_as_seed(wd: Path) -> dict:
     wh_keys = list(config.get("safety_stock_override", {}).keys()) or list(stock.keys())
     warehouses = [{"key": k, "label": WH_LABEL.get(k, k)} for k in wh_keys]
 
-    return {
+    bundle = {
         "snapshot_date":    config.get("snapshot_date", ""),
         "schema_version":   config.get("schema_version", "2.0"),
         "categories":       categories,
@@ -125,3 +125,14 @@ def load_as_seed(wd: Path) -> dict:
         "_v2_suppliers":  suppliers,
         "_v2_data_dir":   str(wd),
     }
+    # ── 時間軸平移到「今天」（2026-08-03）──
+    #   快照日寫死 2026-05-26，但展場是 9/2-9/4 且機器**提前交客戶**（8 月就開機）
+    #   ⇒ 訪客問「今天進了什麼」會看到三個月前的資料。
+    #   平移**只在記憶體做**，warehouse_data/ 原檔不動 ⇒ reset_demo 仍回得到乾淨狀態。
+    #   詳見 date_shift.py（含為何不寫死 9/2 的理由）。
+    try:
+        import date_shift
+        bundle = date_shift.shift_bundle(bundle)
+    except Exception:
+        pass          # 平移失敗就用原始日期，不能讓載入整個掛掉
+    return bundle
