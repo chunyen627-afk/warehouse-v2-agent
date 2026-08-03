@@ -8493,6 +8493,45 @@ async def _run_due_schedules():
 # ─── 警示規則背景排程 ──────────────────────────────────────
 _ALERT_CHECK_INTERVAL = 3600  # 每小時掃一次
 
+
+# ── 展場體驗：設定完馬上觸發一次 ────────────────────────────
+#   背景排程的節奏是給「真實營運」用的（警示每小時、排程每天固定時刻），
+#   但**展場訪客只停留幾分鐘** ⇒ 設定完只看到一張確認卡，看不到「它真的會動」，
+#   而觸發那一刻（畫面跳出通知橫幅）才是這個功能的賣點。
+#   ⇒ 確認後立刻跑一次**真實檢查/真實腳本**（非假動畫），讓因果在同一個畫面完成。
+#   ⚠️ 用 create_task 背景跑：不擋確認卡的回應（訪客先看到「已建立」，
+#     1-2 秒後通知橫幅才跳出來，順序才對）。
+def _demo_kick(coro, tag: str):
+    """把展場即時觸發丟到背景跑，失敗只記 log 不影響主流程。"""
+    async def _run():
+        try:
+            await asyncio.sleep(1.2)      # 讓「已建立」的卡片先落地
+            await coro
+        except Exception as e:
+            log.warning(f"[demo-kick:{tag}] 即時觸發失敗（不影響設定本身）: {e}")
+    try:
+        asyncio.create_task(_run())
+    except Exception as e:
+        log.warning(f"[demo-kick:{tag}] 無法排程: {e}")
+
+
+async def _demo_run_schedule(job: dict):
+    """立刻執行剛建立的排程（走 `_run_due_schedules` 同一套推播與執行）。"""
+    if not job or not job.get("script_id"):
+        return
+    now = datetime.now()
+    await push_display({"type": "schedule_triggered", "job_id": job.get("id", ""),
+                        "script_label": job.get("script_label", ""),
+                        "ts": now.strftime("%H:%M")})
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: finance.execute("commit_run_script",
+                                      {"script_id": job["script_id"], "confirmed": True}))
+    ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+    await push_display({"type": "schedule_done", "job_id": job.get("id", ""),
+                        "script_label": job.get("script_label", ""),
+                        "ok": ok,
+                        "summary": (result or {}).get("summary", "")})
+
 async def _alert_scheduler_loop():
     """背景每小時掃 alert_rules.json，觸發時推 WebSocket 通知。"""
     import asyncio as _aio
@@ -8505,8 +8544,14 @@ async def _alert_scheduler_loop():
             log.error(f"[alert_scheduler] 掃描失敗: {e}")
         await _aio.sleep(_ALERT_CHECK_INTERVAL)
 
-async def _check_alert_rules():
-    """掃一次 alert_rules.json，有觸發就推 WebSocket。"""
+async def _check_alert_rules(only_rule_id: str = ""):
+    """掃一次 alert_rules.json，有觸發就推 WebSocket。
+
+    `only_rule_id`：**展場即時觸發**用——只檢查訪客剛建立的那一條。
+    不限定的話會把 baseline 既有的全域規則（AL001/AL003）一起觸發，
+    畫面跳出三條橫幅、前兩條跟訪客無關 ⇒ 展場會很混亂（實測到）。
+    背景排程仍是不帶參數＝掃全部（那才是真實營運要的行為）。
+    """
     from tools_v2 import _data_dir, _match_script
     import json as _json
     try:
@@ -8516,6 +8561,8 @@ async def _check_alert_rules():
             return
         rules = _json.loads(rules_path.read_text("utf-8")).get("rules", [])
         active = [r for r in rules if r.get("enabled", True)]
+        if only_rule_id:
+            active = [r for r in active if r.get("id") == only_rule_id]
         if not active:
             return
         # 用 list_low_stock 取缺貨資料
@@ -8561,20 +8608,48 @@ async def _check_alert_rules():
                     "detail": detail,
                     "ts": datetime.now().strftime("%H:%M"),
                 })
+            elif only_rule_id:
+                # 🎯 展場體驗：**沒觸發也要回報一次**。
+                #   60 個商品裡只有 31 個當下低於安全庫存 ⇒ 訪客隨手挑有
+                #   約一半機率什麼都不會跳，而「系統壞了」與「這商品剛好沒缺」
+                #   在畫面上**完全一樣**（都只有一張「已建立」卡片）⇒ 訪客
+                #   無法確定警示到底有沒有生效。
+                #   回報「已檢查、目前不符合條件」反而更能證明規則真的跑了。
+                #   ⚠️ 只在展場即時觸發（only_rule_id）時送——背景每小時掃描
+                #     不能送，否則沒事也一直洗版。
+                log.info(f"[alert] 規則 {rule['id']} 已檢查、未達條件")
+                await push_display({
+                    "type": "alert_checked_ok",
+                    "rule_id": rule["id"],
+                    "condition_label": cond_label,
+                    "scope_txt": scope_txt,
+                    "ts": datetime.now().strftime("%H:%M"),
+                })
     except Exception as e:
         log.error(f"[_check_alert_rules] {e}", exc_info=True)
 
 
 # ─── Display 廣播 ─────────────────────────────────────────
 async def push_display(payload: dict):
+    """推播給看板 + **訪客本人**。
+
+    🚨 2026-08-03：原本只送 `display_sockets`（`/ws/display`），但訪客頁面
+    **只連 `/ws`**（index.html:978）、且 `/ws/display` 實測**零連線**
+    ⇒ `alert_triggered` / `schedule_triggered` 這些通知橫幅
+    **從來沒有任何訪客收得到**（前端 handleMessage 的處理分支一直是對的，
+    訊息根本沒送到那條連線）。今天 SCH001 早上 9 點真的跑了，畫面上也沒東西。
+    ⇒ 改成兩個 set 都送。訪客沒開的推播型別前端會自然忽略（handleMessage
+    是 if-type 分派），不會有副作用。
+    """
     msg  = json.dumps(payload, ensure_ascii=False)
     dead = set()
-    for ws in display_sockets:
+    for ws in list(display_sockets) + list(all_sockets):
         try:
             await ws.send_text(msg)
         except Exception:
             dead.add(ws)
     display_sockets.difference_update(dead)
+    all_sockets.difference_update(dead)
 
 
 # ─── FastAPI ──────────────────────────────────────────────
@@ -8701,6 +8776,43 @@ async def get_audit_file(fname: str):
     media = "text/csv; charset=utf-8-sig"
     headers = {**NO_CACHE, "Content-Disposition": f'attachment; filename="{fname}"'}
     return Response(content=ap.read_bytes(), media_type=media, headers=headers)
+
+
+async def _live_push(mv: dict):
+    """模擬產生一筆異動 → 刷新看板數字 + 推一條輕量訊息（訪客看得到來源）。"""
+    await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
+    await push_display({
+        "type": "live_movement",
+        "name": mv.get("name", ""),
+        "warehouse_label": mv.get("warehouse_label", ""),
+        "direction": mv.get("direction", ""),
+        "qty": mv.get("qty", 0),
+        "actor": mv.get("actor", ""),
+        "ts": datetime.now().strftime("%H:%M:%S"),
+    })
+
+
+@app.post("/api/live_mode")
+async def live_mode(req: Request):
+    """動態倉庫模擬開關（展場用；**預設關閉**）。
+
+    ⚠️ 開著跑會持續改資料 ⇒ 守衛 892 句與所有寫入測試會隨機 FAIL，
+       跑測試前務必關掉（或別開）。
+    """
+    import live_sim
+    body = {}
+    try:
+        body = await req.json()
+    except Exception:
+        pass
+    act = (body.get("action") or "").lower()
+    if act == "start":
+        live_sim.start_in_loop(push=_live_push)
+        log.info(f"[live] 動態倉庫模擬 **開啟**（{live_sim.LiveConfig.speedup}× 速）")
+    elif act == "stop":
+        live_sim.stop()
+        log.info("[live] 動態倉庫模擬 **關閉**")
+    return JSONResponse(live_sim.status(), headers=NO_CACHE)
 
 
 @app.get("/anomalies")
@@ -9903,11 +10015,27 @@ async def ws_handler(ws: WebSocket):
                     elif act == "set_alert":
                         res = tools_v2.commit_alert_set(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
+                        # 展場體驗：設定完**馬上**跑一次真實檢查（背景排程是每小時，
+                        #   訪客只停留幾分鐘、等不到）。走的是同一支
+                        #   `_check_alert_rules()`＝真的讀規則、真的算缺貨，
+                        #   不是假動畫。
+                        #   ⚠️ 只檢查訪客**剛建立的那條**——不限定的話 baseline
+                        #     既有的兩條全域規則會一起跳，訪客看到三條橫幅、
+                        #     前兩條跟他無關（實測到）。
+                        _demo_kick(
+                            _check_alert_rules(
+                                only_rule_id=(res.get("data") or {}).get("rule_id", "")),
+                            "alert")
                     elif act == "set_schedule":
                         res = tools_v2.commit_schedule_set(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                         await push_display({"type": "schedule_created",
                                            "job": res.get("data", {}).get("job", {})})
+                        # 同上：排程要等到時鐘走到設定時刻（一天一次機會）
+                        #   → 立刻跑一次那支腳本，讓訪客看到完整因果。
+                        _demo_kick(
+                            _demo_run_schedule(res.get("data", {}).get("job", {})),
+                            "schedule")
                     elif act == "item_create":
                         res = tools_v2.commit_create_item(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)

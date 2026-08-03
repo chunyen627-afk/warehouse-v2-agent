@@ -653,6 +653,21 @@
   background: rgba(229,62,62,.12); border: 1px solid #e53e3e; border-radius: 8px;
   padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #fc8181;
 }
+/* 已檢查但未達條件 — 刻意用「安心綠」而非警報紅：訪客要能一眼分辨
+   「規則跑了、目前沒事」與「真的有東西缺貨」 */
+/* 動態倉庫模擬：開啟時按鈕變綠，訪客一眼知道現在資料在動 */
+#live-btn { font-size: 12px; padding: 4px 8px; white-space: nowrap; }
+#live-btn.on { background: rgba(72,187,120,.20); border-color: #48bb78; color: #9ae6b4; }
+.live-move {
+  font-size: 12px; color: var(--muted); padding: 3px 10px; margin-bottom: 4px;
+  border-left: 2px solid #4a5568; opacity: .85;
+}
+.live-move .in  { color: #9ae6b4; }
+.live-move .out { color: #fbb6ce; }
+.alert-ok-banner {
+  background: rgba(72,187,120,.10); border: 1px solid #48bb78; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #9ae6b4;
+}
 
 /* ── 手機版調整 ── */
 @media (max-width: 768px) {
@@ -723,6 +738,7 @@ body.compact-top #messages { padding-top: 4px; }
   <button id="alert-panel-btn" title="Alert rules" onclick="toggleAlertPanel()">
     🔔 <span id="alert-badge" class="alert-badge" style="display:none">0</span>
   </button>
+  <button id="live-btn" title="Live warehouse simulation (background inbound/outbound)" onclick="toggleLive()">▶ Live</button>
   <button id="reset-demo-btn" title="Reset demo data (password required)" onclick="resetDemoData()">♻</button>
   <button id="close-btn" title="Close page" onclick="closePage()">✕</button>
 </header>
@@ -782,6 +798,24 @@ body.compact-top #messages { padding-top: 4px; }
 
 <script>
 // ── 重置展示資料（需密碼，防止展場被玩爛回不去）──
+let _liveOn = false;
+function toggleLive() {
+  const want = _liveOn ? 'stop' : 'start';
+  fetch('/api/live_mode', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: want})
+  }).then(r => r.json()).then(st => {
+    _liveOn = !!st.on;
+    const b = document.getElementById('live-btn');
+    b.classList.toggle('on', _liveOn);
+    b.textContent = _liveOn ? '⏸ Live' : '▶ Live';
+    b.title = _liveOn
+      ? `Live simulation running (${st.speedup}x speed) - background inbound/outbound`
+      : 'Live warehouse simulation (background inbound/outbound)';
+  }).catch(() => {});
+}
+
 async function resetDemoData() {
   const pwd = prompt('Password required to reset demo data (this clears all added items, movements, alerts and schedules — cannot be undone):');
   if (pwd === null) return;  // Cancel
@@ -1268,6 +1302,33 @@ function handleMessage(msg) {
     badge.style.display = 'block';
     badge.style.background = '#e53e3e';
     if (_alertPanelOpen) loadAlertPanel();
+    return;
+  }
+  if (msg.type === 'live_movement') {
+    // 背景模擬的異動 —— 刻意標示來源（pda_scan / wms_sync / ecom_order），
+    // 不偽裝成訪客操作。訪客看得出「整個倉庫都在動，Agent 都看得到」。
+    const row = document.createElement('div');
+    row.className = 'live-move';
+    const isIn = msg.direction === 'in';
+    const sign = isIn ? '+' : '-';
+    row.innerHTML = `${msg.ts || ''} <span class="${isIn ? 'in' : 'out'}">${sign}${msg.qty}</span> `
+      + `${msg.name} @ ${msg.warehouse_label} <span style="opacity:.6">via ${msg.actor}</span>`;
+    messages.appendChild(row);
+    // 只留最近 12 筆，避免洗版蓋掉對話
+    const rows = messages.querySelectorAll('.live-move');
+    if (rows.length > 12) rows[0].remove();
+    scrollBottom();
+    return;
+  }
+  if (msg.type === 'alert_checked_ok') {
+    // 規則已檢查、目前不符合條件。展場關鍵：讓訪客分得出
+    // 「系統沒反應」vs「這商品剛好沒缺貨」——後者才是實情。
+    const banner = document.createElement('div');
+    banner.className = 'alert-ok-banner';
+    banner.innerHTML = `✅ <b>Alert rule active</b> (${msg.rule_id}) ${msg.ts || ''}<br>
+      <span style="color:var(--muted)">Checked just now: ${msg.scope_txt} — ${msg.condition_label} not met yet, nothing to report.</span>`;
+    messages.appendChild(banner);
+    scrollBottom();
     return;
   }
   if (msg.type === 'alert_deleted') {
