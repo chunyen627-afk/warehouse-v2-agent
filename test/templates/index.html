@@ -648,6 +648,29 @@
   padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #9ae6b4;
 }
 /* 動態倉庫模擬：開啟時按鈕變綠 */
+/* 即時看板列 —— 數字變動時閃一下，訪客一眼看到「資料在動」 */
+#live-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 7px 12px; background: rgba(72,187,120,.07);
+  border-top: 1px solid rgba(72,187,120,.25);
+  border-bottom: 1px solid rgba(72,187,120,.25);
+  font-size: 12px;
+}
+#live-bar .lb-item { display: flex; align-items: baseline; gap: 5px; }
+#live-bar .lb-label { color: var(--muted); font-size: 11px; }
+#live-bar .lb-val {
+  font-weight: 700; font-size: 14px; color: var(--text);
+  transition: color .25s, transform .25s; display: inline-block;
+}
+#live-bar .lb-val.warn { color: #fbb6ce; }
+#live-bar .lb-val.up   { color: #68d391; transform: scale(1.22); }
+#live-bar .lb-val.down { color: #fc8181; transform: scale(1.22); }
+#live-bar .lb-sep { width: 1px; height: 18px; background: rgba(255,255,255,.15); }
+#live-bar .lb-pulse {
+  margin-left: auto; color: #68d391; font-size: 11px; letter-spacing: .5px;
+  animation: lbBlink 1.6s ease-in-out infinite;
+}
+@keyframes lbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
 #live-btn { font-size: 12px; padding: 4px 8px; white-space: nowrap; }
 #live-btn.on { background: rgba(72,187,120,.20); border-color: #48bb78; color: #9ae6b4; }
 .live-move {
@@ -770,6 +793,16 @@ body.compact-top #messages { padding-top: 4px; }
   <button class="chip" data-action="agent-menu" style="border-color:#3182ce;color:#fff;background:linear-gradient(135deg,#3182ce,#5a67d8);font-weight:700">🤖 智慧管家</button>
 </div>
 
+<!-- 即時看板：只在 Live 模式顯示，讓訪客一眼看到數字在動 -->
+<div id="live-bar" style="display:none">
+  <div class="lb-item"><span class="lb-label">北區倉</span><span class="lb-val" id="lb-north">—</span></div>
+  <div class="lb-item"><span class="lb-label">中區倉</span><span class="lb-val" id="lb-central">—</span></div>
+  <div class="lb-item"><span class="lb-label">南區倉</span><span class="lb-val" id="lb-south">—</span></div>
+  <div class="lb-sep"></div>
+  <div class="lb-item"><span class="lb-label">總庫存價值</span><span class="lb-val" id="lb-value">—</span></div>
+  <div class="lb-item"><span class="lb-label">缺貨</span><span class="lb-val warn" id="lb-low">—</span></div>
+  <div class="lb-pulse" id="lb-pulse">● 即時</div>
+</div>
 <div id="messages"></div>
 
 <!-- 點同捆率彈出的算式說明 -->
@@ -804,6 +837,9 @@ function toggleLive() {
     const b = document.getElementById('live-btn');
     b.classList.toggle('on', _liveOn);
     b.textContent = _liveOn ? '⏸ 即時' : '▶ 即時';
+    const bar = document.getElementById('live-bar');
+    if (bar) bar.style.display = _liveOn ? 'flex' : 'none';
+    if (_liveOn) refreshSnapshot();
   }).catch(() => {});
 }
 
@@ -1293,6 +1329,10 @@ function handleMessage(msg) {
     badge.style.display = 'block';
     badge.style.background = '#e53e3e';
     if (_alertPanelOpen) loadAlertPanel();
+    return;
+  }
+  if (msg.type === 'snapshot') {
+    applySnapshot(msg.snapshot);
     return;
   }
   if (msg.type === 'live_movement') {
@@ -2811,8 +2851,37 @@ if (!SpeechRec) {
 
 function refreshSnapshot() {
   fetch('/snapshot').then(r => r.json()).then(s => {
-    $('snap-date').textContent = `${s.snapshot_date} · ${s.sku_count} SKU · ${s.warehouse_count} 倉`;
+    applySnapshot(s);
   });
+}
+
+// ─── 即時看板：數字變動時閃一下（Live 模式的視覺主體）───
+const _lbPrev = {};
+function _lbSet(id, val, fmt) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const prev = _lbPrev[id];
+  el.textContent = fmt ? fmt(val) : val;
+  if (prev !== undefined && prev !== val) {
+    const cls = val > prev ? 'up' : 'down';
+    el.classList.remove('up', 'down');
+    void el.offsetWidth;              // 強制 reflow，讓同方向連續變動也重播動畫
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), 900);
+  }
+  _lbPrev[id] = val;
+}
+
+function applySnapshot(s) {
+  if (!s) return;
+  $('snap-date').textContent = `${s.snapshot_date} · ${s.sku_count} SKU · ${s.warehouse_count} 倉`;
+  const n = x => x.toLocaleString();
+  (s.warehouse_summary || []).forEach(w => {
+    _lbSet('lb-' + w.warehouse, w.item_count, n);
+  });
+  const totVal = (s.warehouse_summary || []).reduce((a, w) => a + (w.stock_value || 0), 0);
+  _lbSet('lb-value', totVal, v => 'NT$ ' + n(v));
+  if (typeof s.low_stock_count === 'number') _lbSet('lb-low', s.low_stock_count, n);
 }
 refreshSnapshot();
 
