@@ -44,6 +44,14 @@ def _today() -> _date:
     return _date.fromisoformat(snap)
 
 
+def _wh_label(s, key: str) -> str:
+    """倉庫 key → 顯示名（north → North）。訪客看得到的字一律走這支。"""
+    for wh in s.warehouses:
+        if wh["key"] == key:
+            return wh.get("label") or key
+    return key
+
+
 # ════════════════════════════════════════════════════════════
 # 偵測規則（每條回 list[alert dict]）
 #   alert = {key, level, type, title, detail, data}
@@ -151,7 +159,7 @@ def _detect_expiry(s) -> list[dict]:
                 "key": f"expiry:{b['sku_id']}:{b['warehouse']}:{b['expire_date']}",
                 "level": "warning", "type": "expiry",
                 "title": f"Expiring with stock: {nm} has {b['qty']} units, {dleft} days left",
-                "detail": f"{b['warehouse']} expires {b['expire_date']} (write-off risk)",
+                "detail": f"{_wh_label(s, b['warehouse'])} expires {b['expire_date']} (write-off risk)",
                 "data": {"sku_id": b["sku_id"], "name": nm, "warehouse": b["warehouse"],
                          "days_left": dleft, "qty": b["qty"]},
             })
@@ -227,6 +235,8 @@ class AlertManager:
             return alerts
         cond_type = {"below_safety": "low_stock", "out_of_stock": "low_stock", "expiring": "expiry"}
         for a in alerts:
+            if a.get("subscribed"):
+                continue                      # 已標過（多條規則命中同一告警）→ 不重複疊 ⭐
             sku = a.get("data", {}).get("sku_id")
             for r in rules:
                 if not r.get("enabled", True):
@@ -239,6 +249,7 @@ class AlertManager:
                 a["title"] = "⭐ " + a["title"]
                 if a["level"] == "info":      # 被訂閱 → info 升 warning
                     a["level"] = "warning"
+                break                         # 一個告警被訂閱就是被訂閱，不論幾條規則命中
         return alerts
 
     def filter_new(self, alerts: list[dict]) -> list[dict]:

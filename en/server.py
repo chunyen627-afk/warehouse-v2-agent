@@ -5107,8 +5107,28 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   ⚠️ 只在「指代單品」時讓路：句中要有 it/this/that 之類指代或明確商品名，
     #   且**不可**有複數/全店語（which items / anything / what's running low），
     #   否則會把正常的缺貨清單查詢也搶走。
-    _c3_single_ref = bool(_re.search(
-        r"\b(?:is|are|was)\s+(?:it|this|that|the\s+\w+)\b|\bit'?s\b", text_low)) \
+    #   ⚠️ 2026-08-03（資料邊界批）：原本只認「指代詞」那一半，
+    #   `is wireless mouse below safety stock`（句中直接講商品名、無指代）
+    #   落不進來 → 又退化成全店 43 筆清單（同一個坑的另一個入口）。
+    #   註解本來就寫「指代**或明確商品名**」，實作漏了後者 → 補上。
+    #   商品名分支要**接地**（match 分數 ≥4）才算，避免把 `is anything below
+    #   safety stock` 這種全店問法搶走。
+    _c3_ref_word = bool(_re.search(
+        r"\b(?:is|are|was)\s+(?:it|this|that|the\s+\w+)\b|\bit'?s\b", text_low))
+    _c3_named_item = False
+    _c3_named_kw = ""          # 接地成功的商品名 → 下面直接複用，不要再抽一次
+    if _re.search(r"\b(?:is|are|was|has|does)\b", text_low):
+        try:
+            import warehouse as _W_c3n
+            _kw_c3n = _extract_sku_keyword(user_text) or ""
+            if _kw_c3n:
+                _m_c3n = _W_c3n.match_items(_kw_c3n)
+                if _m_c3n and _m_c3n[0].get("score", 0) >= 4:
+                    _c3_named_item = True
+                    _c3_named_kw = _kw_c3n
+        except Exception:
+            _c3_named_item = False
+    _c3_single_ref = (_c3_ref_word or _c3_named_item) \
         and not _re.search(
             r"\b(?:which|what|anything|everything|all|any)\s+(?:items?|ones?|"
             r"products?|things?)\b|\bwhats?\s+(?:running|getting|low)\b|"
@@ -5137,6 +5157,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     _c3_sl_args["keyword"] = _c3_sl_kw
             except Exception:
                 pass
+        # ⚠️ 2026-08-03：LLM 不一定給 keyword（實測 `is bluetooth speaker under
+        #   safety stock` 給的是 category=electronics）→ 空 keyword 就回全店概覽，
+        #   等於白讓路。進入條件已經接地抽出商品名了，直接複用（坑 16 的另一面：
+        #   上游抽對了、下游沒接）。
+        if not _c3_sl_args.get("keyword") and _c3_named_kw:
+            _c3_sl_args["keyword"] = _c3_named_kw
         return "query_inventory", _c3_sl_args, True
 
     if (any(kw in user_text for kw in _LOW_STOCK_INTENT_WORDS) or
@@ -5548,6 +5574,28 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 and any(w in user_text for w in ("還剩", "剩幾", "剩多少", "庫存", "還有多少", "幾件", "存量"))):
             log.info(f"[校正 C4e] 存量問句誤投 hot → query_inventory kw={_c4e_kw!r}")
             return "query_inventory", {"keyword": _c4e_kw}, True
+        # ── EN 分支（2026-08-03 資料邊界批）：同 C4e 的意圖，但上面判準全中文
+        #   （坑 7）→ 英文句一個都不中。實測 5/5 穩定壞掉：
+        #   `which warehouse has the most wireless mouse` → LLM 給
+        #   list_hot_items{rank_type:slow} → 回「本週滯銷 TOP10」，
+        #   訪客問的是滑鼠在哪個倉最多。
+        #   ⚠️ `list_hot_items` **不在 `_TOOL_INTENT_GUARD`**，所以沒有任何一層
+        #     問過「句中有講熱銷/排行嗎」——這裡補上。
+        #   判準：有接地商品名 + **句中沒有任何銷售排行語** → 不是排行問句。
+        #   （`best sellers` / `what sells fastest` 等正常入口全部保留。）
+        if _is_mostly_english(user_text) and _c4e_kw:
+            _c4e_low = user_text.lower().replace("'", "").replace("’", "")
+            _c4e_sales = _re.search(
+                r"\b(?:hot|hottest|best[\s-]?sell\w*|top[\s-]?sell\w*|"
+                r"popular|fastest|quickest|slow[\s-]?moving|slowest|"
+                r"sells?\s+(?:best|most|fastest)|sold\s+(?:best|most)|"
+                r"biggest\s+seller|rank\w*|top\s*\d+|bestseller\w*)\b", _c4e_low)
+            if not _c4e_sales:
+                _m_c4e_en = _W_c4e.match_items(_c4e_kw)
+                if _m_c4e_en and _m_c4e_en[0].get("score", 0) >= 4:
+                    log.info(f"[校正 C4e-en] 無排行語卻投 hot → query_inventory "
+                             f"kw={_c4e_kw!r}")
+                    return "query_inventory", {"keyword": _c4e_kw}, True
 
     # ── C4b: list_hot_items period + category 依 user_text 校準 ──
     # (模型對沒明講期間的 query period 不穩定、且常漏抽 category slot)
@@ -5856,6 +5904,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         "wanted", "wish", "hoping", "hope", "kindly", "mind",
                         "possible", "possibly", "maybe", "perhaps", "just",
                         "quick", "quickly", "question",
+                        # 2026-08-03（資料邊界批）：**分布/範圍介系詞**——
+                        #   `show me wireless mouse across warehouses` 的 across
+                        #   被當陌生修飾詞 → C1g-oov **清掉已抽對的
+                        #   'Wireless Mouse'** → 回「查無 across warehouses」。
+                        #   clf conf=0.99、keyword 抽對，純粹被閘門吃掉正解
+                        #   （坑 3 同型）。這些是純方位/範圍詞，不可能是商品名。
+                        #   ⚠️ 不收 "in"（in-ear/built-in 等商品名含它）。
+                        "across", "among", "amongst", "between", "throughout",
+                        "per", "each", "every", "versus", "vs",
                         # r1：確認語（did it take effect / put it back）不是商品名
                         "effect", "effective", "applied", "apply", "back",
                         "take", "takes", "took", "put", "puts", "get", "gets",
@@ -13128,6 +13185,51 @@ async def ws_handler(ws: WebSocket):
                                     r"\b(?:alert|notify|warn|remind)\s+me\b|\bwhen\b|"
                                     r"\bbelow\b|\bunder\b|\bdrops?\b", _ul_adm):
                     _en_admin = "list_expiring_items"
+            # ── 2026-08-03（資料邊界批）：「哪個倉最多/最空」三倉排名 ──
+            #   compare_warehouses(warehouse_a='all') **本來就支援**三倉排名
+            #   （warehouse.py:1080 註解自述「哪個倉最多/最空/各倉分布」），
+            #   但英文句一個都進不去（坑 7 同型：功能在、英文入口缺）。
+            #   實測 5/5 穩定壞掉（非 LLM 浮動）：
+            #     'which warehouse has the most stock' → clf query_inventory(1.00) 全店概覽
+            #     'which warehouse is the emptiest'    → 「查無 emptiest 這個商品」
+            #   ⚠️ 帶商品名的（'which warehouse has the most wireless mouse'）
+            #     **不走這裡**——那要的是單品在各倉的分布，query_inventory
+            #     單品卡本來就列三倉數量，是正解。
+            _en_whrank_args = None
+            if _en_admin is None and _is_mostly_english(user_text):
+                _ul_wr = user_text.lower()
+                if _re.search(r"\bwhich\s+(?:warehouse|site|location)\b|"
+                              r"\bwhat\s+warehouse\b|\brank\s+the\s+warehouses?\b",
+                              _ul_wr):
+                    # 句中有具體商品名 → 不是整倉排名，讓原路由處理（單品卡）
+                    _wr_kw = ""
+                    try:
+                        import warehouse as _W_wr
+                        _wr_kw = _extract_sku_keyword(user_text) or ""
+                        if _wr_kw:
+                            _m_wr = _W_wr.match_items(_wr_kw)
+                            if not (_m_wr and _m_wr[0].get("score", 0) >= 4):
+                                _wr_kw = ""
+                    except Exception:
+                        _wr_kw = ""
+                    if not _wr_kw:
+                        # metric：講「值/金額」用 stock_value，其餘用 item_count
+                        #   （「最多東西」「最空」問的是數量，不是金額）
+                        _wr_metric = ("stock_value"
+                                      if _re.search(r"\bvalue|\bworth|\bmoney|\bnt\$|\bcost",
+                                                    _ul_wr)
+                                      else "turnover"
+                                      if _re.search(r"\bturnover|\bmoves?\s+fastest|"
+                                                    r"\bfastest\s+moving", _ul_wr)
+                                      else "item_count")
+                        _en_whrank_args = {"warehouse_a": "all", "warehouse_b": "all",
+                                           "metric": _wr_metric}
+            if _en_whrank_args:
+                log.info(f"[en-whrank] {user_text!r} → compare_warehouses{_en_whrank_args}")
+                _clf_func_ws = "compare_warehouses"
+                _clf_conf_ws = 1.0
+                _en_admin_hard = True
+
             if _en_admin:
                 log.info(f"[en-admin] {user_text!r} → {_en_admin}")
                 _clf_func_ws = _en_admin
@@ -13144,8 +13246,14 @@ async def ws_handler(ws: WebSocket):
                 _needs_llm_ws = func_name in ("manage_config", "run_script", "set_alert",
                                                "set_schedule", "generate_po", "generate_report",
                                                "query_movement", "compare_warehouses")
+                # 2026-08-03：en-whrank 已經把參數算好了（warehouse_a/b='all' +
+                #   metric），不需要 LLM 再抽一次——丟給 LLM 反而抽不穩。
+                if _en_whrank_args:
+                    _needs_llm_ws = False
                 if not _needs_llm_ws:
                     func_args = {}
+                    if _en_whrank_args:
+                        func_args = dict(_en_whrank_args)   # 三倉排名：參數已算好
                     if func_name in ("query_inventory", "search_log", "query_related_items"):
                         if _pre_kw_ws and len(_pre_kw_ws) >= 2:
                             func_args["keyword"] = _pre_kw_ws
@@ -13784,6 +13892,15 @@ async def ws_handler(ws: WebSocket):
                         "wanted", "wish", "hoping", "hope", "kindly", "mind",
                         "possible", "possibly", "maybe", "perhaps", "just",
                         "quick", "quickly", "question",
+                        # 2026-08-03（資料邊界批）：**分布/範圍介系詞**——
+                        #   `show me wireless mouse across warehouses` 的 across
+                        #   被當陌生修飾詞 → C1g-oov **清掉已抽對的
+                        #   'Wireless Mouse'** → 回「查無 across warehouses」。
+                        #   clf conf=0.99、keyword 抽對，純粹被閘門吃掉正解
+                        #   （坑 3 同型）。這些是純方位/範圍詞，不可能是商品名。
+                        #   ⚠️ 不收 "in"（in-ear/built-in 等商品名含它）。
+                        "across", "among", "amongst", "between", "throughout",
+                        "per", "each", "every", "versus", "vs",
                         # r1：確認語（did it take effect / put it back）不是商品名
                         "effect", "effective", "applied", "apply", "back",
                         "done", "changed", "change", "updated", "saved",
