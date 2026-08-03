@@ -2264,9 +2264,16 @@ function renderViewCard(view, data, topSummary) {
         </div>`;
     }
   } else if (view === 'po_done') {
+    // 採購單也給「開啟」連結——JSON 訪客看不懂，HTML 才看得懂
+    const poView = data.view_file
+      ? `<a href="/audit/${data.view_file}" target="_blank" rel="noopener"
+           style="display:inline-block;margin-top:8px;padding:6px 14px;
+                  background:var(--accent);color:#fff;border-radius:6px;
+                  font-size:13px;text-decoration:none">📋 Open purchase order</a>` : '';
     card.innerHTML = `<div class="label">✅ Purchase draft created</div>
       <div style="padding:8px;font-size:14px">${data.po_id||''} — ${data.lines||0} lines, saved to PO_draft/</div>
-      ${data.trace_id?`<div style="font-size:11px;color:var(--muted)">trace_id: ${data.trace_id} · audit logged</div>`:''}`;
+      ${poView}
+      ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · audit logged</div>`:''}`;
   } else if (view === 'alert_confirm') {
     const scopeTxt = (data.scope_names||[]).length ? (data.scope_names||[]).join(', ') : 'all items';
     card.innerHTML = `

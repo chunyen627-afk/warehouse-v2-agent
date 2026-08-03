@@ -1703,6 +1703,24 @@ def _detect_clarify(user_text: str) -> dict | None:
     if _has_rca_word(t):
         return None
 
+    # ── 匯出進出紀錄：沒指定期間 → 反問（user 定調 2026-08-03）──
+    #   訪客講「匯出進出紀錄」時，直接給預設 7 天他不知道可以改；
+    #   反問並給可點選項，跟現有 clarify 選單同一套機制。
+    #   ⚠️ 已經講了期間的（昨天/本週/最近 N 天）不攔，直接放行執行。
+    _exp_intent = _re.search(r"(?:匯出|匯|輸出|下載|導出).{0,6}(?:進出|異動|出入|進貨出貨|交易|紀錄|記錄)|"
+                             r"(?:進出|異動|交易).{0,4}(?:紀錄|記錄).{0,4}(?:匯出|下載|輸出)", t)
+    _exp_has_period = _re.search(r"今天|今日|昨天|昨日|前天|本週|這週|上週|本月|這個月|上個月|"
+                                 r"最近\s*\d+\s*天|過去\s*\d+\s*天|\d+\s*天內", t)
+    if _exp_intent and not _exp_has_period:
+        return {"question": "要匯出哪個期間的進出紀錄？",
+                "options": ["昨天", "最近 7 天", "最近 30 天", "本月"],
+                "actions": ["匯出昨天的進出紀錄",
+                            "匯出最近 7 天的進出紀錄",
+                            "匯出最近 30 天的進出紀錄",
+                            "匯出本月的進出紀錄"],
+                "hint": "進出紀錄匯出"}
+
+
     # 進出貨結構（含空格斷開，r19：「北倉進 50 個 耳機」曾被這裡誤攔成
     # 「你想查什麼」）→ 放行給 C13b 開卡
     import re as _re_dc
@@ -4016,6 +4034,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     # 被 C7b 正確轉成 movement 後，C18 又拿 intent_clf 的 query_inventory 蓋回去
     # （第10輪測試抓到）。hard=True 讓 C18 不碰。
     _c7b_hit = any(w in user_text for w in _MOVEMENT_PROTECT_WORDS)
+    # ⚠️ **匯出/下載讓路**（2026-08-03）：「匯出昨天的進出紀錄」含保護詞
+    #   「進出紀錄」，會被 C7b 搶去 query_movement（查詢），但訪客要的是
+    #   **跑匯出腳本產檔**。LLM 其實判對了（run_script{script_name:匯出}），
+    #   是這道保護把它蓋掉。⇒ 句中有明確匯出動詞時不攔。
+    if _c7b_hit and _re.search(r"匯出|匯到|輸出|下載|導出|存成|存檔|"
+                               r"\bexport\b|\bdownload\b", user_text, _re.I):
+        _c7b_hit = False
     if _c7b_hit:
         kw = func_args.get("keyword", "") or _extract_sku_keyword(user_text)
         # keyword 髒掉（帶時間/疑問詞，如「最近 進什麼貨」）比對不到商品就丟掉
@@ -4165,6 +4190,27 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
 
     # C9b: run_script script_name 去掉前綴動詞（「執行腳本 月底盤點」→「月底盤點」）
     if func_name == "run_script" and func_args.get("script_name"):
+        # ⚠️ **期間要從原句帶進去**（2026-08-03）：LLM 抽的 script_name 常常
+        #   只有「匯出」兩個字，訪客講的「昨天/最近 7 天」在裡面找不到
+        #   ⇒ 匯出腳本永遠用預設天數。
+        #   🩸 第一版把原句**附加到 script_name** ⇒ `_match_script` 比對不到
+        #   白名單。⇒ 改用**獨立欄位** `_period_text`，不動 script_name。
+        if _re.search(r"匯出|輸出|下載|導出|\bexport\b|\bdownload\b", user_text, _re.I):
+            func_args = dict(func_args)
+            func_args["_period_text"] = user_text
+            # 🩸 英文版另一個坑：LLM 常把**期間詞本身**當成 script_name
+            #   （`export movements yesterday` → script_name='yesterday'）
+            #   ⇒ 白名單比對不到、走「不在白名單」的反問。
+            #   ⇒ script_name 只剩期間詞時，用原句的匯出意圖補回腳本名。
+            _sn_raw = str(func_args.get("script_name", "")).strip().lower()
+            if _re.fullmatch(r"(?:today|yesterday|this\s+week|last\s+week|"
+                             r"this\s+month|last\s+month|\d+\s*days?|"
+                             r"今天|昨天|前天|本週|上週|本月|上個月)", _sn_raw):
+                func_args["script_name"] = ("export movements"
+                                            if _re.search(r"[a-z]", user_text, _re.I)
+                                            else "匯出進出記錄")
+                log.info(f"[校正 C9c] script_name 是期間詞 {_sn_raw!r} → "
+                         f"{func_args['script_name']!r}")
         _script_prefixes = ("執行腳本", "幫我執行", "請執行", "麻煩跑", "執行一次",
                             "幫我跑", "跑一次", "執行", "跑", "啟動", "run ")
         sn = func_args["script_name"].strip()
@@ -5515,6 +5561,23 @@ async def _check_alert_rules(only_rule_id: str = ""):
                     "detail": detail,
                     "ts": datetime.now().strftime("%H:%M"),
                 })
+            elif only_rule_id:
+                # 🎯 展場體驗：**沒觸發也要回報一次**。
+                #   60 個商品裡只有約一半當下低於安全庫存 ⇒ 訪客隨手挑有
+                #   約一半機率什麼都不會跳，而「系統壞了」與「這商品剛好沒缺」
+                #   在畫面上**完全一樣**（都只有一張「已建立」卡片）⇒ 訪客
+                #   無法確定警示到底有沒有生效。
+                #   回報「已檢查、目前不符合條件」反而更能證明規則真的跑了。
+                #   ⚠️ 只在展場即時觸發（only_rule_id）時送——背景每小時掃描
+                #     不能送，否則沒事也一直洗版。
+                log.info(f"[alert] 規則 {rule['id']} 已檢查、未達條件")
+                await push_display({
+                    "type": "alert_checked_ok",
+                    "rule_id": rule["id"],
+                    "condition_label": cond_label,
+                    "scope_txt": scope_txt,
+                    "ts": datetime.now().strftime("%H:%M"),
+                })
     except Exception as e:
         log.error(f"[_check_alert_rules] {e}", exc_info=True)
 
@@ -6807,8 +6870,10 @@ async def ws_handler(ws: WebSocket):
                         res = tools_v2.commit_config_set(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                     elif act == "run_script":
+                        # days：訪客在開卡時講的期間（匯出進出紀錄用）
                         res = tools_v2.commit_run_script(
-                            data.get("script_id", ""), actor="user_confirmed", trace_id=trace_id)
+                            data.get("script_id", ""), actor="user_confirmed",
+                            trace_id=trace_id, days=data.get("days"))
                     elif act == "generate_po":
                         res = tools_v2.commit_po(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
@@ -9982,6 +10047,47 @@ async def ws_handler(ws: WebSocket):
                 if mismatch and not _hard and clf_intent != "unknown":
                     log.info(f"[C18] clf={clf_intent}({clf_conf:.2f}) vs model={func_name} → 校正")
                     func_name = intent_clf.LABEL_TO_FUNC.get(clf_intent, clf_intent)
+                    # ⚠️ 轉成 run_script 時**必須補 script_name**（2026-08-03）：
+                    #   `export movements yesterday` → clf 判 run_script(1.00) 正確，
+                    #   但舊 func_args 是 query_movement 的（period/direction），
+                    #   沒有 script_name ⇒ 下游找不到腳本、走「不在白名單」反問。
+                    if func_name == "run_script" and not func_args.get("script_name"):
+                        _c18_exp = _re.search(r"匯出|輸出|下載|導出|\bexport\b|\bdownload\b",
+                                              user_text, _re.I)
+                        # ⚠️ 匯出但**沒講期間** → 直接回期間反問（2026-08-03）。
+                        #   不能只是「不補腳本名」——那會落到「不在白名單」的
+                        #   通用反問（選項是三支腳本），不是我們要的期間選單。
+                        _c18_has_period = _re.search(
+                            r"\b(?:today|yesterday|this\s+week|last\s+week|this\s+month|"
+                            r"last\s+month|past\s+\d+|last\s+\d+|recent\s+\d+|\d+\s*days?)\b|"
+                            r"今天|今日|昨天|昨日|前天|本週|這週|上週|本月|這個月|上個月|"
+                            r"最近\s*\d+\s*天|過去\s*\d+\s*天", user_text, _re.I)
+                        if _c18_exp and not _c18_has_period:
+                            _c18_zh = not _re.search(r"[a-z]", user_text, _re.I)
+                            _c18_clar = ({
+                                "question": "要匯出哪個期間的進出紀錄？",
+                                "options": ["昨天", "最近 7 天", "最近 30 天", "本月"],
+                                "actions": ["匯出昨天的進出紀錄", "匯出最近 7 天的進出紀錄",
+                                            "匯出最近 30 天的進出紀錄", "匯出本月的進出紀錄"],
+                                "hint": "進出紀錄匯出"} if _c18_zh else {
+                                "question": "Which period do you want to export?",
+                                "options": ["Yesterday", "Last 7 days", "Last 30 days", "This month"],
+                                "actions": ["export movements yesterday",
+                                            "export movements last 7 days",
+                                            "export movements last 30 days",
+                                            "export movements this month"],
+                                "hint": "Movement log export"})
+                            log.info(f"[C18] 匯出無期間 → 期間反問")
+                            await send({"type": "done", "result": {
+                                "ok": True, "summary": _c18_clar["question"],
+                                "view": "clarify", "data": _c18_clar}})
+                            continue
+                        func_args = {"script_name": (
+                            ("export movements" if _re.search(r"[a-z]", user_text, _re.I)
+                             else "匯出進出記錄") if _c18_exp else user_text),
+                            "_period_text": user_text}
+                        log.info(f"[C18] run_script 補 script_name="
+                                 f"{func_args['script_name']!r}")
                     # C18 改了 func_name 後，舊 func_args 是照舊 func_name 的參數格式
                     # （例如 set_alert 的 condition/target），直接沿用到新功能會
                     # 完全對不上、甚至讓工具函式收到空必填參數而報錯。轉成

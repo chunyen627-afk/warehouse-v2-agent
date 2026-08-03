@@ -614,7 +614,36 @@ def _match_script(script_name: str) -> dict | None:
     return None
 
 
+def _parse_days(text: str) -> int | None:
+    """從訪客的話抽出期間 → 天數。抽不到回 None（用腳本預設）。
+
+    2026-08-03：匯出進出紀錄的期間反問（clarify 選單）選完會送
+    「匯出最近 7 天的進出紀錄」這類句子，這支負責把它變成 --days。
+    """
+    import re as _re2
+    t = (text or "").lower()
+    if _re2.search(r"昨天|昨日|yesterday", t):
+        return 1
+    if _re2.search(r"前天|day\s+before\s+yesterday", t):
+        return 2
+    if _re2.search(r"本週|這週|this\s+week", t):
+        return 7
+    if _re2.search(r"上週|last\s+week", t):
+        return 14
+    if _re2.search(r"本月|這個月|this\s+month", t):
+        return 30
+    if _re2.search(r"上個月|last\s+month", t):
+        return 60
+    m = _re2.search(r"(?:最近|過去|past|last|recent)\s*(\d+)\s*(?:天|days?)|"
+                    r"(\d+)\s*(?:天內|days?)", t)
+    if m:
+        n = int(m.group(1) or m.group(2))
+        return max(1, min(365, n))
+    return None
+
+
 def run_script(script_name: str = "", **_kw) -> dict:
+    _period_text = str(_kw.pop("_period_text", "") or "")
     if not script_name and _kw:
         script_name = str(list(_kw.values())[0])
     steps: list[dict] = []
@@ -632,7 +661,11 @@ def run_script(script_name: str = "", **_kw) -> dict:
     summary = f"準備執行白名單腳本【{sc['label']}】：{sc.get('description', sc.get('desc', ''))}。請確認後執行。"
     return {"ok": True, "summary": summary, "view": "script_confirm",
             "data": {"pending": True, "script_id": sc["id"], "label": sc["label"],
-                     "desc": sc.get("description", sc.get("desc", "")), "timeout_s": sc["timeout_s"], "trace": steps}}
+                     "desc": sc.get("description", sc.get("desc", "")), "timeout_s": sc["timeout_s"],
+                     # 訪客講的期間（匯出用）→ 帶到 confirm 那步。
+                     # `_period_text` 是 server 塞的原句（script_name 只有「匯出」
+                     # 兩字時期間抽不到）；沒有就退回用 script_name 自己解析。
+                     "days": _parse_days(_period_text or script_name), "trace": steps}}
 
 
 # 白名單腳本實際指令（server confirm 後呼叫 commit_run_script）
@@ -641,13 +674,16 @@ _SCRIPT_CMD = {
     # 本機是 warehouse_v2/test/warehouse_data、RPI5 是 ~/warehouse_v2/warehouse_data
     # （扁平佈局），寫死 test/ 前綴會在 RPI5 找不到檔（r55 收官批抓到）。
     "stock_audit":      ("stock_audit.py",      []),
-    "export_movements": ("export_movements.py", ["--days", "30"]),
+    # ⚠️ 預設 7 天（原本 30）——動態模擬把今天灌到十幾萬筆，
+    #   30 天的匯出訪客打開只會看到滿滿今天的資料，看不出意義。
+    "export_movements": ("export_movements.py", ["--days", "7"]),
     "generate_report":  ("generate_report.py",  ["--type", "full"]),
 }
 
 
 def commit_run_script(script_id: str, actor: str = "user_confirmed",
-                      trace_id: str | None = None) -> dict:
+                      trace_id: str | None = None, days: int | None = None) -> dict:
+    """執行白名單腳本。`days` 讓訪客指定期間（匯出進出紀錄用，2026-08-03）。"""
     sc = next((s for s in _load_manifest().get("scripts", []) if s["id"] == script_id), None)
     if not sc:
         return W._err("腳本不存在")
@@ -656,6 +692,11 @@ def commit_run_script(script_id: str, actor: str = "user_confirmed",
         return W._err(f"腳本 {script_id} 未綁定指令")
     fname, extra = spec
     script_path = _data_dir() / "scripts" / fname
+    extra = list(extra)
+    # 訪客指定了期間 → 覆寫預設的 --days（沒指定就用 _SCRIPT_CMD 裡的預設）
+    if days is not None and "--days" in extra:
+        i = extra.index("--days")
+        extra[i + 1] = str(max(1, min(365, int(days))))
     extra = ["--data-dir", str(_data_dir()), *extra]
     root = _data_dir().parent                 # server.py 所在目錄（兩平台皆是）
     ts = datetime.now().isoformat(timespec="seconds")
@@ -725,7 +766,20 @@ def _md_table(headers, rows):
 
 def generate_report(report_type: str = "full", actor: str = "agent_auto",
                     trace_id: str | None = None) -> dict:
-    """掃全倉產出 markdown 報告，寫到 reports/。免確認（只寫專用目錄）。"""
+    """產生倉庫報告 —— **一律導向 `stock_audit`，全系統只有這一份報告**。
+
+    ⚠️ 2026-08-03（user 定調）：原本這裡自己產一份 Markdown，跟盤點的
+    HTML+CSV **是兩份不同的報告** ⇒ 訪客講「產生報表」和「跑盤點」
+    會拿到不一樣的東西，而盤點那份才是最完整的（KPI/需注意/熱銷/
+    到期/完整庫存，含撐天與市值）。
+    ⇒ 這支改成薄包裝，直接跑同一支腳本。報告類型只留一份、不再分歧。
+    """
+    return commit_run_script("stock_audit", actor=actor, trace_id=trace_id)
+
+
+def _generate_report_legacy(report_type: str = "full", actor: str = "agent_auto",
+                            trace_id: str | None = None) -> dict:
+    """舊版 Markdown 報告產生器（已停用，保留供查證/回退）。"""
     steps: list[dict] = []
     rt = _resolve_report_type(report_type)
     dd = _data_dir()
@@ -1056,6 +1110,56 @@ def commit_po(pending: dict, actor: str = "user_confirmed", trace_id: str | None
     doc = {"po_id": po_id, "type": "PO_draft", "date": s_date(), "status": "draft",
            "created_by": actor, "lines": pending.get("lines", []), "total": pending.get("total", 0)}
     (draft_dir / f"{po_id}.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    # ── HTML 版（訪客點連結直接看）──
+    #   JSON 是給機器讀的，訪客看不懂 ⇒ 產一份可讀的採購單。
+    #   放 audit/ 是因為 `/audit/*.html` 端點已經支援瀏覽器直接開。
+    _wh = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
+    _po_rows = "".join(
+        f'<tr><td>{ln.get("sku_id","")}</td><td>{ln.get("name","")}</td>'
+        f'<td>{_wh.get(ln.get("warehouse",""), ln.get("warehouse",""))}</td>'
+        f'<td class="n b">{ln.get("order_qty",0)}</td>'
+        f'<td class="r">{ln.get("reason","")}</td></tr>'
+        for ln in doc["lines"])
+    _po_html = dd / "audit" / f"{po_id}.html"
+    try:
+        _po_html.write_text(f"""<!doctype html><html><head><meta charset="utf-8">
+<title>採購單 {po_id}</title><style>
+body{{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;margin:0;padding:16px;
+background:#131820;color:#e6edf3}}
+h1{{font-size:19px;margin:0 0 4px}} .sub{{color:#8b98a5;font-size:13px;margin-bottom:14px}}
+.kpis{{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}}
+.kpi{{background:rgba(255,255,255,.05);border-radius:8px;padding:9px 14px;min-width:110px}}
+.kpi .k{{font-size:11px;color:#8b98a5;text-transform:uppercase;letter-spacing:.4px}}
+.kpi .v{{font-size:20px;font-weight:700;margin-top:2px}}
+.badge{{display:inline-block;background:rgba(246,173,85,.18);color:#f6ad55;
+border:1px solid #f6ad55;border-radius:5px;padding:2px 9px;font-size:12px;font-weight:700}}
+table{{border-collapse:collapse;width:100%;font-size:13px}}
+th{{background:#1a2130;text-align:left;padding:7px 9px;border-bottom:2px solid #2d3748;
+font-size:11.5px;letter-spacing:.4px;text-transform:uppercase}}
+th.n{{text-align:right}}
+td{{padding:6px 9px;border-bottom:1px solid #1e2530;white-space:nowrap}}
+td.n{{text-align:right;font-variant-numeric:tabular-nums}} td.b{{font-weight:700;color:#90cdf4}}
+td.r{{color:#8b98a5;font-size:12px;white-space:normal}}
+tr:nth-child(even){{background:rgba(255,255,255,.025)}}
+</style></head><body>
+<h1>採購單草稿</h1>
+<div class="sub">{po_id} &middot; {doc['date']} &middot; <span class="badge">草稿</span>
+ &middot; 建立者 {actor}</div>
+<div class="kpis">
+  <div class="kpi"><div class="k">品項數</div><div class="v">{len(doc['lines'])}</div></div>
+  <div class="kpi"><div class="k">總數量</div>
+    <div class="v">{sum(int(l.get('order_qty', 0)) for l in doc['lines']):,}</div></div>
+  <div class="kpi"><div class="k">預估金額</div>
+    <div class="v">NT$ {doc.get('total', 0):,}</div></div>
+</div>
+<table><thead><tr><th>SKU</th><th>商品</th><th>倉別</th>
+<th class="n">訂購量</th><th>原因</th></tr></thead>
+<tbody>{_po_rows}</tbody></table>
+<div class="sub" style="margin-top:12px">這是草稿，尚未送出給供應商。存於 orders/PO_draft/{po_id}.json</div>
+</body></html>""", encoding="utf-8")
+    except Exception:
+        _po_html = None
+
     snap = W.state().snapshot_date or ts[:10]
     with open(dd / "audit" / f"{snap}_changes.log", "a", encoding="utf-8") as f:
         f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
@@ -1063,7 +1167,9 @@ def commit_po(pending: dict, actor: str = "user_confirmed", trace_id: str | None
                             "lines": len(doc["lines"]), "total": doc["total"]},
                            ensure_ascii=False) + "\n")
     return {"ok": True, "summary": f"採購單草稿 {po_id} 已建立（{len(doc['lines'])} 項、NT$ {doc['total']:,}），存到 PO_draft/。",
-            "view": "po_done", "data": {"po_id": po_id, "trace_id": trace_id, "lines": len(doc["lines"])}}
+            "view": "po_done", "data": {"po_id": po_id, "trace_id": trace_id,
+                                        "lines": len(doc["lines"]),
+                                        "view_file": f"{po_id}.html" if _po_html else ""}}
 
 
 def commit_alert_set(pending: dict, actor: str = "user_confirmed", trace_id: str | None = None) -> dict:
@@ -1841,6 +1947,10 @@ def create_movement(keyword: str = "", warehouse: str = "", direction: str = "",
 WH_LABEL_MAP = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
 
 
+# 動態模擬的來源 —— 這些 actor 的異動不寫 audit log（見 commit_movement 註解）
+_SIM_ACTORS = {"pda_scan", "wms_sync", "ecom_order"}
+
+
 def commit_movement(pending: dict, actor: str = "user_confirmed",
                      trace_id: str | None = None) -> dict:
     """HITL 確認後真正寫入 stock.csv + transactions/ + 熱更新記憶體。
@@ -1903,16 +2013,22 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
                 w.writerow(["date", "sku_id", "warehouse", "direction", "qty"])
             w.writerow([snap_date, sku, wh_key, dir_key, qty_val])
 
-        # 3. audit log（退貨標 create_return，交易紀錄仍記 in，方便 RCA/報表統一處理）
-        audit_dir = dd / "audit"
-        audit_dir.mkdir(parents=True, exist_ok=True)
-        _audit_action = "create_return" if p.get("is_return") else "create_movement"
-        with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
-            f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
-                                "action": _audit_action, "sku": sku, "warehouse": wh_key,
-                                "direction": dir_key, "qty": qty_val,
-                                "before": current, "after": after_qty},
-                               ensure_ascii=False) + "\n")
+        # ⚠️ **動態模擬的異動不寫 audit log**（2026-08-03）：
+        #   audit log 是「誰改了什麼」的稽核軌跡、給人看的；模擬是背景常態
+        #   流量，不是人的操作。200× 下每 2.7 秒 60 筆 ⇒ 實測一天衝到 34MB
+        #   （比所有匯出檔加起來還大）。資料本身（stock.csv / transactions/）
+        #   照常寫，查詢與報表不受影響。
+        if actor not in _SIM_ACTORS:
+            # 3. audit log（退貨標 create_return，交易紀錄仍記 in，方便 RCA/報表統一處理）
+            audit_dir = dd / "audit"
+            audit_dir.mkdir(parents=True, exist_ok=True)
+            _audit_action = "create_return" if p.get("is_return") else "create_movement"
+            with open(audit_dir / f"{snap_date}_changes.log", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"ts": ts, "trace_id": trace_id, "actor": actor,
+                                    "action": _audit_action, "sku": sku, "warehouse": wh_key,
+                                    "direction": dir_key, "qty": qty_val,
+                                    "before": current, "after": after_qty},
+                                   ensure_ascii=False) + "\n")
 
         # 4. 熱更新記憶體
         s.stock.setdefault(wh_key, {})[sku] = after_qty

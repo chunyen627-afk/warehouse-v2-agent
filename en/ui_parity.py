@@ -47,6 +47,8 @@ CHECKS = [
     ("一行一筆(ab-txt)",       r"ab-txt", 2),
     ("異常橫幅節流刷新",       r"function pullAnomaliesThrottled\(\)", 1),
     ("live_batch 觸發刷新",    r"pullAnomaliesThrottled\(\);", 1),
+    ("採購單開啟按鈕",        r'poView', 2),
+    ("報告開啟按鈕",          r'viewHtml', 2),
     # 警示回報
     ("alert_checked_ok",       r"msg\.type === 'alert_checked_ok'", 1),
     ("alert-ok-banner CSS",    r"\.alert-ok-banner \{", 1),

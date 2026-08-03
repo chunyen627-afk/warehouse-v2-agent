@@ -101,6 +101,9 @@ def load_as_seed(wd: Path) -> dict:
     stock = dict(stock)
 
     # warehouses：從 stock keys + config override keys 還原（保序用 north/central/south 慣例）
+    # EN build：multi 模式的倉名（系統真正讀的是 warehouse_data/，不是
+    #   seed_data.json）→ 這裡漏翻的話，dashboard_snapshot 的 label、
+    #   報表的 Stock Overview 表格都會顯示中文倉名。
     WH_LABEL = {"north": "北區倉", "central": "中區倉", "south": "南區倉"}
     wh_keys = list(config.get("safety_stock_override", {}).keys()) or list(stock.keys())
     warehouses = [{"key": k, "label": WH_LABEL.get(k, k)} for k in wh_keys]

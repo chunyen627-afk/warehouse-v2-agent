@@ -2246,9 +2246,16 @@ function renderViewCard(view, data, topSummary) {
         </div>`;
     }
   } else if (view === 'po_done') {
+    // 採購單也給「開啟」連結——JSON 訪客看不懂，HTML 才看得懂
+    const poView = data.view_file
+      ? `<a href="/audit/${data.view_file}" target="_blank" rel="noopener"
+           style="display:inline-block;margin-top:8px;padding:6px 14px;
+                  background:var(--accent);color:#fff;border-radius:6px;
+                  font-size:13px;text-decoration:none">📋 開啟採購單</a>` : '';
     card.innerHTML = `<div class="label">✅ 採購草稿已建立</div>
       <div style="padding:8px;font-size:14px">${data.po_id||''} — ${data.lines||0} 項，存到 PO_draft/</div>
-      ${data.trace_id?`<div style="font-size:11px;color:var(--muted)">trace_id: ${data.trace_id} · 已記 audit</div>`:''}`;
+      ${poView}
+      ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · 已記 audit</div>`:''}`;
   } else if (view === 'alert_confirm') {
     const scopeTxt = (data.scope_names||[]).length ? (data.scope_names||[]).join('、') : '全部商品';
     card.innerHTML = `
