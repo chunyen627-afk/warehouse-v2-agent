@@ -8743,6 +8743,10 @@ async def startup():
     asyncio.create_task(_alert_scheduler_loop())
     # ── 定時腳本排程 ──
     asyncio.create_task(_schedule_runner_loop())
+    # ── 動態倉庫模擬：開機自動啟動（user 定調 2026-08-03）──
+    #   展場開機就要看到數據在跳，不必手動按。預設 200× + 60 商品全動。
+    #   ⚠️ 跑守衛/寫入測試前務必先關（run_guard_en.sh 已內建 stop）。
+    asyncio.create_task(_live_autostart())
 
 
 @app.get("/reports/{fname}")
@@ -8773,6 +8777,13 @@ async def get_audit_file(fname: str):
     ap = _P(finance.state().v2_data_dir) / "audit" / fname
     if not ap.exists():
         return Response(status_code=404)
+    # ⚠️ 2026-08-03：**HTML 直接在瀏覽器看，不強制下載**。
+    #   RPI5 上用 LibreOffice 開 60 列的 CSV 要 3 分鐘還卡住（實測），
+    #   展場根本不能用 ⇒ 盤點同時產一份 HTML，訪客點了直接看。
+    #   CSV 保留給「要帶走用 Excel 分析」的情境。
+    if fname.endswith(".html"):
+        return Response(content=ap.read_bytes(),
+                        media_type="text/html; charset=utf-8", headers=dict(NO_CACHE))
     media = "text/csv; charset=utf-8-sig"
     headers = {**NO_CACHE, "Content-Disposition": f'attachment; filename="{fname}"'}
     return Response(content=ap.read_bytes(), media_type=media, headers=headers)
@@ -8812,6 +8823,31 @@ async def _live_push(mvs):
 async def live_grid():
     """60 商品當下數量（開啟網格時先填一次基準）。"""
     return JSONResponse({"grid": _live_grid()}, headers=NO_CACHE)
+
+
+async def _live_autostart():
+    """開機後等 server ready 再啟動動態模擬。
+
+    ⚠️ 等 ready 是必要的：模擬會呼叫 `commit_movement`，那需要資料已載入。
+       失敗只記 log，絕不影響服務啟動（模擬是展示功能，不是核心）。
+    """
+    import asyncio as _aio
+    try:
+        for _ in range(120):                 # 最多等 2 分鐘
+            if HEALTH.get("stage") == "ready":
+                break
+            await _aio.sleep(1)
+        else:
+            log.warning("[live] 等 ready 逾時，自動啟動略過")
+            return
+        import live_sim
+        live_sim.start_in_loop(push=_live_push)
+        st = live_sim.status()
+        log.info(f"[live] 開機自動啟動（{st['speedup']}× 速、"
+                 f"{'全部商品' if st['sweep_all'] else st['batch']} 筆/輪、"
+                 f"間隔 {st['interval_s']}s）")
+    except Exception as e:
+        log.error(f"[live] 自動啟動失敗（不影響服務）: {e}")
 
 
 @app.post("/api/live_mode")

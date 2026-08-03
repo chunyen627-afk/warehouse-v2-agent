@@ -845,12 +845,9 @@ body.compact-top #messages { padding-top: 4px; }
   <div class="lb-item"><span class="lb-label">Low stock</span><span class="lb-val warn" id="lb-low">—</span></div>
   <div class="lb-sep"></div>
   <label class="lb-ctl">Speed
-    <input type="range" id="lb-speed" min="5" max="200" step="5" value="20"
+    <input type="range" id="lb-speed" min="5" max="200" step="5" value="200"
            oninput="tuneLive()" title="Simulation speed (x real time)">
-    <span id="lb-speed-v">20x</span>
-  </label>
-  <label class="lb-ctl" title="Move every product each round">
-    <input type="checkbox" id="lb-sweep" onchange="tuneLive()" checked> All 60 items
+    <span id="lb-speed-v">200x</span>
   </label>
   <button class="lb-toggle" id="lb-grid-btn" onclick="toggleGrid()">▾ Show all items</button>
   <div class="lb-pulse" id="lb-pulse">● LIVE</div>
@@ -2175,9 +2172,19 @@ function renderViewCard(view, data, topSummary) {
     const isAudit  = fname && fname.endsWith('.csv');
     const dlHtml   = fname
       ? `<a href="/${isAudit?'audit':'reports'}/${fname}" download="${fname}"
+           style="display:inline-block;margin-top:8px;margin-right:8px;padding:6px 14px;
+                  background:rgba(255,255,255,.10);color:var(--text);border-radius:6px;
+                  font-size:13px;text-decoration:none">⬇ Download CSV</a>` : '';
+    // 「在瀏覽器開啟」——盤點同時產一份 HTML（RPI5 上 LibreOffice 開 CSV
+    //   要 3 分鐘還卡住，實測）。有 VIEW: 就給可點連結，秒開、不用額外程式。
+    const viewMatch = tail.match(/VIEW:(.+)/);
+    const viewPath  = viewMatch ? viewMatch[1].trim() : '';
+    const viewName  = viewPath ? viewPath.split('/').pop() : '';
+    const viewHtml  = viewName
+      ? `<a href="/audit/${viewName}" target="_blank" rel="noopener"
            style="display:inline-block;margin-top:8px;padding:6px 14px;
                   background:var(--accent);color:#fff;border-radius:6px;
-                  font-size:13px;text-decoration:none">⬇ Download ${fname}</a>` : '';
+                  font-size:13px;text-decoration:none">📊 Open report</a>` : '';
     const summaryLine = tail.match(/SUMMARY:(.+)/);
     const summaryText = summaryLine ? summaryLine[1].trim() : (data.summary || '');
     // ⚠️ config_done 與 script_done **共用這個渲染器**，但標題原本寫死
@@ -2187,7 +2194,7 @@ function renderViewCard(view, data, topSummary) {
     const doneWhat = view === 'config_done' ? 'Setting' : 'Script run';
     card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} ${doneWhat} ${data.ok===false?'failed':'done'}</div>
       <div style="padding:8px;font-size:14px">${summaryText}</div>
-      ${dlHtml}
+      ${viewHtml}${dlHtml}
       ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · logged to audit log</div>`:''}`;
   } else if (view === 'report_done') {
     const trace = data.trace || [];
@@ -3043,11 +3050,10 @@ function toggleGrid() {
 
 function tuneLive() {
   const sp = parseInt(document.getElementById('lb-speed').value, 10);
-  const sweep = document.getElementById('lb-sweep').checked;
   document.getElementById('lb-speed-v').textContent = sp + 'x';
   fetch('/api/live_mode', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'tune', speedup: sp, sweep_all: sweep})
+    body: JSON.stringify({action: 'tune', speedup: sp})
   }).catch(() => {});
 }
 refreshSnapshot();

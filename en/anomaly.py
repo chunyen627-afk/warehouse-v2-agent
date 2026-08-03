@@ -30,8 +30,15 @@ class AnomalyConfig:
     days_left_warning = 14          # 撐天 ≤ 此 → warning
     expiry_warning_days = 14        # 效期 ≤ 此天還有量 → warning
     expiry_min_qty = 5              # 到期量門檻（低於不報，免洗版）
-    burst_sigma = 3.0               # 出庫暴量：偏離均值 > N 倍標準差
-    burst_min_history = 10          # 至少 N 天歷史才算暴量（樣本不足不報）
+    # ── 出庫暴增：看**單筆**，不看當日累計（user 定調 2026-08-03）──
+    #   累計高只代表「今天很忙」；**單筆爆量才是異常**（一次搬走一整櫃、
+    #   或數量打錯多一個零）——那才是刷單/失竊/系統錯要抓的。
+    #   實測歷史單筆出貨：13,149 筆、中位 3 件、**p99 僅 4 件**、史上最大 30 件。
+    #   ⇒ 單筆 ≥ 該商品歷史最大值 × 倍數，且 ≥ 絕對下限 → 報暴增。
+    #   效果：模擬的 1-4 件永遠不觸發；訪客故意「出貨 500 個」立刻跳。
+    burst_single_mult = 2.0         # 單筆 ≥ 歷史最大 × 此倍數 → 暴增
+    burst_single_min = 50           # 且至少要這麼多件（避免小量商品誤報）
+    burst_min_history = 10          # 至少 N 筆歷史才判（樣本不足不報）
     dormant_days = 60               # 連續零出庫 ≥ 此 → 呆滯
     dormant_min_value = 2000        # 呆滯品庫存市值門檻（低於不報）
     suppress_hours = 6              # 同一告警 N 小時內不重報（告警抑制）
@@ -109,38 +116,55 @@ def _detect_low_stock(s) -> list[dict]:
 
 
 def _detect_burst(s) -> list[dict]:
-    """③ 出庫暴增/暴跌（warning）。統計門檻：偏離該 SKU 日均 > N 倍標準差。"""
+    """③ 出庫暴增（warning）——看**單筆**異常，不看當日累計。
+
+    ⚠️ 2026-08-03 改判準（user 定調）：原本比「當日累計 vs 日均」，
+    但累計高只代表今天忙；而動態模擬把一天壓縮成幾分鐘，累計必然爆
+    ⇒ 60 個商品同時報假暴增（實測 54-60 筆）。
+    真實倉管要抓的是**單筆爆量**：一次搬走一整櫃、數量打錯多一個零。
+    ⇒ 改成「單筆 ≥ 該商品歷史單筆最大 × 倍數，且 ≥ 絕對下限」。
+    效果：模擬的 1-4 件永遠不觸發；訪客故意「出貨 500 個」立刻跳。
+    """
     out = []
-    # 每 (sku) 的每日出庫序列
-    daily = defaultdict(lambda: defaultdict(int))   # sku -> {date: qty}
-    for m in s.movements:
-        if m["direction"] == "out":
-            daily[m["sku_id"]][m["date"]] += m["qty"]
     today = _today()
-    recent = {(today - timedelta(days=i)).isoformat() for i in range(3)}  # 近 3 天視為「最新」
-    for sku, series in daily.items():
-        vals = list(series.values())
-        if len(vals) < AnomalyConfig.burst_min_history:
+    recent = {(today - timedelta(days=i)).isoformat() for i in range(4)}
+    # 每個 SKU 的歷史單筆出貨量（排除近 3 天，避免拿異常當基準）
+    hist = defaultdict(list)
+    fresh = []                                   # 近期要檢查的每一筆
+    for m in s.movements:
+        if m["direction"] != "out":
             continue
-        mean = statistics.mean(vals)
-        sd = statistics.pstdev(vals)
-        if sd == 0:
+        if m["date"] in recent:
+            fresh.append(m)
+        else:
+            hist[m["sku_id"]].append(m["qty"])
+    seen = set()
+    for m in fresh:
+        sku, q = m["sku_id"], m["qty"]
+        h = hist.get(sku, [])
+        if len(h) < AnomalyConfig.burst_min_history:
             continue
-        for d, q in series.items():
-            if d not in recent:
+        hmax = max(h)
+        thr = max(AnomalyConfig.burst_single_min, hmax * AnomalyConfig.burst_single_mult)
+        if q >= thr:
+            d = m["date"]
+            k = (sku, d, q)
+            if k in seen:                        # 同商品同日同量只報一次
                 continue
-            z = (q - mean) / sd
-            if abs(z) >= AnomalyConfig.burst_sigma:
-                nm = s._items_by_sku.get(sku, {}).get("name", sku)
-                direction = "spike" if z > 0 else "drop"
-                out.append({
-                    "key": f"burst:{sku}:{d}",
-                    "level": "warning", "type": "burst",
-                    "title": f"Outbound {direction}: {nm} shipped {q} units on {d}",
-                    "detail": f"daily avg {mean:.0f}, deviation {z:+.1f}σ (possible fraud / theft / system error)",
-                    "data": {"sku_id": sku, "name": nm, "date": d, "qty": q,
-                             "mean": round(mean, 1), "z": round(z, 2)},
-                })
+            seen.add(k)
+            mean = statistics.mean(h)
+            nm = s._items_by_sku.get(sku, {}).get("name", sku)
+            wh = _wh_label(s, m.get("warehouse", ""))
+            out.append({
+                "key": f"burst:{sku}:{d}:{q}",
+                "level": "warning", "type": "burst",
+                "title": f"Unusually large outbound: {nm} - {q} units in one go",
+                "detail": (f"{wh} on {d}. Typical single shipment {mean:.0f}, "
+                           f"largest ever {hmax} (possible fraud / theft / system error)"),
+                "data": {"sku_id": sku, "name": nm, "date": d, "qty": q,
+                         "warehouse": m.get("warehouse", ""),
+                         "typical": round(mean, 1), "hist_max": hmax},
+            })
     return out
 
 

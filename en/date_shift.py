@@ -86,26 +86,47 @@ def shift_bundle(bundle: dict, target: _date | None = None) -> dict:
         return bundle
     # ⚠️ 冪等性：offset 一律從**原始檔的 snapshot_date**（永遠是 2026-05-26）
     #   重算，不是拿上次平移後的結果再平移 ⇒ 載入幾次都得到同一個結果。
-    #   （實測連載 3 次，movements 範圍完全一致。）
+
+    # 🚨 只平移「原始 seed 範圍內」的日期（≤ 原始 snapshot_date）。
+    #   執行期新寫入的資料（訪客操作、動態模擬）**已經是平移後的日期**
+    #   （`commit_movement` 用的 `snap_date` 就是平移後的今天），
+    #   再平移一次會變成未來 ⇒ 實測 08-03 的 222 件被推到 **2026-10-11**，
+    #   而 anomaly 讀到「今天出 222 件 vs 日均 9」→ **60 筆假暴增警報**。
+    #   判準：日期 > 原始 snapshot_date 的一律不動（那是執行期產生的）。
+    try:
+        _cutoff = _date.fromisoformat(snap[:10])
+    except Exception:
+        _cutoff = None
+
+    def _shift_hist(ds: str) -> str:
+        """只平移歷史（原始 seed）日期；執行期寫入的原樣保留。"""
+        if not ds or _cutoff is None:
+            return _shift_str(ds, off)
+        try:
+            if _date.fromisoformat(ds[:10]) > _cutoff:
+                return ds                      # 執行期資料，已是正確日期
+        except Exception:
+            return ds
+        return _shift_str(ds, off)
 
     bundle["snapshot_date"] = _shift_str(snap, off)
 
     for m in bundle.get("movements", []) or []:
         if m.get("date"):
-            m["date"] = _shift_str(m["date"], off)
+            m["date"] = _shift_hist(m["date"])
 
     for b in bundle.get("batches", []) or []:
         for k in ("mfg_date", "expire_date"):
             if b.get(k):
-                b[k] = _shift_str(b[k], off)
+                b[k] = _shift_hist(b[k])
 
     for o in bundle.get("orders", []) or []:
         if o.get("date"):
-            o["date"] = _shift_str(o["date"], off)
+            o["date"] = _shift_hist(o["date"])
         for ln in o.get("lines", []) or []:
             for k in ("date", "eta", "received_date"):
                 if ln.get(k):
-                    ln[k] = _shift_str(ln[k], off)
+                    ln[k] = _shift_hist(ln[k])
 
     cfg = bundle.get("_v2_config")
     if isinstance(cfg, dict) and cfg.get("snapshot_date"):

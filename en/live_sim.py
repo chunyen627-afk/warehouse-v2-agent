@@ -13,8 +13,10 @@ RFID、電商訂單等**多個來源即時更新**，絕大多數變動沒有人
    熱更新記憶體（含坑 33 修好的 `s.movements`）。不另寫一套寫入邏輯。
 3. **只在安全區間波動**——低於 `floor_ratio`×安全庫存就強制進貨、
    高於 `ceil_ratio` 就強制出貨 ⇒ 跑三天也不會把資料玩壞。
-4. **預設關閉**——守衛 892 句與所有寫入測試都假設「除非我寫入否則數字不動」，
-   背景一直改資料會讓它們隨機 FAIL。跑測試前務必關掉。
+4. **預設開機自動啟動、200×、60 商品全動**（user 定調 2026-08-03）。
+   ⚠️ 守衛 892 句與所有寫入測試都假設「除非我寫入否則數字不動」
+   ⇒ **跑測試前務必先關**（`POST /api/live_mode {"action":"stop"}`，
+   `run_guard_en.sh` 已內建）。
 
 ## 節奏依據（實測這份 seed 的真實模式，`_churn.py`）
 | | 入庫 | 出庫 |
@@ -22,7 +24,7 @@ RFID、電商訂單等**多個來源即時更新**，絕大多數變動沒有人
 | 筆數占比 | 21% | **79%** |
 | 單筆數量 | 中位 **49** 件（少而大）| 中位 **3** 件（多而小）|
 真實節奏是每天 63.6 筆 ⇒ 營業 10 小時約**每 9 分鐘一筆**。
-展場訪客只待幾分鐘 ⇒ 用 `SPEEDUP` 把時間軸加速（預設 20×），
+展場訪客只待幾分鐘 ⇒ 用 `speedup` 把時間軸加速（**預設 200×** ＝ 2.7 秒一輪），
 **比例維持真實**，只是快轉。可對外說「一天濃縮成幾分鐘」。
 """
 import asyncio
@@ -39,13 +41,17 @@ class LiveConfig:
     #   平均 **81 分鐘**才輪到同一個 ⇒ 訪客盯著某商品看幾乎不會動。
     #   改成**每輪同時動多筆**（`batch`），讓畫面上大量商品一起跳。
     #   實測單筆 `_do_one` 只要 **2ms**（含真實寫檔），一輪幾十筆零壓力。
-    speedup = 20                  # 時間加速倍率（可現場調，1-200）
+    # 預設 **200×**（約 2.7 秒一輪 × 60 商品全動）——user 定調 2026-08-03：
+    # 開機就要看到數據在跳，不必手動調。實測資源負擔極低（中英同時全速跑，
+    # 問答延遲 0.39s→0.37s 沒被拖慢、load 1.15、記憶體 avail 5.7GB）。
+    speedup = 200                 # 時間加速倍率（可現場調，1-400）
     base_interval_s = 9 * 60      # 真實世界的平均間隔（實測 seed 真值）
     jitter = 0.45                 # 間隔隨機抖動 ±45%，避免機械感
     batch = 8                     # 每輪同時動幾筆（可現場調，1-60）
     tick_s = 2.0                  # 最短輪詢間隔（速度拉到最大時的下限）
-    # 預設**每輪 60 個商品全動**（user 定調 2026-08-03）：真實倉庫是所有商品
-    # 同時各自進出，不是一次只動一個。展場視覺也需要「整片在動」。
+    # **恆為真**（user 定調 2026-08-03，前端選項已移除）：真實倉庫是所有商品
+    # 同時各自進出。**包含訪客後來新增的商品**——`_do_batch` 每輪重讀
+    # `W.state().items`，新商品下一輪就納入。
     sweep_all = True
 
     # ── 進出比例（實測：出庫 79% / 入庫 21%）──
@@ -59,6 +65,7 @@ class LiveConfig:
     floor_ratio = 0.80            # 低於 安全庫存×0.8 → 強制進貨
     ceil_ratio = 1.60             # 高於 安全庫存×1.6 → 強制出貨
     min_qty_floor = 5             # 任何倉別不讓它掉到 5 件以下
+    default_safety = 50           # 商品沒設安全庫存時的護欄基準（新增商品常是 0）
 
     # ── 來源（訪客看得到，證明是「別的系統」在動）──
     actors = ("pda_scan", "wms_sync", "ecom_order")
@@ -133,7 +140,7 @@ def _pick_move(only_sku: str = ""):
     `only_sku`：指定商品（sweep_all 模式用，確保每個商品都輪到）。
     """
     s = W.state()
-    items = [it for it in s.items if it.get("safety_stock")]
+    items = list(s.items)          # 全收（新商品 safety_stock 可能是 0）
     if only_sku:
         items = [it for it in items if it["sku_id"] == only_sku]
     if not items:
@@ -143,9 +150,8 @@ def _pick_move(only_sku: str = ""):
 
     for it in (items if only_sku else items[:25]):
         sku = it["sku_id"]
-        ss = it.get("safety_stock") or 0
-        if ss <= 0:
-            continue
+        # 安全庫存 0（訪客新增的商品）→ 用預設值當護欄基準，讓它也會動
+        ss = it.get("safety_stock") or LiveConfig.default_safety
         floor = max(LiveConfig.min_qty_floor, int(ss * LiveConfig.floor_ratio))
         ceil = int(ss * LiveConfig.ceil_ratio)
 
@@ -217,7 +223,10 @@ def _do_batch() -> list:
     out = []
     if LiveConfig.sweep_all:
         s = W.state()
-        items = [it for it in s.items if it.get("safety_stock")]
+        # ⚠️ 不能用 `it.get("safety_stock")` 過濾——**訪客新增的商品安全庫存
+        #   可能是 0**（實測 item_create 流程預設 0），那樣會被排除、永遠不動。
+        #   改成全收，護欄用 `_DEFAULT_SS` 兜底。
+        items = list(s.items)
         random.shuffle(items)
         for it in items:
             mv = _do_one(only_sku=it["sku_id"])

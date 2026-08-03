@@ -838,12 +838,9 @@ body.compact-top #messages { padding-top: 4px; }
   <div class="lb-item"><span class="lb-label">缺貨</span><span class="lb-val warn" id="lb-low">—</span></div>
   <div class="lb-sep"></div>
   <label class="lb-ctl">速度
-    <input type="range" id="lb-speed" min="5" max="200" step="5" value="20"
+    <input type="range" id="lb-speed" min="5" max="200" step="5" value="200"
            oninput="tuneLive()" title="模擬速度（實時間倍率）">
-    <span id="lb-speed-v">20x</span>
-  </label>
-  <label class="lb-ctl" title="每輪每個商品都動">
-    <input type="checkbox" id="lb-sweep" onchange="tuneLive()" checked> 全部 60 項
+    <span id="lb-speed-v">200x</span>
   </label>
   <button class="lb-toggle" id="lb-grid-btn" onclick="toggleGrid()">▾ 展開商品</button>
   <div class="lb-pulse" id="lb-pulse">● 即時</div>
@@ -1129,7 +1126,9 @@ function renderAnomalyBanner(data) {
   }
   const crit = counts.critical || 0, warn = counts.warning || 0, info = counts.info || 0;
   if (crit + warn + info === 0) { bar.style.display = 'none'; return; }
-  const top = all.filter(a => a.level !== 'info').slice(0, 5);
+  // 全部列出（原本寫死 slice(0,5)，其餘只顯示「…還有 N 項」看不到）
+  // 清單本身可捲動（CSS max-height + overflow-y），一筆一行。
+  const top = all.filter(a => a.level !== 'info');
   bar.style.display = 'block';
   bar.innerHTML = `
     <div class="ab-head" onclick="this.parentNode.classList.toggle('open')">
@@ -2155,9 +2154,19 @@ function renderViewCard(view, data, topSummary) {
     const isAudit  = fname && fname.endsWith('.csv');
     const dlHtml   = fname
       ? `<a href="/${isAudit?'audit':'reports'}/${fname}" download="${fname}"
+           style="display:inline-block;margin-top:8px;margin-right:8px;padding:6px 14px;
+                  background:rgba(255,255,255,.10);color:var(--text);border-radius:6px;
+                  font-size:13px;text-decoration:none">⬇ 下載 CSV</a>` : '';
+    // 「在瀏覽器開啟」——盤點同時產一份 HTML（RPI5 上 LibreOffice 開 CSV
+    //   要 3 分鐘還卡住，實測）。有 VIEW: 就給可點連結，秒開、不用額外程式。
+    const viewMatch = tail.match(/VIEW:(.+)/);
+    const viewPath  = viewMatch ? viewMatch[1].trim() : '';
+    const viewName  = viewPath ? viewPath.split('/').pop() : '';
+    const viewHtml  = viewName
+      ? `<a href="/audit/${viewName}" target="_blank" rel="noopener"
            style="display:inline-block;margin-top:8px;padding:6px 14px;
                   background:var(--accent);color:#fff;border-radius:6px;
-                  font-size:13px;text-decoration:none">⬇ 下載 ${fname}</a>` : '';
+                  font-size:13px;text-decoration:none">📊 開啟報告</a>` : '';
     const summaryLine = tail.match(/SUMMARY:(.+)/);
     const summaryText = summaryLine ? summaryLine[1].trim() : (data.summary || '');
     // ⚠️ config_done 與 script_done **共用這個渲染器**，但標題原本寫死
@@ -2167,7 +2176,7 @@ function renderViewCard(view, data, topSummary) {
     const doneWhat = view === 'config_done' ? '設定' : '腳本執行';
     card.innerHTML = `<div class="label">${data.ok===false?'⚠️':'✅'} ${doneWhat}${data.ok===false?'失敗':'完成'}</div>
       <div style="padding:8px;font-size:14px">${summaryText}</div>
-      ${dlHtml}
+      ${viewHtml}${dlHtml}
       ${data.trace_id?`<div style="font-size:11px;color:var(--muted);margin-top:6px">trace_id: ${data.trace_id} · 已記錄到 audit log</div>`:''}`;
   } else if (view === 'report_done') {
     const trace = data.trace || [];
@@ -3006,11 +3015,10 @@ function toggleGrid() {
 
 function tuneLive() {
   const sp = parseInt(document.getElementById('lb-speed').value, 10);
-  const sweep = document.getElementById('lb-sweep').checked;
   document.getElementById('lb-speed-v').textContent = sp + 'x';
   fetch('/api/live_mode', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'tune', speedup: sp, sweep_all: sweep})
+    body: JSON.stringify({action: 'tune', speedup: sp})
   }).catch(() => {});
 }
 refreshSnapshot();
