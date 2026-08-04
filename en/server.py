@@ -8052,7 +8052,15 @@ def _ctx_absorb(vid, result: dict):
     # （語音輸入時代點不了按鈕，序數是最自然的選法）。非 clarify 回答即清。
     if view == "clarify":
         _opts51 = data.get("options") or []
-        if _opts51:
+        # ⚠️ 有 actions 就存 actions（2026-08-04,第七輪抓到——ZH 同款修法
+        #   沒鏡射過來）：options 是顯示標籤（'Last week'）,actions 才是完整
+        #   指令（'export movements last week'）。序數代換標籤 → 雜訊路由
+        #   （'2' 變 period_compare、'the last one' 掉進商品 clarify）。
+        #   前端點按鈕本來就送 actions ⇒ 序數路與點擊路才一致。
+        _acts51 = data.get("actions") or []
+        if _acts51 and len(_acts51) == len(_opts51):
+            _clarify_opts_by_vid[vid] = list(_acts51)
+        elif _opts51:
             _clarify_opts_by_vid[vid] = list(_opts51)
         else:
             _clarify_opts_by_vid.pop(vid, None)
@@ -14004,9 +14012,12 @@ async def ws_handler(ws: WebSocket):
                         _p10_item = False
                     if not _p10_item:
                         _pre_en_script = "export movements"   # ⚠️ 英文版白名單別名,不可用中文「匯出」
-                elif _re.search(r"\b(?:run|do|perform|start)\b", user_text, _re.I) and \
+                elif _re.search(r"\b(?:run(?:ning)?|do(?:ing)?|perform(?:ing)?|"
+                                r"start(?:ing)?)\b", user_text, _re.I) and \
                         _re.search(r"\b(?:stocktake|stock\s*take|stock\s*count|"
                                    r"inventory\s*count|audit)\b", user_text, _re.I):
+                    # 2026-08-04：'would you mind **running** a quick stock audit'
+                    #   動名詞不匹配 \brun\b 曾整段 miss → RCA/設定 guide
                     _pre_en_script = "stocktake"
                 elif _re.search(r"\bhealth\s+check(?:up)?\b", user_text, _re.I):
                     # 2026-08-04：'warehouse health check' 被 clf 判
@@ -14869,6 +14880,13 @@ async def ws_handler(ws: WebSocket):
                                       #   「忽略未知參數」信號燈）
                                       or bool(_re.search(
                                           r"\bhealth\s+check(?:up)?\b",
+                                          user_text, _re.I))
+                                      # 跑盤點（含動名詞禮貌形）同樣保護
+                                      or bool(_re.search(
+                                          r"\b(?:run(?:ning)?|do(?:ing)?|"
+                                          r"perform(?:ing)?)\b.{0,24}"
+                                          r"\b(?:stock\s*audit|stocktake|"
+                                          r"stock\s*(?:take|count))\b",
                                           user_text, _re.I))))
                 if mismatch and not _hard and not _en_admin_hard \
                         and not _c18_exp_keep and clf_intent != "unknown":
