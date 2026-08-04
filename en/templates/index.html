@@ -2273,13 +2273,13 @@ function renderViewCard(view, data, topSummary) {
           <div class="hitl-header ${riskLevel}">✋ Purchase authorization — confirm to submit</div>
           <div class="hitl-body">
             <div style="font-size:13px;margin-bottom:8px">
-              <b>${lines.length}</b> items need restocking, estimated
+              <b>${lines.length}</b> item${lines.length>1?'s':''} need${lines.length>1?'':'s'} restocking, estimated
               <b style="color:var(--accent);font-size:16px">NT$ ${totalAmt}</b>
             </div>
             <table class="exp-table" style="margin:8px 0">
               <tr><th>Item</th><th>WH</th><th>Reorder qty</th><th>Amount</th><th>Supplier</th></tr>
               ${lines.slice(0,12).map(l=>`<tr>
-                <td>${l.name}</td><td>${l.warehouse}</td>
+                <td>${l.name}</td><td>${WAREHOUSE_LABEL[l.warehouse]||l.warehouse}</td>
                 <td><b>${l.order_qty}</b></td>
                 <td style="color:var(--accent)">NT$ ${(l.amount||0).toLocaleString()}</td>
                 <td style="color:var(--muted)">${l.supplier||'—'}</td></tr>`).join('')}

@@ -4856,6 +4856,31 @@ _VIEW2FUNC = {"inventory": "query_inventory", "inventory_single": "query_invento
 
 
 _clarify_opts_by_vid: dict = {}   # r51：vid → 上一輪 clarify 的選單（序數選擇用）
+_export_done_by_vid: dict = {}    # 2026-08-04：vid → (kind, ts)，產出完成後的追問接續
+
+
+def _lq_has_item_zh(text: str) -> bool:
+    """live-qa 商品讓路：「瑜珈墊數字跳來跳去」是 RCA 對帳句不是 live 問句。
+
+    守衛 1121/1122 抓到。⚠️ match_items(整句) 在 ZH 回空（引擎對長句歸零,
+    實測連「藍牙耳機庫存」都只有 3 分）⇒ 不能用 EN 的分數門檻。
+    改判準：商品**核心名**（split 去規格尾）或其 **3 字滑窗** substring in 句
+    ——3 字窗對中文是有意義的詞（EN 才是坑 1 的誤爆來源）。
+    只在 live-regex 已命中時執行,誤中面極小。
+    """
+    try:
+        import warehouse as _W_lq
+        for _it in _W_lq.state().items:
+            _core = str(_it.get("name", "")).split()[0]
+            if len(_core) >= 2 and _core in text:
+                return True
+            if len(_core) >= 4:
+                for _i in range(len(_core) - 2):
+                    if _core[_i:_i + 3] in text:
+                        return True
+        return False
+    except Exception:
+        return False
 _write_flow_by_vid: dict = {}     # r56：vid → 寫入續流（進出貨/調貨 clarify 問倉別/數量後，
                                   #        短答「北倉」「30件」要接回寫入而不是變庫存查詢）
 
@@ -4913,6 +4938,12 @@ def _ctx_absorb(vid, result: dict):
 
     # r51：clarify 選單記憶——「咖啡對應到5個商品」後訪客說「第一個」要能選
     # （語音輸入時代點不了按鈕，序數是最自然的選法）。非 clarify 回答即清。
+    # 產出完成記憶（2026-08-04，同 EN 版）
+    if view == "script_done":
+        _sd_tail = str((data or {}).get("output_tail") or "")
+        _export_done_by_vid[vid] = (
+            "export" if "movements_" in _sd_tail else "report",
+            __import__("time").time())
     if view == "clarify":
         _opts51 = data.get("options") or []
         # ⚠️ 有 actions 就存 actions（2026-08-04,user 實測抓到）：
@@ -7421,6 +7452,54 @@ async def ws_handler(ws: WebSocket):
                     "data": {"question": _nx_msg, "options": [], "hint": ""}}})
                 continue
 
+            # ── 直達層（2026-08-04 第七輪配套,同 EN 版）─────────────────
+            #   ① live 問句：「數字怎麼一直在變」曾被當商品問（clarify）,
+            #     「這是即時資料嗎」曾 rejected —— live 模擬的招牌問題。
+            if _re.search(r"(?:數字|庫存|資料|畫面).{0,8}(?:一直|自己|怎麼|為什麼|為啥|幹嘛)"
+                          r".{0,6}(?:在)?(?:變|動|跳)|"
+                          r"即時(?:資料|更新|的)?嗎|是(?:真的|即時)(?:資料|的)嗎|"
+                          r"會自己(?:變|動|更新)|數字(?:在)?(?:跳|動|變)", user_text) \
+                    and not _lq_has_item_zh(user_text):
+                _lq_msg = ("是的，現在是 Live 模式！倉庫正在模擬真實營運"
+                           "（PDA 掃描、WMS 同步、電商訂單），庫存數字會像"
+                           "真實倉庫一樣持續變動。想看什麼都可以問我——"
+                           "例如「缺貨的有哪些」或「匯出昨天的進出紀錄」。")
+                log.info(f"[live-qa] {user_text!r} → live 模式說明")
+                for ch in _lq_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _lq_msg, "data": {}}})
+                continue
+            #   ② 產出完成後的追問（180 秒窗口）
+            _pex = _export_done_by_vid.get(vid)
+            if _pex and __import__("time").time() - _pex[1] < 180:
+                if _re.fullmatch(r"(?:可以|能|要怎麼|怎麼)?(?:下載|打開|開啟|存檔|看檔案?)"
+                                 r"(?:它|檔案|報告|嗎|呢)?[?？!！。.\s]*", user_text.strip()):
+                    _dl_msg = ("可以喔——點上面卡片的 📊【開啟報告】直接看，"
+                               "或按 ⬇【下載 CSV】存檔。")
+                    log.info("[post-export] 下載指路")
+                    for ch in _dl_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "guide", "summary": _dl_msg,
+                        "data": {}}})
+                    continue
+                #   期間追問改寫 canonical 句 → 走完整已驗證鏈
+                _pp_zh = _re.fullmatch(
+                    r"(?:那|再|還有|順便|然後)?\s*"
+                    r"(昨天|上週|上一週|前一週|前一周|上個月|前一個月|上一季|前一季)"
+                    r"(?:的)?(?:呢|也要|也匯|也來一份|好了)?[?？!！。.\s]*",
+                    user_text.strip())
+                if _pex[0] == "export" and _pp_zh:
+                    _pp_map = {"昨天": "昨天", "上週": "前一週", "上一週": "前一週",
+                               "前一週": "前一週", "前一周": "前一週",
+                               "上個月": "前一個月", "前一個月": "前一個月",
+                               "上一季": "前一季", "前一季": "前一季"}
+                    user_text = f"匯出{_pp_map[_pp_zh.group(1)]}的進出紀錄"
+                    log.info(f"[post-export] 期間追問改寫 → {user_text!r}")
+
             # r76：招呼開場（「哈囉開店啦」）曾掉「沒有這個商品」醜 clarify
             _gr_m82 = _re.fullmatch(
                 r"(哈囉|嗨+|hi|hello|安安|你好|大家好|早+)[啊呀!！~～\s]*"
@@ -7476,7 +7555,8 @@ async def ws_handler(ws: WebSocket):
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）
             # r67：+今天/那我/我先（「今天就到這 感謝」）
             _fw_all = _re.fullmatch(
-                rf"(?:今天|那我|我先|那就)?[\s好啦嗯哦喔]*(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})"
+                rf"(?:今天|那我|我先|那就|太|真是|真的|超|非常)?"
+                rf"[\s好啦嗯哦喔]*(?:(?:{_FW_BYE_TOK}|{_FW_THX_TOK})"
                 rf"[\s啦嘍囉喔哦耶呀呦唷了~～!！?？。.，,]*)+",
                 user_text.strip(), _re.IGNORECASE)
             _fw_bye = _fw_all and _re.search(rf"(?:{_FW_BYE_TOK})", user_text, _re.IGNORECASE)

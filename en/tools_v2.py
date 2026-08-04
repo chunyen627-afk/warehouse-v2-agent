@@ -1277,7 +1277,7 @@ def generate_po(source: str = "low_stock") -> dict:
     return {"ok": True,
             "summary": ("Purchase order draft generated from the "
                         f"{'low-stock list' if src == 'low_stock' else 'shortfall records'}: "
-                        f"{len(lines)} lines, estimated NT$ {total:,}. "
+                        f"{len(lines)} line{'s' if len(lines) > 1 else ''}, estimated NT$ {total:,}. "
                         "Please confirm to submit."),
             "view": "po_confirm",
             "data": {"pending": True, "source": src, "lines": lines, "total": total, "trace": steps}}

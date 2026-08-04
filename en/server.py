@@ -355,6 +355,13 @@ def is_meaningful_input(text: str) -> bool:
                  r"\b(?:health\s+check|stocktake|stock\s+audit)\b", s, re.I):
         return True
 
+    # 身份問句（2026-08-04 第七輪：'who made you' 曾掉「查無商品 who made」,
+    #   ZH 版黑名單有對應詞,EN 漏）
+    if re.fullmatch(r"(?:so\s+)?who\s+(?:made|built|created|designed)\s+"
+                    r"(?:you|this|it)[?.! ]*|who\s+are\s+you[?.! ]*|"
+                    r"are\s+you\s+(?:an?\s+)?(?:ai|robot|bot|chatgpt|gpt|human)"
+                    r"[?.! ]*", s):
+        return False
     # r81 寫入契約：破壞動詞 × 全稱詞的組合一律擋（不枚舉個案）。
     # 「全部商品歸零」曾漏黑名單→吐 60 項清單。破壞語意 + 全稱範圍 = 搗蛋。
     # 查詢語（「快歸零的有哪些」）不含全稱詞、或含查詢語尾，不會誤中。
@@ -7985,6 +7992,7 @@ _VIEW2FUNC = {"inventory": "query_inventory", "inventory_single": "query_invento
 
 
 _clarify_opts_by_vid: dict = {}   # r51：vid → 上一輪 clarify 的選單（序數選擇用）
+_export_done_by_vid: dict = {}    # 2026-08-04：vid → (kind, ts)，產出完成後的追問接續用
 _write_flow_by_vid: dict = {}     # r56：vid → 寫入續流（進出貨/調貨 clarify 問倉別/數量後，
                                   #        短答「北倉」「30件」要接回寫入而不是變庫存查詢）
 
@@ -8050,6 +8058,13 @@ def _ctx_absorb(vid, result: dict):
 
     # r51：clarify 選單記憶——「咖啡對應到5個商品」後訪客說「第一個」要能選
     # （語音輸入時代點不了按鈕，序數是最自然的選法）。非 clarify 回答即清。
+    # 產出完成記憶（2026-08-04）：script_done 後的「and last week too /
+    #   can i download it」要接得住（第七輪抓到兩類都答非所問）
+    if view == "script_done":
+        _sd_tail = str((data or {}).get("output_tail") or "")
+        _export_done_by_vid[vid] = (
+            "export" if "movements_" in _sd_tail else "report",
+            __import__("time").time())
     if view == "clarify":
         _opts51 = data.get("options") or []
         # ⚠️ 有 actions 就存 actions（2026-08-04,第七輪抓到——ZH 同款修法
@@ -11039,6 +11054,83 @@ async def ws_handler(ws: WebSocket):
                     "ok": True, "view": "guide", "summary": _gr_msg, "data": {}}})
                 continue
 
+            # ── 直達層（2026-08-04 第七輪配套）────────────────────────────
+            #   ① live 問句：訪客盯著跳動數字必問「why do the numbers keep
+            #     changing」,曾掉 RCA 對帳報告（答非所問）。
+            _lq_en = _re.search(
+                r"(?:why|how\s+come)\b.{0,30}\b(?:numbers?|figures?|stock|data)\b"
+                r".{0,24}\b(?:chang|mov|jump|updat|different)|"
+                r"\bis\s+th(?:is|at|ese)\s+(?:real[- ]?time|live|real)\b|"
+                r"\breal[- ]?time\s+data\b|\blive\s+(?:data|mode)\b|"
+                r"\bnumbers?\s+(?:keep\s+)?(?:changing|moving|jumping)\b",
+                user_text, _re.I)
+            _lq_has_item = False
+            if _lq_en:
+                try:
+                    import warehouse as _W_lq
+                    _lq_m = _W_lq.match_items(user_text)
+                    _lq_has_item = bool(_lq_m and _lq_m[0].get("score", 0) >= 6)
+                except Exception:
+                    _lq_has_item = False
+            if _lq_en and _is_mostly_english(user_text) and not _lq_has_item:
+                _lq_msg = ("Yes — Live mode is on! The warehouse simulates real "
+                           "operations (PDA scans, WMS sync, e-commerce orders), "
+                           "so stock numbers keep updating just like a real "
+                           "warehouse. Ask me anything about the moving stock — "
+                           "try \"what's running low\" or "
+                           "\"export movements yesterday\".")
+                log.info(f"[live-qa] {user_text!r} → live 模式說明")
+                for ch in _lq_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _lq_msg, "data": {}}})
+                continue
+            #   ② 產出完成後的追問（180 秒窗口防陳舊 context）
+            _pex = _export_done_by_vid.get(vid)
+            if _pex and __import__("time").time() - _pex[1] < 180:
+                _dl_en = _re.fullmatch(
+                    r"(?:can|could|may)?\s*i?\s*(?:download|open|get|save|view)\s*"
+                    r"(?:it|that|this|the\s+(?:file|report|csv))?\s*"
+                    r"(?:please)?[?.! ]*", user_text.strip(), _re.I)
+                if _dl_en:
+                    _dl_msg = ("Sure — tap 📊 [Open report] to view it in a new "
+                               "tab, or ⬇ [Download CSV] on the card above to "
+                               "save the file.")
+                    log.info("[post-export] 下載指路")
+                    for ch in _dl_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "guide", "summary": _dl_msg,
+                        "data": {}}})
+                    continue
+                #   期間追問改寫成 canonical 句 → 走完整已驗證鏈（選單/確認/days）
+                _pp_en = _re.fullmatch(
+                    r"(?:and|what\s+about|how\s+about|also|now|then)?\s*(?:the)?\s*"
+                    r"(last\s+(?:week|month|quarter)|previous\s+(?:week|month)|"
+                    r"past\s+(?:week|month)|yesterday)\s*"
+                    r"(?:too|as\s+well|please|now)?\s*[?.! ]*",
+                    user_text.strip(), _re.I)
+                if _pex[0] == "export" and _pp_en:
+                    user_text = "export movements " + _pp_en.group(1).lower()
+                    log.info(f"[post-export] 期間追問改寫 → {user_text!r}")
+            #   ③ 無卡 confirm（第七輪 S15：曾回 60 項概覽,ZH 版是正確引導）
+            if (_re.fullmatch(r"(?:ok\s*)?(?:confirm(?:\s*it)?|go\s+ahead|"
+                              r"yes\s+confirm|approve)[?.! ]*",
+                              user_text.strip(), _re.I)
+                    and vid not in _pending_by_vid):
+                _nc_msg = ("There's nothing waiting for confirmation right now. "
+                           "Ask me to export movements or run a report first, "
+                           "then confirm the card that appears.")
+                log.info("[no-pending-confirm] 無卡確認 → 引導")
+                for ch in _nc_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _nc_msg, "data": {}}})
+                continue
+
             # r76：招呼開場（「哈囉開店啦」）曾掉「沒有這個商品」醜 clarify
             _gr_m82 = _re.fullmatch(
                 r"(哈囉|嗨+|hi|hello|安安|你好|大家好|早+)[啊呀!！~～\s]*"
@@ -11104,6 +11196,8 @@ async def ws_handler(ws: WebSocket):
                            r"cheers|appreciate\s*(?:it|that)|much\s*appreciated|"
                            r"(?:thats|that'?s)\s*(?:all|it|great|perfect|helpful)|"
                            r"nice\s*one|awesome|perfect|great\s*stuff|good\s*stuff|"
+                           # 2026-08-04 第七輪：裸 'cool' 曾掉「查無商品 cool」
+                           r"cool|sweet|neat|nice|love\s*it|"
                            r"got\s*it|understood|makes\s*sense|"
                            r"(?:youre|you'?re)\s*(?:the\s*best|great|awesome)")
             # r63：允許開頭客套填充（「好啦下班了 掰」的「好啦」）

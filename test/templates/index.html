@@ -2261,7 +2261,7 @@ function renderViewCard(view, data, topSummary) {
             <table class="exp-table" style="margin:8px 0">
               <tr><th>商品</th><th>倉</th><th>補貨量</th><th>金額</th><th>供應商</th></tr>
               ${lines.slice(0,12).map(l=>`<tr>
-                <td>${l.name}</td><td>${l.warehouse}</td>
+                <td>${l.name}</td><td>${WAREHOUSE_LABEL[l.warehouse]||l.warehouse}</td>
                 <td><b>${l.order_qty}</b></td>
                 <td style="color:var(--accent)">NT$ ${(l.amount||0).toLocaleString()}</td>
                 <td style="color:var(--muted)">${l.supplier||'—'}</td></tr>`).join('')}
