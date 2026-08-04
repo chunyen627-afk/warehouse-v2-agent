@@ -2,9 +2,16 @@
 # -*- coding: utf-8 -*-
 """gen_qr2.py — 產生中英文版 QR code（2026-08-04，第二台重建用）。
 
-舊版 `gen_qr.py` 把 IP 寫死成熱點的 192.168.4.1，
-第二台固定放公司走區網 ⇒ 改成**自動抓本機區網 IP**，
-換網段/換機器都不用改程式。
+🚨 **展場一定要用熱點 IP `192.168.4.1`**——
+訪客手機是連 RPI5 開的熱點（SSID `RPI5-Demo`），
+連上後**只有區網、沒有外網也沒有 DNS**，
+所以 QR 必須指向熱點位址；用公司 Wi-Fi 的 IP（192.168.125.x）**手機連不到**。
+（曾經誤產成區網 IP，2026-08-04 修正。）
+
+預設 = 熱點 IP；要產區網版（自己在辦公室測）才傳參數：
+  python3 gen_qr2.py            # 熱點 192.168.4.1（展場用，預設）
+  python3 gen_qr2.py lan        # 自動抓本機區網 IP
+  python3 gen_qr2.py 10.0.0.5   # 指定 IP
 
 產出（桌面）：
   QRcode_英文版.png  → https://<本機IP>:8002
@@ -60,8 +67,16 @@ def make(url, label, path):
     print(f"{path}  ->  {url}")
 
 
+HOTSPOT_IP = "192.168.4.1"      # nmcli con show rpi5-hotspot → ipv4.addresses
+
 if __name__ == "__main__":
-    ip = sys.argv[1] if len(sys.argv) > 1 else lan_ip()
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if arg == "lan":
+        ip = lan_ip()
+    elif arg:
+        ip = arg
+    else:
+        ip = HOTSPOT_IP             # 預設＝展場用的熱點位址
     make(f"https://{ip}:8002", "EN", f"{DESKTOP}/QRcode_英文版.png")
     make(f"https://{ip}:8001", "ZH", f"{DESKTOP}/QRcode_中文版.png")
-    print(f"\n本機區網 IP：{ip}")
+    print(f"\nQR 指向（熱點/展場用）：{ip}")

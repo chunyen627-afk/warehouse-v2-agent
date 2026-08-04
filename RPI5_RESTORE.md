@@ -432,9 +432,76 @@ rsync -a --partial --exclude=__pycache__ --exclude='*.pyc' --exclude='*.log' \
 cd ~ && tar czf /tmp/kiosk.tgz launch_warehouse.sh fix_chromium_exit.py \
     health_watchdog.sh .config/autostart/warehouse.desktop Desktop/*.desktop
 
-# ── 7. QR code 重產（**IP 不一樣，不能沿用舊機的圖**）
-python3 ~/gen_qr2.py          # 自動抓本機區網 IP，產中英兩張到桌面
+# ── 7. QR code 重產
+python3 ~/gen_qr2.py          # 預設＝熱點 192.168.4.1，產中英兩張到桌面
 ```
+
+> 🚨 **雷（2026-08-04 踩到）：QR 一定要指向熱點 IP `192.168.4.1`**
+> 訪客手機是連 RPI5 開的熱點（SSID `RPI5-Demo`），連上後
+> **只有區網、沒有外網也沒有 DNS** ⇒ 用公司 Wi-Fi 的 IP（192.168.125.x）
+> 產 QR，**展場現場手機完全連不上**。
+> 熱點位址查法：`nmcli -g ipv4.addresses con show rpi5-hotspot`（→ 192.168.4.1/24）。
+
+---
+
+## 7c. HTTPS 憑證（兩套，只有第 2 套要動手）
+
+| 憑證 | 用途 | 重建時要做什麼 |
+|---|---|---|
+| **自簽**（CN=Warehouse-Demo） | 倉管 server 8001/8002 | ❌ **不用做**——`cert.pem`/`key.pem` 隨 rsync 一起到位 |
+| **Let's Encrypt**（`rpi5demo.duckdns.org`） | nginx 對外入口 | ✅ 整包搬 + 設獨立續期 |
+
+### 🎤 為什麼一定要 HTTPS（跟手機語音直接相關）
+瀏覽器的 `getUserMedia`（麥克風）有硬性限制：
+| 連線方式 | 麥克風 |
+|---|---|
+| `https://` 任何位址 | ✅ 可用 |
+| `http://localhost` | ✅ 可用（本機例外） |
+| **`http://192.168.x.x`** | ❌ **完全不可用** |
+⇒ 倉管 server 本身就跑 HTTPS（`server_https.py`），**手機直連 8001/8002 即可用語音，不需要經過 nginx**。
+會跳一次自簽憑證警告，點「繼續前往」後麥克風正常——這是展場的正常流程。
+
+### nginx / LE 憑證是**舊專案 `rpi5-demo` 的遺留**
+代理到 **port 8000**（倉管從來沒用過這個 port），
+且 `rpi5-demo.service` 在兩台都是 **disabled + inactive**
+⇒ `curl -skI https://localhost` 回 **502 是正常的**，不是壞掉。
+保留只為與第一台一致；倉管完全不依賴它。
+
+> ⚠️ **想靠 LE 憑證「不跳警告」在展場行不通**：熱點模式沒有 DNS，
+> 手機解析不到 `rpi5demo.duckdns.org`，只能用 IP 連，而 LE 憑證綁網域
+> ⇒ 用 IP 連一樣警告。**自簽 + 點過警告是展場唯一可行的方式。**
+
+### 搬移步驟（實測可行，2026-08-04）
+```bash
+# 舊機
+sudo tar czf /tmp/le_certs.tgz -C /etc letsencrypt          # 要整包，不能只 cp live/
+sudo tar czf /tmp/nginx_demo.tgz -C /etc \
+     nginx/sites-available/rpi5-demo systemd/system/rpi5-demo.service
+sudo chown p400 /tmp/le_certs.tgz /tmp/nginx_demo.tgz
+scp /tmp/le_certs.tgz /tmp/nginx_demo.tgz ~/duckdns-hook.sh p400@<新機IP>:/tmp/
+
+# 新機
+sudo apt install -y nginx certbot        # ⚠️ 兩個都要，重建的機器預設沒有
+sudo tar xzf /tmp/le_certs.tgz -C /etc
+sudo tar xzf /tmp/nginx_demo.tgz -C /etc
+cp /tmp/duckdns-hook.sh ~/ && chmod +x ~/duckdns-hook.sh   # ⚠️ 含 token，別印出內容
+sudo ln -sf /etc/nginx/sites-available/rpi5-demo /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl enable --now nginx
+
+# 續期 deploy hook
+sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+printf '#!/bin/bash\nsystemctl reload nginx\n' | \
+  sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh >/dev/null
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+```
+**驗收**：`sudo certbot renew --dry-run` 要看到
+`all simulated renewals succeeded`；`systemctl list-timers | grep certbot` 要在。
+（certbot 2.x 的 dry-run **不會跑 deploy hook**，那是正常的；hook 本體手動跑一次驗證即可。）
+
+> 🔑 **兩台可各自獨立續期**：走 DNS-01（hook 自動塞 DuckDNS TXT），
+> **不需要網域 A 記錄指向本機** ⇒ 互不干擾，也不依賴對方開機。
+> renewal conf 裡 `manual_auth_hook = /home/p400/duckdns-hook.sh`，
+> 只要 hook 放在同路徑就不用改設定。
 
 > 🚨 **雷：`Environment=LD_LIBRARY_PATH=~/whisper.cpp/build/bin` 會讓服務起不來**
 > ```
