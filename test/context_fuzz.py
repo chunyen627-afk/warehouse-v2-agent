@@ -9,10 +9,7 @@
   WARN  = 語意可疑（rejected 的追問、答非所問嫌疑）→ 人工回看
   ok    = 通過
 r69 滿版：19 前置（含 6 種確認卡、選單、清單、比較、寫入完成態）× 20 追問 = 380 對。
-r82 擴充：新增第二段 write_contract_fuzz（29 句）——機器化守《寫入操作規範
-WRITE_CONTRACT.md》的六類鐵律（三要素齊開卡／缺要素追問／查無不頂替／搗蛋拒／
-比例負數擋／漏打字纠錯）。把 r74-r81 逐句人工挖的寫入破口變成常設自動防線。
-用法：python context_fuzz.py [--rpi5] [--only setup_key|write|full|miss|nf|sab|lim|typo]
+用法：python context_fuzz.py [--rpi5] [--only setup_key]
 """
 import asyncio, json, ssl, sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")

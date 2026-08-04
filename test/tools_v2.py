@@ -628,18 +628,54 @@ def _parse_days(text: str) -> int | None:
         return 2
     if _re2.search(r"本週|這週|this\s+week", t):
         return 7
-    if _re2.search(r"上週|last\s+week", t):
-        return 14
+    # ⚠️ 語意＝**往前推一週**（2026-08-03 user 定調），不是「上一個完整週」。
+    #   修前回 14（＝往前 8-14 天那一週），訪客講「前一週」卻拿到兩週前的資料。
+    if _re2.search(r"上週|上周|前一週|前一周|前1週|last\s+week|past\s+week|"
+                   r"previous\s+week", t):
+        return 7
     if _re2.search(r"本月|這個月|this\s+month", t):
         return 30
-    if _re2.search(r"上個月|last\s+month", t):
-        return 60
-    m = _re2.search(r"(?:最近|過去|past|last|recent)\s*(\d+)\s*(?:天|days?)|"
+    # 同上：**往前推一個月**（修前回 60＝上一個完整月）。
+    if _re2.search(r"上個月|上一個月|前一個月|前1個月|前一月|last\s+month|"
+                   r"past\s+month|previous\s+month", t):
+        return 30
+    # 🆕 前一季（2026-08-03 user 需求）——快照有 91 個有資料的日子，
+    #   90 天剛好涵蓋整個資料範圍，是這份 demo 能匯出的最大期間。
+    if _re2.search(r"前一季|上一季|上季|前1季|近一季|這一季|本季|"
+                   r"last\s+quarter|past\s+quarter|previous\s+quarter|"
+                   r"this\s+quarter|last\s+3\s+months|past\s+3\s+months|"
+                   r"前三個月|近三個月|過去三個月", t):
+        return 90
+    m = _re2.search(r"(?:最近|過去|前|past|last|recent)\s*(\d+)\s*(?:天|days?)|"
                     r"(\d+)\s*(?:天內|days?)", t)
     if m:
         n = int(m.group(1) or m.group(2))
         return max(1, min(365, n))
+    # 中文數字：「前七天」「最近三天」——user 定調的引導語就是「前七天」，
+    # 訪客照著講不能因為沒打阿拉伯數字就漏掉（2026-08-03 端到端實測抓到）。
+    m = _re2.search(r"(?:最近|過去|前)\s*([零一二三四五六七八九十兩]+)\s*天", t)
+    if m:
+        _n = _cjk_num(m.group(1))
+        if _n:
+            return max(1, min(365, _n))
     return None
+
+
+def _cjk_num(s: str) -> int:
+    """中文數字 → int（只需涵蓋 1..99，期間不會更大）。"""
+    _d = {"零": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4,
+          "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if not s:
+        return 0
+    if "十" not in s:
+        n = 0
+        for ch in s:
+            if ch not in _d:
+                return 0
+            n = n * 10 + _d[ch]
+        return n
+    a, _, b = s.partition("十")
+    return (_d.get(a, 1) if a else 1) * 10 + (_d.get(b, 0) if b else 0)
 
 
 def run_script(script_name: str = "", **_kw) -> dict:
@@ -658,14 +694,22 @@ def run_script(script_name: str = "", **_kw) -> dict:
 
     # 安全護欄：只回「待確認」，不直接 subprocess（執行交給 server confirm 後）
     _trace(steps, "confirm", f"命中白名單腳本：{sc['label']}（逾時上限 {sc['timeout_s']}s）")
-    summary = f"準備執行白名單腳本【{sc['label']}】：{sc.get('description', sc.get('desc', ''))}。請確認後執行。"
+    # 訪客講的期間（匯出用）→ 帶到 confirm 那步。
+    # `_period_text` 是 server 塞的原句（script_name 只有「匯出」兩字時期間
+    # 抽不到）；沒有就退回用 script_name 自己解析。
+    _days = _parse_days(_period_text or script_name)
+    # ⚠️ 卡片文案要**跟著訪客講的期間走**：manifest 的 description 是寫死的
+    #   「合併最近 7 天…」，訪客講「昨天」時卡片卻說 7 天（2026-08-03 實測抓到）
+    #   ——後端其實有正確帶 days=1，只有文案騙人，訪客會以為選單沒作用。
+    _desc = sc.get("description", sc.get("desc", ""))
+    if sc["id"] == "export_movements" and _days:
+        _p = "昨天" if _days == 1 else f"最近 {_days} 天"
+        _desc = f"合併{_p}進出記錄，產出 CSV"
+    summary = f"準備執行白名單腳本【{sc['label']}】：{_desc}。請確認後執行。"
     return {"ok": True, "summary": summary, "view": "script_confirm",
             "data": {"pending": True, "script_id": sc["id"], "label": sc["label"],
-                     "desc": sc.get("description", sc.get("desc", "")), "timeout_s": sc["timeout_s"],
-                     # 訪客講的期間（匯出用）→ 帶到 confirm 那步。
-                     # `_period_text` 是 server 塞的原句（script_name 只有「匯出」
-                     # 兩字時期間抽不到）；沒有就退回用 script_name 自己解析。
-                     "days": _parse_days(_period_text or script_name), "trace": steps}}
+                     "desc": _desc, "timeout_s": sc["timeout_s"],
+                     "days": _days, "trace": steps}}
 
 
 # 白名單腳本實際指令（server confirm 後呼叫 commit_run_script）
@@ -1216,6 +1260,12 @@ _SCHEDULE_SCRIPT_MAP = {
     "報告":     "generate_report",
     "月報":     "generate_report",
     "週報":     "generate_report",
+    # ⚠️ 「日報」漏收 → 「排程每天早上九點出日報」對到空字串，訪客看到
+    #   `[error] 找不到腳本「」`（2026-08-03 端到端實測；同句換月報就正常）。
+    #   同一個「日報」概念散在 _sched_act_kws / C12 _report_words / intent_clf
+    #   詞表，這張 alias 表是最後一個漏的 —— 補要四張一起補（坑 28 同型）。
+    "日報":     "generate_report",
+    "年報":     "generate_report",
     # 「每天半夜兩點自動跑庫存體檢」只講「體檢」沒講「報告」（conv100-r6）
     "體檢":     "generate_report",
     "健檢":     "generate_report",

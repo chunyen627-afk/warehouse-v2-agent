@@ -15,17 +15,9 @@ SEED = Path(__file__).parent / "seed_data.json"
 
 def main():
     d = json.load(open(SEED, encoding="utf-8"))
-    # 可重複執行：seed 已英文化(有 name_zh)則用 name_zh 建對照
-    already_en = all("name_zh" in it for it in d["items"])
-    items_for_map = ([{**it, "name": it["name_zh"]} for it in d["items"]]
-                     if already_en else d["items"])
-    en_map, missing = build_en_map(items_for_map)
+    en_map, missing = build_en_map(d["items"])
     if missing:
-        print("[warn] 未對到英文名，中止:", missing); sys.exit(1)
-    if already_en:
-        print("[seed] 已英文化，跳過 seed、只處理 items.csv")
-        en_items_csv(en_map, d)
-        print("[done] items.csv englishized"); return
+        print("⚠️ 有商品未對到英文名，中止：", missing); sys.exit(1)
 
     # 備份中文原版（只備一次，不覆蓋既有備份）
     bak = SEED.with_suffix(".json.zh.bak")
@@ -50,36 +42,10 @@ def main():
             w["label"] = WAREHOUSE_EN[key][0]
 
     json.dump(d, open(SEED, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    print(f"[seed] {len(d['items'])} items, {len(d['categories'])} cats, {len(d['warehouses'])} whs -> EN")
-
-    # ── 主資料 warehouse_data/master/items.csv 也英文化（multi 模式真正讀這個）──
-    en_items_csv(en_map, d)
-    print("[done] items.csv + seed_data.json englishized")
-
-
-def en_items_csv(en_map, seed_dict):
-    """warehouse_data/master/items.csv 的 name + category_label 英文化（by sku_id）。"""
-    import csv
-    csvp = Path(__file__).parent / "warehouse_data" / "master" / "items.csv"
-    if not csvp.exists():
-        print("[csv] items.csv 不存在，略過"); return
-    bak = csvp.with_suffix(".csv.zh.bak")
-    if not bak.exists():
-        shutil.copy(csvp, bak)
-    # category key -> 英文 label（用 seed 已英文化的 categories）
-    cat_en = {c["key"]: c["label"] for c in seed_dict["categories"]}
-    rows = list(csv.DictReader(open(csvp, encoding="utf-8-sig")))
-    fields = rows[0].keys() if rows else []
-    for r in rows:
-        sid = r.get("sku_id", "")
-        if sid in en_map:
-            r["name"] = en_map[sid]["name_en"]
-        if r.get("category") in cat_en:
-            r["category_label"] = cat_en[r["category"]]
-    with open(csvp, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(fields))
-        w.writeheader(); w.writerows(rows)
-    print(f"[csv] items.csv {len(rows)} rows -> EN name+category_label")
+    print(f"✅ 已英文化：{len(d['items'])} 商品、{len(d['categories'])} 類、{len(d['warehouses'])} 倉")
+    print("   items 範例：", d["items"][0]["name"], "|", d["items"][0]["name_zh"])
+    print("   category  ：", [c["label"] for c in d["categories"]])
+    print("   warehouse ：", [w["label"] for w in d["warehouses"]])
 
 
 if __name__ == "__main__":

@@ -330,6 +330,31 @@ def is_meaningful_input(text: str) -> bool:
             "what is this system", "what's this system",
             "is this real data", "how does this demo")):
         return True
+    # ── 產出類意圖放行（2026-08-04，意圖測試抓到）───────────────────
+    #   訪客要的正是報告/採購單/進出紀錄,卻在守門員就被擋掉：
+    #     `generate a PO`（PO 太短）/ `export everything from last quarter`
+    #     （everything 不是受詞）→ rejected
+    #     `warehouse health check` / `which items grew the most`
+    #     → 被當商品名查 →「查無 health/grew 這個商品」
+    #   ⚠️ 一律用**詞界正則**不用 substring（坑 1：`po` ∈ re**po**rt/ex**po**rt）。
+    if re.search(r"\b(?:generate|create|make|run|produce|give\s+me|i\s+need|"
+                 r"i\s+want|show\s+me|export|download)\b[^.?!]{0,30}"
+                 r"\b(?:po|purchase\s+order|report|stocktake|stock\s+take|"
+                 r"audit|health\s+check|movements?|transactions?|records?|"
+                 r"logs?|csv|everything)\b", s, re.I):
+        return True
+    #   排行/趨勢問法（grew/dropped/best/worst + items/sellers）
+    if re.search(r"\b(?:which|what)\b[^.?!]{0,20}\b(?:items?|products?|skus?|"
+                 r"sellers?)\b[^.?!]{0,20}"
+                 r"\b(?:grew|grow|dropped|drop|rose|fell|best|worst|most|least)\b",
+                 s, re.I):
+        return True
+    #   健檢/盤點類名詞片語（health check / stock audit / stocktake report）
+    if re.search(r"\b(?:warehouse|inventory|stock|full)\s+"
+                 r"(?:health\s+check|report|audit|summary|stocktake)\b|"
+                 r"\b(?:health\s+check|stocktake|stock\s+audit)\b", s, re.I):
+        return True
+
     # r81 寫入契約：破壞動詞 × 全稱詞的組合一律擋（不枚舉個案）。
     # 「全部商品歸零」曾漏黑名單→吐 60 項清單。破壞語意 + 全稱範圍 = 搗蛋。
     # 查詢語（「快歸零的有哪些」）不含全稱詞、或含查詢語尾，不會誤中。
@@ -812,6 +837,10 @@ _EN_FUNC_WORDS = (
     "compare", "history", "record", "records", "purchase",
     "order", "orders", "supplier", "category", "seller", "sellers",
     "confirm", "cancel", "delete", "between", "below", "above",
+    # 匯出/報告類（2026-08-04,坑 24：候選集原本只涵蓋查詢詞,
+    #   'exprot' 根本沒有修復目標可配）
+    "export", "exports", "download", "audit", "stocktake",
+    "generate", "quarter", "yesterday",
 )
 
 
@@ -862,10 +891,16 @@ def _en_funcword_fix(text: str) -> str:
                 if _r > _best.get(_stem, (0, ""))[0]:
                     _best[_stem] = (_r, _w_f)
             _sc = sorted(_best.values(), reverse=True)
-            if not _sc or _sc[0][0] < 0.85:
+            # 換位錯字（2026-08-04）：'exprot'→'export' ratio 0.833 過不了
+            #   0.85,但**同字母異序＋同首字母**是換位打字的精準訊號 ——
+            #   定向放行,不放寬全域門檻（記憶方法論：絕不放寬全域門檻）。
+            _anag = bool(_sc and _sc[0][0] >= 0.80
+                         and sorted(_bare) == sorted(_sc[0][1])
+                         and _bare[0] == _sc[0][1][0])
+            if not _sc or (_sc[0][0] < 0.85 and not _anag):
                 out.append(_tok)
                 continue
-            if len(_sc) > 1 and (_sc[0][0] - _sc[1][0]) < 0.06:
+            if not _anag and len(_sc) > 1 and (_sc[0][0] - _sc[1][0]) < 0.06:
                 out.append(_tok)
                 continue
             out.append(_tok.lower().replace(_bare, _sc[0][1]))
@@ -1478,6 +1513,26 @@ def _has_rca_word(t: str) -> bool:
 # generate_po / query_related 這類「不需要商品名就能開卡」的功能（WS 端沒有
 # intent_clf 兜底時尤其嚴重）。execute 之前檢查：這些工具若句中完全沒有對應
 # 意圖詞 → 判定為 LLM 幻覺，降級 rejected（第18輪訪客閒聊II抓到大量此類）。
+# ── 英文匯出意圖共用判準（2026-08-04）──────────────────────────────
+#   訪客不會只講 export：`give me a csv` / `can i get the records` 也是要匯出。
+#   一個判準接整條鏈（_exp_intent / Pre-C-Cmp2 / C18 / _tool_intent_ok / C16）,
+#   避免「修一層、下一層再擋」（坑 3——上次 bypass 就是被 run_script 意圖
+#   閘門 reject 的）。動詞必須與受詞連用,`give me the stock` 不會誤中（坑 8）。
+_EN_EXP_VERB_RE = re.compile(
+    r"\b(?:export|download|dump|save|extract)\b|"
+    r"\b(?:give|get|send|fetch)\s+me\b|"
+    r"\bcan\s+i\s+(?:get|have|see)\b|"
+    r"\bi(?:'d|\s+would)?\s+(?:need|want|like)\b", re.I)
+_EN_EXP_OBJ_RE = re.compile(
+    r"\b(?:movements?|transactions?|records?|logs?|history|"
+    r"in\s*/?\s*out|csv)\b", re.I)
+
+
+def _en_export_intent(text: str) -> bool:
+    """句面有「匯出/索取動詞 + 進出受詞」＝明確要一份進出紀錄檔。"""
+    return bool(_EN_EXP_VERB_RE.search(text) and _EN_EXP_OBJ_RE.search(text))
+
+
 _TOOL_INTENT_GUARD = {
     # ⚠️ EN build：每個工具的詞表都補了英文（原表幾乎全中文 → 英文句一律不命中，
     #    被 gate-rescue 降級成 query_inventory，clf conf=1.00 的正確判斷全被打掉）
@@ -1526,7 +1581,9 @@ _TOOL_INTENT_GUARD = {
     # 腳本清單暴露給訪客（RPI5 v21 抓到）。沒動作詞 → 閘門擋成 rejected 婉拒。
     "run_script":       ("跑", "執行", "盤點", "匯出", "產出", "重產", "重新產生",
                          "重生", "重建", "做一次", "做個", "run", "export", "regenerate",
-                         "stocktake", "stock count", "stock audit", "rebuild", "perform"),
+                         "stocktake", "stock count", "stock audit", "rebuild", "perform",
+                         # 2026-08-04：health check 直達要過閘門（坑 3 一次接齊）
+                         "health check", "audit"),
     # query_movement：需進出貨/紀錄/期間意圖詞。閒聊句「今天過得如何」的
     # 「今天」曾讓 LLM 幻覺 movement（第19輪）。含商品名的進出貨已走 C13b
     # create_movement，這裡只擋純幻覺的空 movement。
@@ -1562,6 +1619,11 @@ def _tool_intent_ok(func_name: str, user_text: str) -> bool:
     """
     words = _TOOL_INTENT_GUARD.get(func_name)
     if not words:
+        return True
+    # ⚠️ run_script × 匯出意圖（2026-08-04）：`give me a csv of the movements`
+    #   沒有 run/export 字面,曾被這道閘門當幻覺 reject（上次 bypass 失敗的兇手）。
+    #   句面有「索取動詞+進出受詞」＝合法的匯出請求,放行。
+    if func_name == "run_script" and _en_export_intent(user_text):
         return True
     _ut_low = user_text.lower()
     return any(w in user_text or w in _ut_low for w in words)
@@ -2307,6 +2369,44 @@ def _is_mostly_english(s: str) -> bool:
     return ascii_letters >= 2 and cjk <= 1
 
 
+# ── `daily` 的兩種詞性：頻率副詞 vs 形容詞（2026-08-03）────────────────
+#   `daily report` / `daily summary` 的 daily 是**形容詞**（日報這份文件），
+#   不是「每天執行」。但排程判準把它當頻率詞 ⇒
+#     `show me the daily report` → **開排程確認卡**（訪客只想看報表，
+#     按下去卻建立每天 09:00 的持久化排程）。
+#   坑 8 補充記過同型（`daily goods` 類別名被當頻率詞），當時只補了
+#   `goods|necessities` 兩個負向環視詞 ⇒ **換一個名詞就再犯**。
+#   ⇒ 不再往負向環視塞詞（塞詞已證明會漏），改用**語境**分辨：
+#     真排程句必然帶「排程動詞或時刻」（schedule/set up/every X/at 9am），
+#     索取句是 give me / show me / i want / can i see / … please。
+#   ⚠️ 只在「沒有任何排程訊號」時才認定為索取 ——
+#     `schedule a daily report at 9am` 兩者都有，排程訊號優先，照常開排程卡。
+_EN_SCHED_SIGNAL = _re.compile(
+    r"\b(?:schedule|scheduled|scheduling|recurring|set\s+up|"
+    r"every\s+(?:day|morning|night|evening|week|month|monday|tuesday|"
+    r"wednesday|thursday|friday|saturday|sunday|\d+\s*days?)|"
+    r"each\s+(?:day|week|month)|automatically|"
+    r"at\s+\d{1,2}\s*(?::\d{2})?\s*(?:am|pm|o'clock)|"
+    r"at\s+\d{1,2}:\d{2})\b", _re.I)
+_EN_FETCH_NOW = _re.compile(
+    r"\b(?:show|give|send|get|fetch|bring|display|"
+    r"i\s+(?:want|need|would\s+like)|can\s+i\s+(?:see|get|have)|"
+    r"let\s+me\s+see|pull\s+up|open)\b|\bplease\s*[.?!]*$|\bnow\b", _re.I)
+
+
+def _en_daily_is_adjective(user_text: str) -> bool:
+    """英文句的 daily/weekly/monthly 是形容詞（索取一份日報）而非排程頻率。
+
+    True ⇒ 排程判準應該讓路，讓句子走原本的報告/查詢路由。
+    保守設計：只要句中有任何排程訊號就回 False（寧可維持現狀也不要吃掉真排程句）。
+    """
+    if not _is_mostly_english(user_text):
+        return False
+    if _EN_SCHED_SIGNAL.search(user_text):
+        return False
+    return bool(_EN_FETCH_NOW.search(user_text))
+
+
 def _normalize_typos(user_text: str) -> str:
     # EN build：以英文為主的輸入跳過中文錯字/注音/中英映射（只保留全半形正規化）
     if _is_mostly_english(user_text):
@@ -2435,9 +2535,20 @@ def _rewrite_query(user_text: str) -> str:
     # movement rewrite 同病（r17，固定句資訊銷毀第五例）：「上週北倉進了哪些貨」
     # 被改寫成「查詢進出記錄」→ 期間+倉別全毀，回「本週全部商品」。句中帶
     # 倉名/明確期間 → 保留原句，讓 C2e/C17a 校正接手。
-    _mv_keep = any(w in t for w in ("北倉", "中倉", "南倉", "北區", "中區", "南區",
-                                    "上週", "上周", "上禮拜", "昨天", "昨日",
-                                    "上個月", "今天", "本月", "這個月"))
+    # ⚠️ 期間詞抽成共用常數（2026-08-03，第 10 例資訊銷毀的教訓）：
+    #   `_parse_days` 加了「前一週/前一個月/前一季」，但**這裡的保護清單沒跟著加**
+    #   ⇒ 「給我前一週的進出記錄」被 1265 行的固定句 rewrite 吃掉期間，
+    #     只回今天一天的資料。加期間詞時**兩處必須同步**，故集中在此。
+    _PERIOD_KEEP_WORDS = (
+        "上週", "上周", "上禮拜", "昨天", "昨日", "前天",
+        "上個月", "今天", "本月", "這個月", "本週", "這週", "這禮拜",
+        # 2026-08-03 user 需求：往前推一週/一個月/一季
+        "前一週", "前一周", "前一個月", "前一月", "前一季", "上一季", "上季",
+        "近一季", "本季", "這一季", "前三個月", "近三個月", "過去三個月",
+        "前七天", "前7天", "最近", "過去",
+    )
+    _mv_keep = any(w in t for w in ("北倉", "中倉", "南倉", "北區", "中區", "南區")) \
+        or any(w in t for w in _PERIOD_KEEP_WORDS)
     _GENERIC_RCA_HEADS = ("庫存", "數量", "進貨", "帳", "對不上", "差異")
     # ── r20 通用實體守衛：句中帶商品名/倉名/類別詞 → 跳過所有「固定句」改寫 ──
     # 固定句 rewrite 已累計 9 例資訊銷毀（compare/hot×3/movement/expiring×2/
@@ -2518,20 +2629,48 @@ def _detect_clarify(user_text: str) -> dict | None:
     #   反問並給可點選項，跟現有 clarify 選單同一套機制。
     #   ⚠️ 已經講了期間的（昨天/本週/最近 N 天）不攔，直接放行執行。
     _exp_t = t.lower()
+    # ⚠️ 索取式也算匯出意圖（2026-08-04）：`give me a csv of the movements`
+    #   沒講期間 → 該出期間選單,而不是掉到 movement 統計卡。
     _exp_intent = _re.search(
         r"\bexport\b.*\b(?:movement|transaction|record|log|history|in\s*/?\s*out)|"
         r"\b(?:movement|transaction)\s*(?:log|record|history)\b.*\bexport\b|"
         r"\bdownload\b.*\bmovement", _exp_t)
+    if not _exp_intent and _en_export_intent(_exp_t):
+        # ⚠️ 索取式擴充要**商品讓路**（user 定調：統計卡留給單一商品）：
+        #   `give me the movement records for wireless mouse`（13 分）走統計卡,
+        #   `give me a csv of the movements`（雜訊 4 分）走期間選單。
+        #   門檻 6 來自實測分布（雜訊 3-5 / 真商品 7-13）。
+        try:
+            import warehouse as _W_expi
+            _m_expi = _W_expi.match_items(_exp_t)
+            if not (_m_expi and _m_expi[0].get("score", 0) >= 6):
+                _exp_intent = True
+        except Exception:
+            _exp_intent = True
+    # ⚠️ 必須與選單措辭對齊（2026-08-03）：選項改成 Last week/month/quarter 後,
+    #   訪客點了送出的句子若這裡認不得,會**再反問一次**（選單承諾跳票）。
     _exp_has_period = _re.search(
         r"\b(?:today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month|"
+        # ⚠️ previous/past 變體（2026-08-04）：原本只收 previous quarter，
+        #   漏了 previous week / past month ⇒ 路由已定案成 run_script，
+        #   卻在這裡被判「沒講期間」→ 又反問一次（選單承諾跳票同型）。
+        r"(?:last|past|previous)\s+(?:week|month|quarter)|"
+        r"this\s+quarter|last\s+3\s+months|past\s+3\s+months|"
         r"past\s+\d+|last\s+\d+|recent\s+\d+|\d+\s*days?)\b", _exp_t)
-    if _exp_intent and not _exp_has_period:
+    # ⚠️ 排程句讓路（2026-08-04，鏡射中文版 _exp_sched）：
+    #   `schedule the movement export every monday` 是要**設排程**,
+    #   「every monday」是頻率不是期間 → 不該問期間,交給 Pre-C-Sched。
+    _exp_sched_en = _re.search(
+        r"\b(?:every\s+\w+|daily(?!\s+(?:goods|necessities))|weekly|monthly|"
+        r"nightly|each\s+(?:day|week|month)|schedule[ds]?|scheduling|"
+        r"recurring|automatically)\b", _exp_t, _re.I)
+    if _exp_intent and not _exp_has_period and not _exp_sched_en:
         return {"question": "Which period do you want to export?",
-                "options": ["Yesterday", "Last 7 days", "Last 30 days", "This month"],
+                "options": ["Yesterday", "Last week", "Last month", "Last quarter (3 months)"],
                 "actions": ["export movements yesterday",
-                            "export movements last 7 days",
-                            "export movements last 30 days",
-                            "export movements this month"],
+                            "export movements last week",
+                            "export movements last month",
+                            "export movements last quarter"],
                 "hint": "Movement log export"}
 
 
@@ -2678,7 +2817,11 @@ def _detect_clarify(user_text: str) -> dict | None:
     # EN build：英文的**明確開單動詞**（_po_direct 全中文 → 英文開單句
     #   命中 has_po_intent 卻沒被放行，全被 PO clarify 攔住）
     if _re.search(r"\b(?:create|generate|make|draft|raise|issue|open|"
-                  r"give me|prepare|build)\b[^.]{0,30}?"
+                  r"give me|prepare|build|"
+                  # 2026-08-04：'i need a purchase order …' 曾被 PO 歧義
+                  #   選單攔住——需要句也是明確開單意圖
+                  r"i\s+need|i\s+want|we\s+need|need\s+an?|want\s+an?)"
+                  r"\b[^.]{0,30}?"
                   r"\b(?:po|purchase orders?|orders?)\b", t.lower()):
         has_po_direct = True
     # 系統性防漏：跟 C-PO 同一組判斷——「採購單/採購草稿/補貨單 + 開單動詞」
@@ -5111,7 +5254,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _po_in_text = (any(w in user_text for w in ("採購單", "下單", "產採購", "補貨單"))
                    or bool(_re.search(
                        r"\b(?:create|generate|make|draft|raise|issue|open|prepare|"
-                       r"give me|build)\b[^.]{0,30}?\b(?:po|purchase orders?)\b",
+                       # 2026-08-04：'i need a purchase order …' 的需要句——
+                       #   D3 修了 _detect_clarify 那份,這裡是同款正則的
+                       #   另一份（坑 28）,沒補會被 C3 搶成 list_low_stock
+                       r"give me|build|i\s+need|i\s+want|we\s+need|"
+                       r"need\s+an?|want\s+an?)\b[^.]{0,30}?"
+                       r"\b(?:po|purchase orders?)\b",
                        text_low)))
     # 「XX最近有補貨嗎」是問進貨紀錄不是缺貨清單 → 讓給 C7b movement（conv100-r13）
     _mv_q_in_text = any(w in user_text for w in ("有補貨", "有進貨", "補過貨", "進過貨"))
@@ -5327,7 +5475,15 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 熱銷/滯銷詞在場讓給 C4 轉排行（r22 smoke：「賣不好的有哪些」曾被
         # 這裡搶成概覽，該滯銷榜）
         _c3e_hotslow = (any(w in user_text for w in _HOT_INTENT_WORDS_HOT)
-                        or any(w in user_text for w in _HOT_INTENT_WORDS_SLOW))
+                        or any(w in user_text for w in _HOT_INTENT_WORDS_SLOW)
+                        # 趨勢句讓路（2026-08-04）：'which items grew the most'
+                        #   clf 誤判 list_low_stock,C3e 概覽 hard-return 搶在
+                        #   C16 趨勢轉換之前 → 'grew' 被當商品名查。
+                        #   讓路後 C16 的 grew/dropped 正則轉 compare_periods。
+                        or bool(_re.search(
+                            r"\bgrew\b|\bgrowth\b|\bdropped\b|\brose\b|\bfell\b|"
+                            r"\btrend(?:ing)?\b|\bmonth[- ]over[- ]month\b",
+                            text_low)))
         # RCA 詞也放行讓 C8 轉 search_log（r22 RPI5：「庫存少得莫名其妙」
         # 曾被這裡搶成單品庫存）
         if not _c3e_low and not _c3e_hotslow and not _has_rca_word(user_text) \
@@ -6664,7 +6820,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                            "每天早上", "每天晚上", "自動執行", "自動跑")
     # EN build：排程時間詞原全中文 → 英文排程句（every morning / daily / at 9am）
     #   在 C10 也不被視為排程意圖
-    _is_sched_intent = (any(w in user_text for w in _sched_time_kws_c10)
+    #   ⚠️ 索取語氣讓路（2026-08-03，同 Pre-C-Sched）：`show me the daily report`
+    #     的 daily 是形容詞，不該被視為排程意圖。
+    _is_sched_intent = (not _en_daily_is_adjective(user_text)) and (
+                       any(w in user_text for w in _sched_time_kws_c10)
                         or bool(_re.search(
                             r"\b(?:schedule|scheduled|scheduling|recurring|"
                             r"every\s+(?:day|morning|night|week|month|monday|tuesday|"
@@ -6706,7 +6865,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     #   C12 原本沒有這道讓路（`_is_sched_intent` 只用在 C10）→ 'schedule a daily
     #   low stock report at 9am' 被 C12 搶成 generate_report＝**排程功能對英文
     #   整條進不去**（實測直接產了一份報表）。中文詞表也一併掛上（共用邏輯）。
-    _sched_let_pass = (_is_sched_intent
+    #   ⚠️ 索取語氣不讓路（2026-08-03）：`show me the daily report` 要**產報告**，
+    #     讓路會把它推給排程路徑 → 開出每天 09:00 的確認卡。
+    _sched_let_pass = (not _en_daily_is_adjective(user_text)) and (
+                      _is_sched_intent
                        or bool(_re.search(
                            r"\b(?:schedule|scheduled|scheduling|recurring|every\s+"
                            r"(?:day|morning|night|week|month|monday|tuesday|wednesday|"
@@ -6870,7 +7032,45 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                       r"\bgrew\s+the\s+most\b|\bdropped\s+the\s+most\b", text_low))
     if _cmp_period_en and any(w in text_low for w in ("north", "central", "south")):
         _cmp_period_en = False   # 提到倉名＝比倉，讓給 compare_warehouses
-    if func_name != "compare_periods" and (
+    # ⚠️ 匯出句讓路（2026-08-04）：`export movements last week` 的「last week」
+    #   是**匯出期間**不是跨期比較,但 _cmp_period_en 正則直接命中
+    #   ⇒ 把 Pre-C10 已定案的 run_script{匯出} 蓋掉。
+    #   今天第四次同型（C12/C7b/C18/C16 各蓋過一次上游定案）
+    #   ⇒ 上游定案後,每個下游覆蓋層都要加交集防護。
+    #   收窄：匯出動詞 + 進出受詞**兩者齊備**才讓路,
+    #   單純 `compare last two months` 照常走比較。
+    # ⚠️ 讓路動詞與 Pre-C10 同一組（2026-08-04）：訪客不會只講 export，
+    #   `i'd like to see last week's movements` 也是要匯出。
+    #   兩處用同判準，避免各自演化成不同行為。
+    _c16_is_export = (
+        bool(_re.search(r"\b(?:export|download|dump|save|extract)\b|"
+                        r"\b(?:give|get|send|fetch)\s+me\b|"
+                        r"\bcan\s+i\s+(?:get|have|see)\b|"
+                        r"\bi(?:'d|\s+would)?\s+(?:need|want|like)\b", user_text, _re.I))
+        and bool(_re.search(r"\b(?:movements?|transactions?|records?|logs?|"
+                            r"history|in\s*/?\s*out|csv)\b", user_text, _re.I))
+    ) or (func_name == "run_script"
+          and str(func_args.get("script_name", "")) in ("匯出", "export movements"))
+    # ⚠️ 單一商品句不轉跨期比較（2026-08-04）：
+    #   `how many bluetooth earphones moved last week` 是問**那個商品**的進出，
+    #   不是全店跨期成長比較 ⇒ 讓給 movement/inventory。
+    #   接地用 match_items 分數（坑 10：別用字面比對）。
+    _c16_has_item = False
+    try:
+        # ⚠️ 用 match_items(整句) 不用 _extract_sku_keyword（2026-08-04）：
+        #   抽取器 fallback 會回傳雜詞再被 fuzzy 誤配（'download movements
+        #   last quarter' 曾 item=True 擋掉匯出）。整句比對無商品 token=0 分。
+        import warehouse as _W_c16
+        _c16_m = _W_c16.match_items(user_text)
+        # 門檻 6：實測雜訊 3-5（'last'→Elastic 滑窗）/ 真商品 7-13
+        _c16_has_item = bool(_c16_m and _c16_m[0].get("score", 0) >= 6)
+    except Exception:
+        _c16_has_item = False
+    if _c16_is_export or _c16_has_item:
+        log.info(f"[C16] 讓路 → 不轉 compare_periods"
+                 f"（export={_c16_is_export} item={_c16_has_item}）")
+    if func_name != "compare_periods" and not _c16_is_export \
+            and not _c16_has_item and (
             any(w in user_text for w in _cmp_period_words) or _cmp_period_en):
         log.info(f"[校正 C16] 跨期比較 → compare_periods（原 {func_name}）")
         return "compare_periods", {"metric": "out"}, True
@@ -13731,7 +13931,10 @@ async def ws_handler(ws: WebSocket):
                     #   （'schedule a daily low stock report at 9am'）永遠
                     #   進不到 set_schedule。同樣要求「頻率 + 動作」兩者齊備，
                     #   避免 'daily sales' 這種純形容詞句被誤攔。
-                    _en_sched_time = bool(_re.search(
+                    # ⚠️ 索取語氣讓路（2026-08-03）：`show me the daily report`
+                    #   的 daily 是形容詞不是頻率 → 不可攔進 set_schedule
+                    #   （訪客只想看報表，卻收到「每天 09:00 自動執行」確認卡）。
+                    _en_sched_time = (not _en_daily_is_adjective(user_text)) and bool(_re.search(
                         r"\b(?:schedule|scheduled|recurring|"
                         r"every\s+(?:day|morning|night|evening|week|month|monday|"
                         r"tuesday|wednesday|thursday|friday|saturday|sunday|\d+\s*days?)|"
@@ -13776,10 +13979,45 @@ async def ws_handler(ws: WebSocket):
 
                 # ── Pre-C10：腳本意圖強攔截（在 clarify / LLM 校正之前）──
                 _prec10_skip = ("run_script", "set_schedule", "query_movement", "compare_warehouses")
+                # ⚠️ 英文腳本意圖（2026-08-04,坑 7 典型：詞表全中文,英文一處
+                #   也命中不了 → Pre-C10 整段跳過,英文匯出句落到 clf/LLM 自由判斷。
+                #   實測 `export movements last week` 被判 compare_periods、
+                #   `last month` 被判 compare_warehouses,只有 yesterday/quarter
+                #   剛好判對 ⇒ **純靠運氣**）。
+                #   要求動詞+受詞齊備,避免裸 export/report 誤攔（坑 8：
+                #   英文功能詞常同時是業務詞）。
+                _pre_en_script = None
+                # ⚠️ 動詞含**索取式**（2026-08-04）：訪客不會只講 export，
+                #   更常講 `give me the movement log` / `can i get the records`。
+                #   必須與受詞連用才算，否則 `give me the stock` 被誤攔（坑 8）。
+                if _en_export_intent(user_text):
+                    # ⚠️ 單一商品讓路（2026-08-04）：`give me the movement records
+                    #   for wireless mouse`（match 13 分）該留統計卡,不轉全倉匯出。
+                    #   門檻 6 同其他層（實測雜訊 3-5 / 真商品 7-13）。
+                    #   商品讓路要**每個開火點都接**——先前只接 Cmp2/C16,
+                    #   漏了這裡,Cmp2 判對也來不及（Pre-C10 先轉完）。
+                    try:
+                        import warehouse as _W_p10e
+                        _p10_m = _W_p10e.match_items(user_text)
+                        _p10_item = bool(_p10_m and _p10_m[0].get("score", 0) >= 6)
+                    except Exception:
+                        _p10_item = False
+                    if not _p10_item:
+                        _pre_en_script = "export movements"   # ⚠️ 英文版白名單別名,不可用中文「匯出」
+                elif _re.search(r"\b(?:run|do|perform|start)\b", user_text, _re.I) and \
+                        _re.search(r"\b(?:stocktake|stock\s*take|stock\s*count|"
+                                   r"inventory\s*count|audit)\b", user_text, _re.I):
+                    _pre_en_script = "stocktake"
+                elif _re.search(r"\bhealth\s+check(?:up)?\b", user_text, _re.I):
+                    # 2026-08-04：'warehouse health check' 被 clf 判
+                    #   query_inventory → keyword 'health' → 查無商品。
+                    #   health check＝體檢報告（manifest 別名精確命中）。
+                    _pre_en_script = "health report"
                 _pre_script_kws = ("盤點", "匯出進出", "匯出記錄", "進出記錄", "體檢報告", "月底盤點",
                                    # r19：「匯出這週的進出成Excel」動詞跟受詞被隔開
                                    "匯出")
-                _pre_script_hit = next((w for w in _pre_script_kws if w in user_text), None)
+                _pre_script_hit = next((w for w in _pre_script_kws if w in user_text),
+                                       None) or _pre_en_script
                 # 排程語氣（每個月十五號盤點）讓給 Pre-C-Sched，不搶成立即執行（conv100-r5）
                 _prec10_sched = any(w in user_text for w in (
                     "每天", "每日", "天天", "每週", "每周", "每月", "每個月", "每星期", "每禮拜", "排程"))
@@ -13793,6 +14031,10 @@ async def ws_handler(ws: WebSocket):
                             "匯出": "匯出", "體檢報告": "體檢報告"}
                     func_name = "run_script"
                     func_args = {"script_name": smap.get(_pre_script_hit, _pre_script_hit)}
+                    # ⚠️ 英文匯出路帶原句（2026-08-04）：C9b 只認 export|download
+                    #   字面,索取式句子不帶 _period_text 會永遠用預設 7 天。
+                    if _pre_en_script:
+                        func_args["_period_text"] = user_text
                     log.info(f"[Pre-C10] 腳本意圖強攔截 → run_script script_name={func_args['script_name']!r}")
 
                 # ── Pre-C-Movement（ws 版）──
@@ -13845,7 +14087,39 @@ async def ws_handler(ws: WebSocket):
                 # LLM 對 compare 的 warehouse_a/b 常自由發揮（「北倉和中倉哪邊的貨
                 # 比較齊」回 central vs south，conv100-r5）。句中點名 2 倉 → 依出現
                 # 順序覆寫；點名 <2 倉且有排名語氣 → 三倉排名；指標詞覆寫 metric。
-                if func_name == "compare_warehouses" and _cmp_has_prod_ws:
+                # ⚠️ 匯出句讓路（2026-08-04，今天第五次同型）：
+                #   `export movements last month` LLM 幻覺出 compare_warehouses，
+                #   Cmp2 又抽出**句中根本沒有的**商品名 Elastic Sports Bra
+                #   → query_inventory。Cmp2 跑在 Pre-C10 之前 ⇒ 路由被定死。
+                # 改用共用判準（含索取式動詞,2026-08-04）
+                _cmp2_is_export = _en_export_intent(user_text)
+                # ⚠️ 單一商品讓路（user 定調：統計卡留給只問單一商品）：
+                #   句中有接地商品就不轉全倉匯出。接地看**句子**不看 LLM args
+                #   （LLM keyword 常是幻覺,trace 實見 'food item'/'coffee maker'）。
+                _cmp2_has_item = False
+                if _cmp2_is_export:
+                    try:
+                        # ⚠️ 同 C16：match_items(整句)，不經抽取器 fallback
+                        import warehouse as _W_cmp2e
+                        _cmp2_m = _W_cmp2e.match_items(user_text)
+                        # 門檻 6：同 C16（實測雜訊 3-5 / 真商品 7-13）
+                        _cmp2_has_item = bool(_cmp2_m and _cmp2_m[0].get("score", 0) >= 6)
+                    except Exception:
+                        _cmp2_has_item = False
+                    if _cmp2_is_export:
+                        log.info(f"[Cmp2-exp] export=True item={_cmp2_has_item}")
+                # ⚠️ 讓路不夠,要 **hard-return 定案**（坑 16）：只做「不搶」會讓
+                #   句子停在 LLM 幻覺的 compare_warehouses 上（實測回倉庫週轉率）。
+                #   匯出意圖明確 ⇒ 直接定案 run_script,腳本名用 manifest 英文別名。
+                if _cmp2_is_export and not _cmp2_has_item and func_name in (
+                        "compare_warehouses", "compare_periods", "query_inventory",
+                        "query_movement"):
+                    func_name = "run_script"
+                    func_args = {"script_name": "export movements",
+                                 "_period_text": user_text}
+                    log.info(f"[Pre-C-Cmp2] 匯出句定案 → run_script: {user_text!r}")
+                if func_name == "compare_warehouses" and _cmp_has_prod_ws \
+                        and not _cmp2_is_export:
                     # 帶真商品名的「XX北倉中倉哪邊多」是查該商品分倉庫存，
                     # 不是倉庫總量比較（conv100-r10；LLM 直接輸出 compare 時
                     # elif 的商品守衛擋不到）
@@ -14583,7 +14857,21 @@ async def ws_handler(ws: WebSocket):
 
                 # ── C18：clf mismatch 檢查（hard_corrected 時不蓋過）──
                 mismatch, clf_intent, clf_conf = intent_clf.check_mismatch(user_text, func_name)
-                if mismatch and not _hard and not _en_admin_hard and clf_intent != "unknown":
+                # ⚠️ 匯出定案保護（2026-08-04）：Cmp2/Pre-C10 已把索取式匯出句
+                #   定案成 run_script，clf 對這種句子只會判 query_movement
+                #   （它看不出「要檔案」）→ 不讓 C18 拿 clf 蓋回去。
+                #   專屬條件不借用 _hard（坑 14：借大旗標會關掉整道閘門）。
+                _c18_exp_keep = (func_name == "run_script"
+                                 and (_en_export_intent(user_text)
+                                      # health check 直達同樣保護（2026-08-04：
+                                      #   clf=query_inventory(1.00) 曾蓋回,還把
+                                      #   script_name 帶進 query_inventory → 坑 16
+                                      #   「忽略未知參數」信號燈）
+                                      or bool(_re.search(
+                                          r"\bhealth\s+check(?:up)?\b",
+                                          user_text, _re.I))))
+                if mismatch and not _hard and not _en_admin_hard \
+                        and not _c18_exp_keep and clf_intent != "unknown":
                     log.info(f"[C18] clf={clf_intent}({clf_conf:.2f}) vs model={func_name} → 校正")
                     func_name = intent_clf.LABEL_TO_FUNC.get(clf_intent, clf_intent)
                     # ⚠️ 轉成 run_script 時**必須補 script_name**（2026-08-03）：
@@ -14598,9 +14886,12 @@ async def ws_handler(ws: WebSocket):
                         #   通用反問（選項是三支腳本），不是我們要的期間選單。
                         _c18_has_period = _re.search(
                             r"\b(?:today|yesterday|this\s+week|last\s+week|this\s+month|"
-                            r"last\s+month|past\s+\d+|last\s+\d+|recent\s+\d+|\d+\s*days?)\b|"
+                            # ⚠️ 與 _exp_has_period 同步（2026-08-04）
+                            r"last\s+month|(?:last|past|previous)\s+(?:week|month|quarter)|"
+                            r"this\s+quarter|last\s+3\s+months|past\s+3\s+months|"
+                            r"past\s+\d+|last\s+\d+|recent\s+\d+|\d+\s*days?)\b|"
                             r"今天|今日|昨天|昨日|前天|本週|這週|上週|本月|這個月|上個月|"
-                            r"最近\s*\d+\s*天|過去\s*\d+\s*天", user_text, _re.I)
+                            r"最近\s*\d+\s*天|過去\s*\d+\s*天|前\s*[0-9零一二三四五六七八九十兩]+\s*天", user_text, _re.I)
                         if _c18_exp and not _c18_has_period:
                             _c18_zh = not _re.search(r"[a-z]", user_text, _re.I)
                             _c18_clar = ({
@@ -14610,11 +14901,11 @@ async def ws_handler(ws: WebSocket):
                                             "匯出最近 30 天的進出紀錄", "匯出本月的進出紀錄"],
                                 "hint": "進出紀錄匯出"} if _c18_zh else {
                                 "question": "Which period do you want to export?",
-                                "options": ["Yesterday", "Last 7 days", "Last 30 days", "This month"],
+                                "options": ["Yesterday", "Last week", "Last month", "Last quarter (3 months)"],
                                 "actions": ["export movements yesterday",
-                                            "export movements last 7 days",
-                                            "export movements last 30 days",
-                                            "export movements this month"],
+                                            "export movements last week",
+                                            "export movements last month",
+                                            "export movements last quarter"],
                                 "hint": "Movement log export"})
                             log.info(f"[C18] 匯出無期間 → 期間反問")
                             await send({"type": "done", "result": {
@@ -15053,6 +15344,18 @@ async def ws_handler(ws: WebSocket):
                 })
 
                 summary = result["summary"]
+                # ⚠️ 路由已被改掉就不貼提示（2026-08-03）：
+                #   `export movements last 7 days` 曾顯示
+                #   `(auto-matched to "Elastic Sports Bra")` —— Pre-C-Cmp2 先從
+                #   LLM 的幻覺 compare 抽出商品名、oov:auto_fix 設了提示字，
+                #   之後 C18 把路由修正回 run_script（匯出腳本，**不吃 keyword**），
+                #   提示字卻沒跟著撤 ⇒ 訪客看到匯出 CSV 卻標著不相干的商品名。
+                #   ⇒ 只有「吃 keyword 的查詢類」才保留提示。
+                if _oov_hint and func_name not in (
+                        "query_inventory", "query_movement", "list_low_stock",
+                        "query_related_items", "search_log", "list_expiring_items",
+                        "compare_warehouses", "list_hot_items"):
+                    _oov_hint = None
                 if _oov_hint:
                     summary = _oov_hint + " " + summary
                     result = {**result, "summary": summary}

@@ -120,9 +120,7 @@ MV_T = ["{w} received {n} {k}", "{w} shipped {n} {k}", "add {n} {k} to {w}",
 for name, variants, canon in ITEMS[:30]:
     for _ in range(2):
         add("mv", random.choice(MV_T).format(
-            # 量取小值：部分 SKU 單倉庫存只有數十件，隨機到 100 會回「庫存不足」
-            # （業務上正確、但守衛期望 movement_confirm 就誤報 FAIL，同 tf 類）
-            w=random.choice(WHS)[0], n=random.choice([5, 10, 20, 30]),
+            w=random.choice(WHS)[0], n=random.choice([5, 10, 20, 30, 50, 100]),
             k=random.choice(variants)))
 # 退貨
 for name, variants, canon in ITEMS[:12]:
@@ -135,9 +133,7 @@ TF_T = ["transfer {n} {k} from {a} to {b}", "move {n} {k} from {a} to {b}",
         "send {n} {k} from {a} warehouse to {b}", "ship {n} {k} {a} to {b}"]
 for name, variants, canon in ITEMS[:14]:
     a, b = random.sample([w[0] for w in WHS], 2)
-    # 量取小值：部分 SKU 單倉庫存只有十幾件，隨機到 30 會回「庫存不足」
-    #   （業務上正確、但守衛期望 transfer_confirm 就會誤報 FAIL）
-    add("tf", random.choice(TF_T).format(n=random.choice([2, 3, 5, 10]),
+    add("tf", random.choice(TF_T).format(n=random.choice([5, 10, 20, 30]),
                                           k=random.choice(variants), a=a, b=b))
 
 # ════════════════════════════════════════════════════════════

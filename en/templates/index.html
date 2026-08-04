@@ -1172,7 +1172,38 @@ function pullAnomaliesThrottled() {
   _anomLast = now;
   pullAnomalies();
 }
-setTimeout(pullAnomalies, 1200);   // auto-detect on load (without the user asking)
+setTimeout(pullAnomalies, 1200);
+
+// ─── 載入時同步 Live 狀態（2026-08-03）───────────────────────
+//   後端 autostart 開著模擬時，畫面也要顯示成啟動狀態（含即時看板），
+//   否則訪客看到靜止的倉庫、要手動按一次才會動。
+//   空 body = 唯讀查狀態，不會啟動或關閉。
+function syncLiveState() {
+  fetch('/api/live_mode', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: '{}'
+  }).then(r => r.json()).then(st => {
+    _liveOn = !!st.on;
+    const b = document.getElementById('live-btn');
+    if (b) {
+      b.classList.toggle('on', _liveOn);
+      b.textContent = _liveOn ? '\u23f8 Live' : '\u25b6 Live';
+      b.title = _liveOn
+        ? `Live simulation running (${st.speedup}x speed) - background inbound/outbound`
+        : 'Live warehouse simulation (background inbound/outbound)';
+    }
+    const bar = document.getElementById('live-bar');
+    if (bar) bar.style.display = _liveOn ? 'flex' : 'none';
+    // 滑桿同步成後端真實速度（避免顯示 200x 實際跑 75x）
+    const sl = document.getElementById('lb-speed');
+    const sv = document.getElementById('lb-speed-v');
+    if (sl && st.speedup) { sl.value = st.speedup; }
+    if (sv && st.speedup) { sv.textContent = st.speedup + 'x'; }
+    if (_liveOn) refreshSnapshot();
+  }).catch(() => {});
+}
+setTimeout(syncLiveState, 300);
+   // auto-detect on load (without the user asking)
 
 function appendBot(text, klass) {
   const div = document.createElement('div');
@@ -1243,7 +1274,7 @@ const CAPABILITIES = [
   { icon:'↩️', name:'Returns (customer returns, stock added back)', egs:['customer returned 3 bluetooth earphones at north', '5 smart bands returned at central'] },
   { icon:'🚨', name:'Low stock / Expiring / Best sellers', egs:['whats running low', 'whats expiring soon', 'what sold best this week'] },
   { icon:'🔍', name:'trace a mismatch', egs:['why are smart bands down so much', 'power bank numbers dont match'] },
-  { icon:'📄', name:'Reports / Purchase orders', egs:['give me a full warehouse report', 'create a purchase order for low stock items'] },
+  { icon:'📄', name:'Reports / Purchase orders / Movement log', egs:['give me a full warehouse report', 'create a purchase order for low stock items', 'export movements'] },
   { icon:'⚙️', name:'Settings / Items (needs your confirmation)', egs:['increase safety stock by 30 in south', 'add item', 'delete item'] },
 ];
 function renderCapabilityMap() {
@@ -2159,7 +2190,7 @@ function renderViewCard(view, data, topSummary) {
         </div>
         <div class="hitl-btns">
           <button class="hitl-approve" onclick='doConfirm(this)' data-action="${isCfg?'config_set':'run_script'}"
-            data-payload='${JSON.stringify(isCfg?{pending:data}:{script_id:data.script_id})}'>✅ Authorize run</button>
+            data-payload='${JSON.stringify(isCfg?{pending:data}:{script_id:data.script_id, days:data.days})}'>✅ Authorize run</button>
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Reject</button>
         </div>
       </div>`;

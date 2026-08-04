@@ -41,6 +41,28 @@ def _status(safety_stock, wh_qtys, wh_keys=("north", "central", "south")):
     return "OK"
 
 
+def _prune_outputs(out_dir, prefix, keep=8):
+    """同類產出檔只保留最新 keep 份（2026-08-04，user 要求設上限）。
+
+    起因：實測 audit/ 累積 46 個 stock_audit 檔、**零清理機制**，展場跑
+    幾天會無限長大。訪客看完報告就關掉，不需要永久保留。
+    ⚠️ 只清帶時間戳的產出檔；`*_changes.log`/`*_alerts.log` 是稽核記錄，
+       絕不可刪（本函式靠 prefix 精確比對，碰不到它們）。
+    ⚠️ 同一次產出有 .csv + .html 兩個檔 ⇒ 切片要 keep*2。
+    清理失敗只吞例外不中斷 —— 產出比清理重要。
+    """
+    try:
+        fs = sorted(out_dir.glob(prefix + "_*"),
+                    key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in fs[keep * 2:]:
+            try:
+                old.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default=str(pathlib.Path(__file__).parent.parent))
@@ -283,6 +305,7 @@ td.bad{{color:#fc8181;font-weight:700}}
 
     print(f"OUTPUT:{out_file}")
     print(f"VIEW:{html_file}")
+    _prune_outputs(out_dir, "stock_audit")   # 只保留最新 8 份（2026-08-04）
     print(f"SUMMARY:{len(items)} SKUs scanned, {low_count} need attention. Report saved to audit/{out_file.name}")
 
 if __name__ == "__main__":

@@ -1162,7 +1162,38 @@ function pullAnomaliesThrottled() {
   _anomLast = now;
   pullAnomalies();
 }
-setTimeout(pullAnomalies, 1200);   // 進站自動偵測（不靠使用者問）
+setTimeout(pullAnomalies, 1200);
+
+// ─── 載入時同步 Live 狀態（2026-08-03）───────────────────────
+//   後端 autostart 開著模擬時，畫面也要顯示成啟動狀態（含即時看板），
+//   否則訪客看到靜止的倉庫、要手動按一次才會動。
+//   空 body = 唯讀查狀態，不會啟動或關閉。
+function syncLiveState() {
+  fetch('/api/live_mode', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: '{}'
+  }).then(r => r.json()).then(st => {
+    _liveOn = !!st.on;
+    const b = document.getElementById('live-btn');
+    if (b) {
+      b.classList.toggle('on', _liveOn);
+      b.textContent = _liveOn ? '\u23f8 Live' : '\u25b6 Live';
+      b.title = _liveOn
+        ? `\u52d5\u614b\u5009\u5eab\u6a21\u64ec\u904b\u884c\u4e2d\uff08${st.speedup}\u00d7 \u901f\uff09`
+        : '\u52d5\u614b\u5009\u5eab\u6a21\u64ec\uff08\u80cc\u666f\u9032\u51fa\u8ca8\uff09';
+    }
+    const bar = document.getElementById('live-bar');
+    if (bar) bar.style.display = _liveOn ? 'flex' : 'none';
+    // 滑桿同步成後端真實速度（避免顯示 200x 實際跑 75x）
+    const sl = document.getElementById('lb-speed');
+    const sv = document.getElementById('lb-speed-v');
+    if (sl && st.speedup) { sl.value = st.speedup; }
+    if (sv && st.speedup) { sv.textContent = st.speedup + 'x'; }
+    if (_liveOn) refreshSnapshot();
+  }).catch(() => {});
+}
+setTimeout(syncLiveState, 300);
+   // 進站自動偵測（不靠使用者問）
 
 function appendBot(text, klass) {
   const div = document.createElement('div');
@@ -1233,7 +1264,7 @@ const CAPABILITIES = [
   { icon:'↩️', name:'退貨（客人退、庫存加回）', egs:['北倉客人退了3個藍牙耳機', '中倉被退5個智慧手環'] },
   { icon:'🚨', name:'缺貨 / 到期 / 熱銷', egs:['缺貨的有哪些', '快到期的有哪些', '這週哪些賣最好'] },
   { icon:'🔍', name:'追查「帳對不上」', egs:['智慧手環怎麼少這麼多', '行動電源帳對不上'] },
-  { icon:'📄', name:'產生報告 / 採購單', egs:['幫我出個全倉體檢報告', '幫我把缺貨的產採購單'] },
+  { icon:'📄', name:'產生報告 / 採購單 / 進出紀錄表', egs:['幫我出個全倉體檢報告', '幫我把缺貨的產採購單', '匯出進出紀錄'] },
   { icon:'⚙️', name:'改設定 / 管商品（要你確認）', egs:['南倉安全庫存全部加30', '新增商品', '刪除商品'] },
 ];
 function renderCapabilityMap() {
@@ -2141,7 +2172,7 @@ function renderViewCard(view, data, topSummary) {
         </div>
         <div class="hitl-btns">
           <button class="hitl-approve" onclick='doConfirm(this)' data-action="${isCfg?'config_set':'run_script'}"
-            data-payload='${JSON.stringify(isCfg?{pending:data}:{script_id:data.script_id})}'>✅ 授權執行</button>
+            data-payload='${JSON.stringify(isCfg?{pending:data}:{script_id:data.script_id, days:data.days})}'>✅ 授權執行</button>
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 退回重擬</button>
         </div>
       </div>`;

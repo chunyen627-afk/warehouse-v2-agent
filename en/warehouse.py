@@ -412,8 +412,14 @@ def _snapshot_date() -> _date:
 
 def _period_range(period: str) -> tuple[_date, _date]:
     today = _snapshot_date()
+    # ⚠️ 一律排除「今天」（2026-08-03 user 定調）：動態模擬每 2.7 秒寫 60 筆，
+    #   實測今天 46,982 筆 vs 正常日 48-93 筆（**差 500-1000 倍**）
+    #   ⇒ 訪客問「今天進出」看到的是模擬雜訊，不是業務資料。
+    #   匯出腳本本來就排除今天，這裡讓**查詢**跟它一致。
+    #   ⇒ `today` 改查昨天（summary 會標明），週/月範圍的結束日也收到昨天。
+    _yday = today - _td(days=1)
     if period == "today":
-        return today, today
+        return _yday, _yday
     if period == "yesterday":
         y = today - _td(days=1)
         return y, y
@@ -421,12 +427,16 @@ def _period_range(period: str) -> tuple[_date, _date]:
         d2 = today - _td(days=2)
         return d2, d2
     if period == "this_week":
-        return today - _td(days=today.weekday()), today
+        # 結束日收到昨天（排除今天的模擬雜訊）；若今天是週一則退化成只查昨天
+        _ws = today - _td(days=today.weekday())
+        return min(_ws, _yday), _yday
     if period == "last_week":
         this_mon = today - _td(days=today.weekday())
         return this_mon - _td(days=7), this_mon - _td(days=1)
     if period == "this_month":
-        return today.replace(day=1), today
+        # 同上：結束日收到昨天；今天是 1 號時退化成只查昨天
+        _ms = today.replace(day=1)
+        return min(_ms, _yday), _yday
     return today, today
 
 
@@ -875,6 +885,14 @@ def query_movement(
         direction = "both"
     period_label = PERIOD_LABEL[period]
     dir_label    = DIRECTION_LABEL[direction]
+    # ⚠️ Once today is excluded the label must follow (2026-08-03): the data is
+    #   already yesterday's, so a "Today" label would silently show another day.
+    _today_note = ""
+    if period == "today":
+        period_label = "Yesterday"
+        _today_note = " (today is still accumulating - showing yesterday)"
+    elif period in ("this_week", "this_month"):
+        period_label = f"{period_label} (through yesterday)"
 
     sku_filter = None
     matched_item_label = ""
@@ -916,13 +934,13 @@ def query_movement(
     delta = in_qty - out_qty
 
     if direction == "in":
-        summary = f"{period_label} {scope}: {in_qty:,} units received"
+        summary = f"{period_label} {scope}: {in_qty:,} units received{_today_note}"
     elif direction == "out":
-        summary = f"{period_label} {scope}: {out_qty:,} units shipped"
+        summary = f"{period_label} {scope}: {out_qty:,} units shipped{_today_note}"
     else:
         summary = (
             f"{period_label} {scope}: {in_qty:,} in, {out_qty:,} out"
-            f" (net {delta:+,})"
+            f" (net {delta:+,}){_today_note}"
         )
 
     return {

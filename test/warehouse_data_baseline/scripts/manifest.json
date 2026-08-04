@@ -12,7 +12,7 @@
     {
       "id": "export_movements",
       "label": "匯出進出記錄",
-      "description": "合併最近 30 天進出記錄，產出 CSV",
+      "description": "合併最近 7 天進出記錄，產出 CSV",
       "timeout_s": 60,
       "output_type": "csv",
       "output_dir": "audit"

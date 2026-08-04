@@ -23,7 +23,7 @@
     {
       "id": "export_movements",
       "label": "Export Movement Log",
-      "description": "Merge the last 30 days of inbound/outbound records into a CSV",
+      "description": "Merge the last 7 days of inbound/outbound records into a CSV",
       "timeout_s": 60,
       "output_type": "csv",
       "output_dir": "audit",
