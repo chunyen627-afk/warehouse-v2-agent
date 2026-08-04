@@ -2544,12 +2544,38 @@ function renderFollowups(view, data) {
       { label: '🔥 本週熱銷', query: '本週熱銷' },
     ]);
   } else if (view === 'movement') {
-    showSuggestions([
+    const mvItems = [];
+    // 逃生 chip：回答被鎖在單一商品、但訪客這句沒提到它（多半是 carry-over
+    // 從上一句帶過來的）→ 一鍵退回「該倉該期間全部商品」。canonical 句含
+    // 「全部」（_CTX_GLOBAL）＋ keyword 比對不到自動退全倉，雙保險不會再被鎖。
+    const mvKw = String(data.keyword || '');
+    const mvSent = String(window._lastSentText || '');
+    // 誤現防護：訪客打「藍牙耳機」會被解析成主檔名「無線藍牙耳機」，
+    // 子字串包含會失敗 → 改看字元重疊率（≥50% 視為這句有提到該商品）
+    let mvHit = false;
+    if (mvKw && mvSent) {
+      if (mvSent.includes(mvKw)) { mvHit = true; }
+      else {
+        let ov = 0;
+        for (const ch of new Set(mvKw)) { if (mvSent.includes(ch)) ov++; }
+        mvHit = (ov / new Set(mvKw).size) >= 0.5;
+      }
+    }
+    if (mvKw && mvSent && !mvHit) {
+      const mvWh = ({north:'北區倉', central:'中區倉', south:'南區倉'})[data.warehouse] || '';
+      const mvP = data.period_label || '';
+      // query 用「整體進出」：含 _CTX_GLOBAL 詞不會再被 carry-over 鎖，
+      // 且實測路由到 movement（「全部商品的進出」會被當全店概覽，不能用）
+      mvItems.push({ label: `📦 看${mvWh || '全倉'}${mvP}全部商品進出`,
+                     query: `${mvWh}${mvP}整體進出` });
+    }
+    mvItems.push(
       { label: '今天進出', query: '今天進出狀況' },
       { label: '本週進出', query: '本週進出狀況' },
       { label: '本月進出', query: '本月進出狀況' },
       { label: '🚨 庫存警示', direct_call: { function: 'list_low_stock' } },
-    ]);
+    );
+    showSuggestions(mvItems);
   } else if (view === 'compare_warehouses') {
     showSuggestions([
       { label: '比庫存價值', query: '北倉跟南倉庫存價值比較' },
@@ -2616,6 +2642,7 @@ function randomSurprise() {
 
 function sendQuery(text) {
   if (isSending || !text) return;
+  window._lastSentText = text;  // 逃生 chip 用：判斷回答的商品是不是這句提的
   $('input-text').value = '';  // 通過 guard 才清空，避免文字不見但沒送出
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     connectWS();

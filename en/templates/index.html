@@ -2562,12 +2562,37 @@ function renderFollowups(view, data) {
       { label: '🔥 best sellers this week', query: 'best sellers this week' },
     ]);
   } else if (view === 'movement') {
-    showSuggestions([
+    const mvItems = [];
+    // Escape chip: answer got scoped to one item the visitor did not mention in
+    // this sentence (usually carry-over from the previous turn) -> one tap back
+    // to "all items" for the same warehouse/period. The canonical query fails
+    // item matching on purpose, so query_movement falls back to all items.
+    const mvKw = String(data.keyword || '');
+    const mvSent = String(window._lastSentText || '');
+    // False-positive guard: "mouse" resolves to master name "Wireless Mouse";
+    // substring fails -> treat any shared word (>=3 letters) as a mention.
+    let mvHit = false;
+    if (mvKw && mvSent) {
+      const s = mvSent.toLowerCase();
+      if (s.includes(mvKw.toLowerCase())) { mvHit = true; }
+      else {
+        mvHit = mvKw.toLowerCase().split(/[^a-z0-9]+/)
+          .some(w => w.length >= 3 && s.includes(w));
+      }
+    }
+    if (mvKw && mvSent && !mvHit) {
+      const mvWh = ({north:'North', central:'Central', south:'South'})[data.warehouse] || '';
+      const mvP = (data.period_label || '').toLowerCase();
+      mvItems.push({ label: `📦 All items ${mvWh ? '(' + mvWh + ', ' : '('}${mvP})`,
+                     query: `${mvWh ? mvWh + ' warehouse ' : ''}movements ${mvP} for all items` });
+    }
+    mvItems.push(
       { label: 'Today in/out', query: 'todays movements' },
       { label: 'This week in/out', query: 'this weeks movements' },
       { label: 'This month in/out', query: 'this months movements' },
       { label: '🚨 Low stock', direct_call: { function: 'list_low_stock' } },
-    ]);
+    );
+    showSuggestions(mvItems);
   } else if (view === 'compare_warehouses') {
     showSuggestions([
       { label: 'By stock value', query: 'compare north and south by stock value' },
@@ -2634,6 +2659,7 @@ function randomSurprise() {
 
 function sendQuery(text) {
   if (isSending || !text) return;
+  window._lastSentText = text;  // escape chip: was the answered item mentioned in THIS sentence?
   $('input-text').value = '';  // clear only after passing the guard, so text is never lost without being sent
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     connectWS();
