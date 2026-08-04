@@ -1242,6 +1242,15 @@ def _daily_out_series(sku: str, days: int = 30, warehouse: str = "all") -> list[
     for i in range(days):
         d = (start + _td(days=i)).isoformat()
         series.append(by_day.get(d, 0))
+    # 換日防護：過去某天若殘留動態模擬肥單（展場第2/3天早上忘了 reset），
+    # 該天出貨量會是正常日的數百倍 → 「排除今天」擋不住、日均照樣被灌爆。
+    # 單日量 > max(200, 中位數×30) 視為污染日，以中位數替代
+    # （真實促銷 2-3 倍不會誤傷；模擬日是百倍級）。
+    nz = sorted(v for v in series if v > 0)
+    if nz:
+        _med = nz[len(nz) // 2]
+        _cap = max(200, _med * 30)
+        series = [v if v <= _cap else _med for v in series]
     return series
 
 
