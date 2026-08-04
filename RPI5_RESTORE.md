@@ -503,6 +503,54 @@ sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
 > renewal conf 裡 `manual_auth_hook = /home/p400/duckdns-hook.sh`，
 > 只要 hook 放在同路徑就不用改設定。
 
+### 🔄 重簽自簽憑證（換機器／SAN 不含新 IP 時）
+新機的憑證是從舊機 rsync 來的，**SAN 只有舊機的位址** →
+用新機的區網 IP 連會多一層「名稱不符」警告。用 `en/regen_cert.sh` 重簽：
+```bash
+bash ~/regen_cert.sh                      # 自動帶入本機 IP 與 hostname
+sudo systemctl restart warehouse-v2 warehouse-v2-en
+```
+🚨 **SAN 一定要含 `192.168.4.1`**（熱點閘道）——展場訪客手機走的就是這個位址。
+驗收：`echo | openssl s_client -connect <IP>:8002 2>/dev/null | openssl x509 -noout -checkip <IP>`
+要回 `does match certificate`。
+
+---
+
+## 7d. 🎤 手機當麥克風（**2026-08-04 尚未實測**）
+
+100 句語音實測**全部走桌上的 C930c**，手機錄音這條路**從未驗證**。
+
+### 流程（已從程式碼確認，`templates/index.html:2849/2873`）
+```
+手機瀏覽器 getUserMedia 錄音 → Blob(audio/webm)
+   → POST https://192.168.4.1:8002/api/asr    ← 走熱點區網，**不需外網**
+   → RPI5 用 whisper.cpp 辨識 → 回傳文字 → 前端送查詢
+```
+**手機只負責錄音＋上傳，辨識跑在 RPI5** ⇒ 跟桌機用 C930c 是同一條後端路徑。
+
+### 🔑 三個容易搞混的觀念
+1. **HTTPS 是 `getUserMedia` 的硬性要求**，與「辨識在雲端或本機」無關。
+   `http://192.168.x.x` 下 `navigator.mediaDevices` **物件根本不存在**
+   （前端 2896 行有防護判斷）。
+2. **手機不需要開外網**——這正是離線 demo 的賣點
+   （kiosk 還刻意用 `--disable-background-networking` 關掉所有對外連線）。
+3. **不要改用手機內建語音辨識**（`webkitSpeechRecognition`）：
+   那會把音訊送 Google/Apple 雲端，**需要外網**，
+   且展示重點會從「自研邊緣 AI」變成「雲端服務」。
+
+### ⚠️ 待驗證的風險
+**iOS Safari 對自簽憑證的安全上下文判定較嚴**，
+可能出現「接受了憑證警告，但仍拒絕麥克風」。
+⇒ 展前務必 **Android Chrome ＋ iOS Safari 各實測一台**。
+若 iOS 真的不行，替代方案：mkcert 產可被信任的憑證，
+或引導訪客改用 RPI5 螢幕前的 C930c。
+
+> 訪客接受憑證警告的操作（兩平台不同，展場引導要注意）：
+> | | Android Chrome | iOS Safari |
+> |---|---|---|
+> | 步驟 | 進階 → 繼續前往 | 顯示詳細資訊 → 瀏覽此網站 → 確認 |
+> ⇒ **iOS 多一步**。
+
 > 🚨 **雷：`Environment=LD_LIBRARY_PATH=~/whisper.cpp/build/bin` 會讓服務起不來**
 > ```
 > libllama.so: undefined symbol: _Z24ggml_backend_meta_device...
@@ -633,7 +681,35 @@ sudo nmcli connection modify rpi5-hotspot connection.autoconnect-priority 0
 開機會自動開熱點 → wlan0 被佔用連不上 WiFi → 無外網 → ZeroTier watchdog
 依設計停掉 ZeroTier → **完全連不進去**（只能接螢幕鍵盤救）。
 
-熱點：SSID `RPI5-Demo` / 密碼 `demo1234` / AP IP `192.168.4.1`
+熱點：SSID `RPI5-Demo` / AP IP `192.168.4.1`
+> ⚠️ 密碼請用互動方式設，**不要寫進文件或指令歷史**：
+> ```bash
+> read -s -p "熱點密碼: " P; sudo nmcli con modify rpi5-hotspot \
+>   802-11-wireless-security.psk "$P"; unset P
+> ```
+
+#### 🆕 兩台機器的熱點命名（2026-08-04）
+| | 第一台 | 第二台 |
+|---|---|---|
+| 主機名 | `raspberrypi` | `raspberrypi2` |
+| 區網 IP | 192.168.125.232 | 192.168.125.178 |
+| **熱點 SSID** | `RPI5-Demo` | **`RPI5-Demo-2`** |
+| 熱點 IP | 192.168.4.1 | 192.168.4.1（**相同，不衝突**）|
+
+🔑 **熱點 IP 相同不會衝突**——每台開的熱點是**各自獨立的網段**
+（像每個家庭路由器都是 192.168.1.1）。手機連上哪台的 SSID，
+`192.168.4.1` 就是那台。
+⇒ **要區分的是 SSID，不是 IP**。這樣做的好處：
+**QR code 內容兩台完全通用**，展場流程與說明不用分岔。
+
+建立第二台熱點（密碼另外用上面的互動方式設）：
+```bash
+sudo nmcli con add type wifi ifname wlan0 con-name rpi5-hotspot \
+     ssid "RPI5-Demo-2" autoconnect no
+sudo nmcli con modify rpi5-hotspot 802-11-wireless.mode ap \
+     802-11-wireless.band bg ipv4.method manual ipv4.addresses 192.168.4.1/24
+sudo nmcli con modify rpi5-hotspot 802-11-wireless-security.key-mgmt wpa-psk
+```
 
 ### 9.2 ZeroTier（遠端固定 IP）
 ```bash
