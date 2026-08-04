@@ -20,6 +20,7 @@
 set -u
 cd ~/warehouse_v2 || exit 1
 PORT=8001
+OTHER_PORT=8002   # 英文版——跑守衛時兩版模擬都要關（血案：模擬吃 94.9% CPU，守衛活性 116→9 句/分）
 LOG=_guard_zh.log
 
 _api() {  # $1=path  $2=json
@@ -27,8 +28,14 @@ _api() {  # $1=path  $2=json
          -H 'Content-Type: application/json' -d "$2" --max-time 120 2>/dev/null
 }
 
-echo "① 關閉動態模擬（守衛期間庫存不可自己變動）"
+_api_other() {
+    curl -sk -X POST "https://localhost:${OTHER_PORT}$1" \
+         -H 'Content-Type: application/json' -d "$2" --max-time 120 2>/dev/null
+}
+
+echo "① 關閉動態模擬（守衛期間庫存不可自己變動；兩版都關，另一版模擬會吃光 CPU）"
 _api /api/live_mode '{"action":"stop"}' | head -c 60; echo
+_api_other /api/live_mode '{"action":"stop"}' | head -c 60; echo
 
 echo "② reset 展示資料到 baseline"
 _api /api/reset_demo '{"password":"0000"}' | head -c 60; echo
@@ -44,8 +51,9 @@ _api /api/reset_demo '{"password":"0000"}' | head -c 60; echo
 #   ①關掉模擬是守衛的必要條件，但**忘了開回來 = 展場看到靜止的倉庫**。
 #   模擬只在**服務啟動**時 autostart（重開網頁不會，那是 server 端狀態），
 #   跑完守衛不會自己回來 ⇒ 這步是展場前跑過測試後的最後一道保險。
-echo "⑤ 重新啟動動態模擬（展場要看到數字在跳）"
+echo "⑤ 重新啟動動態模擬（展場要看到數字在跳；兩版都開回）"
 _api /api/live_mode '{"action":"start"}' | head -c 70; echo
+_api_other /api/live_mode '{"action":"start"}' | head -c 70; echo
 
 echo
 grep -E "累積回歸|FAIL" "$LOG" | head -30

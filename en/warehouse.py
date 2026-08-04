@@ -1320,9 +1320,11 @@ def list_hot_items(
 # ────────────────────────────────────────────────
 def _daily_out_series(sku: str, days: int = 30, warehouse: str = "all") -> list[int]:
     """回近 N 天「每日出貨量」list(長度 N、補 0)。給趨勢斜率用。
-    warehouse='all' 算三倉合計、否則只算單倉(逐倉補貨建議用)。"""
+    warehouse='all' 算三倉合計、否則只算單倉(逐倉補貨建議用)。
+    ⚠️ 視窗只到昨天：動態模擬把一天壓成幾分鐘，今天的出貨量是平常數十倍，
+    算進日均會讓每個商品都「撐 0 天」（同 stock_audit.py 2026-08-03 的修法）。"""
     s = state()
-    end = _snapshot_date()
+    end = _snapshot_date() - _td(days=1)
     start = end - _td(days=days - 1)
     by_day: dict[str, int] = {}
     for m in s.movements:
