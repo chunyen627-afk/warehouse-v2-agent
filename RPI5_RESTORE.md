@@ -50,8 +50,35 @@ sudo apt install -y python3-pip python3-venv git ffmpeg chromium-browser \
 ```bash
 pip3 install --break-system-packages \
     fastapi==0.92.0 uvicorn==0.17.6 websockets \
-    llama-cpp-python fasttext qrcode pillow jieba
+    llama-cpp-python fasttext qrcode pillow jieba diskcache
 ```
+
+#### 🚀 最快做法：`llama_cpp` / `fasttext` **從既有機器搬**（省 30+ 分鐘編譯）
+`llama-cpp-python` 在 RPI5 上要現場編譯 30+ 分鐘。
+兩台 **Python 版本相同（3.11.2）、架構相同（aarch64）** 就能直接搬編譯產物：
+```bash
+# 來源機
+cd ~/.local/lib/python3.11/site-packages && tar czf /tmp/pypkg.tgz \
+    llama_cpp llama_cpp_python-*.dist-info \
+    fasttext fasttext-*.dist-info fasttext_pybind.cpython-311-aarch64-linux-gnu.so
+# 目標機
+mkdir -p ~/.local/lib/python3.11/site-packages
+cd ~/.local/lib/python3.11/site-packages && tar xzf /tmp/pypkg.tgz
+pip3 install --break-system-packages diskcache typing_extensions   # ⚠️ 見下方雷
+```
+
+> 🚨 **雷（2026-08-04 踩到）：搬完 `import llama_cpp` 會缺 `diskcache`**
+> ```
+> ModuleNotFoundError: No module named 'diskcache'
+> ```
+> `llama_cpp` 的**純 Python 依賴不會跟著 tar 走**（它們是獨立套件）。
+> 搬完一定要補 `pip3 install --break-system-packages diskcache typing_extensions`，
+> 然後 `python3 -c "import llama_cpp, fasttext"` 驗證真的載得起來。
+
+> 🚨 **雷：先跑 `pip3 install llama-cpp-python` 會白等**
+> 若打算用「搬」的，**不要先讓 pip 去下載編譯**——
+> 它會下載 71MB 原始碼並開始編譯，中途 `pkill` 掉才發現白花 10 分鐘。
+> **決定用搬的，就直接搬**。
 
 實測可用版本（2026-07-27）：
 
@@ -131,24 +158,54 @@ md5sum ~/warehouse_v2_en/models/en_q8_0.gguf
 > **談模型版本一律 md5 對照，別靠檔名或記憶。**
 
 ### 4.3 whisper.cpp（中英文語音共用同一個 build）
+
+#### 🚀 最快做法：**從既有機器整包搬**（2026-08-04 實測，省 40 分鐘編譯）
+兩台 RPI5 只要 **Python 版本相同（3.11.2）、架構相同（aarch64）**就能直接搬：
+```bash
+# 來源機
+cd ~ && tar czf /tmp/whisper.tgz \
+    whisper.cpp/build/bin/whisper-cli \
+    whisper.cpp/models/ggml-small-q5_0.bin \
+    whisper.cpp/models/ggml-base.bin \
+    $(find whisper.cpp -name "*.so*" -printf "%p ")     # ⚠️ 見下方雷
+# 目標機
+cd ~ && tar xzf /tmp/whisper.tgz
+```
+
+> 🚨 **雷（2026-08-04 踩到）：只搬 `whisper-cli` 執行檔會跑不起來**
+> ```
+> error while loading shared libraries: libwhisper.so.1: cannot open shared object file
+> ```
+> `whisper-cli` 依賴 `build/bin/` 底下一整組 `.so`
+> （`libwhisper.so*`／`libggml*.so*`／`libparakeet.so*`）。
+> **打包時一定要用 `find whisper.cpp -name "*.so*"` 一起收**，
+> 而且執行時需要 `LD_LIBRARY_PATH=~/whisper.cpp/build/bin`
+> （server 若用 systemd 啟動，要在 unit 裡設 `Environment=LD_LIBRARY_PATH=...`）。
+
+#### 從頭編譯（沒有既有機器可搬時）
 ```bash
 cd ~ && git clone https://github.com/ggerganov/whisper.cpp
 cd whisper.cpp && cmake -B build && cmake --build build -j2   # 約 5 分鐘
-bash ./models/download-ggml-model.sh tiny.en    # 英文用
-bash ./models/download-ggml-model.sh base       # 中文用（multilingual）
+bash ./models/download-ggml-model.sh small-q5_0   # 英文用（現行）
+bash ./models/download-ggml-model.sh base         # 中文用（multilingual）
 ```
-> ⚠️ `tiny.en` / `base.en` 是**英文專用**版（同尺寸下英文更準，容量全給英文）；
-> 中文沒有專用版，只能用 multilingual 的 `tiny`/`base`/`small`。
-> 這就是中英用不同模型的原因——不是沒統一，是**英文有專用版可用、中文沒有**。
 
-**英文 → `tiny.en`**（⚠️ 不要 base.en，RPI5 實測）：
+**英文 → `small-q5_0` + `-ac 640`**（2026-07-31 換掉 tiny.en，非母語腔實測後定案）：
 
-| 模型 | 延遲 | WER 乾淨 |
+| 模型 | 真人台灣腔通過率 | 延遲 |
 |---|---|---|
-| **tiny.en (74MB)** | **0.94s** | **9.3%** |
-| base.en (148MB) | 2.33s | 10.2% |
+| tiny.en（**舊結論，已淘汰**） | 27% | 0.95s |
+| base 多語 | 33% | 2.07s |
+| small.en | 40% | 6.69s |
+| small 多語 | 53% | 6.66s |
+| **small-q5_0 + ac640** | **60%** | **3.45s** |
 
-倉管查詢句短、句型固定，tiny 容量已夠，變大沒收益反而慢 2.5 倍。
+> ⚠️ **舊結論「tiny.en WER 9.3% 最佳」是 TTS 合成音測的**，真人非母語腔下不成立。
+> 兩個反直覺點：①**多語版打敗英文專用版**（訓練時看過大量非母語者英文）
+> ②**量化單獨用會變慢**（ARM 無對應指令），搭配 `-ac` 削掉 encoder 成本才變加分。
+> 2026-08-02 用 100 句真人錄音再驗一次，現行組合三個噪音層都最高 ⇒ **選型已封閉**。
+
+中文沒有英文專用版可選，只能用 multilingual 的 `base`。
 
 ### 4.4 中文為什麼是 `base`（不是 tiny 也不是 small）
 拿 user 錄的**真人**音檔實測（⚠️ 不要用合成音判斷——中文版經驗是合成音
@@ -297,6 +354,111 @@ Type=Application
 ```
 
 `~/launch_warehouse.sh` —— **repo 有這份，直接複製**（另需 `fix_chromium_exit.py`）。
+
+> 🚨 **雷（2026-08-04 踩到）：Chromium 150 的 CDP 完全不回應**
+> `--remote-debugging-port=9222` 的 DevTools Protocol 是**維護工具**
+> （`drive_kiosk.py` / `click_probe.py` / `web_test.py` 都靠它遠端看畫面、送輸入）。
+> | Chromium | CDP |
+> |---|---|
+> | **147**（第一台） | ✅ 正常 |
+> | **150**（第二台，2026-08 倉庫版本） | ❌ **連得上、指令送得出，但永遠收不到回應** |
+>
+> 症狀很難認：`/json` 查得到分頁、WebSocket 也連得上，
+> 只有 `Runtime.evaluate` 之後**靜默無回應**（15 秒零訊息）。
+> ⚠️ 排查時先確認 **`websockets` 版本是 16.0**——
+> 17.0.1 會讓 `wsc.connect()` 直接卡死（更早期的症狀，容易跟這個混淆）。
+>
+> **影響範圍**：只影響「遠端自動化測試」，
+> **展場 demo / kiosk 開機自啟 / 服務本身完全不受影響**。
+> ⇒ 第二台若只是展示機，**不必為此降版**；
+>   真的需要遠端驅動畫面時，再從官方封存裝回 147。
+
+---
+
+## 7b. 🆕 複製第二台的最快流程（2026-08-04 實證）
+
+從零編譯要 4-6 小時，**從既有機器搬只要約 1 小時**。前提：
+**Python 版本相同（3.11.2）、架構相同（aarch64）**。
+
+### 步驟
+```bash
+# ── 0. 新機先裝系統套件（chromium-browser / wtype / cmake 常缺）
+sudo apt install -y python3-pip git ffmpeg chromium-browser grim wtype \
+                    build-essential cmake
+
+# ── 1. 純 Python 套件用 pip（快）
+pip3 install --break-system-packages \
+    fastapi==0.92.0 uvicorn==0.17.6 websockets==16.0 \
+    qrcode pillow jieba diskcache
+#   ⚠️ websockets **鎖 16.0**（17.x 會讓 CDP 卡死，見 §7）
+
+# ── 2. 編譯型套件從舊機搬（省 30+ 分鐘）
+#     舊機：
+cd ~/.local/lib/python3.11/site-packages && tar czf /tmp/pypkg.tgz \
+    llama_cpp llama_cpp_python-*.dist-info \
+    fasttext fasttext-*.dist-info fasttext_pybind.*.so
+#     新機：
+cd ~/.local/lib/python3.11/site-packages && tar xzf /tmp/pypkg.tgz
+
+# ── 3. whisper 從舊機搬（**.so 一定要一起收**，見 §4.3）
+cd ~ && tar czf /tmp/whisper.tgz \
+    whisper.cpp/build/bin/whisper-cli \
+    whisper.cpp/models/ggml-small-q5_0.bin whisper.cpp/models/ggml-base.bin \
+    $(find whisper.cpp -name "*.so*" -printf "%p ")
+
+# ── 4. 程式碼＋模型用 rsync（**不要用 tar 傳大檔**，見下方雷）
+#     先讓兩台能直連：舊機產金鑰、公鑰貼到新機 authorized_keys
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -q     # 舊機
+#     然後舊機直接推：
+rsync -a --partial \
+  --exclude=models/_unused --exclude=__pycache__ --exclude='*.pyc' \
+  --exclude='*.log' --exclude=audio \
+  ~/warehouse_v2_en/ p400@<新機IP>:~/warehouse_v2_en/
+rsync -a --partial --exclude=__pycache__ --exclude='*.pyc' --exclude='*.log' \
+  ~/warehouse_v2/ p400@<新機IP>:~/warehouse_v2/
+```
+
+> 🚨 **雷：用 `tar` + `scp` 傳 700MB+ 會靜默截斷**
+> 實測 `wh_en.tgz`(731M) 傳完解開時 `gzip: unexpected end of file`，
+> 而且**檔案數只差 91 個**——不比對數量根本發現不了。
+> ⇒ **大目錄一律用 `rsync -a --partial`**（可續傳、只傳差異、自動校驗）。
+> 兩台 RPI5 直連比繞經 Windows 中繼快得多。
+
+```bash
+# ── 5. systemd 服務（**照抄舊機的 unit**，見 §6）
+#   ⚠️ 不要自作聰明加 Environment=LD_LIBRARY_PATH（見下方雷）
+
+# ── 6. kiosk 與桌面
+cd ~ && tar czf /tmp/kiosk.tgz launch_warehouse.sh fix_chromium_exit.py \
+    health_watchdog.sh .config/autostart/warehouse.desktop Desktop/*.desktop
+
+# ── 7. QR code 重產（**IP 不一樣，不能沿用舊機的圖**）
+python3 ~/gen_qr2.py          # 自動抓本機區網 IP，產中英兩張到桌面
+```
+
+> 🚨 **雷：`Environment=LD_LIBRARY_PATH=~/whisper.cpp/build/bin` 會讓服務起不來**
+> ```
+> libllama.so: undefined symbol: _Z24ggml_backend_meta_device...
+> ```
+> whisper.cpp 和 llama-cpp-python **各自帶一份 ggml，版本不相容**。
+> 設了全域 `LD_LIBRARY_PATH` 會讓 `libllama.so` 去載到 whisper 的 ggml → 崩潰。
+> ⇒ **systemd unit 裡不要設**；whisper 是 server 用 subprocess 呼叫的，
+>   它自己能找到同目錄的 `.so`。
+
+### 驗收清單（缺一不可）
+| 項目 | 指令 |
+|---|---|
+| 兩服務 active | `systemctl is-active warehouse-v2 warehouse-v2-en` |
+| 模型真的載入 | `journalctl -u warehouse-v2-en \| grep "health.*ready"` |
+| **檔案與舊機一致** | `md5sum server.py tools_v2.py warehouse.py templates/index.html` 兩台比對 |
+| 麥克風 | `arecord -l \| grep card` 且實錄 3 秒看 RMS > 0.0001 |
+| WS 能答 | 送 `bluetooth earphones stock` 應得 `inventory_single` |
+| kiosk 雙分頁 | `curl -s localhost:9222/json \| grep -c 8002` |
+| 桌面 QR | `ls ~/Desktop/QRcode_*.png` |
+
+> ⚠️ **git commit 對不起來是正常的**：RPI5 上的是**獨立本地 repo**（branch `master`），
+> Windows 端才有 GitHub remote（branch `main`）。
+> **要比版本請比 `md5sum`，不要比 commit hash。**
 
 ### 🖥️ 開機行為（user 定調 2026-07-27）
 **同時開中英兩個分頁，英文在前景**：
