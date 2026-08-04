@@ -14982,8 +14982,39 @@ async def ws_handler(ws: WebSocket):
                                           r"\b(?:stock\s*audit|stocktake|"
                                           r"stock\s*(?:take|count))\b",
                                           user_text, _re.I))))
+                # ⚠️ movement 定案保護（2026-08-04）：'south warehouse movements
+                #   yesterday' 模型判對 query_movement（ctx 也補好了），clf 卻
+                #   高信心 compare_warehouses(0.91) 蓋回去 → 答倉庫排名答非所問。
+                #   句含 movement 名詞（查詢形，不收 received/shipped 寫入動詞）
+                #   且無比較記號時，clf 的 compare 不得覆蓋。只擋 compare 這一種
+                #   collision——clf → run_script（匯出）等其他校正照常有效。
+                _c18_mv_keep = (func_name == "query_movement"
+                                and clf_intent == "compare_warehouses"
+                                and bool(_re.search(
+                                    r"\b(?:movements?|inbound|outbound|"
+                                    r"shipments?|in\s*(?:and|/)\s*out)\b",
+                                    user_text, _re.I))
+                                and not _re.search(
+                                    r"\b(?:compare|comparison|versus|vs\.?|"
+                                    r"difference|which\s+warehouse|"
+                                    r"rank(?:ing)?s?|most|least|busiest)\b",
+                                    user_text, _re.I))
+                if _c18_mv_keep and mismatch:
+                    log.info(f"[C18-mvkeep] clf={clf_intent}({clf_conf:.2f}) "
+                             f"不蓋 query_movement（句含 movement 名詞、無比較記號）")
+                    # 順手補倉別：這類句常見 'south warehouse movements …'，
+                    #   fresh 連線下 LLM 沒抽 warehouse → 回全倉答非所「倉」。
+                    #   只在句中恰好提到一個倉、且 args 未設時才填（兩倉並列不猜）。
+                    if func_args.get("warehouse") in (None, "", "all"):
+                        _mvk_whs = set(_re.findall(r"\b(north|central|south)\b",
+                                                   user_text, _re.I))
+                        if len(_mvk_whs) == 1:
+                            func_args["warehouse"] = _mvk_whs.pop().lower()
+                            log.info(f"[C18-mvkeep] 補 warehouse="
+                                     f"{func_args['warehouse']!r}（句面倉別）")
                 if mismatch and not _hard and not _en_admin_hard \
-                        and not _c18_exp_keep and clf_intent != "unknown":
+                        and not _c18_exp_keep and not _c18_mv_keep \
+                        and clf_intent != "unknown":
                     log.info(f"[C18] clf={clf_intent}({clf_conf:.2f}) vs model={func_name} → 校正")
                     func_name = intent_clf.LABEL_TO_FUNC.get(clf_intent, clf_intent)
                     # ⚠️ 轉成 run_script 時**必須補 script_name**（2026-08-03）：
