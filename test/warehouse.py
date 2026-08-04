@@ -990,10 +990,9 @@ def compare_warehouses(
             return sum(stock.values())
         elif metric == "turnover":
             total_stock = sum(stock.values()) or 1
-            start = _snapshot_date() - _td(days=30)
-            out_qty = sum(m["qty"] for m in s.movements
-                          if m["warehouse"] == wh_key and m["direction"] == "out"
-                          and _date.fromisoformat(m["date"]) >= start)
+            # 走 _daily_out_series 共享「排除今天＋離群日剪裁」：
+            # 舊寫法窗含今天，模擬開著時週轉率被灌成十倍級假數字
+            out_qty = sum(_daily_out_series(None, 30, warehouse=wh_key))
             return round(out_qty / total_stock, 3)
         return 0
 
@@ -1034,14 +1033,8 @@ def compare_warehouses(
             return sum(stock.values())
         elif metric == "turnover":
             total_stock = sum(stock.values()) or 1
-            start = _snapshot_date() - _td(days=30)
-            out_qty = sum(
-                m["qty"]
-                for m in s.movements
-                if m["warehouse"] == wh_key
-                and m["direction"] == "out"
-                and _date.fromisoformat(m["date"]) >= start
-            )
+            # 同上一處：共享排除今天＋離群日剪裁
+            out_qty = sum(_daily_out_series(None, 30, warehouse=wh_key))
             return round(out_qty / total_stock, 3)
         return 0
 
@@ -1218,9 +1211,10 @@ def list_hot_items(
 # ────────────────────────────────────────────────
 # 趨勢 / 庫存可撐幾天 / 建議補貨日 helper
 # ────────────────────────────────────────────────
-def _daily_out_series(sku: str, days: int = 30, warehouse: str = "all") -> list[int]:
+def _daily_out_series(sku: str | None, days: int = 30, warehouse: str = "all") -> list[int]:
     """回近 N 天「每日出貨量」list(長度 N、補 0)。給趨勢斜率用。
     warehouse='all' 算三倉合計、否則只算單倉(逐倉補貨建議用)。
+    sku=None 算全部商品合計（週轉率等倉級指標用，共享同一套污染防護）。
     ⚠️ 視窗只到昨天：動態模擬把一天壓成幾分鐘，今天的出貨量是平常數十倍，
     算進日均會讓每個商品都「撐 0 天」（同 stock_audit.py 2026-08-03 的修法）。"""
     s = state()
@@ -1228,7 +1222,7 @@ def _daily_out_series(sku: str, days: int = 30, warehouse: str = "all") -> list[
     start = end - _td(days=days - 1)
     by_day: dict[str, int] = {}
     for m in s.movements:
-        if m["sku_id"] != sku or m["direction"] != "out":
+        if (sku is not None and m["sku_id"] != sku) or m["direction"] != "out":
             continue
         if warehouse != "all" and m["warehouse"] != warehouse:
             continue

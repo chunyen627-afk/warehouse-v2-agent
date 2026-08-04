@@ -2,7 +2,7 @@
 月底盤點：掃全倉庫存、和安全庫存比較，產出 CSV + HTML 到 audit/
 用法：python stock_audit.py [--data-dir <path>]
 """
-import sys, csv, pathlib, datetime, argparse
+import sys, csv, pathlib, datetime, argparse, json
 
 # 類別 slug → 顯示名。訪客會下載這份 CSV，`appliance_kitchen` 不好讀。
 # ⚠️ 這支腳本是獨立執行（不 import app 模組），所以這裡內嵌一份；
@@ -108,12 +108,24 @@ def main():
                             "qty": int(r.get("qty") or 0), "exp": exp})
 
     # 出貨累計（熱銷排行用）——與 generate_report 同一套來源
+    # ⚠️ 只收 seed 範圍內的日子（同 export_movements 的 ③④，2026-08-05）：
+    #   執行期寫入（訪客/動態模擬）的 date 是平移後的近期日期 ≥ 原始
+    #   snapshot_date；不濾的話「今天跳過」擋不住**換日**——展場第 2/3 天
+    #   昨天=前一天的模擬肥單，TOP10 與撐幾天照樣被灌爆。
+    try:
+        _cfg = json.load(open(dd / "master" / "config.json", encoding="utf-8"))
+        _base_s = str(_cfg.get("snapshot_date", ""))[:10]
+    except Exception:
+        _base_s = ""
     sku_sales = {}
     tx_dir = dd / "transactions"
     if tx_dir.exists():
         for f in sorted(tx_dir.glob("*.csv")):
             for r in csv.DictReader(open(f, encoding="utf-8-sig")):
                 if r.get("direction") == "out":
+                    _dsale = r.get("date") or ""
+                    if _base_s and _dsale >= _base_s:
+                        continue              # 執行期寫入（模擬/訪客）不進排行
                     k = r["sku_id"]
                     sku_sales[k] = sku_sales.get(k, 0) + int(r.get("qty") or 0)
 
@@ -132,8 +144,9 @@ def main():
         for f in sorted(tx_dir.glob("*.csv")):
             for r in csv.DictReader(open(f, encoding="utf-8-sig")):
                 d = r.get("date") or ""
-                if r.get("direction") != "out" or d == _today_s:
-                    continue                      # 跳過今天（模擬灌的）
+                if r.get("direction") != "out" or d == _today_s \
+                        or (_base_s and d >= _base_s):
+                    continue        # 跳過今天＋所有執行期寫入（換日防護）
                 hist_days.add(d)
                 k = r["sku_id"]
                 sku_hist[k] = sku_hist.get(k, 0) + int(r.get("qty") or 0)
