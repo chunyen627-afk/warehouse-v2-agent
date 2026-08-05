@@ -163,6 +163,10 @@ GATEKEEPER_KEYWORDS = {
     "compare", "comparison", "versus", "item list", "product list",
     "full list", "all items", "everything we", "what do we have",
     "running low", "low stock", "restock", "reorder", "out of stock",
+    # r14+1：#26 'which SKUs need replenishment'/#31 'stockout risk' 曾被
+    #   守門擋成搗蛋；days of cover 是庫存卡本來就有的欄位、訪客會直接問
+    "replenish", "stockout", "skus", "zero stock", "days of cover",
+    "stock cover",
     "expiring", "expire", "expiry", "shelf life", "movements",
     "moved", "inbound", "outbound", "transfers", "help",
     "what can you", "how does this", "safety stock", "purchase order",
@@ -349,6 +353,12 @@ def is_meaningful_input(text: str) -> bool:
                  r"\b(?:grew|grow|dropped|drop|rose|fell|best|worst|most|least)\b",
                  s, re.I):
         return True
+    #   r14+1：數量條件查詢（#12 'is anything under 20 units' 曾 rejected）
+    #   ——比較詞後必須跟數字，閒聊句（'anything under the sun'）不會中
+    if re.search(r"\b(?:anything|any\s+items?|what|which|items?|skus?|stock)\b"
+                 r"[^.?!]{0,24}\b(?:under|below|over|above|less\s+than|"
+                 r"fewer\s+than|more\s+than)\b\s*\d+", s, re.I):
+        return True
     #   健檢/盤點類名詞片語（health check / stock audit / stocktake report）
     if re.search(r"\b(?:warehouse|inventory|stock|full)\s+"
                  r"(?:health\s+check|report|audit|summary|stocktake)\b|"
@@ -533,7 +543,10 @@ _GATEKEEPER_BLACKLIST = (
     "<script", "</script", "select * from", "onerror=",
     # 離題領域
     "股市", "股票", "天氣", "電影", "音樂", "新聞", "地圖",
-    "翻譯", "計算", "食譜", "笑話", "遊戲", "stocks", "weather",
+    # r14+1：裸 "stocks" 曾誤殺 'urgent restocks'（substring 撞複數）——
+    #   股票閒聊改收片語；漏網的裸 stocks 會被商品比對 OOV 誠實拒絕
+    "翻譯", "計算", "食譜", "笑話", "遊戲", "stock market", "stock exchange",
+    "weather",
     "寫詩", "作業", "便當", "樂透", "唱歌", "唱首", "說個故事", "講個故事",
     "陪我聊", "聊天", "星期幾", "現在幾點", "下雨",
     # 問 AI 身份 / 嗆聲
@@ -1223,6 +1236,10 @@ _LOW_STOCK_INTENT_WORDS = (
     "under minimum", "below the min", "under the min",
     "below par", "under par", "below the threshold", "below threshold",
     "under the threshold", "beneath the minimum",
+    # r14+1（backlog 類1）：#31 'stockout risk items'/#52 'zero stock' 曾
+    #   「查無此商品」。⚠️ 'stock out'（帶空白）**不可收**——substring 會
+    #   撞守衛句 'low stock outdoor gear'（撞詞掃描實證），只收連寫形。
+    "stockout", "stocked out", "zero stock",
 )
 
 # 熱銷意圖詞（C4 用）
@@ -1267,6 +1284,15 @@ _HOT_INTENT_WORDS_SLOW = (
     # r17：「哪些商品從來沒動過」曾回今天進出總覽（答非所問）
     "沒動過", "沒有動過", "從來沒動", "都沒動", "沒在動", "沒賣過",
     "worst selling", "slow", "slow mover",
+    # r14+1（網頁百句 backlog 類1）：倉管營運行話的滯銷家族——
+    #   #30 'any dead stock this month' 曾回熱銷 TOP10（**反義誤導**，
+    #   clf 判對 hot_items 但 rank 預設 hot）；#48 never sells/#51 least
+    #   popular/#54 not selling 曾「查無此商品」。撞詞掃描：60 商品名
+    #   零碰撞；守衛既有 'dead stock'/'least popular items'/'whats not
+    #   moving' 三句期望 view=hot_items 不變、rank 修正為 slow=真正解。
+    "dead stock", "never sell", "never sold", "least popular", "unpopular",
+    "not selling", "not moving", "no movement", "hasnt moved", "hasn't moved",
+    "isnt moving", "isn't moving", "zero sales", "no sales",
 )
 
 # 模糊時間詞（C2 用）
@@ -6077,6 +6103,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         #   not found」（與 _NOEX_STOP 同步）
                         "sku", "skus", "more", "less", "than", "fewer",
                         "exceed", "exceeds", "number", "carry", "carrying",
+                        # r14+1：營運行話（backlog 類1）——stockout risk/
+                        #   replenishment/volume/popular 曾被抽成商品名。
+                        #   ⚠️ 'cover' 不可收（撞 phone cover 別名，掃描實證）
+                        "stockout", "risk", "risks", "replenishment",
+                        "urgent", "popular", "unpopular", "volume",
+                        "volumes", "dead", "zero", "restocks", "restock",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
@@ -13759,6 +13791,17 @@ async def ws_handler(ws: WebSocket):
                                     r"\b(?:alert|notify|warn|remind)\s+me\b|\bwhen\b|"
                                     r"\bbelow\b|\bunder\b|\bdrops?\b", _ul_adm):
                     _en_admin = "list_expiring_items"
+                # r14+1（#35）：'inbound volume yesterday' 這類**進出量裸句**
+                #   clf 語料沒見過 → query_inventory 把 'inbound volume' 當
+                #   商品名查（「查無此商品」）。方向詞＋量詞的組合夠獨特，
+                #   直達 movement；period/direction 交 LLM 抽、C4-mvp 期間
+                #   接地兜底。排除真寫入句（received/shipped + 數字）。
+                elif _re.search(r"\b(?:inbound|outbound|incoming|outgoing)\s+"
+                                r"(?:volumes?|flows?|totals?|activity)\b|"
+                                r"\b(?:movement|shipping)\s+volumes?\b",
+                                _ul_adm) and not _re.search(
+                                    r"\b(?:received|shipped|arrived)\s+\d", _ul_adm):
+                    _en_admin = "query_movement"
             # ── 2026-08-03（資料邊界批）：「哪個倉最多/最空」三倉排名 ──
             #   compare_warehouses(warehouse_a='all') **本來就支援**三倉排名
             #   （warehouse.py:1080 註解自述「哪個倉最多/最空/各倉分布」），
@@ -14542,6 +14585,10 @@ async def ws_handler(ws: WebSocket):
                         #   回「查無 skus carry 這個商品」
                         "sku", "skus", "more", "less", "than", "fewer",
                         "exceed", "exceeds", "number", "carry", "carrying",
+                        # r14+1：營運行話（與 _oov_stop 同步；cover 不收）
+                        "stockout", "risk", "risks", "replenishment",
+                        "urgent", "popular", "unpopular", "volume",
+                        "volumes", "dead", "zero", "restocks", "restock",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話
