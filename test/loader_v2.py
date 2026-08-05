@@ -76,16 +76,26 @@ def load_as_seed(wd: Path) -> dict:
     association_meta = json.load(open(ameta_path, encoding="utf-8")) if ameta_path.exists() else {}
 
     # ── transactions → movements（攤平所有日_方向 CSV）────────
+    # ⚠️ 逐列防禦（2026-08-05 機二實案）：硬斷電斷在模擬寫入中，檔尾是
+    #   NUL 殘骸/半行 → csv 給出缺欄列 → int(None) 讓整個初始化炸掉、
+    #   兩版 HEALTH=failed、訪客打字只回「系統啟動失敗」。爛列跳過並記數，
+    #   一列殘骸不該弄死整個系統（展場拔電是常態）。
     movements = []
+    _bad_rows = 0
     for csv_path in sorted((wd / "transactions").glob("*.csv")):
         for r in _read_csv(csv_path):
-            movements.append({
-                "date":      r["date"],
-                "sku_id":    r["sku_id"],
-                "warehouse": r["warehouse"],
-                "direction": r["direction"],
-                "qty":       int(r["qty"]),
-            })
+            try:
+                movements.append({
+                    "date":      r["date"],
+                    "sku_id":    r["sku_id"],
+                    "warehouse": r["warehouse"],
+                    "direction": r["direction"],
+                    "qty":       int(r["qty"]),
+                })
+            except (TypeError, ValueError, KeyError):
+                _bad_rows += 1
+    if _bad_rows:
+        print(f"[loader_v2] 略過 {_bad_rows} 列殘缺交易列（疑斷電殘骸）", flush=True)
 
     # ── orders/SO → orders（v1 connected analysis 用）────────
     orders = []

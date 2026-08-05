@@ -5917,11 +5917,30 @@ async def live_mode(req: Request):
     return JSONResponse(live_sim.status(), headers=NO_CACHE)
 
 
+_ANOM_CACHE: dict = {"ts": 0.0, "data": None}
+_ANOM_TTL = 30.0   # 秒；告警真正的即時通道是 WS 推播，這裡是輪詢的兜底
+
+
 @app.get("/anomalies")
 async def anomalies(only_new: bool = False):
-    """主動異常偵測 — 也可被使用者主動查詢（雙軌：背景推 + 手動拉）。"""
+    """主動異常偵測 — 也可被使用者主動查詢（雙軌：背景推 + 手動拉）。
+    ⚠️ 2026-08-05 改 TTL 快取＋executor：scan_once 設計時 ~190ms，但它每次
+    全掃 s.movements，模擬一天灌數十萬筆後膨脹成秒級，而且原本**同步跑在
+    event loop 上**——kiosk 每 8 秒 poll 一次 → 兩版 server 100% CPU、
+    所有 API 被餓死、UI 卡頓（機二實案，py-spy 抓到 MainThread 全在
+    _daily_out_series）。"""
     import anomaly
-    return JSONResponse(anomaly.scan_once(only_new=only_new), headers=NO_CACHE)
+    import time as _t
+    loop = asyncio.get_event_loop()
+    if only_new:
+        data = await loop.run_in_executor(
+            None, lambda: anomaly.scan_once(only_new=True))
+        return JSONResponse(data, headers=NO_CACHE)
+    if _ANOM_CACHE["data"] is None or _t.time() - _ANOM_CACHE["ts"] > _ANOM_TTL:
+        data = await loop.run_in_executor(
+            None, lambda: anomaly.scan_once(only_new=False))
+        _ANOM_CACHE["ts"], _ANOM_CACHE["data"] = _t.time(), data
+    return JSONResponse(_ANOM_CACHE["data"], headers=NO_CACHE)
 
 
 if STATIC_DIR.exists():

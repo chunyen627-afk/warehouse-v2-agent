@@ -1211,31 +1211,54 @@ def list_hot_items(
 # ────────────────────────────────────────────────
 # 趨勢 / 庫存可撐幾天 / 建議補貨日 helper
 # ────────────────────────────────────────────────
+_MV_DAYIDX: dict = {"key": None, "sku": None, "wh": None}
+
+
+def _mv_day_index() -> tuple[dict, dict]:
+    """出貨日索引 {(sku,wh,date):qty} 與 {(wh,date):qty}，O(N) 建一次。
+    ⚠️ 為什麼敢快取：撐天/週轉視窗**排除今天**，而執行期寫入（模擬/訪客）
+    全記在今天 ⇒ 索引刻意不含今天，之後怎麼寫入都不會失效。
+    只在 State 換新（reset）或換日時重建。
+    起因（2026-08-05 py-spy 實錘）：/anomalies 每次 poll 全掃 s.movements
+    （模擬一天灌數十萬筆），240 次掃描把兩版 server 燒滿 100%、API 全餓死。"""
+    s = state()
+    key = (id(s), _snapshot_date().isoformat())
+    if _MV_DAYIDX["key"] != key:
+        today_s = _snapshot_date().isoformat()
+        idx_sku: dict = {}
+        idx_wh: dict = {}
+        for m in s.movements:
+            d = m.get("date") or ""
+            if m.get("direction") != "out" or len(d) != 10 or d >= today_s:
+                continue
+            ks = (m["sku_id"], m["warehouse"], d)
+            idx_sku[ks] = idx_sku.get(ks, 0) + m["qty"]
+            kw = (m["warehouse"], d)
+            idx_wh[kw] = idx_wh.get(kw, 0) + m["qty"]
+        _MV_DAYIDX["key"] = key
+        _MV_DAYIDX["sku"] = idx_sku
+        _MV_DAYIDX["wh"] = idx_wh
+    return _MV_DAYIDX["sku"], _MV_DAYIDX["wh"]
+
+
 def _daily_out_series(sku: str | None, days: int = 30, warehouse: str = "all") -> list[int]:
     """回近 N 天「每日出貨量」list(長度 N、補 0)。給趨勢斜率用。
     warehouse='all' 算三倉合計、否則只算單倉(逐倉補貨建議用)。
     sku=None 算全部商品合計（週轉率等倉級指標用，共享同一套污染防護）。
     ⚠️ 視窗只到昨天：動態模擬把一天壓成幾分鐘，今天的出貨量是平常數十倍，
-    算進日均會讓每個商品都「撐 0 天」（同 stock_audit.py 2026-08-03 的修法）。"""
-    s = state()
+    算進日均會讓每個商品都「撐 0 天」（同 stock_audit.py 2026-08-03 的修法）。
+    2026-08-05 起走 _mv_day_index 查表（O(N) 全掃在模擬灌大後燒死 CPU）。"""
+    idx_sku, idx_wh = _mv_day_index()
     end = _snapshot_date() - _td(days=1)
     start = end - _td(days=days - 1)
-    by_day: dict[str, int] = {}
-    for m in s.movements:
-        if (sku is not None and m["sku_id"] != sku) or m["direction"] != "out":
-            continue
-        if warehouse != "all" and m["warehouse"] != warehouse:
-            continue
-        try:
-            d = _date.fromisoformat(m["date"])
-        except Exception:
-            continue
-        if start <= d <= end:
-            by_day[m["date"]] = by_day.get(m["date"], 0) + m["qty"]
+    whs = ("north", "central", "south") if warehouse == "all" else (warehouse,)
     series = []
     for i in range(days):
         d = (start + _td(days=i)).isoformat()
-        series.append(by_day.get(d, 0))
+        if sku is None:
+            series.append(sum(idx_wh.get((w, d), 0) for w in whs))
+        else:
+            series.append(sum(idx_sku.get((sku, w, d), 0) for w in whs))
     # 換日防護：過去某天若殘留動態模擬肥單（展場第2/3天早上忘了 reset），
     # 該天出貨量會是正常日的數百倍 → 「排除今天」擋不住、日均照樣被灌爆。
     # 單日量 > max(200, 中位數×30) 視為污染日，以中位數替代
