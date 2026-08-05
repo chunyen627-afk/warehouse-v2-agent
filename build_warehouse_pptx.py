@@ -266,7 +266,7 @@ add_text(s, MX, Inches(1.75), Inches(11.8), Inches(0.4),
 add_text(s, MX, Inches(2.25), Inches(11.8), Inches(1.5),
          "倉管 Agent v2", size=54, bold=True, color=WHITE)
 add_text(s, MX, Inches(3.35), Inches(11.8), Inches(0.7),
-         "一句自然語言 → 一秒拿到正確答案，全程在一台 Raspberry Pi 上跑",
+         "一句自然語言 → 秒級拿到正確答案，全程在一台 Raspberry Pi 上跑",
          size=18, color=GREYBB)
 # 三個亮點膠囊
 caps = [("270M", "邊緣級小模型"), ("100+ 輪", "品質收斂"), ("100%", "雙平台回歸")]
@@ -282,7 +282,7 @@ add_text(s, MX, Inches(6.85), Inches(11.8), Inches(0.35),
          "FunctionGemma 270M 微調模型 × 多層校正架構 × RPi5 CPU 部署 → 下一步接自研晶片加速",
          font=FONT_EN, size=12, color=GREY77)
 set_notes(s, "封面。定位：這是晶片團隊的軟體成果——一個能展示邊緣 AI 落地的真實應用。"
-             "一句話說清楚產品：自然語言問倉管、一秒回答、跑在便宜的樹莓派上。"
+             "一句話說清楚產品：自然語言問倉管、秒級回答、跑在便宜的樹莓派上。"
              "三個數字：270M 是模型只有 2.7 億參數（業界主流 3B-8B 的零頭）、"
              "100+ 輪是品質收斂的迭代次數、100% 是回歸測試通過率。"
              "底線一句話點出硬體路線圖：現在純 CPU、下一步接自研晶片加速。")
@@ -310,7 +310,7 @@ add_round(s, rx, Inches(1.7), Inches(5.75), Inches(4.6), fill=TEALBG, shadow=Tru
 add_text(s, rx + Inches(0.35), Inches(1.95), Inches(5.05), Inches(0.5),
          "倉管 Agent v2", size=18, bold=True, color=TEALDK)
 gains = [("💬", "直接用講的：「藍牙耳機還剩幾個」"),
-         ("⚡", "一句話一秒回答，免選單"),
+         ("⚡", "一句話秒級回答，免選單"),
          ("📶", "掃 QR 手機就能問，展場離線也行"),
          ("🍓", "一台樹莓派跑得動，硬體成本極低")]
 for i, (ic, tx) in enumerate(gains):
@@ -319,7 +319,7 @@ for i, (ic, tx) in enumerate(gains):
     add_text(s, rx + Inches(1.0), y + Inches(0.07), Inches(4.4), Inches(0.6),
              tx, size=14.5, color=DARK, anchor=MSO_ANCHOR.MIDDLE)
 set_notes(s, "痛點對照。左邊是傳統倉管系統的四個痛：要學、層級深、現場難用、客製貴。"
-             "右邊是本專案的解法：用講的、一秒答、手機掃碼、樹莓派就能跑。")
+             "右邊是本專案的解法：用講的、秒級答、手機掃碼、樹莓派就能跑。")
 pn(s)
 
 print("S1-S2 done")
@@ -532,7 +532,7 @@ s = slide_blank()
 title_bar(s, "THE QUIET HERO", "小主角 FastText：路由交給穩的，生成交給會的")
 kpi_row(s, Inches(1.52), [
     ("14 類", "自定義意圖標籤"),
-    ("0.5GB", "intent_clf.bin 模型"),
+    ("4.2MB", "intent_clf 量化模型（原 0.5GB）"),
     ("98.9%", "路由準確率"),
     ("毫秒級", "CPU 路由延遲"),
 ], num_size=27)
@@ -596,7 +596,7 @@ title_bar(s, "WHY SO SMALL", "270M：故意選小，不是能力不足")
 kpi_row(s, Inches(1.75), [
     ("270M", "本專案模型參數"),
     ("3-8B", "業界主流 Agent"),
-    ("~30 t/s", "RPi5 CPU 推論速度"),
+    ("20–30 t/s", "RPi5 CPU 推論速度"),
     ("0 元", "雲端 API 費用"),
 ], num_size=27)
 add_round(s, MX, Inches(3.35), Inches(11.87), Inches(3.3), fill=LIGHT, shadow=True)
@@ -807,7 +807,7 @@ add_rich(s, Inches(7.4), Inches(4.35), Inches(5.0), Inches(0.7),
 # 底部一句話
 add_round(s, MX, Inches(5.7), Inches(11.87), Inches(0.95), fill=TEALBG)
 add_text(s, MX + Inches(0.4), Inches(5.9), Inches(11.0), Inches(0.6),
-         "每修一個 bug 就存一句守衛 → 882 句形成防護網，任何改動只要跑回歸就知道有沒有踩壞舊功能",
+         "每修一個 bug 就存一句守衛 → 1122 句形成防護網，任何改動只要跑回歸就知道有沒有踩壞舊功能",
          size=13.5, color=TEALDK, anchor=MSO_ANCHOR.MIDDLE)
 set_notes(s, "收斂的量化證據。左邊柱狀圖：守衛庫從 138 句一路長到 866 句，每個數字都是"
              "累積的防護網。右邊：多輪 bug 軌跡 6-7-6-8 沒收斂，正好證明隨機測試的極限，"
@@ -821,7 +821,7 @@ kpi_row(s, Inches(1.85), [
     ("33 hr", "連續運行"),
     ("1600+", "次推論"),
     ("44°C", "溫度穩定"),
-    ("~30 t/s", "速度零衰減"),
+    ("20–30 t/s", "速度零衰減"),
 ], num_size=26)
 add_round(s, MX, Inches(3.4), Inches(5.75), Inches(3.1), fill=LIGHT, shadow=True)
 add_text(s, MX + Inches(0.35), Inches(3.65), Inches(5.0), Inches(0.45),
@@ -863,7 +863,7 @@ add_text(s, MX + Inches(0.35), Inches(2.35), Inches(4.9), Inches(0.4),
 add_text(s, MX + Inches(0.35), Inches(2.8), Inches(4.9), Inches(0.5),
          "RPi5 CPU（純軟體）", size=17, bold=True, color=DARK)
 now_pts = [("模型", "FunctionGemma 270M"),
-           ("速度", "~30 tokens/s"),
+           ("速度", "20–30 tokens/s"),
            ("品質", "六套回歸雙平台 100%"),
            ("成本", "一台樹莓派，無 GPU / 無雲端")]
 for i, (k, v) in enumerate(now_pts):
@@ -894,7 +894,7 @@ add_text(s, MX, Inches(6.35), Inches(11.8), Inches(0.5),
          "關鍵訊息：連純 CPU 都已跑出生產級品質——軟體、測試、落地全部就緒，就等自研晶片把天花板拉高。",
          size=13, bold=True, color=TEALDK)
 set_notes(s, "★硬體路線圖頁（點綴，但對晶片團隊的參展定位很重要）。左邊實色=現在已實測："
-             "270M 在 RPi5 純 CPU、~30 t/s、六套回歸雙平台 100%、極低成本。右邊白底虛線框"
+             "270M 在 RPi5 純 CPU、20–30 t/s（模擬全開時 ~20、關閉 ~30）、六套回歸雙平台 100%、極低成本。右邊白底虛線框"
              "=下一階段 roadmap 目標（明確標成目標，不假裝已達成）：加自研晶片加速 → 跑 "
              "3B/7B 更大模型 → 能力從查詢升級到真正對話。核心訊息：軟體與應用已就緒，"
              "就等晶片把算力天花板拉高。誠實區分實測與目標，保住對評審的信任。")
@@ -990,7 +990,7 @@ add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
 # 縱向全鏈流程
 vchain = [
     ("前端錄音", "Siri 式：點一下 → 講 → 靜音自動結束（瀏覽器 VAD 偵測）", TEAL, "🎙️"),
-    ("whisper.cpp", "OpenAI whisper，RPi5 CPU 純離線辨識（英文 0.94s / 句）", TEALDK, "🧠"),
+    ("whisper.cpp", "OpenAI whisper，RPi5 CPU 純離線辨識（中英同顆 small-q5_0，~3.5s/句）", TEALDK, "🧠"),
     ("OpenCC 轉繁", "簡體 → 繁體，順便轉台灣用語（僅中文版需要）", NAVY, "🔄"),
     ("同音修正層", "倉別 / 動詞 / 量詞 / 異體字——只掛 ASR 出口，不碰倉管核心", AMBER, "🔧"),
     ("倉管 WS", "既有守衛庫 + 發音容錯層接手，回答與打字完全一致", TEALDK, "📦"),
@@ -1035,7 +1035,7 @@ rows = [
      "ZH 端到端 66/100", "★ 現役（8 月中英統一＋-ac 640）", True),
     ("whisper tiny.en", "74 MB", "英文專用", "0.94s", "WER 9.3%", "英文版初選 → 升級 small", False),
     ("whisper base", "141 MB", "多語（含中文）", "2.15s", "端到端 36/100", "中文版初選 → 升級 small", False),
-    ("whisper base.en", "67 MB", "英文專用", "2.33s", "WER 10.2%", "比 tiny.en 慢又沒更準", False),
+    ("whisper base.en", "141 MB", "英文專用", "2.33s", "WER 10.2%", "比 tiny.en 慢又沒更準", False),
     ("Fun-ASR-Nano（原用）", "~800M", "中文強", "2.5s", "真人 4/8", "× 來源不符，已汰換", False),
 ]
 ry = ty + th
@@ -1979,10 +1979,10 @@ add_text(s, MX, Inches(0.7), Inches(11.8), Inches(0.35),
 add_text(s, MX, Inches(1.15), Inches(11.8), Inches(0.7),
          "一句話查倉管，跑在樹莓派，品質可證明", size=28, bold=True, color=WHITE)
 cards = [
-    ("價值", "🎯", "自然語言問倉管，一秒回答；手機掃碼、離線可用、硬體成本極低"),
+    ("價值", "🎯", "自然語言問倉管，秒級回答；手機掃碼、離線可用、硬體成本極低"),
     ("技術", "🧠", "270M 小模型當路由器 + 規則層當決策者，業界邊緣 Agent 的正解"),
     ("品質", "🛡️", "中文 1122 句雙平台 100%、英文 892 句 100%；「可靠」是數字不是祈禱"),
-    ("語音", "🎙️", "全離線 whisper；英文 0.94s / 句，中英共用一套 runtime"),
+    ("語音", "🎙️", "全離線 whisper；中英統一 small-q5_0（~3.5s/句）、同一套 runtime"),
     ("雙語", "🌐", "中英雙版同機並存，訪客點分頁切換；移植 19 類坑已歸納成方法論"),
 ]
 y0 = Inches(1.92)
@@ -1996,7 +1996,7 @@ for i, (tag, ic, desc) in enumerate(cards):
     add_text(s, MX + Inches(2.75), y + Inches(0.12), Inches(8.8), Inches(0.62),
              desc, size=13.5, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
 add_text(s, MX, Inches(6.66), Inches(11.8), Inches(0.5),
-         "下一步：展前真機全量驗收、demo 基準日對齊——重置鈕 / 開機自啟 / Wi-Fi 自癒 / 中英雙版並存已完成",
+         "下一步：第二台交機（全量認證已過）、展前真人語音多句實測、SEMICON 9/2–9/4 展出——開機自動歸零 / 動態模擬 / 雙語 / 手機動線全數就緒",
          size=13, color=GREYBB)
 set_notes(s, "總結五張卡：價值、技術、品質、語音、雙語。收尾一句下一步。整份簡報的主軸——"
              "用最小的模型、最便宜的硬體，做到可以用數字證明的品質。"
