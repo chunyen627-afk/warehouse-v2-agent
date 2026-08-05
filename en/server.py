@@ -337,7 +337,10 @@ def is_meaningful_input(text: str) -> bool:
             "what can you do", "what can i ask", "what do you do",
             "what is this demo", "what's this demo", "whats this demo",
             "what is this system", "what's this system",
-            "is this real data", "how does this demo")):
+            "is this real data", "how does this demo",
+            # r18 #28：超禮貌開頭（would it be possible to see the movement
+            #   log 曾被守門拒）——後面接什麼都是合理提問
+            "would it be possible", "is it possible to")):
         return True
     # ── 產出類意圖放行（2026-08-04，意圖測試抓到）───────────────────
     #   訪客要的正是報告/採購單/進出紀錄,卻在守門員就被擋掉：
@@ -1340,6 +1343,8 @@ _HOT_INTENT_WORDS_SLOW = (
     #   ＋#15 collecting dust/#33 underperforming/#16 slowest sku
     "the worst", "collecting dust", "underperforming", "underperform",
     "slowest sku", "slowest item", "slowest items",
+    # r18 #30：'worst seller'（單數——worst selling 有收、seller 沒）
+    "worst seller", "worst sellers",
 )
 
 # 模糊時間詞（C2 用）
@@ -6251,6 +6256,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         #   categories 曾被抽成商品名
                         "numbers", "gimme", "lemme", "wheres", "sitting",
                         "totals", "categories", "category", "stale",
+                        # r18（與 _NOEX_STOP 同步）
+                        "sanity", "customer", "customers", "asking",
+                        "time", "times", "usual",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
@@ -7910,7 +7918,8 @@ _CTX_FOLLOWUP_RE_EN = _re.compile(
     #     所以句子進得了門、卻在 carry-over 這層落空——兩處詞表不同步。
     r"(?:what|how)\s+about\b|"
     # 承接副詞：'then' / 'also' / 'too' / 'again' / 'now' / 'each'
-    r"then|also|too|again|now|each|"
+    # r18 #37：'one more time'/'once more'——same again 家族的同義講法
+    r"then|also|too|again|now|each|one more time|once more|"
     # 序數指代：'the first one' / 'the second'
     # ⚠️ 'the \w+ ones?' 要排在 'the (first|…)' **前面**（交替分支左優先不回溯，
     #   否則 'the most urgent one' 不會命中——r2 S5 實測）
@@ -14051,9 +14060,15 @@ async def ws_handler(ws: WebSocket):
                 # r14+2（#21）：裸 'transfers?' / 'movements?' 功能詞單獨句
                 #   ——曾被 alias fuzzy 配成 trainers→Running Shoes。
                 #   單獨一個功能名詞＝想看進出/調撥紀錄 → movement 總覽。
-                elif _re.fullmatch(r"\s*(?:transfers?|movements?)"
-                                   r"(?:\s+(?:log|history|records?))?"
-                                   r"(?:\s+please)?\s*[?.!]*\s*", _ul_adm):
+                elif (_re.fullmatch(r"\s*(?:transfers?|movements?)"
+                                    r"(?:\s+(?:log|history|records?))?"
+                                    r"(?:\s+please)?\s*[?.!]*\s*", _ul_adm)
+                      # r18 #28：'would it be possible to see the movement
+                      #   log' clf 誤判 run_script(0.97) 被 guard 拒——句含
+                      #   紀錄片語且無寫入數字＝查 movement
+                      or (_re.search(r"\b(?:movement|transfer)s?\s+"
+                                     r"(?:log|history|records?)\b", _ul_adm)
+                          and not _re.search(r"\d", _ul_adm))):
                     # r16 #27/#28：'transfer log'/'movement history' 片語也收
                     _en_admin = "query_movement"
                 # r16 #16：'slowest sku this month' 曾被 clf 判 compare 直達
@@ -14897,6 +14912,9 @@ async def ws_handler(ws: WebSocket):
                         # r15：口語縮寫/狀態詞（與 _oov_stop 同步）
                         "numbers", "gimme", "lemme", "wheres", "sitting",
                         "totals", "categories", "category", "stale",
+                        # r18（與 _oov_stop 同步）
+                        "sanity", "customer", "customers", "asking",
+                        "time", "times", "usual",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話
