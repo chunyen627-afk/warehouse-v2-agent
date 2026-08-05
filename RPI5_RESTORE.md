@@ -849,3 +849,73 @@ sudo systemctl reboot
   重訓只多買到「SYSTEM_PROMPT 去中文 + 幾類已有規則兜住的長尾」，
   投入產出不成比例
 - 兩版並存記憶體 2.9G / 7.9G，磁碟 35G / 57G
+
+---
+
+## 15. 🩸 一次還原到底檢查表（2026-08-05 機二重建實錄）
+
+> 機二「照手冊還原」後，user 實際上手一天內踩到 **9 類缺口**——全是手冊
+> §1-§12 沒涵蓋的。以後照本章補完＋跑完驗收清單，才算「還原完成」。
+
+### 15.1 缺口清單與補法（照抄即可）
+
+```bash
+# ① 系統套件（§1 的清單之外還要這些）
+sudo apt install -y foot dnsmasq \
+     fonts-noto-color-emoji fonts-noto-core fonts-noto-extra fonts-noto-ui-core \
+     fonts-dejavu fonts-dejavu-extra \
+     fcitx5 fcitx5-chewing fcitx5-frontend-gtk3 fcitx5-frontend-gtk4 fcitx5-config-qt \
+     sox libsox-fmt-all jq xxd wget
+fc-cache -f
+# ② pip（中文語音鏈的簡繁轉換；漏了 /api/asr 回「OpenCC 未安裝」）
+sudo pip3 install opencc-python-reimplemented==0.1.7 --break-system-packages
+```
+
+| 缺什麼 | 症狀（實際發生過） |
+|---|---|
+| `fonts-noto-color-emoji` 等字型 | 頁面所有 📦⚠️⭐ 圖示變 **□ 方塊** |
+| `foot` | 桌面 terminal 圖示點了沒反應 |
+| `dnsmasq`（完整版，非 dnsmasq-base）＋ `/etc/dnsmasq.conf` | **熱點連得上但拿不到 IP**（手機 169.254.x.x 自派位址、QR 掃了逾時）|
+| `fcitx5-chewing` 全家 | 沒有注音輸入 |
+| OpenCC pip 包 | 中文語音按了錄完報「OpenCC 未安裝」 |
+| `sox/jq/xxd/wget` | check_mic 等維運腳本靜默失敗 |
+
+```bash
+# ③ 家目錄腳本 —— 一定要 **全 glob** 搬（含中文檔名！）：
+#    桌面圖示的目標是 啟動_中文版.sh → switch_lang.sh，漏了圖示全滅
+scp 來源機:'~/*.sh' 來源機:'~/*.py' ~/
+chmod +x ~/*.sh
+# ④ crontab（看門狗雙保險全靠它；重建後曾整個是空的）
+ssh 來源機 crontab -l | crontab -
+# ⑤ /etc/dnsmasq.conf 從來源機整檔搬 + enable
+ssh 來源機 sudo cat /etc/dnsmasq.conf | sudo tee /etc/dnsmasq.conf
+sudo systemctl enable --now dnsmasq
+# ⑥ Chromium 受管政策（麥克風授權＋關翻譯列；新 profile 沒它＝語音按了秒退、
+#    中文頁跳翻譯長條）
+sudo mkdir -p /etc/chromium/policies/managed
+ssh 來源機 sudo cat /etc/chromium/policies/managed/warehouse-media.json \
+  | sudo tee /etc/chromium/policies/managed/warehouse-media.json
+# ⑦ systemd drop-in：開機自動歸零（boot_reset.sh + 20-boot-reset.conf ×2 服務）
+#    來源機 /etc/systemd/system/warehouse-v2*.service.d/ 整目錄照搬 + daemon-reload
+```
+
+### 15.2 ⚠️ 兩個「新 profile 症候群」的治本設定（已進腳本，確認別退版）
+
+- `launch_warehouse.sh` **和** `switch_lang.sh` 都要有 `--password-store=basic`
+  （chromium 啟動點有兩個！只改一支，桌面圖示照樣跳「為新鑰匙圈選擇密碼」
+  且整頁卡在 about:blank）
+- 政策 `TranslateEnabled:false`（en-US 介面看中文頁會跳翻譯提示列）
+
+### 15.3 還原驗收清單（全過才叫還原完成）
+
+1. `sudo reboot` → 開機自動歸零 log（`journalctl -t boot_reset -b`）→ 服務×2
+   ready → kiosk 兩分頁有標題、**無任何對話框** → Live badge 顯示運行中
+2. **桌面每顆圖示各點一次**：啟動中文版／啟動英文版／terminal／切換熱點
+3. `crontab -l` 有 3 條（net_watchdog / health_watchdog / lxterminal 清理）
+4. 畫面圖示無 □ 方塊；中文頁右上無翻譯長條
+5. 注音：輸入框 Ctrl+Space 能打中文
+6. **語音**：麥克風按下去（不秒退）→ 講一句 → 有辨識結果
+7. **熱點實測**（手機）：切熱點 → 手機連 SSID → **拿到 192.168.4.x**（不是
+   169.254）→ 掃網頁 QR → 過兩層憑證警告 → 頁面能查詢
+8. `./run_guard_zh.sh --smoke` 全綠 → 有時間再跑全量 1122+892+parity
+9. 溫度：待機 ≤55°C、壓測零降頻（`vcgencmd get_throttled` = 0x0）
