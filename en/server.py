@@ -511,6 +511,13 @@ _ADJ_LIKE_OOV = {
     "condition", "level", "expensive", "cheap", "balanced", "overstocked",
     "understocked", "stocked", "space", "capacity", "recommend",
     "recommended", "suggestion",
+    # r14+2（#32/#69）：庫存狀態名詞——'stock position of camping tent' 的
+    #   position 曾被當陌生修飾詞**清掉已抽對的 Camping Tent 4-person**
+    #   （坑 3 同型），cat-fill 再拿 camping 填成 Sports 類概覽
+    "position", "positions", "levels", "standing",
+    # r14+2（#69）：禮貌片語的名詞——'could I trouble you' 的 trouble 曾被
+    #   當陌生修飾詞清掉已抽對的 Camping Tent（r12 禮貌詞批漏了這幾個）
+    "trouble", "bother", "pardon",
     # r23：**疑問詞**——`where is the mouse stock` 的 where 被當商品名 →
     #   「查無 where 這個商品」。
     #   ⚠️ 不能加進 `_oov_stop`／`_NOEX_STOP`：那三個詞（why/when/where）
@@ -541,6 +548,11 @@ _GATEKEEPER_BLACKLIST = (
     "偷偷", "程式碼", "原始碼", "source code",
     # 注入字串（r20：<script> 曾因英文 alert 命中缺貨詞回清單）
     "<script", "</script", "select * from", "onerror=",
+    # r14+2（#86/#87/#80）：'drop all tables' 中間隔 all 讓 'drop table'
+    #   比不到；meaning of life／what model are you 家族曾 fuzzy 撞
+    #   Running Shoes 回商品卡
+    "drop all", "meaning of life", "what model are you",
+    "which model are you", "what llm", "what ai model",
     # 離題領域
     "股市", "股票", "天氣", "電影", "音樂", "新聞", "地圖",
     # r14+1：裸 "stocks" 曾誤殺 'urgent restocks'（substring 撞複數）——
@@ -1266,6 +1278,10 @@ _HOT_INTENT_WORDS_HOT = (
     # r30：賣況/買氣（帶商品名時 C4-prod 轉該商品銷況）
     "賣況怎樣", "賣況如何", "買氣",
     "top selling", "best seller", "hot",
+    # r14+2（#42）：'what sold over the weekend' 是熱銷清單問法——曾被
+    #   LLM 幻覺 keyword 再被 carry-over 補成前句商品卡。weekend 含
+    #   week substring → C4 period 自動 this_week。
+    "what sold", "what was sold",
 )
 _HOT_INTENT_WORDS_SLOW = (
     "賣最差", "滯銷", "賣不掉", "最冷門", "賣最少", "銷量最差",
@@ -1631,6 +1647,9 @@ _TOOL_INTENT_GUARD = {
                          "有動", "動靜",
                          "movement", "inbound", "outbound", "in", "out",
                          # EN build：英文進出貨詞
+                         # r14+2（#21）：transfers 裸句經 en-admin 直達 movement
+                         #   卻被本閘門「缺意圖詞」拒掉——調撥紀錄本就是 movement
+                         "transfer", "transfers",
                          "movements", "shipment", "shipments", "shipped", "ship",
                          "received", "receive", "came in", "come in", "went out",
                          "moved", "transactions", "activity", "goods",
@@ -3544,6 +3563,15 @@ def _en_fuzzy_keyword(core: str) -> str:
         #   門檻下**零誤中**，只有 rimper→romper 命中。
         #   ⚠️ 限 ≥5 字母：4 字母的編輯距離 1 就換一個意思。
         if not near and len(tok) >= 5:
+            # r14+2（#21）：**正確拼寫的系統功能詞不做商品 fuzzy**——
+            #   'transfers?' 曾被放寬層配到 'trainers'(0.80+) → 回 Running
+            #   Shoes 庫存卡。功能詞的錯字由 _en_funcword_fix 負責，
+            #   商品模糊層不該碰它們。
+            if tok in ("transfer", "transfers", "movement", "movements",
+                       "schedule", "schedules", "report", "reports",
+                       "export", "exports", "record", "records",
+                       "return", "returns", "receipt", "receipts"):
+                continue
             near = [k for k in difflib.get_close_matches(
                 tok, _ALIAS_KEYS_EN, n=3, cutoff=0.80) if k in cand]
             if near:
@@ -5669,8 +5697,22 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         _c4_solo_intent = (_is_mostly_english(user_text)
                            and len(user_text.strip().strip("?.!,").split()) <= 1)
         # （'hot cocoa' 這類「意圖詞被商品名吸收」已在 is_hot 源頭排除）
+        # r14+2（#42）：字面接地會被介系詞騙——'what sold over the weekend'
+        #   靠 Pour-**over** 的 over 過關 → 幻覺商品銷況卡。英文句要求
+        #   商品名**實詞**（≥3 字母、非介系詞）真的出現在原句。
+        _c4_solid = True
+        if _is_mostly_english(user_text) and _c4_prod:
+            _c4_func = {"over", "under", "with", "for", "and", "per",
+                        "off", "out", "the"}
+            _c4_core = {w.strip(" ?.!,'\"").lower()
+                        for w in _re.split(r"[\s\-/]+", user_text.lower())}
+            _c4_core_s = {t.rstrip("s") for t in _c4_core}
+            _c4_solid = any(
+                w.lower() in _c4_core or w.lower().rstrip("s") in _c4_core_s
+                for w in _re.split(r"[\s\-/]+", _c4_prod)
+                if len(w) >= 3 and w.lower() not in _c4_func)
         if (_c4_pm and _c4_pm[0].get("score", 0) >= 3
-                and not _c4_solo_intent
+                and not _c4_solo_intent and _c4_solid
                 and _kw_grounded(_c4_prod, user_text)):
             _c4_period = ("this_month" if any(w in user_text for w in ("本月", "這個月", "月")) else "this_month")
             log.info(f"[校正 C4-prod] 帶商品名的銷況問句 → query_movement kw={_c4_prod!r}")
@@ -6109,6 +6151,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         "stockout", "risk", "risks", "replenishment",
                         "urgent", "popular", "unpopular", "volume",
                         "volumes", "dead", "zero", "restocks", "restock",
+                        # r14+2：weekend（#42 曾幻覺配商品）＋功能名詞
+                        "weekend", "weekends", "restocking", "replenishing",
+                        "transfer", "transfers", "movement", "movements",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
@@ -6397,10 +6442,16 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 _core = {w.strip(" ?.!,'\"").lower()
                          for w in _re.split(r"[\s\-/]+", user_text.lower())}
                 # 商品名任一實詞要真的出現在原句（別名/錯字路已在上游處理過）
+                # r14+2（#42）：接地實詞要排除介系詞——'what sold over the
+                #   weekend' 的 over 恰好是 Pour-**over** Coffee Set 的一段，
+                #   讓幻覺商品騙過接地檢查
+                _C2C_FUNC = {"over", "under", "with", "for", "and", "per",
+                             "off", "out", "the"}
                 _c2c_ok = any(
                     w.lower() in _core or w.lower().rstrip("s") in
                     {t.rstrip("s") for t in _core}
-                    for w in _re.split(r"[\s\-/]+", cleaned) if len(w) >= 3)
+                    for w in _re.split(r"[\s\-/]+", cleaned)
+                    if len(w) >= 3 and w.lower() not in _C2C_FUNC)
                 if not _c2c_ok:
                     log.info(f"[校正 C2c] 英文補 keyword {cleaned!r} 不接地 → 不補")
             if (cleaned and len(cleaned) >= 2 and _c2c_ok
@@ -7544,6 +7595,36 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 func_args.pop("category", None)
                 log.info(f"[EN cat-fill] 讓路模糊層：{user_text!r} → kw={_fz_cat!r}"
                          f"（不轉 {_cat_en2} 類）")
+            elif not _solid_kw and not _kw_en2:
+                # r14+2（#61）：kw 全空時先拿句子 core 試商品比對——
+                #   'camping rent stock'（rent=tent 錯字）曾直接轉 Sports 類
+                #   概覽，其實 core 對 Camping Tent 4-person 分數已達門檻。
+                #   比到具體商品就用商品，比不到才轉類別。
+                _cf_kw2 = ""
+                try:
+                    _cf_core2 = _en_query_core(user_text)
+                    # ⚠️ 只在「類別詞之外還有別的實詞」時才試商品——
+                    #   純類別句（'sports category stock'）的 sports 會
+                    #   誤配 Sports Compression Arm Sleeve
+                    _cf_rest = [w for w in _re.split(r"[\s\-/]+", _cf_core2.lower())
+                                if len(w) >= 3 and _category_from_en(w) is None]
+                    if _cf_rest:
+                        import warehouse as _W_cf2
+                        _cf_m2 = _W_cf2.match_items(_cf_core2)
+                        if _cf_m2 and _cf_m2[0].get("score", 0) >= 4:
+                            _cf_kw2 = _cf_m2[0]["name"]
+                except Exception:
+                    _cf_kw2 = ""
+                if _cf_kw2:
+                    func_args = {**func_args, "keyword": _cf_kw2}
+                    func_args.pop("category", None)
+                    log.info(f"[EN cat-fill] core 比到具體商品 → kw={_cf_kw2!r}"
+                             f"（不轉 {_cat_en2} 類）")
+                else:
+                    func_args = {k: v for k, v in func_args.items() if k != "keyword"}
+                    func_args["category"] = _cat_en2
+                    log.info(f"[EN cat-fill] {user_text!r} → query_inventory"
+                             f"{{category:{_cat_en2}}}（原 kw={_kw_en2!r} 不扎實）")
             elif not _solid_kw:
                 func_args = {k: v for k, v in func_args.items() if k != "keyword"}
                 func_args["category"] = _cat_en2
@@ -8253,6 +8334,9 @@ _CTX_GLOBAL_RE_EN = _re.compile(
     r"alerts?|clearance|expiring|expire|expiry|"
     r"compare|comparison|versus|vs|overview|summary|"
     r"total value|stock value|inventory value|overall|"
+    # r14+2（#42）：what sold/came in/moved 是**全店** movement 問句——
+    #   'what sold over the weekend' 曾被 C2c carry-over 補成前句商品
+    r"what (?:sold|was sold|came in|moved|shipped|arrived|happened)|"
     r"anything|whats there|what do we have|item list)\b", _re.I)
 
 
@@ -11925,7 +12009,11 @@ async def ws_handler(ws: WebSocket):
             # 「每天晚上七點」排程句要讓路（Pre-C-Sched 在後面接）
             _UNSUPPORTED_TIME = ("上上週", "上上周", "上上禮拜", "大前天", "週末", "周末",
                                  "上季", "上一季", "去年", "前年", "年初", "年底",
-                                 "上個月", "上月")
+                                 "上個月", "上月",
+                                 # r14+2（#42）：本表原全中文（坑 7）——
+                                 #   'what sold over the weekend' 進不了
+                                 #   gate、掉到 fuzzy 幻覺出商品卡
+                                 "weekend", "last year", "a year ago")
             # （r62 撤回時段粒度 gate：「中午前的異動」「下午有出貨嗎」是既有守衛
             #   接受的整天近似行為——出手前要先查 corpus，守衛既定行為優先）
             # r26：「上個月跟這個月哪個賣得多」雙期間比較不支援（上個月單獨出現時
@@ -11939,10 +12027,16 @@ async def ws_handler(ws: WebSocket):
                                 and any(w in user_text for w in ("這週", "本週", "這禮拜"))
                                 and any(w in user_text for w in ("哪週", "哪個", "誰", "比", "差"))
                                 and not _extract_sku_keyword(user_text)))
-            if ((any(w in user_text for w in _UNSUPPORTED_TIME) or _dual_period)
-                    and any(w in user_text for w in ("進", "出", "貨", "賣", "異動", "紀錄", "記錄"))):
-                _ut_msg = ("進出統計目前支援：今天／昨天／前天／本週／上週／本月。"
-                           "想看哪個範圍呢？")
+            _ut_low = user_text.lower()
+            if ((any(w in _ut_low for w in _UNSUPPORTED_TIME) or _dual_period)
+                    and any(w in _ut_low for w in ("進", "出", "貨", "賣", "異動", "紀錄", "記錄",
+                                                   # r14+2：觸發詞也要有英文（坑 7）
+                                                   "sold", "sell", "sales", "moved",
+                                                   "movement", "shipped", "received",
+                                                   "bought", "came in", "went out"))):
+                _ut_msg = ("Movement stats currently support: today / yesterday / "
+                           "this week / last week / this month. "
+                           "Which range would you like?")
                 log.info(f"[time-gate] 不支援時間粒度 → clarify: {user_text!r}")
                 for ch in _ut_msg:
                     await send({"type": "token", "text": ch})
@@ -11950,7 +12044,8 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _ut_msg,
                     "data": {"question": _ut_msg,
-                             "options": ["今天進了什麼", "昨天的出貨", "上週的進出", "本月進出統計"],
+                             "options": ["what came in today", "yesterday's outbound",
+                                         "last week movements", "this month in/out stats"],
                              "hint": ""}}})
                 continue
 
@@ -13791,6 +13886,12 @@ async def ws_handler(ws: WebSocket):
                                     r"\b(?:alert|notify|warn|remind)\s+me\b|\bwhen\b|"
                                     r"\bbelow\b|\bunder\b|\bdrops?\b", _ul_adm):
                     _en_admin = "list_expiring_items"
+                # r14+2（#21）：裸 'transfers?' / 'movements?' 功能詞單獨句
+                #   ——曾被 alias fuzzy 配成 trainers→Running Shoes。
+                #   單獨一個功能名詞＝想看進出/調撥紀錄 → movement 總覽。
+                elif _re.fullmatch(r"\s*(?:transfers?|movements?)\s*[?.!]*\s*",
+                                   _ul_adm):
+                    _en_admin = "query_movement"
                 # r14+1（#35）：'inbound volume yesterday' 這類**進出量裸句**
                 #   clf 語料沒見過 → query_inventory 把 'inbound volume' 當
                 #   商品名查（「查無此商品」）。方向詞＋量詞的組合夠獨特，
@@ -13895,6 +13996,18 @@ async def ws_handler(ws: WebSocket):
                                                  user_text, _re.I)
                             if _mw_clf:
                                 func_args["warehouse"] = _mw_clf.group(1).lower()
+                            # r14+2（#64）：'coffee beand stock' 錯字句在這條
+                            #   快路徑抽不到 kw → 掉全店概覽。錯字修復層本就
+                            #   能救（beand→beans 0.889 且 coffee 同商品佐證），
+                            #   接上；修復層對正常句/OOV 反例回空、不影響。
+                            if not func_args.get("keyword") and _is_mostly_english(user_text):
+                                try:
+                                    _fz_clf = _en_fuzzy_keyword(_en_query_core(user_text))
+                                    if _fz_clf:
+                                        func_args["keyword"] = _fz_clf
+                                        log.info(f"[clf-fastpath] 錯字修復補 kw: {_fz_clf!r}")
+                                except Exception:
+                                    pass
                     elif func_name == "query_movement":
                         # r20：期間原本**寫死 this_month** → 問昨天/上週都被
                         #   吃掉（而且 tool 對不認得的值靜默 fallback 成 today，
@@ -14589,6 +14702,9 @@ async def ws_handler(ws: WebSocket):
                         "stockout", "risk", "risks", "replenishment",
                         "urgent", "popular", "unpopular", "volume",
                         "volumes", "dead", "zero", "restocks", "restock",
+                        # r14+2：weekend＋功能名詞（與 _oov_stop 同步）
+                        "weekend", "weekends", "restocking", "replenishing",
+                        "transfer", "transfers", "movement", "movements",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話
