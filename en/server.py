@@ -167,6 +167,8 @@ GATEKEEPER_KEYWORDS = {
     #   守門擋成搗蛋；days of cover 是庫存卡本來就有的欄位、訪客會直接問
     "replenish", "stockout", "skus", "zero stock", "days of cover",
     "stock cover",
+    # r15 #11：'anything sitting at zero units' 曾被守門擋
+    "zero units", "at zero",
     "expiring", "expire", "expiry", "shelf life", "movements",
     "moved", "inbound", "outbound", "transfers", "help",
     "what can you", "how does this", "safety stock", "purchase order",
@@ -489,6 +491,10 @@ def _period_from_en(text: str) -> str | None:
     t = text.lower()
     if _re.search(r"\bday before yesterday\b", t):
         return "day_before_yesterday"
+    # r15 #23/#34：'this morning' 資料只有日粒度——today 是最誠實近似
+    #   （原本掉到 this_week 回 1,399 件＝誤導級）
+    if _re.search(r"\bthis morning\b|\bthis afternoon\b", t):
+        return "today"
     if _re.search(r"\byesterday(?:'s)?\b", t):
         return "yesterday"
     if _re.search(r"\blast\s+week\b|\bprevious\s+week\b|\bpast\s+week\b", t):
@@ -1252,6 +1258,13 @@ _LOW_STOCK_INTENT_WORDS = (
     #   「查無此商品」。⚠️ 'stock out'（帶空白）**不可收**——substring 會
     #   撞守衛句 'low stock outdoor gear'（撞詞掃描實證），只收連寫形。
     "stockout", "stocked out", "zero stock",
+    # r15：#11 'anything sitting at zero units' 曾誤擋、#10 'top anything
+    #   up'（top…up 被 anything 隔開，'top up' substring 比不到）、
+    #   #78 'healthy on stock' 反向問法兜 low_stock（79 模式：清單即答案）
+    #   ⚠️ 'stock healthy' 不可收——撞 r17 保護句 'is the earphone stock
+    #     healthy'（單品卡），只收 #78 的語序
+    "zero units", "at zero", "top anything up", "top something up",
+    "top it up", "top us up", "healthy on stock",
 )
 
 # 熱銷意圖詞（C4 用）
@@ -1282,6 +1295,9 @@ _HOT_INTENT_WORDS_HOT = (
     #   LLM 幻覺 keyword 再被 carry-over 補成前句商品卡。weekend 含
     #   week substring → C4 period 自動 this_week。
     "what sold", "what was sold",
+    # r15 #82：'skip the slow movers show me winners'——winners 靠 C4
+    #   「後講的贏」（rfind）勝過前面的 slow movers
+    "winners", "winner", "top performers", "best performers",
 )
 _HOT_INTENT_WORDS_SLOW = (
     "賣最差", "滯銷", "賣不掉", "最冷門", "賣最少", "銷量最差",
@@ -1309,6 +1325,8 @@ _HOT_INTENT_WORDS_SLOW = (
     "dead stock", "never sell", "never sold", "least popular", "unpopular",
     "not selling", "not moving", "no movement", "hasnt moved", "hasn't moved",
     "isnt moving", "isn't moving", "zero sales", "no sales",
+    # r15 #4：'which products have gone stale' 曾回熱銷（反義）
+    "gone stale", "stale",
 )
 
 # 模糊時間詞（C2 用）
@@ -3268,6 +3286,10 @@ _EN_Q_STOP_RE = _re.compile(
     # ⚠️ **不收 why/when/where**——那三個是 RCA（why is X off）與期間查詢的
     #   關鍵意圖詞，剝掉會傷到 _RCA_INTENT_WORDS 之類的下游判斷。
     r"which|whose|whom|"
+    # r15 #56/#38：連接詞/裸 top 沒剝——'and in south' 剝完剩 'and'
+    #   → substring 命中 B**and** → Smart Fitness Band（全新連線也中）；
+    #   'top -5 sellers' 的 top → lap**top**。
+    r"and|or|but|nor|top|"
     r"hows|how's|what's|whats|its|it)\b", _re.I)
 _EN_Q_STOP_INTENT_RE = _re.compile(
     # ⚠️ 這裡收的是「動詞+狀態」的**意圖片語**，剝掉才不會讓 running 之類的
@@ -3501,6 +3523,17 @@ def _en_fuzzy_keyword(core: str) -> str:
         "evening", "night", "today", "tomorrow", "thanks", "thank",
         "please", "sorry", "help", "hours", "open", "human", "person",
         "people", "name", "names", "price", "prices",
+        # r15 #56：超短虛詞被 0.85 門檻放過——'and in south' 的 **and 配到
+        #   band(0.857)** → 全新連線也回 Smart Fitness Band（追了一輪
+        #   carry-over 才發現是純函式層誤配）。連接詞/介系詞永不是商品。
+        "and", "the", "for", "with", "from", "into", "onto", "but",
+        "our", "your", "their", "his", "her", "its", "was", "were",
+        "are", "has", "had", "have", "any", "all", "per", "via",
+        # r15 #27/#38 同款：'hows central **holding** up'→**Folding** Camping
+        #   Chair(0.857)、'top -5 sellers' 的 top→laptop。口語動詞/副詞
+        #   永不是商品名。
+        "holding", "happened", "looking", "sitting", "going", "doing",
+        "coming", "getting", "top", "hows", "whats", "wheres",
     }
 
     hits: list[str] = []
@@ -5813,6 +5846,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             #   this month' 是 GUIDE_MSG 教訪客的句型）
             else:
                 _cat4_en = _category_from_en(user_text)
+                # r15 #69：**排除語境不補**——'best sellers excluding food'
+                #   曾被補成 category=food_beverage → 回「食品類 TOP」＝
+                #   與訪客要的完全相反。excluding 後的類別＝訪客不要的。
+                if _cat4_en and _re.search(
+                        r"\b(?:excluding|except|other than|without|besides|"
+                        r"apart from|not counting)\b", user_text.lower()):
+                    log.info(f"[校正 C4] 排除語境 → 不補 category={_cat4_en}")
+                    _cat4_en = None
                 if _cat4_en:
                     func_args = {**func_args, "category": _cat4_en}
                     log.info(f"[校正 C4] 補 category={_cat4_en}（EN）")
@@ -5858,6 +5899,18 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 「合法但沒接地」曾保留 → 回食品類排行答非所問）
         func_args = _drop_ungrounded_category(dict(func_args), user_text)
         func_args = dict(func_args)
+        # r15 #69：**排除語境**——'best sellers excluding food' 的 food 被
+        #   接地成 category=food_beverage → 回「食品類 TOP」＝與訪客要的
+        #   **完全相反**。excluding/except 後面的類別要丟棄（回全類別排行；
+        #   「真正排除該類」tool 不支援，全類別是最接近且不誤導的答案）。
+        if (func_args.get("category")
+                and _is_mostly_english(user_text)
+                and _re.search(r"\b(?:excluding|except|other than|without|"
+                               r"besides|apart from|not counting)\b",
+                               user_text.lower())):
+            log.info(f"[校正 C4b] 排除語境 → 丟棄 category "
+                     f"{func_args.get('category')!r}（回全類別）")
+            func_args.pop("category", None)
         # period:user_text 明講「本月/月」→ this_month;否則 → this_week
         if "本月" in user_text or "這個月" in user_text or "月度" in user_text or "month" in text_low:
             want_period = "this_month"
@@ -6154,6 +6207,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         # r14+2：weekend（#42 曾幻覺配商品）＋功能名詞
                         "weekend", "weekends", "restocking", "replenishing",
                         "transfer", "transfers", "movement", "movements",
+                        # r15：口語縮寫/狀態詞（與 _NOEX_STOP 同步）——#20
+                        #   gimme numbers/#26 wheres sitting/#67 totals/#73
+                        #   categories 曾被抽成商品名
+                        "numbers", "gimme", "lemme", "wheres", "sitting",
+                        "totals", "categories", "category", "stale",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
@@ -7864,6 +7922,9 @@ def _update_ctx(vid, func_name: str, func_args: dict):
     if wh and wh not in ("all", None):
         _ctx["last_wh"] = wh
     _ctx["last_func"] = func_name
+    # r15 #56 串品案加的常駐觀測點：追 carry-over 污染必看這行
+    log.info(f"[ctx-upd] vid={vid} func={func_name} "
+             f"last_sku={_ctx.get('last_sku')!r} last_wh={_ctx.get('last_wh')!r}")
 
 def _resolve_followup(vid, user_text: str, func_name: str, func_args: dict):
     """
@@ -11802,8 +11863,12 @@ async def ws_handler(ws: WebSocket):
                                 r"^\s*(?:will|can|could|would|are|do)\s+you\b",
                                 user_text, _re.I)):
                         # 亂敲判準：每個詞都要有母音（gjfkdls/asdkjhaskjdh 沒有）
-                        if all(_re.search(r"[aeiou]", _t, _re.I)
-                               for _t in _w if len(_t) >= 3):
+                        # r15 #94：**中文照擋**——'買 iphone' 曾靠 ≤3 詞追問
+                        #   放行繞過 is_meaningful_input 的中文防線（EN 版
+                        #   policy：含中文一律 reject）
+                        if (all(_re.search(r"[aeiou]", _t, _re.I)
+                                for _t in _w if len(_t) >= 3)
+                                and not any("一" <= c <= "鿿" for c in user_text)):
                             _gk_ctx_pass = True
                             log.info(f"[守門員] context 追問放行: {user_text!r}")
             if not _ic_st.get("active") and not _gk_ctx_pass \
@@ -12013,7 +12078,13 @@ async def ws_handler(ws: WebSocket):
                                  # r14+2（#42）：本表原全中文（坑 7）——
                                  #   'what sold over the weekend' 進不了
                                  #   gate、掉到 fuzzy 幻覺出商品卡
-                                 "weekend", "last year", "a year ago")
+                                 "weekend", "last year", "a year ago",
+                                 # r15 #32/#35/#36：星期名/夜間/季度/區間都是
+                                 #   資料粒度沒有的（日粒度快照）——誠實反問
+                                 "friday", "monday", "tuesday", "wednesday",
+                                 "thursday", "saturday", "sunday", "tonight",
+                                 "last night", " q1", " q2", " q3", " q4",
+                                 "between monday", "between tuesday")
             # （r62 撤回時段粒度 gate：「中午前的異動」「下午有出貨嗎」是既有守衛
             #   接受的整天近似行為——出手前要先查 corpus，守衛既定行為優先）
             # r26：「上個月跟這個月哪個賣得多」雙期間比較不支援（上個月單獨出現時
@@ -12033,7 +12104,13 @@ async def ws_handler(ws: WebSocket):
                                                    # r14+2：觸發詞也要有英文（坑 7）
                                                    "sold", "sell", "sales", "moved",
                                                    "movement", "shipped", "received",
-                                                   "bought", "came in", "went out"))):
+                                                   "bought", "came in", "went out",
+                                                   # r15 #32/#35：happened/裸方向詞
+                                                   "happened", "happen", "inbound",
+                                                   "outbound"))
+                    # r15：排程句（every friday…）不是查歷史，不可被本 gate 攔
+                    and not _re.search(r"\b(?:every|schedule|daily|weekly|remind)\b",
+                                       _ut_low)):
                 _ut_msg = ("Movement stats currently support: today / yesterday / "
                            "this week / last week / this month. "
                            "Which range would you like?")
@@ -12050,30 +12127,47 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # ── 最貴/最便宜直答（r19）：資料就有單價，曾被守門員拒答 ──
-            if (any(w in user_text for w in ("最貴", "最便宜", "價格最高", "價格最低",
+            #   r15 #71：判準原全中文（坑 7）——'whats the most expensive
+            #   item we carry' 回「查無 expensive」。補英文詞。
+            _pr_low15 = user_text.lower()
+            if ((any(w in user_text for w in ("最貴", "最便宜", "價格最高", "價格最低",
                                               "單價最高", "單價最低"))
-                    and not any(w in user_text for w in ("改", "設", "調", "元", "折"))):
+                 or _re.search(r"\b(?:most|least)\s+expensive\b|\bcheapest\b|"
+                               r"\bpriciest\b|\bhighest\s+price\b|\blowest\s+price\b",
+                               _pr_low15))
+                    and not any(w in user_text for w in ("改", "設", "調", "元", "折"))
+                    and not _re.search(r"\bset\b|\bchange\b|\bnt\$", _pr_low15)):
                 import warehouse as _W_pr
                 _pr_items = _W_pr.state().items
-                _pr_hi = any(w in user_text for w in ("最貴", "價格最高", "單價最高"))
-                # r28：「最貴的前三名」曾只回第一名
-                _pr_n_m = _re.search(r"前\s*([0-9一二三四五六七八九十]+)", user_text)
+                _pr_hi = (any(w in user_text for w in ("最貴", "價格最高", "單價最高"))
+                          or bool(_re.search(r"\bmost\s+expensive\b|\bpriciest\b|"
+                                             r"\bhighest\s+price\b", _pr_low15)))
+                # r28：「最貴的前三名」曾只回第一名（英文 top N 同步收）
+                _pr_n_m = (_re.search(r"前\s*([0-9一二三四五六七八九十]+)", user_text)
+                           or _re.search(r"\btop\s*([0-9]+)\b", _pr_low15))
                 _pr_n = min(int(_cn_to_int(_pr_n_m.group(1)) or 1), 10) if _pr_n_m else 1
+                # r15 #71 英化：本段原全中文（EN 檔內死中文——守門一直擋著沒人
+                #   走到）。⚠️ view 原是 inventory_single 但 data 缺 total_qty/
+                #   per_warehouse → 渲染器 toLocaleString 會炸進 try/catch；
+                #   改用無渲染器的 view 名，前端只顯示 summary 文字。
                 if _pr_n > 1:
                     _pr_top = sorted(_pr_items, key=lambda x: x["unit_price"], reverse=_pr_hi)[:_pr_n]
                     _pr_it = _pr_top[0]
-                    _pr_sum = (f"{'最貴' if _pr_hi else '最便宜'}前 {_pr_n} 名："
-                               + "、".join(f"「{i['name']}」NT$ {i['unit_price']:,}" for i in _pr_top) + "。")
+                    _pr_sum = ((f"Top {_pr_n} most expensive: " if _pr_hi
+                                else f"Top {_pr_n} cheapest: ")
+                               + ", ".join(f"{i['name']} NT$ {i['unit_price']:,}"
+                                           for i in _pr_top))
                 else:
                     _pr_it = (max if _pr_hi else min)(_pr_items, key=lambda x: x["unit_price"])
-                    _pr_sum = (f"{'最貴' if _pr_hi else '最便宜'}的商品是"
-                               f"「{_pr_it['name']}」，單價 NT$ {_pr_it['unit_price']:,}。")
+                    _pr_sum = ((f"The most expensive item is " if _pr_hi
+                                else f"The cheapest item is ")
+                               + f"{_pr_it['name']} at NT$ {_pr_it['unit_price']:,} per unit.")
                 log.info(f"[dispatch-ws] 價格排序直答: {_pr_it['name']}")
                 for ch in _pr_sum:
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {
-                    "ok": True, "view": "inventory_single", "summary": _pr_sum,
+                    "ok": True, "view": "price_answer", "summary": _pr_sum,
                     "data": {"name": _pr_it["name"], "unit_price": _pr_it["unit_price"]}}})
                 continue
 
@@ -13917,8 +14011,10 @@ async def ws_handler(ws: WebSocket):
             if _en_admin is None and _is_mostly_english(user_text):
                 _ul_wr = user_text.lower()
                 if _re.search(r"\bwhich\s+(?:warehouse|site|location)\b|"
-                              r"\bwhat\s+warehouse\b|\brank\s+the\s+warehouses?\b",
-                              _ul_wr):
+                              r"\bwhat\s+warehouse\b|\brank\s+the\s+warehouses?\b|"
+                              # r15 #26：'wheres most of our inventory sitting'
+                              #   ＝倉庫排名句
+                              r"\bwhere'?s?\s+most\s+of\b", _ul_wr):
                     # 句中有具體商品名 → 不是整倉排名，讓原路由處理（單品卡）
                     _wr_kw = ""
                     try:
@@ -13937,7 +14033,9 @@ async def ws_handler(ws: WebSocket):
                                       if _re.search(r"\bvalue|\bworth|\bmoney|\bnt\$|\bcost",
                                                     _ul_wr)
                                       else "turnover"
-                                      if _re.search(r"\bturnover|\bmoves?\s+fastest|"
+                                      # r15 #74：'moves inventory fastest' 中間隔
+                                      #   受詞讓 moves? fastest 比不到——容許 1 詞
+                                      if _re.search(r"\bturnover|\bmoves?\s+(?:\w+\s+)?fastest|"
                                                     r"\bfastest\s+moving", _ul_wr)
                                       else "item_count")
                         _en_whrank_args = {"warehouse_a": "all", "warehouse_b": "all",
@@ -14705,6 +14803,9 @@ async def ws_handler(ws: WebSocket):
                         # r14+2：weekend＋功能名詞（與 _oov_stop 同步）
                         "weekend", "weekends", "restocking", "replenishing",
                         "transfer", "transfers", "movement", "movements",
+                        # r15：口語縮寫/狀態詞（與 _oov_stop 同步）
+                        "numbers", "gimme", "lemme", "wheres", "sitting",
+                        "totals", "categories", "category", "stale",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話

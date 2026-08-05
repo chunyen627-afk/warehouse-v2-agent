@@ -3462,6 +3462,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         }
         for zh, cat in cat_zh_map.items():
             if zh in user_text:
+                # r15 EN #69 回查 ZH 同款：「除了食品以外賣最好的」曾補成
+                #   category=food_beverage → 回「食品類 TOP」＝反義。
+                #   排除語境（除了/以外/之外/不含/不算/排除）不補類別。
+                if any(w in user_text for w in ("除了", "以外", "之外", "不含",
+                                                "不算", "排除", "扣掉")):
+                    log.info(f"[校正 C4] 排除語境 → 不補 category={cat}")
+                    break
                 new_args["category"] = cat
                 break
         return "list_hot_items", new_args, True
@@ -3508,6 +3515,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                                 "日用": "daily_goods", "清潔": "daily_goods", "服飾": "apparel", "衣服": "apparel",
                                 "運動": "sports", "露營": "sports", "戶外": "sports"}.items():
                 if _zh4 in user_text:
+                    # r15 回查：排除語境不補（三個補點的最後一個——前兩處
+                    #   C4 new_args／C4b 已加，這段是 clf 已判 hot_items
+                    #   的校準路，「除了食品以外」實測走這裡）
+                    if any(w in user_text for w in ("除了", "以外", "之外", "不含",
+                                                    "不算", "排除", "扣掉")):
+                        log.info(f"[校正 C4] 排除語境 → 不補 category={_cat4}")
+                        break
                     func_args = {**func_args, "category": _cat4}
                     log.info(f"[校正 C4] 補 category={_cat4}")
                     break
@@ -3531,6 +3545,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
         # 「合法但沒接地」曾保留 → 回食品類排行答非所問）
         func_args = _drop_ungrounded_category(dict(func_args), user_text)
         func_args = dict(func_args)
+        # r15 回查：排除語境——args 已帶合法 category（clf/LLM 給的）也要拿掉
+        #   （「除了食品以外賣最好的」＝訪客不要食品類）
+        if (func_args.get("category")
+                and any(w in user_text for w in ("除了", "以外", "之外", "不含",
+                                                 "不算", "排除", "扣掉"))):
+            log.info(f"[校正 C4b] 排除語境 → 丟棄 category {func_args.get('category')!r}")
+            func_args.pop("category", None)
         # period:user_text 明講「本月/月」→ this_month;否則 → this_week
         if "本月" in user_text or "這個月" in user_text or "月度" in user_text or "month" in text_low:
             want_period = "this_month"
@@ -3551,6 +3572,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             }
             for zh, cat in _cat_kw.items():
                 if zh in user_text:
+                    # r15 回查：排除語境不補（與 C4 段同步——「除了食品以外」
+                    #   曾補成食品類=反義；此段是 clf 已判 hot_items 的路）
+                    if any(w in user_text for w in ("除了", "以外", "之外", "不含",
+                                                    "不算", "排除", "扣掉")):
+                        log.info(f"[校正 C4b] 排除語境 → 不補 category={cat}")
+                        break
                     log.info(f"[校正 C4b] list_hot_items 補 category={cat}")
                     func_args["category"] = cat
                     break
@@ -8053,7 +8080,14 @@ async def ws_handler(ws: WebSocket):
             #   害「給我上一季的進出記錄」被 time-gate 攔掉、走不到匯出。
             _UNSUPPORTED_TIME = ("上上週", "上上周", "上上禮拜", "大前天", "週末", "周末",
                                  "去年", "前年", "年初", "年底",
-                                 "上個月", "上月")
+                                 "上個月", "上月",
+                                 # r15 EN #32 回查 ZH 同款：「上週五賣了什麼」
+                                 #   曾被「週」吃成本週 TOP——星期粒度資料沒有，
+                                 #   誠實反問（觸發條件已加排程豁免，見下）
+                                 "週一", "週二", "週三", "週四", "週五", "週六", "週日",
+                                 "星期一", "星期二", "星期三", "星期四", "星期五",
+                                 "星期六", "星期日", "禮拜一", "禮拜二", "禮拜三",
+                                 "禮拜四", "禮拜五", "禮拜六", "禮拜日")
             # （r62 撤回時段粒度 gate：「中午前的異動」「下午有出貨嗎」是既有守衛
             #   接受的整天近似行為——出手前要先查 corpus，守衛既定行為優先）
             # r26：「上個月跟這個月哪個賣得多」雙期間比較不支援（上個月單獨出現時
@@ -8068,7 +8102,11 @@ async def ws_handler(ws: WebSocket):
                                 and any(w in user_text for w in ("哪週", "哪個", "誰", "比", "差"))
                                 and not _extract_sku_keyword(user_text)))
             if ((any(w in user_text for w in _UNSUPPORTED_TIME) or _dual_period)
-                    and any(w in user_text for w in ("進", "出", "貨", "賣", "異動", "紀錄", "記錄"))):
+                    and any(w in user_text for w in ("進", "出", "貨", "賣", "異動", "紀錄", "記錄"))
+                    # r15：排程句（每週五匯出…）不是查歷史，不可被本 gate 攔
+                    and not any(w in user_text for w in ("每週", "每星期", "每禮拜",
+                                                         "每天", "每月", "排程",
+                                                         "定時", "提醒我"))):
                 # ⚠️ 2026-08-03 user 定調：當天大量變動（實測 46,982 筆 vs
                 #   正常日 48-93 筆）,**本來就不該產當天的進出報表**
                 #   ⇒ 引導一律從昨天起,且改推薦可匯出分頁的區間。
