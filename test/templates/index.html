@@ -1609,10 +1609,16 @@ function handleMessage(msg) {
       currentBotMsg.innerHTML = '';
     }
     lastBotAnchor = currentBotMsg;   // 預設接在訊息泡後;有卡片時 renderViewCard 會改成卡片
-    if (view && view !== 'guide' && view !== 'rejected') {
-      renderViewCard(view, data, result.summary);
+    try {
+      // 渲染例外絕不能讓 done 流程中斷（2026-08-05 實案：compare 排名卡
+      // 炸 toLocaleString → setSending 沒跑到 → 整頁輸入卡死到重整）
+      if (view && view !== 'guide' && view !== 'rejected') {
+        renderViewCard(view, data, result.summary);
+      }
+      renderFollowups(view, data);
+    } catch (e) {
+      console.error('[render] view card failed:', e);
     }
-    renderFollowups(view, data);
     currentBotMsg = null;
     if (_traceContainer && _traceContainer.parentNode) { _traceContainer.parentNode.removeChild(_traceContainer); }
     _traceContainer = null;
@@ -1764,6 +1770,21 @@ function renderViewCard(view, data, topSummary) {
               <div class="in-bar"  style="width:${(d.in/maxQty*100).toFixed(0)}%"></div>
               <div class="out-bar" style="width:${(d.out/maxQty*100).toFixed(0)}%"></div>
             </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else if (view === 'compare_warehouses' && data.ranked) {
+    // 三倉排名模式（warehouse=all）：payload 是 ranked[]，沒有 value_a/value_b
+    // ——舊碼直接走 pairwise 讀 value_a → toLocaleString 炸掉（2026-08-05 實案）
+    card.innerHTML = `
+      <div class="label">三倉${data.metric_label}排名</div>
+      <div class="rank-list">
+        ${data.ranked.map((r, i) => `
+          <div class="rank-row">
+            <div class="num ${i===0?'top1':i===1?'top2':i===2?'top3':''}">${i+1}</div>
+            <div class="name">${r.label}</div>
+            <div class="qty">${formatMetric(data.metric, r.value)}</div>
           </div>
         `).join('')}
       </div>
@@ -2467,6 +2488,7 @@ function doConfirm(btn) {
 }
 
 function formatMetric(metric, val) {
+  if (val === undefined || val === null) return '—';
   if (metric === 'stock_value') return `NT$ ${val.toLocaleString()}`;
   if (metric === 'item_count')  return `${val.toLocaleString()} 件`;
   if (metric === 'turnover')    return val.toFixed(3);
