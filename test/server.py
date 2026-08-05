@@ -6662,7 +6662,12 @@ async def reset():
 #   ⚠️ whisper 中文會吐**簡體** → OpenCC s2twp 仍然必要（不可比照英文版移除）。
 _VOICE_DIR = Path.home() / "whisper.cpp"
 _VOICE_CLI = _VOICE_DIR / "build/bin/whisper-cli"
-_VOICE_MODEL = _VOICE_DIR / "models/ggml-base.bin"
+# 2026-08-05 升級：base（多語）→ small-q5_0＋-ac 640。
+#   手機麥實測 base 把「藍牙耳機庫存」聽成「蘭亞俄茲庫春」等音節碎片，
+#   容錯層救不動；EN 版早已驗證 small-q5_0＋ac640 配方（1.1s/句、準度大升），
+#   模型檔 175MB 兩台本就都在。倉管句 1-3 秒，-ac 640 削掉的是空白 encoder
+#   運算（whisper 預設 30 秒上下文），速度可回到 2 秒級。
+_VOICE_MODEL = _VOICE_DIR / "models/ggml-small-q5_0.bin"
 
 try:
     from opencc import OpenCC as _OpenCC
@@ -6810,7 +6815,10 @@ async def asr_api(req: Request):
                 # `-l zh` 明確指定中文：small 是 multilingual 模型，
                 #   不指定會做語言偵測，短句容易猜錯語言。
                 [str(_VOICE_CLI), "-m", str(_VOICE_MODEL),
-                 "-f", str(wav), "-nt", "-l", "zh"],
+                 "-f", str(wav), "-nt", "-l", "zh",
+                 # -ac 640：audio-ctx 削到 640 token（預設 1500=30 秒），
+                 # 倉管短句削掉的全是空白運算——快 2 倍級且準度不掉（EN 實證）
+                 "-ac", "640"],
                 capture_output=True, text=True, timeout=180,
             )
         except subprocess.TimeoutExpired:
