@@ -3245,6 +3245,7 @@ _EN_Q_STOP_INTENT_RE = _re.compile(
 _EN_QUERY_CTX_RE = _re.compile(
     r"\b(?:which|what|whats|how many|how much|hows|any|anything|"
     r"records?|history|logs?|list|stats|statistics|summary|report|"
+    r"trends?|volume|movements?|flows?|patterns?|rates?|breakdown|activity|"
     r"compare|comparison|versus|vs|more|less|most|least|total|"
     r"last week|this week|last month|this month|today|yesterday|"
     r"recently|lately|did we|do we|have we|was there|were there|"
@@ -6072,6 +6073,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                         "date", "dates", "expiry", "expiration", "pairing",
                         "pairings", "bundle", "bundles", "combo", "combos",
                         "off", "soon", "bad", "spoiled",
+                        # r14 網頁百句：比較/雜訊詞被抽成商品名 →「more/sku
+                        #   not found」（與 _NOEX_STOP 同步）
+                        "sku", "skus", "more", "less", "than", "fewer",
+                        "exceed", "exceeds", "number", "carry", "carrying",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：確認/操作詞永遠不是商品名（同 _NOEX_STOP，兩處同步）
@@ -14532,6 +14537,11 @@ async def ws_handler(ws: WebSocket):
                         "date", "dates", "expiry", "expiration", "pairing",
                         "pairings", "bundle", "bundles", "combo", "combos",
                         "off", "soon", "bad", "spoiled",
+                        # r14 網頁百句：比較/雜訊詞（與 _oov_stop 同步）——
+                        #   'how many SKUs do we carry' 曾走 [oov:noex]
+                        #   回「查無 skus carry 這個商品」
+                        "sku", "skus", "more", "less", "than", "fewer",
+                        "exceed", "exceeds", "number", "carry", "carrying",
                         "script", "scripts", "error", "errors", "export",
                         "exports", "backup", "backups", "audit", "audits",
                         # r15：**確認/操作詞永遠不是商品名**。卡片被前一句插話
