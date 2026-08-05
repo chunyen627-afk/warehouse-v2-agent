@@ -901,6 +901,85 @@ set_notes(s, "★硬體路線圖頁（點綴，但對晶片團隊的參展定位
 pn(s)
 
 
+# ─── S12c 動態倉庫模擬 Live 模式 ★（2026-08-03 新增）──────────────
+s = slide_blank()
+title_bar(s, "LIVE WAREHOUSE · 動態模擬", "倉庫自己會動：一天的進出貨濃縮成幾分鐘")
+add_text(s, MX, Inches(1.40), Inches(11.8), Inches(0.62),
+         "展場訪客盯著凍結快照看會覺得假。業界真實架構本來就是 perpetual inventory——庫存由條碼槍、"
+         "RFID、電商訂單多來源即時更新，AI 助理是其上的對話層。模擬不是特效，是把真實架構演出來。",
+         size=13, color=GREY55)
+kpi_row(s, Inches(2.18), [
+    ("200×", "時間加速（現場可調 1–400×）"),
+    ("2.7s", "一輪背景進出貨寫入"),
+    ("79%", "出庫占比＝seed 真值比例"),
+    ("0", "對測試的干擾（守衛自動隔離）"),
+], box_h=1.3, num_size=34)
+_live_pts = [
+    ("真實來源", "背景寫入掛 pda_scan / wms_sync / ecom_order 三種 actor——訪客查異動看到"
+                 "混合來源，正好證明 Agent 看得到整個倉庫，不是只看得到自己"),
+    ("護欄", "庫存在安全線 0.8–1.6 倍帶內波動、任何倉不低於 5 件——連跑三天不壞、"
+             "reset 一鍵回乾淨基準（開機自動歸零，斷電/離線都免時鐘）"),
+    ("誠實的代價", "模擬灌大資料曾把 CPU 燒滿（py-spy 抓到 /anomalies 每次輪詢全掃數十萬筆）"
+                   "——以 30 秒快取＋出貨日索引三層修復，CPU 200%→31%、查詢照常秒回"),
+    ("數據紀律", "「昨天/報表/撐天」的統計永遠只取乾淨歷史——模擬寫入被分析層隔離，"
+                 "看得到即時跳動、算得出正確數字，兩者不打架"),
+]
+for i, (k, v) in enumerate(_live_pts):
+    y = Inches(3.78) + Inches(0.80) * i
+    dot_icon(s, MX, y + Inches(0.05), "●", d=0.34, circle=TEAL, gsize=10)
+    add_text(s, MX + Inches(0.55), y, Inches(1.9), Inches(0.7), k, size=13.5, bold=True,
+             color=TEALDK)
+    add_text(s, MX + Inches(2.5), y, Inches(9.3), Inches(0.74), v, size=12.5, color=GREY44)
+set_notes(s, "★動態模擬頁（2026-08-03 上線）。訪客第一眼就看到三倉數字在跳、告警橫幅自己出現"
+             "——回應「倉庫不動很假」的展場回饋。查證過業界：現代倉儲就是 perpetual inventory，"
+             "多數庫存變動沒有人對系統下指令（條碼槍/RFID/電商自動寫入），對話式 AI 是其上的"
+             "查詢層——所以這不是演假資料，是把真實架構濃縮演出。工程重點四件事：①actor 不偽裝"
+             "訪客操作，查異動看得到混合來源；②護欄讓它跑三天不壞；③效能課金誠實講：模擬灌出"
+             "數十萬筆後，前端每 8 秒輪詢的異常掃描把兩核燒滿（py-spy 實錘），用 TTL 快取＋"
+             "出貨日索引修復——這段也是很好的工程故事；④統計紀律：分析層一律排除模擬寫入，"
+             "『昨天』永遠是乾淨歷史，數字對得起對帳。")
+pn(s)
+
+
+# ─── S12d 雙機交付 · 第二台 RPI5 ★（2026-08-05 認證）──────────────
+s = slide_blank()
+title_bar(s, "DUAL UNIT · 交付準備", "第二台 RPI5 重建完成：與主機同級認證、可交客戶")
+add_text(s, MX, Inches(1.40), Inches(11.8), Inches(0.4),
+         "客戶交機版與展場主機完全同構——同一份程式碼（md5 對版）、同一套守衛認證、同一條還原手冊。",
+         size=13, color=GREY55)
+kpi_row(s, Inches(1.98), [
+    ("1122+892", "全量守衛 中/英 100%"),
+    ("26/26 ×6", "並發串線三輪零串線"),
+    ("65.9°C", "壓測峰值 · 全程零降頻"),
+    ("414/414", "交機快篩驗收"),
+], box_h=1.3, num_size=30)
+_du_pts = [
+    ("開機即就緒", "開機自動歸零回乾淨基準（uptime 閘門、離線免時鐘）→ 服務自啟 → "
+                   "kiosk 雙語分頁自開 → 模擬自動起跑——插電就是展示狀態"),
+    ("手機動線", "切熱點 → 掃 QR → 手機直連查詢/語音——DHCP、憑證、手機版面全鏈打通"
+                 "（iPhone 實測）"),
+    ("重建可複製", "重建缺口 9 類全數記錄成手冊 §15「一次還原到底」檢查表——"
+                   "下一台照抄指令＋9 項驗收，不再踩雷"),
+    ("遠端救援", "雙機 ZeroTier 就位（10.35.219.22 / .47）——展場斷網用手機熱點即可遠端搶修"),
+]
+for i, (k, v) in enumerate(_du_pts):
+    y = Inches(3.58) + Inches(0.80) * i
+    dot_icon(s, MX, y + Inches(0.05), "●", d=0.34, circle=NAVY, gsize=10)
+    add_text(s, MX + Inches(0.55), y, Inches(1.9), Inches(0.7), k, size=13.5, bold=True,
+             color=NAVY)
+    add_text(s, MX + Inches(2.5), y, Inches(9.3), Inches(0.74), v, size=12.5, color=GREY44)
+add_text(s, MX, Inches(6.9), Inches(11.8), Inches(0.5),
+         "關鍵訊息：不是「複製一台機器」，是「複製一整套可驗收的交付流程」——手冊在版控裡，第三台起照走。",
+         size=13, bold=True, color=TEALDK)
+set_notes(s, "★雙機交付頁（2026-08-05 認證完成）。第二台從重建到可交客戶的完整故事：全量守衛"
+             "1122+892 與 parity 跟主機同級全綠；耐力賽三輪（並發串線 26/26×6、長對話、劇情批）"
+             "零異常零降頻；散熱裝好後待機 42°C、壓測 65.9°C。重建過程實際踩出 9 類缺口"
+             "（字型/輸入法/DHCP/桌面圖示鏈/crontab/瀏覽器政策等），全部固化成還原手冊 §15"
+             "『一次還原到底』——缺口清單＋照抄指令＋9 項驗收清單，這份手冊跟程式碼一起進版控。"
+             "對客戶的意義：交付的不是一台調好的機器，是一套可重複、可驗收的交付流程。")
+pn(s)
+
+
 # ═══════════════════════════════════════════════════════════
 # ─── S13a 語音 POC · 全鏈架構 ────────────────────────────────
 s = slide_blank()
@@ -952,10 +1031,11 @@ for i, hd in enumerate(headers):
     add_text(s, col_x[i] + Inches(0.12), ty + Inches(0.09), col_w[i] - Inches(0.2), Inches(0.36),
              hd, size=12, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
 rows = [
-    ("whisper tiny.en", "74 MB", "英文專用", "0.94s", "WER 9.3%", "★ 英文版採用", True),
-    ("whisper base", "141 MB", "多語（含中文）", "2.15s", "端到端 8/8", "★ 中文版採用", True),
+    ("whisper small-q5_0", "175 MB", "多語（中英同檔）", "EN 1.1s / ZH 3.5s",
+     "ZH 端到端 66/100", "★ 現役（8 月中英統一＋-ac 640）", True),
+    ("whisper tiny.en", "74 MB", "英文專用", "0.94s", "WER 9.3%", "英文版初選 → 升級 small", False),
+    ("whisper base", "141 MB", "多語（含中文）", "2.15s", "端到端 36/100", "中文版初選 → 升級 small", False),
     ("whisper base.en", "67 MB", "英文專用", "2.33s", "WER 10.2%", "比 tiny.en 慢又沒更準", False),
-    ("whisper tiny（多語）", "74 MB", "多語", "0.97s", "中文 1/8 ×", "中文太差不能用", False),
     ("Fun-ASR-Nano（原用）", "~800M", "中文強", "2.5s", "真人 4/8", "× 來源不符，已汰換", False),
 ]
 ry = ty + th
@@ -987,9 +1067,10 @@ add_rich(s, MX + Inches(0.4), Inches(6.12), Inches(11.1), Inches(0.5),
             "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 add_rich(s, MX + Inches(0.4), Inches(6.63), Inches(11.1), Inches(0.42),
-         [[{"text": "選型準則  ", "size": 13, "bold": True, "color": AMBER},
-           {"text": "不能只看 WER，要看端到端答對率", "size": 12, "bold": True, "color": WHITE},
-           {"text": "——中文 base 字面只對 3/8，但端到端 8/8 全綠，聽錯的都被文字端容錯層救回。",
+         [[{"text": "演進 8月  ", "size": 13, "bold": True, "color": AMBER},
+           {"text": "真人 100 句把 8 句測不出的差距逼出來", "size": 12, "bold": True, "color": WHITE},
+           {"text": "——base 端到端 36/100、small 47/100（同無修正層）；掛回容錯層 66/100。"
+                    "慢 1.4s 買 +30 分，中英自此同一顆模型檔。",
             "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 set_notes(s, "★語音選型頁（技術評審向）。**這一頁 2026-07-27 全面改版**：原本用阿里的 "
@@ -1003,7 +1084,14 @@ set_notes(s, "★語音選型頁（技術評審向）。**這一頁 2026-07-27 �
              "聽錯的『盡量啤酒酷醇』『無限滑鼠擴存』『瑜伽店』全被文字端容錯層救回。這正好證明"
              "前面幾頁講的容錯層是真的在扛事情。代價誠實講：中文 base 2.15s/句比原本略慢，但中文版"
              "是備案、英文版才是展場主力（tiny.en 0.94s 很順）。英文數據為 TTS 合成音實測"
-             "（5 腔調×20 句×3 噪音層），中文為 user 錄的真人音——TTS 是下限估計，評審追問據實說明。")
+             "（5 腔調×20 句×3 噪音層），中文為 user 錄的真人音——TTS 是下限估計，評審追問據實說明。\n"
+             "**2026-08 演進（本頁現役列）**：英文先升級 small-q5_0＋-ac 640（比 tiny.en 更準且 "
+             "1.1s/句，audio-ctx 把 30 秒上下文削到短句實際需要，速度救回來）；8/5 手機麥克風實測"
+             "暴露 base 中文極限（『藍牙耳機庫存』聽成音節碎片、容錯層救不動），以 user 自錄真人 "
+             "100 句重跑基準：base 引擎 2.10s/CER中位 0.33、small 3.54s/0.25；**公平對稱端到端"
+             "（同無修正層）base 36/100 vs small 47/100；small 掛回容錯層 66/100**——慢 1.4 秒買 "
+             "+30 分答對率，且容錯層在 small 的詞形輸出上多救 19 分（47→66），驗證『輸出要像詞、"
+             "救援鏈才接得上手』。中英自此統一同一顆 175MB 模型檔，只差 -l 語言旗標。")
 pn(s)
 
 
@@ -1017,10 +1105,10 @@ add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.36),
 comp = [
     ("端點偵測移到前端", "Web Audio API · 零模型", "RMS 音量偵測",
      "瀏覽器即時算音量：靜音 1.2s 自動送出、15s 硬上限；省掉一顆 VAD 模型", NAVY, "偵"),
-    ("編碼＋解碼合一", "ggml-tiny.en.bin", "74 MB · 英文版",
-     "whisper 是端到端 encoder-decoder：聲學編碼與文字解碼在同一個模型檔內", TEALDK, "聲"),
-    ("同一套 runtime", "ggml-base.bin", "141 MB · 中文版",
-     "中英只差 -m 指到哪顆模型；多語權重輸出簡體，故中文版仍需 OpenCC 轉繁", TEAL, "文"),
+    ("編碼＋解碼合一", "ggml-small-q5_0.bin", "175 MB · 中英共用一顆",
+     "whisper 端到端 encoder-decoder：聲學編碼與文字解碼同一檔；-ac 640 削掉短句用不到的空白運算", TEALDK, "聲"),
+    ("同一套 runtime", "-l en ／ -l zh", "語言只是一個參數",
+     "中英只差語言旗標、共用同一顆模型檔；多語權重輸出簡體，中文仍走 OpenCC 轉繁", TEAL, "文"),
 ]
 cw = Inches(3.83); ch = Inches(2.55); cgap = Inches(0.19)
 cy = Inches(2.0)
@@ -1045,7 +1133,7 @@ for i, (name, fn, size, desc, col, gl) in enumerate(comp):
 py = Inches(4.85)
 add_text(s, MX, py - Inches(0.06), Inches(11.8), Inches(0.34),
          "實際部署管線（POST /api/asr，全程本機、無網路）", size=13, bold=True, color=TEALDK)
-pipe = ["前端錄音 + VAD\n靜音 1.2s 自動停", "ffmpeg\n轉 16k mono", "whisper-cli\ntiny.en / base",
+pipe = ["前端錄音 + VAD\n靜音 1.2s 自動停", "ffmpeg\n轉 16k mono", "whisper-cli\nsmall-q5_0 中英共用",
         "OpenCC\n簡→繁（僅中文）", "出口正規化\n大小寫/錯字", "倉管 WS\n回答"]
 pw = Inches(1.78); ph = Inches(0.82); pgap = Inches(0.19)
 px0 = MX
@@ -1064,7 +1152,7 @@ for i, step in enumerate(pipe):
 add_round(s, MX, Inches(6.4), Inches(11.87), Inches(0.78), fill=DARK, shadow=True)
 add_rich(s, MX + Inches(0.35), Inches(6.53), Inches(11.2), Inches(0.52),
          [[{"text": "RPi5 部署  ", "size": 12.5, "bold": True, "color": TEAL},
-           {"text": "910 MB 三顆 → 74 MB 一顆｜VAD 零模型｜0.94s/句｜純 CPU、零 GPU、零雲端",
+           {"text": "910 MB 三顆 → 175 MB 一顆（中英共用）｜VAD 零模型｜EN 1.1s / ZH 3.5s｜純 CPU、零 GPU、零雲端",
             "size": 11.5, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」「VAD 和 Encoder 現在怎麼做」）。"
@@ -1082,7 +1170,10 @@ set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」「
              "管線：前端錄 webm（含 VAD 自動停）→ ffmpeg 轉 16k mono → whisper-cli → OpenCC 轉繁"
              "（**只有中文版需要**，英文版已移除）→ 出口正規化（英文做大小寫攤平、中文做同音錯字"
              "修正）→ 交倉管 WS，全程本機無網路。**模型體積 910MB → 215MB、英文延遲 2.5s → 0.94s**"
-             "——換掉來源不符的模型不但沒犧牲，反而更輕更快、架構更薄。")
+             "——換掉來源不符的模型不但沒犧牲，反而更輕更快、架構更薄。\n"
+             "**2026-08 更新**：中英已統一為同一顆 ggml-small-q5_0.bin（175MB 多語、量化 q5_0），"
+             "兩版只差 -l en / -l zh 語言旗標——連『兩顆模型』都省成一顆，部署與還原再薄一層。"
+             "速度靠 -ac 640（audio-ctx 從 30 秒上下文削到短句實際需要）守住：EN 1.1s、ZH 3.5s/句。")
 pn(s)
 
 
