@@ -3447,6 +3447,12 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _rank_c4 = "slow" if _sp > _hp else "hot"
         else:
             _rank_c4 = "slow" if is_slow else "hot"
+        # r16 回查（EN #34 同款）：「除了滯銷以外的排行」——排除語境反轉
+        if (_rank_c4 == "slow" and not is_hot
+                and any(w in user_text for w in ("除了", "以外", "之外", "不含", "不算", "排除", "扣掉"))
+                and any(w in user_text for w in ("滯銷", "賣不動", "呆滯", "冷門"))):
+            log.info("[校正 C4] 排除滯銷語境 → 反轉 rank=hot")
+            _rank_c4 = "hot"
         new_args = {
             "rank_type": _rank_c4,
             "period":    period,
@@ -3483,8 +3489,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             log.info(f"[校正 C4] 雙類詞後講的贏 → {func_args['rank_type']}")
         elif is_slow and func_args.get("rank_type") != "slow":
             # r27：「電子類滯銷有哪些」LLM 給 rank_type=hot（合法但方向反）→ 以原句為準
-            func_args = {**func_args, "rank_type": "slow"}
-            log.info("[校正 C4] 滯銷詞在場 → rank_type=slow")
+            # r16：排除語境（除了滯銷以外）反轉——與上段同步
+            if (any(w in user_text for w in ("除了", "以外", "之外", "不含", "不算", "排除", "扣掉"))
+                    and any(w in user_text for w in ("滯銷", "賣不動", "呆滯", "冷門"))):
+                func_args = {**func_args, "rank_type": "hot"}
+                log.info("[校正 C4] 排除滯銷語境 → rank_type=hot")
+            else:
+                func_args = {**func_args, "rank_type": "slow"}
+                log.info("[校正 C4] 滯銷詞在場 → rank_type=slow")
         elif is_hot and func_args.get("rank_type") not in ("hot", "stock"):
             func_args = {**func_args, "rank_type": "hot"}
             log.info("[校正 C4] 熱銷詞在場 → rank_type=hot")
@@ -6225,9 +6237,13 @@ async def api_query(req: Request):
             func_args = {**func_args, "keyword": pre_kw}
 
     # ── Pre-C-Schedule（HTTP 版）──
-    _list_alert_kws_h = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示")
+    # r16 回查：「我的警示清單」曾被 clf 判 list_low_stock 回缺貨清單（警示
+    #   在 LOW 表的老雙棲問題）——補「我的/清單/列表」講法
+    _list_alert_kws_h = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示",
+                         "我的警示", "警示清單", "警示列表")
     _list_alert_rule_kw = "警示規則"  # 單獨處理，避免「新增警示規則」誤走 list
-    _list_sched_kws_h = ("查看排程", "查排程", "看排程", "有哪些排程", "排程列表", "目前排程")
+    _list_sched_kws_h = ("查看排程", "查排程", "看排程", "有哪些排程", "排程列表", "目前排程",
+                         "我的排程", "排程清單")
     _is_alert_set = any(w in user_text for w in ("新增", "設定", "加入", "建立", "通知我", "提醒我"))
     if (not _is_alert_set and
             (any(w in user_text for w in _list_alert_kws_h) or
@@ -9993,7 +10009,10 @@ async def ws_handler(ws: WebSocket):
             #   下面共用的 Pre-C 規則 / 校正流程，維持跟 HTTP 版一致的行為）──
             if True:
                 # ── Pre-C-Schedule：定時排程意圖攔截 ──
-                _list_alert_kws = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示")
+                # r16 回查：「我的警示清單」曾被 clf 判 list_low_stock（與
+                #   HTTP 版 _list_alert_kws_h 同步）
+                _list_alert_kws = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示",
+                                   "我的警示", "警示清單", "警示列表")
                 _list_sched_kws = ("查看排程", "查排程", "看排程", "有哪些排程", "排程列表", "目前排程",
                                    # r19：「把排程都列出來」曾 clarify 找不到
                                    "排程都列", "列出排程", "排程列出來", "排程清單", "列排程",

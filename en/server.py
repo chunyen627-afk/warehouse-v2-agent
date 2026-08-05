@@ -169,6 +169,9 @@ GATEKEEPER_KEYWORDS = {
     "stock cover",
     # r15 #11：'anything sitting at zero units' 曾被守門擋
     "zero units", "at zero",
+    # r16：#23 'cheapest thing we have' 曾被守門擋（直達層修好了守門沒放行）
+    #   ＋#38 bulk＋#15 collecting dust（SLOW 接了守門沒放）
+    "cheapest", "priciest", "expensive", "bulk of", "collecting dust",
     "expiring", "expire", "expiry", "shelf life", "movements",
     "moved", "inbound", "outbound", "transfers", "help",
     "what can you", "how does this", "safety stock", "purchase order",
@@ -571,6 +574,8 @@ _GATEKEEPER_BLACKLIST = (
     "你是誰", "機器人嗎", "chatgpt", "你是真人", "你有意識", "你幾歲",
     "誰做的你", "什麼模型", "你是不是", "你多聰明", "你會說",
     "你好笨", "你好棒", "好厲害", "沒用的東西", "白癡", "廢物",
+    # r16 #91：'you suck' 曾回「查無 suck 這個商品」（substring 蓋 sucks）
+    "you suck", " suck",
     "你很慢", "回答快一點", "你答錯", "當機",
     "罵我", "罵人", "罵一下",   # r58：「罵我一下」曾回「沒有『罵我』這個商品」
     "講中文", "說中文",         # r59：「講中文好嗎」曾回「沒有『講中文』這個商品」
@@ -1265,6 +1270,8 @@ _LOW_STOCK_INTENT_WORDS = (
     #     healthy'（單品卡），只收 #78 的語序
     "zero units", "at zero", "top anything up", "top something up",
     "top it up", "top us up", "healthy on stock",
+    # r16 #21：'anything close to running dry'
+    "running dry", "close to running",
 )
 
 # 熱銷意圖詞（C4 用）
@@ -1327,6 +1334,10 @@ _HOT_INTENT_WORDS_SLOW = (
     "isnt moving", "isn't moving", "zero sales", "no sales",
     # r15 #4：'which products have gone stale' 曾回熱銷（反義）
     "gone stale", "stale",
+    # r16：#99 'and the worst'（帶 the 較安全，裸 worst 撞 low_stock 語境）
+    #   ＋#15 collecting dust/#33 underperforming/#16 slowest sku
+    "the worst", "collecting dust", "underperforming", "underperform",
+    "slowest sku", "slowest item", "slowest items",
 )
 
 # 模糊時間詞（C2 用）
@@ -1629,6 +1640,9 @@ _TOOL_INTENT_GUARD = {
                             "related", "bundle", "cross-sell", "cross sell",
                             "also buy", "also bought", "also get", "along with",
                             "combo", "together with", "what else",
+                            # r16 #50/#51：'who buys it with what'/'show me
+                            #   similar items' 曾 not found
+                            "similar", "buys with", "buy it with",
                             # 守衛第 10 輪：'recommend items for X' 沒收 →
                             #   gate-rescue 降級成庫存查詢
                             "recommend", "recommendation", "suggest items",
@@ -5768,6 +5782,14 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _rank_c4 = "slow" if _sp > _hp else "hot"
         else:
             _rank_c4 = "slow" if is_slow else "hot"
+        # r16 #34：'everything except slow movers'——排除語境反轉（只中 slow
+        #   詞但訪客要的是 slow 以外＝hot）
+        if (_rank_c4 == "slow" and not is_hot and _is_mostly_english(user_text)
+                and _re.search(r"\b(?:except|excluding|without|besides|skip)\b"
+                               r"[^.?!]{0,16}\b(?:slow|stale|dead)\b",
+                               user_text.lower())):
+            log.info("[校正 C4] 排除滯銷語境 → 反轉 rank=hot")
+            _rank_c4 = "hot"
         new_args = {
             "rank_type": _rank_c4,
             "period":    period,
@@ -5797,8 +5819,17 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             log.info(f"[校正 C4] 雙類詞後講的贏 → {func_args['rank_type']}")
         elif is_slow and func_args.get("rank_type") != "slow":
             # r27：「電子類滯銷有哪些」LLM 給 rank_type=hot（合法但方向反）→ 以原句為準
-            func_args = {**func_args, "rank_type": "slow"}
-            log.info("[校正 C4] 滯銷詞在場 → rank_type=slow")
+            # r16 #34：排除語境反轉——'everything except slow movers' 走這段
+            #   （clf 已判 hot_items），要的是 slow 以外＝hot
+            if (_is_mostly_english(user_text)
+                    and _re.search(r"\b(?:except|excluding|without|besides|skip)\b"
+                                   r"[^.?!]{0,16}\b(?:slow|stale|dead)\b",
+                                   user_text.lower())):
+                func_args = {**func_args, "rank_type": "hot"}
+                log.info("[校正 C4] 排除滯銷語境 → rank_type=hot")
+            else:
+                func_args = {**func_args, "rank_type": "slow"}
+                log.info("[校正 C4] 滯銷詞在場 → rank_type=slow")
         elif is_hot and func_args.get("rank_type") not in ("hot", "stock"):
             func_args = {**func_args, "rank_type": "hot"}
             log.info("[校正 C4] 熱銷詞在場 → rank_type=hot")
@@ -6905,6 +6936,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
     _c9_needs_fix = func_name == "manage_config" and (
         not _c9_raw_key or not any(_c9_raw_key in w or w in _c9_raw_key for w in _CONFIG_KEY_WORDS)
     )
+    # r16 #44/#90：'days of cover for X' 是**庫存卡欄位查詢**不是設定——
+    #   en-admin 已直達 query_inventory，C9 不可搶（曾回「restock target
+    #   days=14」答非所問）。set 句（change cover days to 20）照走 C9。
+    if (has_cfgkey and not has_cfgset
+            and _re.search(r"\bdays? of (?:cover|stock|supply)\b|\bstock cover\b",
+                           user_text.lower())):
+        has_cfgkey = False
     if has_cfgkey and (func_name not in ("manage_config", "set_alert") or _c9_needs_fix):
         # 「多少」是問句語氣（「設定多少」「是多少」），有它一律當 read——
         # 曾經只擋「是多少/設多少」，「補貨前置天數設定多少」被「設」搶成 set 而報錯
@@ -8398,6 +8436,11 @@ _CTX_GLOBAL_RE_EN = _re.compile(
     # r14+2（#42）：what sold/came in/moved 是**全店** movement 問句——
     #   'what sold over the weekend' 曾被 C2c carry-over 補成前句商品
     r"what (?:sold|was sold|came in|moved|shipped|arrived|happened)|"
+    # r16 #13/#28/#29/#40/#60：裸方向詞/紀錄總稱/全店價值——排行卡吸榜首
+    #   （r34 設計）後這些全店句被 followup 補品（'this afternoon inbound'
+    #   曾回 Smart Fitness Band）。
+    r"\binbound\b|\boutbound\b|movement history|transfer (?:log|history)|"
+    r"in ?/? ?out balance|full history|worth|todays? summary|"
     r"anything|whats there|what do we have|item list)\b", _re.I)
 
 
@@ -10496,9 +10539,15 @@ async def ws_handler(ws: WebSocket):
                 if _vc_pend.get("data") is not None and _vc_pend.get("view") in _VIEW2ACTION_WS:
                     # r78：「現在先跑一次」的「先」是加急不是猶豫——負向詞改用
                     # 複合形，裸「先」不再擋代按
-                    _vc_neg = any(n in _vc_txt for n in ("不", "別", "取消", "算了",
+                    _vc_neg = (any(n in _vc_txt for n in ("不", "別", "取消", "算了",
                                                           "先不", "先別", "先等", "先緩",
                                                           "等等", "等一下"))
+                               # r16：英文負向原本沒擋——加詞界 confirm 家族後
+                               #   'dont do it' 若不擋會被誤代按（寫入級）
+                               or bool(_re.search(
+                                   r"\b(?:dont|don't|do not|not|no|never|nope|"
+                                   r"cancel|hold|wait|stop|forget)\b",
+                                   _vc_txt.lower())))
                     # r76：「就出3件 確認」——帶內容重申+結尾確認。句中數字必須跟
                     # 卡片數量一致才代按（不一致是改量意圖，讓給改卡提示）
                     _vc_num = _re.search(r"(\d+)", _vc_txt)
@@ -10524,6 +10573,17 @@ async def ws_handler(ws: WebSocket):
                                    or (_vc_len_ok
                                        and any(w in _vc_txt or w in _vc_low
                                                for w in _PEND_OK_SUB))
+                                   # r16 #55/#75：'yes confirm'/'confirm the
+                                   #   alert' 不是 exact 也不含 SUB 片語 →
+                                   #   掉過代按被 C3 搶成缺貨清單（訪客以為
+                                   #   警示建了）。≤4 詞＋詞界確認詞＝代按；
+                                   #   負向詞（dont…）已在上面擋。
+                                   or (_is_mostly_english(_vc_txt)
+                                       and len(_vc_txt.split()) <= 4
+                                       and _re.search(
+                                           r"\b(?:confirm|confirmed|yes|yeah|"
+                                           r"yep|proceed|go ahead|do it)\b",
+                                           _vc_low))
                                    or (len(_vc_txt) <= 6 and ("確認" in _vc_txt or "送出" in _vc_txt))
                                    or (len(_vc_txt) <= 10 and _vc_qty_ok
                                        and _re.search(r"(確認|送出)$", _vc_txt))))
@@ -13983,9 +14043,27 @@ async def ws_handler(ws: WebSocket):
                 # r14+2（#21）：裸 'transfers?' / 'movements?' 功能詞單獨句
                 #   ——曾被 alias fuzzy 配成 trainers→Running Shoes。
                 #   單獨一個功能名詞＝想看進出/調撥紀錄 → movement 總覽。
-                elif _re.fullmatch(r"\s*(?:transfers?|movements?)\s*[?.!]*\s*",
-                                   _ul_adm):
+                elif _re.fullmatch(r"\s*(?:transfers?|movements?)"
+                                   r"(?:\s+(?:log|history|records?))?"
+                                   r"(?:\s+please)?\s*[?.!]*\s*", _ul_adm):
+                    # r16 #27/#28：'transfer log'/'movement history' 片語也收
                     _en_admin = "query_movement"
+                # r16 #16：'slowest sku this month' 曾被 clf 判 compare 直達
+                #   （early-return 保護讓 C4 slow 詞攔不到）→ 倉值比較答非所問
+                elif _re.search(r"\bslowest\s+(?:skus?|items?|products?|"
+                                r"movers?|sellers?)\b", _ul_adm):
+                    _en_admin = "list_hot_items"
+                # r16 #83：'back to the yoga mat' 曾被 clf 判 search_log(0.90)
+                #   → RCA 對帳（坑 14 原案句型）。back to + 商品＝切品查詢。
+                elif _re.search(r"\bback to (?:the )?[a-z]", _ul_adm) \
+                        and _text_has_item_name(user_text):
+                    _en_admin = "query_inventory"
+                # r16 #44/#90：'days of cover for it'/'yoga mat days of cover'
+                #   曾被 C9 搶成 manage_config(read, key='days of cover')。
+                #   撐天就在庫存卡上——直達庫存查詢（kw 由句面/followup 補）。
+                elif _re.search(r"\bdays? of (?:cover|stock|supply)\b|"
+                                r"\bstock cover\b", _ul_adm):
+                    _en_admin = "query_inventory"
                 # r14+1（#35）：'inbound volume yesterday' 這類**進出量裸句**
                 #   clf 語料沒見過 → query_inventory 把 'inbound volume' 當
                 #   商品名查（「查無此商品」）。方向詞＋量詞的組合夠獨特，
@@ -14065,6 +14143,11 @@ async def ws_handler(ws: WebSocket):
                 # 2026-08-03：en-whrank 已經把參數算好了（warehouse_a/b='all' +
                 #   metric），不需要 LLM 再抽一次——丟給 LLM 反而抽不穩。
                 if _en_whrank_args:
+                    _needs_llm_ws = False
+                # r16 'transfer log'：en-admin 的 movement 直達曾被 LLM 覆蓋
+                #   func（幻覺 search_log(coffee maker)）——這類裸功能句
+                #   period/direction 由 14014 段自算即可，不需要 LLM。
+                if _en_admin == "query_movement":
                     _needs_llm_ws = False
                 if not _needs_llm_ws:
                     func_args = {}
