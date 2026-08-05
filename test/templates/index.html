@@ -743,6 +743,20 @@
   header h1 { font-size: 14px; }
 }
 
+/* ── 手機瀏覽器動態工具列修正（2026-08-05 熱點手機實測）──
+   iPhone 的 100vh 含被底部工具列遮住的區域 → 輸入列整排看不見
+   （「下面沒打字和語音那排」）。dvh=動態視口高度（iOS 15.4+），
+   桌面 kiosk 無動態工具列 dvh==vh，完全不受影響。 */
+body { height: 100dvh; }
+.alert-panel { height: 100dvh; }
+@media (max-width: 768px) {
+  /* 標題長（尤其英文版）時 wrap 會把 ✕ 擠到第二行 → 單行＋標題省略號 */
+  header { flex-wrap: nowrap; }
+  header h1 { flex: 1 1 auto; min-width: 0; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; }
+  #input-bar { padding: 6px 8px; gap: 6px; }
+}
+
 /* ── 精簡頂部（15 吋外接螢幕、kiosk 125% 縮放）──
    標題列 / 功能選單 / 異常警示這三條收矮，把垂直空間讓給對話區。
    由 <body class="compact-top"> 啟用；展場要退回原版，移除該 class 即可。
