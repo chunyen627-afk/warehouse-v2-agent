@@ -919,3 +919,10 @@ ssh 來源機 sudo cat /etc/chromium/policies/managed/warehouse-media.json \
    169.254）→ 掃網頁 QR → 過兩層憑證警告 → 頁面能查詢
 8. `./run_guard_zh.sh --smoke` 全綠 → 有時間再跑全量 1122+892+parity
 9. 溫度：待機 ≤55°C、壓測零降頻（`vcgencmd get_throttled` = 0x0）
+
+### 15.4 本章自己也踩過的雷（2026-08-05 同日補）
+
+| 雷 | 說明 |
+|---|---|
+| 裝 dnsmasq 後**必須 `systemctl restart dnsmasq`** | apt 安裝當下服務就用**原廠空設定**先啟動了；之後才蓋 `/etc/dnsmasq.conf` 的話，`enable --now` **不會重啟**（already active）→ 只綁 DNS(53) 不綁 DHCP(67)，症狀跟沒裝一樣。驗收要看 `sudo ss -ulpn \| grep :67` 有 dnsmasq、journal 有 `DHCP, IP range` 行——**別只看 is-active** |
+| 切換_熱點.sh 不可寫死 WiFi 設定檔名 | 兩台名字不同（EOSL_P400 / preconfigured），寫死會讓另一台切不回 WiFi。已改成動態抓（`nmcli -t -f NAME,TYPE ... 802-11-wireless` 排除 hotspot），並在開熱點前自檢 dnsmasq |
