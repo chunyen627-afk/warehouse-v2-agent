@@ -1031,7 +1031,7 @@ for i, hd in enumerate(headers):
     add_text(s, col_x[i] + Inches(0.12), ty + Inches(0.09), col_w[i] - Inches(0.2), Inches(0.36),
              hd, size=12, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
 rows = [
-    ("whisper small-q5_0", "175 MB", "多語（中英同檔）", "EN 1.1s / ZH 3.5s",
+    ("whisper small-q5_0", "175 MB", "多語（中英同檔）", "中英皆 ~3.5s",
      "ZH 端到端 66/100", "★ 現役（8 月中英統一＋-ac 640）", True),
     ("whisper tiny.en", "74 MB", "英文專用", "0.94s", "WER 9.3%", "英文版初選 → 升級 small", False),
     ("whisper base", "141 MB", "多語（含中文）", "2.15s", "端到端 36/100", "中文版初選 → 升級 small", False),
@@ -1086,7 +1086,7 @@ set_notes(s, "★語音選型頁（技術評審向）。**這一頁 2026-07-27 �
              "是備案、英文版才是展場主力（tiny.en 0.94s 很順）。英文數據為 TTS 合成音實測"
              "（5 腔調×20 句×3 噪音層），中文為 user 錄的真人音——TTS 是下限估計，評審追問據實說明。\n"
              "**2026-08 演進（本頁現役列）**：英文先升級 small-q5_0＋-ac 640（比 tiny.en 更準且 "
-             "1.1s/句，audio-ctx 把 30 秒上下文削到短句實際需要，速度救回來）；8/5 手機麥克風實測"
+             "3.45s/句——比 tiny.en 慢但台灣腔通過率 27%→60%，速度靠 -ac 640 從 6.7s 拉回）；8/5 手機麥克風實測"
              "暴露 base 中文極限（『藍牙耳機庫存』聽成音節碎片、容錯層救不動），以 user 自錄真人 "
              "100 句重跑基準：base 引擎 2.10s/CER中位 0.33、small 3.54s/0.25；**公平對稱端到端"
              "（同無修正層）base 36/100 vs small 47/100；small 掛回容錯層 66/100**——慢 1.4 秒買 "
@@ -1152,7 +1152,7 @@ for i, step in enumerate(pipe):
 add_round(s, MX, Inches(6.4), Inches(11.87), Inches(0.78), fill=DARK, shadow=True)
 add_rich(s, MX + Inches(0.35), Inches(6.53), Inches(11.2), Inches(0.52),
          [[{"text": "RPi5 部署  ", "size": 12.5, "bold": True, "color": TEAL},
-           {"text": "910 MB 三顆 → 175 MB 一顆（中英共用）｜VAD 零模型｜EN 1.1s / ZH 3.5s｜純 CPU、零 GPU、零雲端",
+           {"text": "910 MB 三顆 → 175 MB 一顆（中英共用）｜VAD 零模型｜中英 ~3.5s/句｜純 CPU、零 GPU、零雲端",
             "size": 11.5, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」「VAD 和 Encoder 現在怎麼做」）。"
@@ -1173,7 +1173,7 @@ set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」「
              "——換掉來源不符的模型不但沒犧牲，反而更輕更快、架構更薄。\n"
              "**2026-08 更新**：中英已統一為同一顆 ggml-small-q5_0.bin（175MB 多語、量化 q5_0），"
              "兩版只差 -l en / -l zh 語言旗標——連『兩顆模型』都省成一顆，部署與還原再薄一層。"
-             "速度靠 -ac 640（audio-ctx 從 30 秒上下文削到短句實際需要）守住：EN 1.1s、ZH 3.5s/句。")
+             "速度靠 -ac 640（audio-ctx 從 30 秒上下文削到短句實際需要）守住：EN 3.45s、ZH 3.54s/句（tiny.en 時代的 0.94-1.1s 是舊引擎數字，換 small 後中英同級）。")
 pn(s)
 
 
@@ -1742,14 +1742,14 @@ pn(s)
 s = slide_blank()
 title_bar(s, "VOICE · 真人實測", "合成音 92%，真人 55%——這個落差才是真相")
 add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
-         "先前所有英文語音數據都來自 TTS。這次請真人（非母語者）錄 38 句，"
+         "先前所有英文語音數據都來自 TTS。這次請真人（非母語者）先錄 38 句抽樣（後補滿 100 句，見下頁），"
          "用展場實際會部署的模型與麥克風測完整語音鏈。",
          size=13, color=GREY55)
 
 # 三段對照
 steps = [
     ("TTS 合成音", "92%", "US 腔 99 句 · 咬字標準、無語速變化", GREY77),
-    ("真人（非母語）", "55%", "台灣腔 38 句 · 同一支麥克風、同一顆模型", CORAL),
+    ("真人（非母語）", "55%", "台灣腔首測 38 句抽樣（後補滿100句→下頁） · 同麥克風同模型", CORAL),
     ("＋ ASR 容錯層", "79%", "**同一批音檔**，沒重錄、只加規則", TEALDK),
 ]
 for i, (nm, pct, desc, col) in enumerate(steps):
