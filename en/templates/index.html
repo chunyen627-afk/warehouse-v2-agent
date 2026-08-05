@@ -1630,6 +1630,11 @@ function handleMessage(msg) {
     } catch (e) {
       console.error('[render] view card failed:', e);
     }
+    // 空摘要泡泡不留白條（2026-08-05 網頁百句實測：摘要為空的回答會留一顆
+    // 空白長泡泡掛在卡片上方，整場累積一大排，user 一眼抓包）
+    if (currentBotMsg && !currentBotMsg.innerText.trim()) {
+      currentBotMsg.remove();
+    }
     currentBotMsg = null;
     if (_traceContainer && _traceContainer.parentNode) { _traceContainer.parentNode.removeChild(_traceContainer); }
     _traceContainer = null;
