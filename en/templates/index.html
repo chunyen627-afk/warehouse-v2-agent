@@ -1203,6 +1203,15 @@ function syncLiveState() {
   }).catch(() => {});
 }
 setTimeout(syncLiveState, 300);
+// At boot the kiosk opens before the server is ready; live autostart happens
+// later -> a single sync leaves the badge stuck on "start" while the sim IS
+// running (2026-08-05, unit 2). Chase the transition every 5s for the first
+// 3 minutes, then heartbeat-sync every 45s.
+let _liveSyncN = 0;
+setInterval(() => {
+  _liveSyncN++;
+  if (_liveSyncN <= 36 || _liveSyncN % 9 === 0) syncLiveState();
+}, 5000);
    // auto-detect on load (without the user asking)
 
 function appendBot(text, klass) {

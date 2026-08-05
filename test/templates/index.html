@@ -1193,6 +1193,14 @@ function syncLiveState() {
   }).catch(() => {});
 }
 setTimeout(syncLiveState, 300);
+// ⚠️ 開機時 kiosk 比 server ready 早開，autostart 是之後才發生 → 只同步一次
+//   會讓 badge 永遠停在「▶」假象（2026-08-05 機二實案，模擬明明在跑）。
+//   前 3 分鐘每 5 秒追一次抓 autostart 轉換，之後每 45 秒心跳同步。
+let _liveSyncN = 0;
+setInterval(() => {
+  _liveSyncN++;
+  if (_liveSyncN <= 36 || _liveSyncN % 9 === 0) syncLiveState();
+}, 5000);
    // 進站自動偵測（不靠使用者問）
 
 function appendBot(text, klass) {
