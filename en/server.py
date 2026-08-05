@@ -576,6 +576,8 @@ _GATEKEEPER_BLACKLIST = (
     "你好笨", "你好棒", "好厲害", "沒用的東西", "白癡", "廢物",
     # r16 #91：'you suck' 曾回「查無 suck 這個商品」（substring 蓋 sucks）
     "you suck", " suck",
+    # r17 #19：元對話抱怨（"that's not what i asked"）→ rejected 引導
+    "not what i asked", "not what i meant", "you misunderstood",
     "你很慢", "回答快一點", "你答錯", "當機",
     "罵我", "罵人", "罵一下",   # r58：「罵我一下」曾回「沒有『罵我』這個商品」
     "講中文", "說中文",         # r59：「講中文好嗎」曾回「沒有『講中文』這個商品」
@@ -3352,7 +3354,13 @@ _EN_GLUED_STOP_RE = _re.compile(
     #   `in(?=ventory)` 會在正常單字 **in**ventory 內部命中，把它咬成
     #   'in ventory' → 商品比對全毀（守衛 887，4 句錯字句掛掉）。
     #   所有 lookahead 前面都要有 \b 保護，且不可對應到真實單字的內部。
-    r"can(?=you\b|i\b)|whats(?=the\b)|in(?=stock\b))",
+    r"can(?=you\b|i\b)|whats(?=the\b)|in(?=stock\b)|"
+    # r17 #21/#24/#26/#30/#27：ASR 黏字第二批——whatsthe/lowstock/
+    #   runninglow/whatcamein/earphonesstock（全部 not found 或概覽）。
+    #   lookahead 規則同上：\b 起點、目標是完整詞。
+    r"low(?=stock\b)|running(?=low\b)|what(?=camein\b|sthe\b)|"
+    r"came(?=in\b)|show(?=me\b)|earphones(?=stock\b)|transfer(?=ten\b)|"
+    r"compare(?=north\b|south\b)|daysof(?=cover\b)|days(?=ofcover\b))",
     _re.I)
 
 
@@ -15033,7 +15041,11 @@ async def ws_handler(ws: WebSocket):
                         except Exception:
                             pass
                         _unknown = []
-                        for _tx in _re.split(r"[\s\-/]+", user_text.lower()):
+                        # r17 #21/#24/#26/#30：黏字句（whatsthe/lowstock/
+                        #   runninglow/whatcamein）——keyword 層有 unglue、
+                        #   這裡掃**原句** token → 黏字被當「庫裡沒有的商品」。
+                        #   先 unglue 再切。
+                        for _tx in _re.split(r"[\s\-/]+", _en_unglue(user_text).lower()):
                             _tx = _tx.strip(" ?.!,'\"")
                             if len(_tx) < 3 or _tx in _NOEX_STOP or any(c.isdigit() for c in _tx):
                                 continue

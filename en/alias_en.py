@@ -21,6 +21,15 @@ alias_en.py — 英文商品別名 → 主檔商品名 的映射表（EN build�
 
 # 俗稱 → 能命中主檔的字串
 ALIAS_EN = {
+    # r17 ASR 反向分詞（whisper 把合成詞拆開唸）：#31 'blue tooth ear
+    #   phones stock' 曾「查無 blue tooth ear」；同族 key board/power bang
+    "blue tooth ear phones": "Bluetooth Earphones",
+    "blue tooth earphones":  "Bluetooth Earphones",
+    "ear phones":            "Bluetooth Earphones",
+    "blue tooth speaker":    "Bluetooth Speaker",
+    "blue tooth":            "Bluetooth Earphones",
+    "key board":             "Mechanical Keyboard",
+    "power bang":            "Power Bank",
     # electronics
     "earbuds":            "Bluetooth Earphones",
     "wireless earbuds":   "Bluetooth Earphones",
