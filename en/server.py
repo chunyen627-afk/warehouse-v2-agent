@@ -367,7 +367,25 @@ def is_meaningful_input(text: str) -> bool:
             #   被婉拒等於催客人走。放行後走下方 wait-ack 短回應
             "hold on", "hang on", "give me a sec", "give me a second",
             "wait a sec", "wait a moment", "one sec", "one moment",
-            "just a sec", "just a moment", "let me think")):
+            "just a sec", "just a moment", "let me think",
+            # ── en-r20 B 類（2026-08-07）：這些是**真查詢**不是閒聊，
+            #   先前守門員零命中被婉拒。放行後由下方直達層接到正確路由，
+            #   不是放行到引導頁充數。
+            #   ⚠️ 片語不用裸詞：'activity' 單獨會撞 'activity tracker' 商品線
+            "recent activity", "any activity", "latest activity",
+            "recent movement", "any deliveries", "any delivery",
+            "deliveries lately", "delivered lately", "anything arrive",
+            "anything arrived", "anything come in", "what came in",
+            "add it up", "add them up", "add that up", "total it",
+            "sum it up", "grand total",
+            "most urgent", "most critical", "which is worst",
+            "whats worst", "what's worst", "biggest problem",
+            "needs attention", "need attention first",
+            # 裸時間詞：'today' 本來就在 GATEKEEPER_KEYWORDS，'yesterday'
+            #   卻不在 → 同樣講一個時間詞、一個過一個被拒（實測不一致）。
+            #   ⚠️ 這裡只是放行；真正的路由由 Pre-C-B20 的 fullmatch 決定，
+            #     'yesterday earphones stock' 不會被當裸時間詞。
+            "yesterday")):
         return True
     # ── 產出類意圖放行（2026-08-04，意圖測試抓到）───────────────────
     #   訪客要的正是報告/採購單/進出紀錄,卻在守門員就被擋掉：
@@ -1275,6 +1293,15 @@ _LOW_STOCK_INTENT_WORDS = (
     "almost out", "nearly out", "out of stock", "short on", "shortage",
     "below safety", "safety stock", "need to order", "needs ordering",
     "what's low", "whats low", "replenish",
+    # ── en-r20（2026-08-07）：「哪個最急」語彙。實測 'which is most urgent'
+    #   被 Pre-C-B20 正確導向 list_low_stock，卻因為本表沒有 urgent →
+    #   C3e 判定「幻覺無缺貨語」降級成 60 項全店概覽（坑 3：修一層、
+    #   下一層再擋一次）。缺貨清單本來就照撐天排序，最急的就是第一筆。
+    #   ⚠️ 用片語不用裸 urgent/critical：'urgent' 單詞會撞到寫入句語氣
+    #     （'urgent: ship 50 mouse'），這裡只收問「哪個最急」的問法。
+    "most urgent", "most critical", "most pressing", "biggest problem",
+    "needs attention", "need attention", "which is worst", "whats worst",
+    "what's worst", "worst off", "top priority", "first priority",
     # 守衛第 10 輪：這些常見講法沒收 → 落到商品比對/RCA
     "getting low", "gets low", "getting short", "running short",
     "should i order", "should we order", "what to order",
@@ -4613,7 +4640,11 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 r'shifting|send|sends|sending|ship|ships|shipping|relocate|'
                 r'reallocate|redistribute|rebalance|reroute|divert|bring|take|'
                 r'pull|push|please|pls|can you|could you|i want to|i need to|'
+                # en-r20：packs/bags/cartons/bottles 等量詞未收 → 'south shipped
+                #   3 packs of coffee' 剝不乾淨、開不了卡（實測 error）
                 r'from|to|into|over|across|the|units?|pcs|pieces?|boxes?|box|'
+                r'packs?|packets?|bags?|cartons?|cases?|bottles?|cans?|rolls?|'
+                r'sets?|pairs?|dozens?|'
                 r'north|central|south|warehouse|wh|stock|inventory)\b',
                 ' ', _pre13a, flags=_re13a.I)
             _pre13a = _re13a.sub(r'\s+', ' ', _pre13a).strip()
@@ -5017,7 +5048,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 r'wrote|write|off|out|in|into|to|from|the|a|an|of|and|'
                 r'customer|customers|client|clients|supplier|suppliers|vendor|'
                 r'buyer|warehouse|wh|north|central|south|today|yesterday|'
-                r'this|week|month|morning|please|pls|units?|pcs|pieces?)\b',
+                r'this|week|month|morning|please|pls|units?|pcs|pieces?|'
+                # en-r20：量詞家族（packs of coffee 的 packs 未收 → error）
+                r'packs?|packets?|bags?|cartons?|cases?|bottles?|cans?|rolls?|'
+                r'sets?|pairs?|dozens?|boxes?|box)\b',
                 ' ', _pre_clean, flags=_re13b_pre.I)
             _pre_clean = _re13b_pre.sub(r'\s+', ' ', _pre_clean).strip()
         _kw13b = _extract_sku_keyword(_pre_clean) or _extract_sku_keyword(user_text) or ""
@@ -5033,7 +5067,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 r"taken|remove|removed|ship|shipped|send|sent|sold|sell|"
                 r"returned|return|into|to|from|in|at|out|of|the|a|an|and|"
                 r"north|central|south|warehouse|wh|today|yesterday|"
-                r"units?|pcs|pieces?|record|inbound|outbound)\b|\b[0-9]+\b",
+                r"units?|pcs|pieces?|record|inbound|outbound|"
+                # en-r20：量詞家族（同上，三處要一致否則短商品詞路徑漏接）
+                r"packs?|packets?|bags?|cartons?|cases?|bottles?|cans?|rolls?|"
+                r"sets?|pairs?|dozens?|boxes?|box)\b|\b[0-9]+\b",
                 " ", user_text, flags=_re13b_pre.I)
             _short13b = _re13b_pre.sub(r"\s+", " ", _short13b).strip(" ?.!,")
             if _short13b and len(_short13b.split()) <= 2:
@@ -11479,6 +11516,35 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {
                     "ok": True, "view": "guide", "summary": _lq_msg, "data": {}}})
                 continue
+            #   ①-0 加總請求（en-r20 2026-08-07）：'add it up for me' 先前
+            #     rejected。但這句**沒講要加總什麼**——硬猜全店總值可能不是
+            #     訪客要的（user 定調：不確定不猜，反問）。
+            #     ⚠️ 有上一輪卡片時，「它」指的就是那張卡 → 讓 ctx 展開先做，
+            #       這裡只接「沒有 context 可指」的裸加總句。
+            if _is_mostly_english(user_text) \
+                    and not _ctx_for(vid).get("last_sku") \
+                    and not _ctx_for(vid).get("last_view") \
+                    and _re.fullmatch(
+                        r"(?:can\s+you\s+|please\s+|pls\s+)?"
+                        r"(?:add|sum|total)\s+(?:it|them|that|these|those)\s*"
+                        r"(?:up|together)?\s*(?:for\s+me)?[\s?.!]*|"
+                        r"(?:whats|what's|what\s+is)\s+the\s+(?:grand\s+)?total"
+                        r"[\s?.!]*|"
+                        r"(?:sum|total)\s+it\s+up[\s?.!]*",
+                        user_text.strip(), _re.I):
+                _sum_msg = ("Sure — what would you like me to add up? I can total "
+                            "the whole warehouse (say \"total stock value\"), one "
+                            "category (\"food and drinks stock\"), or one item "
+                            "across all three warehouses (\"bluetooth earphones "
+                            "stock\").")
+                log.info(f"[sum-ask] {user_text!r} → 反問要加總什麼")
+                for ch in _sum_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _sum_msg,
+                    "data": {"question": _sum_msg, "options": [], "hint": ""}}})
+                continue
             #   ①-a 等待語（en-r20 2026-08-07）：訪客邊想邊講「hold on a sec」，
             #     既不是查詢也不是搗蛋。先前 rejected（等於催客人走），
             #     放行後若沒人接又會掉全店概覽（60 項清單當回應更怪）。
@@ -14644,6 +14710,67 @@ async def ws_handler(ws: WebSocket):
             # ── intent_clf 命中時也走到這裡（跟 LLM 分支匯流，同一縮排層繼續
             #   下面共用的 Pre-C 規則 / 校正流程，維持跟 HTTP 版一致的行為）──
             if True:
+                # ── Pre-C-B20（en-r20 B 類，2026-08-07）─────────────────────
+                #   這幾句先前守門員零命中被 rejected，但它們**是合法查詢**。
+                #   A 類只做到「放行不再婉拒」，這裡才是接到答案。
+                #   接既有工具、不新寫業務邏輯（list_low_stock 內部已照
+                #   days_left 排序，第 1 筆就是最急的，不必另寫排序）。
+                #   ⚠️ 一律 fullmatch + 無商品名護欄：帶商品名的走既有查詢線
+                #     （'add up the earphones' 該查那顆商品，不是全店加總）。
+                _b20_routed = False     # 本層親自定案 → 豁免下游意圖閘門
+                _b20_ok = _is_mostly_english(user_text)
+                if _b20_ok:
+                    try:
+                        import warehouse as _W_b20
+                        _b20_mm = _W_b20.match_items(user_text)
+                        if _b20_mm and _b20_mm[0].get("score", 0) >= 6:
+                            _b20_ok = False
+                    except Exception:
+                        pass
+                _b20_t = user_text.strip()
+                if _b20_ok and _re.fullmatch(
+                        r"(?:so\s+)?(?:which|what)(?:\s+one)?\s*(?:is|are|'s)?\s*"
+                        r"(?:the\s+)?most\s+(?:urgent|critical|pressing)"
+                        r"(?:\s+(?:one|item|items|thing))?[\s?.!]*|"
+                        r"(?:whats|what's|what\s+is)\s+(?:the\s+)?"
+                        r"(?:most\s+urgent|worst)[\s?.!]*|"
+                        r"(?:which|what)\s+needs?\s+attention(?:\s+first)?[\s?.!]*|"
+                        r"(?:whats|what's)\s+(?:the\s+)?biggest\s+problem[\s?.!]*",
+                        _b20_t, _re.I):
+                    func_name, func_args = "list_low_stock", {}
+                    _b20_routed = True
+                    log.info("[Pre-C-B20] 最急 → list_low_stock（內部已按撐天排序）")
+                elif _b20_ok and _re.fullmatch(
+                        r"(?:any\s+)?(?:recent|latest|any)\s+"
+                        r"(?:activity|movements?)[\s?.!]*|"
+                        r"(?:any\s+)?(?:deliveries|delivery)\s*"
+                        r"(?:lately|recently|today|this\s+week)?[\s?.!]*|"
+                        r"(?:has\s+)?anything\s+(?:arrived?|come\s+in|came\s+in)"
+                        r"(?:\s+(?:lately|recently|today|yet))?[\s?.!]*|"
+                        r"what\s+came\s+in(?:\s+(?:lately|recently|today))?[\s?.!]*",
+                        _b20_t, _re.I):
+                    _p_b20 = _period_from_en(user_text) or "this_week"
+                    _d_b20 = ("in" if _re.search(
+                        r"\b(?:deliveries|delivery|arrived?|came\s+in|"
+                        r"come\s+in|received)\b", user_text, _re.I) else "both")
+                    func_name = "query_movement"
+                    func_args = {"period": _p_b20, "direction": _d_b20}
+                    _b20_routed = True
+                    log.info(f"[Pre-C-B20] 最近動靜 → query_movement "
+                             f"period={_p_b20} direction={_d_b20}")
+                elif _b20_ok and _re.fullmatch(
+                        r"(?:for\s+|about\s+|show\s+me\s+)?"
+                        r"(?:today|todays|today's|yesterday|yesterdays|"
+                        r"yesterday's)[\s?.!]*",
+                        _b20_t, _re.I):
+                    # 裸時間詞：訪客講一個時間詞就是要看「那天發生什麼事」。
+                    # ⚠️ 只收 today/yesterday；this week/this month 讓給既有
+                    #   期間統計線（它們本來就答得出來，收進來反而搶路由）。
+                    _p_b20 = _period_from_en(user_text) or "today"
+                    func_name = "query_movement"
+                    func_args = {"period": _p_b20, "direction": "both"}
+                    _b20_routed = True
+                    log.info(f"[Pre-C-B20] 裸時間詞 → query_movement period={_p_b20}")
                 # ── Pre-C-Schedule：定時排程意圖攔截 ──
                 _list_alert_kws = ("查看警示", "查警示", "有哪些警示", "目前警示", "現在警示")
                 _list_sched_kws = ("查看排程", "查排程", "看排程", "有哪些排程", "排程列表", "目前排程",
@@ -15082,6 +15209,16 @@ async def ws_handler(ws: WebSocket):
                 #   餵給 OOV 找不到商品會誤判成查詢失敗，task_plan 也會顯示錯的步驟，
                 #   see HTTP 版 api_query 的同一個順序，2026-07-02 修 WS/HTTP 不同步）──
                 func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
+                # ⚠️ 坑 4（en-r20 2026-08-07）：Pre-C-B20 的定案要標 _hard，
+                #   否則下游 C18 會拿 clf 的單句高信心蓋回去。實測：
+                #     [Pre-C-B20] 裸時間詞 → query_movement period=yesterday
+                #     [C18] clf=query_inventory(1.00) vs model=query_movement → 校正
+                #   訪客問「昨天」收到 60 項全店概覽。clf 看的是單句、不懂
+                #   「裸時間詞＝問那天發生什麼事」，B20 的 fullmatch 判準更可信。
+                #   ⚠️ 這行必須在 _correct_function_call 之後——它會重新賦值
+                #     _hard，寫在前面會被抹掉（第一次就是這樣漏掉的）。
+                if _b20_routed:
+                    _hard = True
 
                 # ── 長度閘門收尾（r30）：長句只走確定性層，若整條校正鏈都沒接手
                 #   （佔位 query_inventory 原樣出來）→ 優雅引導，不硬答 ──
@@ -15215,6 +15352,52 @@ async def ws_handler(ws: WebSocket):
                             and not _kw_partial:
                         log.info(f"[anti-hallu] keyword={_kw_h!r} 不在原句 → 丟棄")
                         func_args.pop("keyword", None)
+                        # ── en-r20（2026-08-07）：丟棄後**商品變空**的寫入句
+                        #   → 現況回生硬的 error（'Please tell me which item
+                        #   to update'），訪客不知道自己哪裡講錯。
+                        #   實測 'south shipped 3 packs of coffee'：剝掉量詞後
+                        #   殘詞 'coffee' 同分撞三個商品（Automatic Coffee
+                        #   Machine / Pour-over Coffee Set / Classic Black
+                        #   Coffee Beans 各 11 分）——這是**真歧義**，硬選一個
+                        #   開出貨卡會寫錯庫存（user 定調：不確定不猜，反問）。
+                        #   ⇒ 列出候選讓訪客指名。
+                        if (_is_mostly_english(user_text)
+                                and func_name in ("create_movement", "create_transfer")):
+                            try:
+                                _amb = _re.sub(
+                                    r"\b(?:packs?|packets?|bags?|cartons?|cases?|"
+                                    r"bottles?|cans?|rolls?|sets?|pairs?|dozens?|"
+                                    r"boxes?|box|units?|pcs|pieces?|of|the|a|an|"
+                                    r"north|central|south|warehouse|wh|to|from|into|"
+                                    r"shipped|received|sent|sold|got|put|add|added|"
+                                    r"took|taken|remove[d]?|out|in)\b|\b[0-9]+\b",
+                                    " ", user_text, flags=_re.I)
+                                _amb = _re.sub(r"\s+", " ", _amb).strip(" ?.!,")
+                                if _amb:
+                                    import warehouse as _W_amb
+                                    _m_amb = _W_amb.match_items(_amb)
+                                    _top = [x for x in (_m_amb or [])
+                                            if x.get("score", 0) >= 6][:4]
+                                    if len(_top) >= 2:
+                                        _names = [x["item"]["name"] for x in _top]
+                                        _amb_msg = (
+                                            f"Which \"{_amb}\" do you mean? I found "
+                                            f"{len(_top)} that match — tell me which "
+                                            f"one and I'll record the movement.")
+                                        log.info(f"[amb-write] {_amb!r} 同分撞 "
+                                                 f"{len(_top)} 個商品 → clarify 反問")
+                                        for ch in _amb_msg:
+                                            await send({"type": "token", "text": ch})
+                                            await asyncio.sleep(_TK_DELAY.get())
+                                        await send({"type": "done", "result": {
+                                            "ok": True, "view": "clarify",
+                                            "summary": _amb_msg,
+                                            "data": {"question": _amb_msg,
+                                                     "options": _names,
+                                                     "hint": "Tap the item you meant"}}})
+                                        continue
+                            except Exception as _e_amb:
+                                log.info(f"[amb-write] 略過（{_e_amb!r}）")
 
                 # ── EN build：LLM 抽的 keyword 也套英文俗稱正規化 ──
                 #   （_extract_sku_keyword 那條路已套，這裡補 LLM 直出的 keyword：
@@ -16099,8 +16282,13 @@ async def ws_handler(ws: WebSocket):
                 #   'ok back to the earphones'→search_log(0.94) 直接放行回 RCA
                 #   （舊版是被這道閘門擋下的）。改成只認
                 #   **carry-over 剛改過 func** 這一種情況。
+                # ⚠️ Pre-C-B20 的定案不受意圖閘門管（en-r20 2026-08-07）：
+                #   實測 'today' 被 B20 正確導向 query_movement{period:today}，
+                #   卻因為句中「只有時間詞、沒有進出動作詞」被閘門打成
+                #   rejected（同坑 3：修一層、下一層再擋一次）。
+                #   B20 是 fullmatch + 無商品名護欄的明確判斷，比單句詞表可信。
                 if not _tool_intent_ok(func_name, user_text) \
-                        and not _ctx_hard_followup:
+                        and not _ctx_hard_followup and not _b20_routed:
                     # reject 前先試降級救援（口語前綴害 LLM 輸出錯 function，RPI5 v21）
                     _rescue = _intent_guard_rescue(func_name, func_args, user_text)
                     if not _rescue and _re.search(r'[進出]的?貨', user_text):
