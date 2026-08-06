@@ -1001,3 +1001,26 @@ vague|stain iron stock in north
 vague|show me expelling batch rest
 vague|north received 50 wireless mounts
 vague|south shipped 22-down jacket
+guidey|are you sure
+guidey|could this be wrong
+guidey|is this fake
+guidey|can it make mistakes
+guidey|how do you know
+guidey|where does this number come from
+guidey|what is days of cover
+guidey|what is safety stock
+guidey|why is it red
+guidey|what does this mean
+guidey|who made this
+guidey|hold on a sec
+mvt|today
+mvt|yesterday
+mvt|recent activity
+mvt|any deliveries lately
+mvt|anything arrive today
+low|which is most urgent
+low|whats the biggest problem
+vague|add it up for me
+vague|south shipped 3 packs of coffee
+mv|south shipped 3 packs of coffee beans
+mv|north received 2 bags of rice crackers
