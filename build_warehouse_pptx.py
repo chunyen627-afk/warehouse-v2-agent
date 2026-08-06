@@ -1343,7 +1343,7 @@ py = Inches(4.85)
 add_text(s, MX, py - Inches(0.06), Inches(11.8), Inches(0.34),
          "實際部署管線（POST /api/asr，全程本機、無網路）", size=13, bold=True, color=TEALDK)
 pipe = ["前端錄音 + VAD\n靜音 1.2s 自動停", "ffmpeg\n轉 16k mono",
-        f"whisper-cli\n{ASR['name']} 中英共用",
+        f"whisper-cli\n{ASR['name']} · -ac 640",
         "OpenCC\n簡→繁（僅中文）", "出口正規化\n大小寫/錯字", "倉管 WS\n回答"]
 pw = Inches(1.78); ph = Inches(0.82); pgap = Inches(0.19)
 px0 = MX
@@ -1358,12 +1358,21 @@ for i, step in enumerate(pipe):
     if i < len(pipe) - 1:
         add_text(s, x + pw - Inches(0.02), py + Inches(0.5), Inches(0.22), Inches(0.5),
                  "›", font=FONT_EN, size=16, bold=True, color=GREYBB, align=PP_ALIGN.CENTER)
-# 底部部署事實條
-add_round(s, MX, Inches(6.4), Inches(11.87), Inches(0.78), fill=DARK, shadow=True)
-add_rich(s, MX + Inches(0.35), Inches(6.53), Inches(11.2), Inches(0.52),
+# 底部部署事實條（2026-08-06 加入 -ac 640 的時間管控——user 定調：要讓老闆
+#   知道速度是設計出來的，且語音長度有上限、不是無限吃）
+add_round(s, MX, Inches(6.28), Inches(11.87), Inches(0.95), fill=DARK, shadow=True)
+add_rich(s, MX + Inches(0.35), Inches(6.38), Inches(11.2), Inches(0.36),
          [[{"text": "RPi5 部署  ", "size": 12.5, "bold": True, "color": TEAL},
            {"text": f"910 MB 三顆 → {ASR['size']} 一顆（中英共用）｜VAD 零模型｜"
                     f"英文 {ASR['lat']}/句｜純 CPU、零 GPU、零雲端",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+add_rich(s, MX + Inches(0.35), Inches(6.78), Inches(11.2), Inches(0.36),
+         [[{"text": "時間管控  ", "size": 12.5, "bold": True, "color": AMBER},
+           {"text": "-ac 640 = 一次只吃 12.8 秒（預設 30 秒）",
+            "size": 11.5, "bold": True, "color": WHITE},
+           {"text": "——問句 2-3 秒，其餘都是空白運算；削掉後速度快一倍，"
+                    "同時等於替語音輸入設了長度上限。",
             "size": 11.5, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」「VAD 和 Encoder 現在怎麼做」）。"
@@ -1375,6 +1384,12 @@ set_notes(s, "★語音部署架構頁（回應「語音這塊怎麼部署」「
              "偵測到開始講話後，靜音持續 1.2 秒就自動送出，另有 15 秒硬上限（展場吵雜時 VAD 可能"
              "永遠不收尾）。好處是零模型負擔、零延遲、麥克風端就地判斷；也是訪客體感「Siri 式"
              "點一下自動結束」的來源。\n"
+             "③ **-ac 640 是速度與長度上限的關鍵**（2026-08-06 補充）：whisper 預設一次處理 "
+             "30 秒音訊（audio-ctx 1500），不足會補靜音湊滿——倉管問句只有 2-3 秒，等於九成"
+             "算力花在算空白。削到 640（12.8 秒）速度快一倍且準度不掉。**副作用正好是優點**："
+             "它同時替語音輸入設了 12.8 秒上限，訪客講再長也不會無限吃資源。實測錄音最長 "
+             "3.34 秒，12.8 秒留了近四倍餘裕；曾評估再削到 6.4 秒，但長句停頓會被截斷，"
+             "定調維持 640。中英兩版都是這個值（英文走環境變數、中文寫在命令列）。\n"
              "② **Encoder 與解碼器 → 合併成同一個模型檔**。whisper 是端到端的 encoder-decoder "
              "架構，聲學編碼與文字解碼本來就在同一份權重裡，不像 Fun-ASR 要三個檔案分開載入。"
              "所以現在只有一顆 .bin，中英兩版只差 -m 參數指到 tiny.en 還是 base。\n"
