@@ -11,7 +11,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.chart.data import CategoryChartData
-from pptx.enum.chart import XL_CHART_TYPE, XL_LABEL_POSITION
+from pptx.enum.chart import XL_CHART_TYPE, XL_LABEL_POSITION, XL_LEGEND_POSITION
 
 # ─── Theme ──────────────────────────────────────────────────
 TEAL    = RGBColor(0x00, 0xC4, 0x9A)   # 主色 mint teal
@@ -492,7 +492,7 @@ pn(s)
 
 # ─── S4b OOV 招牌能力（訪客怎麼亂打都聽得懂）★重點 ─────────────
 s = slide_blank()
-title_bar(s, "SIGNATURE · OOV 容錯", "訪客怎麼亂打，系統照樣聽懂")
+title_bar(s, "招牌能力 · 亂打也聽得懂", "訪客用簡稱、打錯字、少字多字，系統照樣答對")
 add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
          "展場訪客不會照規矩打字——錯字、注音殘字、講一半、中英夾雜、講俗稱。"
          "270M 小模型 + 多層容錯，照樣抓對商品。", size=13.5, color=GREY55)
@@ -528,7 +528,7 @@ pn(s)
 s = slide_blank()
 title_bar(s, "HOW · 多層容錯", "小模型抓不準？多層防線把它接住")
 add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
-         "270M 抽出的 keyword 常常髒、殘、錯。四層 fallback 逐層修，抓不到才反問——"
+         "小模型抓出來的商品名常常帶雜字、缺字或根本認錯。四道關卡逐層修，真的認不出才反問——"
          "絕不亂猜、絕不幻覺出錯的商品。", size=13.5, color=GREY55)
 oov_layers = [
     ("1", "雜詞剝除", "剝掉倉庫名 / 量詞 / 語氣詞 / 功能詞尾巴", "北倉的藍芽耳機還有幾個  →  藍芽耳機", NAVY),
@@ -711,7 +711,7 @@ suites = [
     ("多輪對話全枚舉", "1980 情境", "首句 + 追問，證明「記得上一個商品」", "💬"),
     ("未知商品抗性", "60+ 情境", "新增商品後查、問不存在的、撞名、亂取名", "🧩"),
     ("81 題標準集", "99%", "路由準確率基準測試", "🎯"),
-    ("OOV 口語集", "98%", "沒見過的口語 / 錯字容錯", "🗣️"),
+    ("沒見過的講法", "98%", "沒收錄過的口語、簡稱、錯字", "🗣️"),
 ]
 ICON["🧩"] = "測"
 y0 = Inches(1.6); rh = Inches(0.86); rgap = Inches(0.13)
@@ -912,30 +912,38 @@ add_text(s, _sx0, _sy0 + _sh + Inches(0.08), Inches(11.87), Inches(0.34),
 #   但那只是**一條功能線**。之後換新角度（排程專項）又抓到 4 個、實際
 #   使用回報 4 件 ⇒ 補上第六柱，讓「換角度就會再冒」這件事在圖上看得見，
 #   老闆才不會誤以為已結案。
+# 2026-08-06 user 校正：原本只畫英文互動五輪的破口數，看不出「900+ 守衛句
+#   怎麼累積的」。改成**守衛庫成長折線**（中英雙線，20+ 輪），資料點多用
+#   折線才擠得下；每個轉折都是一輪「測 → 修 → 補句」。
 _cd = CategoryChartData()
-_cd.categories = ["第一輪", "第二輪", "第三輪", "第四輪", "第五輪", "換角度\n(排程專項)"]
-_cd.add_series("每輪新抓到的問題數", (38, 31, 19, 9, 3, 4))
-_gc = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, MX, Inches(4.42),
+_cd.categories = ["起步", "r30", "r45", "r55", "r60", "r65", "r70",
+                  "r75", "r81", "8/6 補課"]
+_cd.add_series("中文守衛庫", (138, 352, 918, 989, 1025, 1039, 1050,
+                          1075, 1122, 1149))
+_cd.add_series("英文守衛庫", (None, None, None, 651, 873, 887, 892,
+                          892, 892, 938))
+_gc = s.shapes.add_chart(XL_CHART_TYPE.LINE_MARKERS, MX, Inches(4.42),
                          Inches(5.9), Inches(2.1), _cd).chart
-_gc.has_legend = False
+_gc.has_legend = True
+_gc.legend.position = XL_LEGEND_POSITION.TOP
+_gc.legend.include_in_layout = False
+_gc.legend.font.size = Pt(10)
+_gc.legend.font.name = FONT_ZH
 _gc.has_title = True
-_gc.chart_title.text_frame.text = "破口收斂軌跡：換新角度仍會再冒"
+_gc.chart_title.text_frame.text = "守衛庫累積：每輪測完把破口存成守衛句"
 for _r in _gc.chart_title.text_frame.paragraphs[0].runs:
-    _r.font.size = Pt(12.5); _r.font.name = FONT_ZH; _r.font.bold = True; _r.font.color.rgb = DARK
-_pl = _gc.plots[0]
-_pl.has_data_labels = True
-_pl.data_labels.font.size = Pt(12)
-_pl.data_labels.font.name = FONT_EN
-_pl.data_labels.number_format = "0"
-_pl.data_labels.number_format_is_linked = False
-_pl.data_labels.position = XL_LABEL_POSITION.OUTSIDE_END
-_pl.series[0].format.fill.solid()
-_pl.series[0].format.fill.fore_color.rgb = TEAL
-_gc.category_axis.tick_labels.font.size = Pt(11)
+    _r.font.size = Pt(12); _r.font.name = FONT_ZH; _r.font.bold = True; _r.font.color.rgb = DARK
+for _si, _col in enumerate((TEAL, NAVY)):
+    _ser = _gc.plots[0].series[_si]
+    _ser.format.line.color.rgb = _col
+    _ser.format.line.width = Pt(2.25)
+    _ser.smooth = False
+_gc.category_axis.tick_labels.font.size = Pt(9.5)
 _gc.category_axis.tick_labels.font.name = FONT_ZH
-_gc.value_axis.tick_labels.font.size = Pt(10)
+_gc.value_axis.tick_labels.font.size = Pt(9.5)
 _gc.value_axis.tick_labels.font.name = FONT_EN
-_gc.value_axis.has_major_gridlines = False
+_gc.value_axis.has_major_gridlines = True
+_gc.value_axis.major_gridlines.format.line.color.rgb = GREYE6
 
 # 下半右：收斂判準卡
 add_round(s, Inches(6.95), Inches(4.42), Inches(5.65), Inches(2.1), fill=LIGHT, shadow=True)
@@ -973,35 +981,38 @@ pn(s)
 
 # ─── S11c 測過哪些角度／還剩哪些（2026-08-06 user 提問：會被追問）──────
 s = slide_blank()
-title_bar(s, "TEST COVERAGE", "「換角度」換的是什麼：已測 35+ 輪的角度盤點與剩餘缺口")
+title_bar(s, "測試涵蓋範圍", "我們從幾種角度測過、還有哪些要補")
 add_text(s, MX, Inches(1.32), Inches(11.8), Inches(0.4),
-         "每輪刻意換一種「訪客會怎麼講話」的角度，而不是同一批句子重跑。"
-         "下表是已覆蓋的角度、以及展前還要補的三塊。",
+         "每一輪都刻意換一種「訪客可能怎麼講話」來測，而不是拿同一批句子重跑。"
+         "左邊是已經測過的，右邊是下週要補的。",
          size=13, color=GREY55)
 
 _cov = [
-    ("訪客講話方式", "口語簡稱、模糊描述、禮貌繞圈、一句多意圖、代稱追問", True),
-    ("輸入型態", "打字錯字、注音殘留、黏字漏空格、大小寫、標點缺失", True),
-    ("對話結構", "多輪劇情、上下文接續、反悔改單、中途插話、確認代按", True),
-    ("業務語境", "營運詞彙（滯銷/呆料/撐天）、期間表達、跨倉比較、排除語境", True),
-    ("邊界與異常", "查無商品、數量為零/負、超量調撥、不支援期間、重複排程", True),
-    ("搗蛋與離題", "閒聊、辱罵、注入攻擊（drop all tables）、問系統身世", True),
-    ("語音輸入", "ASR 錯字型態、同音字、四種腔調 TTS、三層噪音", True),
-    ("功能面全覆蓋", "七大查詢 × 三類 Agent 工具 × 排程/警示全生命週期", True),
-    ("短句全枚舉", "1-4 字的所有合理組合（把「多輪」變成可數空間）", True),
+    ("怎麼問", "用簡稱、講不清楚、客氣繞圈子、一句話問兩件事", True),
+    ("打字習慣", "打錯字、注音沒選字、字黏在一起、忘記空格與標點", True),
+    ("連續對話", "問一句接一句、講「那個」代替商品名、講到一半反悔改數量、"
+                "用講的代替按按鈕", True),
+    ("生意上的說法", "賣不動、快沒貨、還能撐幾天、這個月跟上個月比、"
+                    "「除了食品以外」這種反過來講的", True),
+    ("問到系統做不到的", "商品不存在、數量填 0 或負數、調貨超過庫存、"
+                       "問還沒有資料的期間", True),
+    ("亂問與搗蛋", "閒聊、罵人、想騙系統刪資料、問「你是誰做的」", True),
+    ("用講的（語音）", "口音不同、聽成同音字、四種腔調、三種背景吵雜度", True),
+    ("每個功能都測", "七種查詢 × 進出貨/調撥/採購 × 排程與警示的建立到刪除", True),
+    ("短句全部窮舉", "把 1-4 個字的所有可能組合都試過一遍", True),
 ]
 _gap = [
-    ("① 真人語音批 · 100 句", "新麥克風到貨後重錄；重點打「換人、換口音」的新錯法",
-     "麥克風到貨當天"),
-    ("② 展場情境批 · 100 句", "站著問的短促語氣、被打斷重問、旁人插話、邊看螢幕邊改口",
+    ("① 真人念 100 句", "換人、換麥克風念一次——不同的人講話會有不同的聽錯法",
+     "新麥克風到貨當天"),
+    ("② 展場情境 100 句", "站著問話比較短促、會被旁人打斷、邊看螢幕邊改口",
      "下週一～二"),
-    ("③ 併發壓力批 · 5 路 ×20", "排隊輪流講話、麥克風連續佔用、同時送出的搶鎖情境",
+    ("③ 多人同時用", "排隊輪流講話、麥克風被一直佔著、好幾個人同時送出",
      "下週三"),
 ]
 _y = Inches(1.86)
 add_round(s, MX, _y, Inches(7.15), Inches(4.42), fill=LIGHT, shadow=True)
 add_text(s, MX + Inches(0.26), _y + Inches(0.14), Inches(6.6), Inches(0.34),
-         "✅ 已覆蓋的角度（35+ 輪累積）", size=13.5, bold=True, color=TEALDK)
+         "✅ 已經測過的（累積 35 輪以上）", size=13.5, bold=True, color=TEALDK)
 _ry = _y + Inches(0.56)
 for _nm, _dsc, _ in _cov:
     add_text(s, MX + Inches(0.26), _ry, Inches(2.35), Inches(0.3),
@@ -1938,15 +1949,17 @@ pn(s)
 
 # ─── S14f 真人 100 句最終實測 ★（2026-08-02）────────────────────
 s = slide_blank()
-title_bar(s, "VOICE · 真人 100 句實測（英文版）", "真人錄 100 句，混入賣場人潮音再測一次")
+title_bar(s, "VOICE · 真人 100 句實測（英文版）",
+          "真人錄 100 句，用電腦混入背景音測抗噪")
 add_text(s, MX, Inches(1.32), Inches(11.8), Inches(0.4),
-         "用真人錄的 100 句，分別在安靜、一般人潮、尖峰吵雜三種背景音下測試——"
-         "同一批錄音，只是把背景音混進去，沒有重錄。",
+         "用真人錄的 100 句，把賣場人潮音以不同強度混進同一批錄音再測——"
+         "沒有重錄任何一句，所以三個數字可直接比較。"
+         "（混音為電腦合成，用來看趨勢；現場麥克風實際收音待展前實地驗證。）",
          size=13, color=GREY55)
 
 tiers = [
     ("安靜環境", "80%", "沒有背景音", TEALDK),
-    ("一般人潮", "82%", "賣場人聲、腳步聲", TEAL),
+    ("一般人潮", "80%", "賣場人聲、腳步聲", TEAL),
     ("尖峰吵雜", "72%", "人潮加倍的最壞情況", GREY77),
 ]
 for i, (nm, pct, desc, col) in enumerate(tiers):
@@ -1959,9 +1972,10 @@ for i, (nm, pct, desc, col) in enumerate(tiers):
     add_text(s, x + Inches(0.25), Inches(2.99), Inches(3.3), Inches(0.38),
              desc, size=10.5, color=GREY55, line_spacing=1.15)
 
-add_text(s, MX, Inches(3.58), Inches(11.8), Inches(0.32),
-         "有背景音不但沒變差，還略好一點——展場的環境音在容忍範圍內",
-         size=13, bold=True, color=TEALDK)
+add_text(s, MX, Inches(3.58), Inches(11.8), Inches(0.34),
+         "一般人潮幾乎不影響（與安靜環境同級）；要吵到尖峰程度才明顯下降。"
+         "⚠️ 背景音是電腦混進去的，不等於現場麥克風實際收音",
+         size=12.5, bold=True, color=TEALDK)
 
 rows = [
     ("模型聽對的只有四成",
@@ -1988,20 +2002,20 @@ add_rich(s, MX + Inches(0.4), Inches(7.02), Inches(11.1), Inches(0.34),
            {"text": "代稱追問、確認落地在同一條連線下實測 100%——展場訪客走的正是這條路。",
             "size": 11.5, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "★這頁講「真人講話、有背景音」的實際表現——最貼近展場的數字。\n"
-             "測法：user 本人錄 100 句，把賣場人潮音混進同一批錄音，分三種強度測。"
-             "**沒有重錄任何一句**，變的只有背景音，所以三個數字可以直接比較。\n"
-             "① 為何有背景音反而略好（82% > 80%）：差 2 句在雜訊範圍內，"
-             "重點是「加了背景音沒有變差」——代表展場環境音在容忍範圍內。\n"
-             "② 為何「模型聽對只有四成」卻能答對八成：四成是「一個字都不能錯」的"
-             "嚴格算法，實際上每 10 個字才錯 1 個（多是藍芽/藍牙這種同音字）。"
-             "容錯層自動修掉這些，答對率就上到八成。\n"
-             "③ 救不回的怎麼辦：系統會反問「請再說一次」，不會硬猜。"
-             "展場上訪客對「我聽不懂」的容忍度，遠高於「自信地答錯」。\n"
-             "★ 若被問母語者會不會更高：**不敢保證**——我們只測過台灣腔真人與合成音，"
-             "而合成音已證實會高估。母語者從未實測，這是誠實的空白。\n"
-             "★ 若被問這數字可信嗎：這批是 2026-08-06 重跑的，不做任何人工放寬"
-             "（先前版本曾把幾句「測法造成的假失敗」複判成通過，這次一律不做）。")
+set_notes(s, "★這頁講「真人講話、有背景音」的抗噪表現。\n"
+             "測法：user 本人錄 100 句，再用電腦把賣場人潮音以不同強度混進**同一批**"
+             "錄音。沒有重錄任何一句，所以三個數字可以直接比較。\n"
+             "① 結論：一般人潮強度下與安靜環境相同（都是 80%），代表展場的環境音"
+             "在容忍範圍內；只有把噪音加到尖峰程度才看得出明顯下降（72%）。\n"
+             "② **重要限制，要主動講**：這是**電腦合成混音**，不等同現場麥克風的"
+             "實際收音。真實環境還有回音、麥克風距離、指向性、訪客音量等變因，"
+             "合成混音模擬不了。所以這組數字看的是**趨勢**（噪音到什麼程度才有影響），"
+             "不是現場保證值。現場實測排在展前場勘。\n"
+             "③ 為何「模型聽對只有四成」卻能答對八成：四成是「一個字都不能錯」的"
+             "嚴格算法，實際每 10 個字才錯 1 個（多是藍芽/藍牙這種同音字），"
+             "容錯層修掉這些就上到八成。救不回的會反問「請再說一次」，不硬猜。\n"
+             "★ 若被問母語者會不會更高：不敢保證——只測過台灣腔真人與合成音，"
+             "母語者從未實測，這是誠實的空白。")
 pn(s)
 
 
