@@ -686,11 +686,17 @@ def run_script(script_name: str = "", **_kw) -> dict:
     sc = _match_script(script_name)
     _trace(steps, "read", f"比對白名單 manifest.json → 「{script_name}」")
     if not sc:
-        avail = "、".join(s["label"] for s in _load_manifest().get("scripts", []))
+        # 2026-08-06（EN 同款）：script_name 可能是 **LLM 幻覺出的內部代號**
+        #   （EN 實測 'run_stock_check'），直接回顯＝內部識別字外洩，訪客只會
+        #   困惑「我沒打過這個字」⇒ 不回顯，只問要跑哪一個。
+        #   options 也改成從 manifest 生（原本寫死三個中文字串，manifest 改了
+        #   就不同步）。
+        _scripts = _load_manifest().get("scripts", [])
+        avail = "、".join(s["label"] for s in _scripts)
         return {"ok": True, "view": "clarify",
-                "summary": f"「{script_name}」不在可執行白名單內。可用：{avail}",
-                "data": {"question": f"「{script_name}」不在可執行白名單內，想跑哪一個？",
-                         "options": ["月底盤點", "匯出進出記錄", "產出體檢報告"], "hint": ""}}
+                "summary": f"想跑哪一個？可執行的有：{avail}",
+                "data": {"question": "想跑哪一個腳本？",
+                         "options": [s["label"] for s in _scripts], "hint": ""}}
 
     # 安全護欄：只回「待確認」，不直接 subprocess（執行交給 server confirm 後）
     _trace(steps, "confirm", f"命中白名單腳本：{sc['label']}（逾時上限 {sc['timeout_s']}s）")

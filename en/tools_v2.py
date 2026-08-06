@@ -779,11 +779,13 @@ def run_script(script_name: str = "", **_kw) -> dict:
     if not sc:
         _scripts = _load_manifest().get("scripts", [])
         avail = ", ".join(s["label"] for s in _scripts)
+        # 2026-08-06 排程百句：訪客打錯字（'run a stock cout evry day at 8am'）
+        #   時 script_name 是 **LLM 幻覺出的內部代號**（實測 'run_stock_check'），
+        #   直接回顯 = 內部識別字外洩，訪客只會困惑「我沒打過這個字」。
+        #   ⇒ 不回顯內部字串，只問要跑哪一個（ZH 同款作法）。
         return {"ok": True, "view": "clarify",
-                "summary": f'"{script_name}" is not on the whitelist. '
-                           f'Available: {avail}',
-                "data": {"question": f'"{script_name}" is not on the whitelist. '
-                                     'Which one do you want to run?',
+                "summary": f'Which one would you like to run? Available: {avail}',
+                "data": {"question": 'Which script would you like to run?',
                          # options 送回後端當查詢字串 → 直接用 manifest 的
                          #   label（已英文化），不能寫死中文
                          "options": [f"run {s['label']}" for s in _scripts],
