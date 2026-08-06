@@ -340,7 +340,34 @@ def is_meaningful_input(text: str) -> bool:
             "is this real data", "how does this demo",
             # r18 #28：超禮貌開頭（would it be possible to see the movement
             #   log 曾被守門拒）——後面接什麼都是合理提問
-            "would it be possible", "is it possible to")):
+            "would it be possible", "is it possible to",
+            # ── en-r20 移植中文（2026-08-07）：展場自介家族 ─────────────
+            #   訪客站到機器前的**第一句**，實測整類 rejected（開場就冷場）。
+            #   ⚠️ 一律片語：裸 who/made/mean 會撞合法查詢
+            #     ('who' ⊂ 'whole', 'made' ⊂ 'made in china' 商品描述)
+            "who made this", "who made you", "who built this",
+            "who built you", "who created this", "who developed this",
+            "what does this mean", "what do these mean",
+            "what's this mean", "whats this mean",
+            "where does this number come from",
+            "where do these numbers come from",
+            "why is it red", "why are they red", "why is this red",
+            # 信任類：訪客質疑數字準不準——被 rejected 像在迴避，
+            #   放行後由下方 trust-qa 誠實說明數字怎麼算的
+            "are you sure", "you sure", "could this be wrong",
+            "can this be wrong", "might this be wrong",
+            "is this fake", "is this real", "is this accurate",
+            "can it make mistakes", "can you make mistakes",
+            "do you make mistakes", "how do you know",
+            "how accurate", "how reliable",
+            # 名詞解釋：卡片上出現的詞就該解釋得出來
+            "what is days of cover", "what is safety stock",
+            "what is low stock", "what does red mean",
+            # 等待語：訪客邊講邊想（'hold on a sec'），不是搗蛋也不是查詢，
+            #   被婉拒等於催客人走。放行後走下方 wait-ack 短回應
+            "hold on", "hang on", "give me a sec", "give me a second",
+            "wait a sec", "wait a moment", "one sec", "one moment",
+            "just a sec", "just a moment", "let me think")):
         return True
     # ── 產出類意圖放行（2026-08-04，意圖測試抓到）───────────────────
     #   訪客要的正是報告/採購單/進出紀錄,卻在守門員就被擋掉：
@@ -11452,6 +11479,195 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {
                     "ok": True, "view": "guide", "summary": _lq_msg, "data": {}}})
                 continue
+            #   ①-a 等待語（en-r20 2026-08-07）：訪客邊想邊講「hold on a sec」，
+            #     既不是查詢也不是搗蛋。先前 rejected（等於催客人走），
+            #     放行後若沒人接又會掉全店概覽（60 項清單當回應更怪）。
+            #     ⇒ 短短應一聲就好，把場子留給訪客。
+            #     ⚠️ 用 fullmatch：'hold on to the receipt' 這類有後續受詞的
+            #       句子不該被當等待語吃掉。
+            if _is_mostly_english(user_text) and _re.fullmatch(
+                    r"(?:ok(?:ay)?[,\s]*)?"
+                    r"(?:hold\s+on|hang\s+on|wait|hold\s+up|"
+                    r"(?:just\s+)?(?:give\s+me\s+)?(?:a|one)\s+(?:sec|second|moment|min|minute)|"
+                    r"(?:just\s+)?a\s+(?:sec|second|moment)|"
+                    r"let\s+me\s+think|thinking|um+|uh+|hmm+)"
+                    r"(?:\s+(?:a\s+)?(?:sec|second|moment|min|minute))?"
+                    r"[\s,.!?~]*", user_text.strip(), _re.I):
+                _wa_msg = ("Sure — take your time. I'm here whenever you're ready.")
+                log.info(f"[wait-ack] {user_text!r} → 等待語短回應")
+                for ch in _wa_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _wa_msg, "data": {}}})
+                continue
+            #   ①-a2 問「誰做的」（en-r20 2026-08-07）：展場訪客很常問這個，
+            #     先前 rejected。誠實回答這是什麼、跑在哪，不吹噓不亂掰。
+            if _is_mostly_english(user_text) and _re.search(
+                    r"\bwho\s+(?:made|built|created|developed|wrote|designed)\s+"
+                    r"(?:this|it|you|the\s+(?:demo|system))\b|"
+                    r"\bwho(?:'s|\s+is)\s+behind\s+(?:this|it)\b",
+                    user_text, _re.I):
+                _wm_msg = ("This is a warehouse assistant demo — a small language "
+                           "model (270M parameters) fine-tuned for warehouse "
+                           "questions, running entirely on the Raspberry Pi in "
+                           "front of you, with no cloud connection. It works out "
+                           "what you're asking; the stock figures themselves come "
+                           "from the warehouse database. Ask me anything about the "
+                           "stock — try \"what's running low\".")
+                log.info(f"[who-qa] {user_text!r} → 自介")
+                for ch in _wm_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _wm_msg, "data": {}}})
+                continue
+            #   ①-b 信任類問句（en-r20 移植中文 2026-08-07）：訪客站在機器前
+            #     很自然會質疑 'are you sure' / 'could this be wrong' /
+            #     'is this fake' / 'can it make mistakes'，先前全被守門員
+            #     rejected（回「這是倉管 demo」＝答非所問，像在迴避質疑）。
+            #     ⇒ 誠實說明數字怎麼來的：不是模型生成，是查資料庫算出來的。
+            #     ⚠️ 不可套在有商品名的句子上（'are you sure about the earphones'
+            #       該走查詢）——沿用 live-qa 同款 match_items score≥6 護欄。
+            _tq_en = _re.search(
+                r"^\s*(?:are|r)\s+(?:you|u)\s+sure\b|"
+                r"^\s*(?:you\s+)?sure\s*\?*\s*$|"
+                r"\b(?:could|might|can)\s+(?:this|that|it|these)\s+be\s+wrong\b|"
+                # ⚠️ 誤傷檢查（鐵則 6）：'is this real data' 原本由上面的 live-qa
+                #   接（回 Live 模式說明，是對的）——這裡不可把 real data 收走。
+                #   ⇒ real/fake 後面接 data 的交給 live-qa，其餘才進 trust-qa。
+                r"\bis\s+(?:this|that|it)\s+(?:fake|made\s*up|real|accurate|correct)"
+                r"(?!\s+(?:data|time))\b|"
+                r"\b(?:can|could|do)\s+(?:it|you)\s+(?:ever\s+)?(?:make|get)\s+"
+                r"(?:mistakes?|it\s+wrong)\b|"
+                r"\b(?:how\s+)?(?:do|would)\s+(?:you|i)\s+know\b|"
+                r"\bhow\s+(?:accurate|reliable|trustworthy)\b|"
+                r"\b(?:is|are)\s+(?:this|these|the\s+numbers?)\s+(?:right|reliable|trustworthy)\b|"
+                r"\bwhere\s+(?:does|do)\s+(?:this|that|the)\s+"
+                r"(?:number|numbers|figure|data|value)s?\s+come\s+from\b|"
+                r"\bare\s+you\s+(?:making|guessing)\b|"
+                r"\bdid\s+you\s+(?:make|guess)\s+(?:that|this|it)\s+up\b",
+                user_text, _re.I)
+            _tq_has_item = False
+            if _tq_en:
+                try:
+                    import warehouse as _W_tq
+                    _tq_m = _W_tq.match_items(user_text)
+                    _tq_has_item = bool(_tq_m and _tq_m[0].get("score", 0) >= 6)
+                except Exception:
+                    _tq_has_item = False
+            if _tq_en and _is_mostly_english(user_text) and not _tq_has_item:
+                _tq_msg = ("The numbers aren't \"generated\" by the model — every "
+                           "one is read straight from the warehouse database and "
+                           "computed with a fixed formula (for example, days of "
+                           "cover = current stock ÷ recent average daily shipments). "
+                           "The model only works out what you're asking; the lookups "
+                           "and the arithmetic are done in code, so asking the same "
+                           "question twice always gives the same answer. Every stock "
+                           "change is logged too — say \"movements\" to see the detail.")
+                log.info(f"[trust-qa] {user_text!r} → 資料來源說明")
+                for ch in _tq_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _tq_msg, "data": {}}})
+                continue
+            #   ①-c 名詞解釋（en-r20 移植中文 2026-08-07）：訪客指著卡片問
+            #     'what is days of cover' / 'why is it red' / 'what does this
+            #     mean'——先前掉到 60 項全店概覽或 config 清單（答非所問）。
+            #     卡片上出現的詞就該解釋得出來。
+            _term_map_en = [
+                (r"\bdays?\s+of\s+cover\b|\bdays?\s+left\b|\bcover\s+days?\b",
+                 "\"Days of cover\" = how many days the current stock will last at "
+                 "the recent shipping rate. It's current stock ÷ recent average "
+                 "daily shipments. Under 7 days turns red so you know to reorder."),
+                (r"\bsafety\s+stock\b",
+                 "\"Safety stock\" = the minimum quantity that should stay in the "
+                 "warehouse. Below that line there's a risk of running out, so the "
+                 "item shows up in low-stock alerts. It can be set per item, and "
+                 "overridden per warehouse."),
+                (r"\bsuggested\s+(?:qty|quantity|reorder|restock)\b|"
+                 r"\bhow\s+much\s+to\s+(?:order|reorder|restock)\b|\breorder\s+qty\b",
+                 "\"Suggested qty\" = how much to reorder this time — enough to bring "
+                 "stock back to the safety level, plus what's expected to sell during "
+                 "the lead time."),
+                (r"\bnet\s+change\b|\bnet\s+movement\b",
+                 "\"Net change\" = received minus shipped over the period. Positive "
+                 "means stock grew, negative means it's being drawn down."),
+                # ⚠️ 誤傷檢查（鐵則 6）：裸 \bexpiring\b 撞掉守衛 4 句合法查詢
+                #   （'whats expiring soon' / 'whats expiring at north'）——
+                #   那是要**看清單**不是要解釋名詞。收窄成「明講要解釋」的問法。
+                (r"\bexpiry\s+alerts?\b|\bshelf\s+life\b|"
+                 r"\bwhat\s+(?:is|are)\s+(?:the\s+)?expiry\s+alerts?\b",
+                 "\"Expiry alerts\" = batches approaching their expiry date. Red "
+                 "within 7 days, orange within 14, yellow within 30 — so you can "
+                 "clear them before they're written off."),
+                (r"\b(?:why\s+)?(?:is|are)\s+(?:it|this|that|they|these)\s+red\b|"
+                 r"\bred\b.{0,12}\bmean\b|\bwhat\s+does\s+red\b",
+                 "Red means urgent: either days of cover is under 7 (about to run "
+                 "out) or a batch expires within 7 days. Orange is the next tier — "
+                 "under 14 days — and yellow is a 30-day heads-up."),
+                (r"\blow\s+stock\b.{0,10}\bmean\b|\bwhat\s+is\s+low\s+stock\b",
+                 "\"Low stock\" = the item has fallen below its safety stock level, "
+                 "so it's flagged for reordering before it runs out."),
+            ]
+            # ⚠️ 誤傷檢查（鐵則 6）擋下的兩類，護欄不可拿掉：
+            #   ① 'whats the mouse safety stock' —— 帶**商品名**是查那顆商品的
+            #     設定值（config_read），不是要名詞解釋。守衛語料 16 句在這。
+            #   ② 'whats the safety stock for north' —— 帶**倉別**同理。
+            #   ⇒ 句中有真商品名或倉別 → 一律讓路給既有查詢線。
+            _tm_has_item = False
+            if _is_mostly_english(user_text):
+                try:
+                    import warehouse as _W_tm
+                    _tm_mm = _W_tm.match_items(user_text)
+                    _tm_has_item = bool(_tm_mm and _tm_mm[0].get("score", 0) >= 6)
+                except Exception:
+                    _tm_has_item = False
+            _tm_has_wh = bool(_re.search(
+                r"\b(?:north|central|south)\b|\ball\s+warehouses?\b", user_text, _re.I))
+            # ⚠️ match_items 分數不足以擋住全部（實測 'cooking pan' 只有 score=3，
+            #   而 'are you sure' 也是 3 —— 降門檻會反過來讓 trust-qa 失效）。
+            #   ⇒ 改認**句型**：名詞前面有冠詞/所有格 = 在問「某個東西的設定值」，
+            #     'whats THE cooking pan safety stock' vs 'what is safety stock'。
+            #     這是結構性判準，不必逐個商品枚舉。
+            if _re.search(r"\b(?:what(?:'?s|\s+is|\s+are))\s+the\s+.+?\s+"
+                          r"(?:safety\s+stock|days?\s+of\s+cover|reorder\s+point)\b|"
+                          r"\b(?:safety\s+stock|days?\s+of\s+cover)\s+(?:for|of)\s+\w+",
+                          user_text, _re.I):
+                _tm_has_item = True
+            if _is_mostly_english(user_text) and not _tm_has_item and not _tm_has_wh \
+                    and _re.search(
+                    r"\bwhat\s+(?:is|are|does|do)\b|\bwhat's\b|\bwhats\b|"
+                    r"\bwhat\s+d(?:oes|o)\s+(?:this|that|it|they)\s+mean\b|"
+                    r"\bmeaning\s+of\b|\bwhy\s+is\s+it\b|\bwhy\s+are\s+they\b|"
+                    r"\bhow\s+(?:is|are)\s+(?:it|this|that|they)\s+(?:calculated|computed|worked\s+out)\b|"
+                    r"\bhow\s+do\s+you\s+(?:calculate|compute|work\s+(?:it|that)\s+out)\b|"
+                    r"\bwhere\s+does\s+(?:it|this|that)\s+come\s+from\b",
+                    user_text, _re.I):
+                _tm_hit_en = next((_msg for _pat, _msg in _term_map_en
+                                   if _re.search(_pat, user_text, _re.I)), None)
+                # 'what does this mean' 沒帶名詞——指的是**畫面上這張卡**。
+                #   沒有 last_view 就給通用解讀指引，不硬猜某個名詞。
+                if not _tm_hit_en and _re.search(
+                        r"\bwhat\s+d(?:oes|o)\s+(?:this|that|it|these|they)\s+mean\b|"
+                        r"\bwhat's\s+(?:this|that)\s+mean\b|\bmeaning\s+of\s+(?:this|that)\b",
+                        user_text, _re.I):
+                    _tm_hit_en = (
+                        "Happy to explain — which part? On a stock card, \"days of "
+                        "cover\" is how long the stock lasts at the current shipping "
+                        "rate, \"safety stock\" is the minimum you should keep, and "
+                        "red means it needs attention within 7 days. Tell me the "
+                        "word you're looking at (for example \"what is days of "
+                        "cover\") and I'll explain that one.")
+                if _tm_hit_en:
+                    log.info(f"[term-qa] {user_text!r} → 名詞解釋")
+                    for ch in _tm_hit_en:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "guide", "summary": _tm_hit_en, "data": {}}})
+                    continue
             #   ② 產出完成後的追問（180 秒窗口防陳舊 context）
             _pex = _export_done_by_vid.get(vid)
             if _pex and __import__("time").time() - _pex[1] < 180:
