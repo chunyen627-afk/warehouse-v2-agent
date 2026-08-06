@@ -2320,8 +2320,18 @@ def commit_reset_demo_data(password: str = "", actor: str = "user_confirmed",
     if not baseline.exists():
         return W._err("找不到基準快照 warehouse_data_baseline/，無法重置")
 
-    shutil.rmtree(current)
-    shutil.copytree(baseline, current)
+    # 🚨 2026-08-06：rmtree 裸奔曾在「模擬/腳本寫檔中」撞
+    #   Directory not empty → **半刪災難**（master/ 只剩 stock.csv、
+    #   服務重啟即掛，實案）。改雙 tmp 原子交換：先把新資料建好、
+    #   rename 換入——目錄 rename 不受內部檔案被佔用影響。
+    _tmp_new = root / "warehouse_data_new_tmp"
+    _tmp_old = root / "warehouse_data_old_tmp"
+    shutil.rmtree(_tmp_new, ignore_errors=True)
+    shutil.rmtree(_tmp_old, ignore_errors=True)
+    shutil.copytree(baseline, _tmp_new)
+    current.rename(_tmp_old)
+    _tmp_new.rename(current)
+    shutil.rmtree(_tmp_old, ignore_errors=True)
 
     # 重新載入 State（跟開機 init() 用同一份 seed_path）
     W.reset()

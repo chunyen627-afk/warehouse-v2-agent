@@ -5571,11 +5571,16 @@ async def _run_due_schedules():
                 continue
             # 執行腳本
             log.info(f"[scheduler] 排程 {job['id']} 觸發：{job['script_label']}")
+            log.info("[scheduler] step1 push_triggered…")
             await push_display({"type": "schedule_triggered", "job_id": job["id"],
                                 "script_label": job["script_label"], "ts": now.strftime("%H:%M")})
+            log.info("[scheduler] step2 exec script…")
             result = await asyncio.get_event_loop().run_in_executor(
-                None, lambda jid=job["script_id"]: finance.execute("commit_run_script",
-                                                                   {"script_id": jid, "confirmed": True}))
+                None, lambda jid=job["script_id"]: __import__("tools_v2").commit_run_script(
+                                                                   jid, actor="scheduler"))
+            log.info(f"[scheduler] step3 exec done ok={result.get('ok')} "
+                     f"summary={result.get('summary','')[:60]!r} "
+                     f"tail={str((result.get('data') or {}).get('output_tail',''))[:200]!r}")
             # 更新 last_run
             job["last_run"] = now.isoformat(timespec="seconds")
             jobs_path.write_text(_json.dumps({"jobs": jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -5623,8 +5628,8 @@ async def _demo_run_schedule(job: dict):
                         "script_label": job.get("script_label", ""),
                         "ts": now.strftime("%H:%M")})
     result = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: finance.execute("commit_run_script",
-                                      {"script_id": job["script_id"], "confirmed": True}))
+        None, lambda: __import__("tools_v2").commit_run_script(
+                                      job["script_id"], actor="scheduler"))
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
     await push_display({"type": "schedule_done", "job_id": job.get("id", ""),
                         "script_label": job.get("script_label", ""),
@@ -5744,7 +5749,12 @@ async def push_display(payload: dict):
     dead = set()
     for ws in list(display_sockets) + list(all_sockets):
         try:
-            await ws.send_text(msg)
+            # 🚨 2026-08-06（user 抓到：9 點排程盤點連兩天靜默失敗）：
+            #   隔夜半死連線的 send_text 會**永久 pending 不 raise**——
+            #   try/except 擋不住卡住的 await ⇒ scheduler coroutine 掛死在
+            #   push(schedule_triggered)，腳本根本沒執行。白天手動測全是
+            #   活連線所以從沒踩到。per-send 3 秒上限，黑洞連線直接斷。
+            await asyncio.wait_for(ws.send_text(msg), timeout=3.0)
         except Exception:
             dead.add(ws)
     display_sockets.difference_update(dead)

@@ -2724,8 +2724,16 @@ def commit_reset_demo_data(password: str = "", actor: str = "user_confirmed",
     if not baseline.exists():
         return W._err("Baseline snapshot warehouse_data_baseline/ not found, cannot reset")
 
-    shutil.rmtree(current)
-    shutil.copytree(baseline, current)
+    # 🚨 2026-08-06（ZH 半刪災難同款修，兩版同步）：rmtree 裸奔在寫檔中會
+    #   撞 Directory not empty → 半刪。雙 tmp 原子交換。
+    _tmp_new = root / "warehouse_data_new_tmp"
+    _tmp_old = root / "warehouse_data_old_tmp"
+    shutil.rmtree(_tmp_new, ignore_errors=True)
+    shutil.rmtree(_tmp_old, ignore_errors=True)
+    shutil.copytree(baseline, _tmp_new)
+    current.rename(_tmp_old)
+    _tmp_new.rename(current)
+    shutil.rmtree(_tmp_old, ignore_errors=True)
 
     # 重新載入 State（跟開機 init() 用同一份 seed_path）
     W.reset()

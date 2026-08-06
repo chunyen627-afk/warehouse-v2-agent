@@ -8990,8 +8990,8 @@ async def _run_due_schedules():
             await push_display({"type": "schedule_triggered", "job_id": job["id"],
                                 "script_label": job["script_label"], "ts": now.strftime("%H:%M")})
             result = await asyncio.get_event_loop().run_in_executor(
-                None, lambda jid=job["script_id"]: finance.execute("commit_run_script",
-                                                                   {"script_id": jid, "confirmed": True}))
+                None, lambda jid=job["script_id"]: __import__("tools_v2").commit_run_script(
+                                                                   jid, actor="scheduler"))
             # 更新 last_run
             job["last_run"] = now.isoformat(timespec="seconds")
             jobs_path.write_text(_json.dumps({"jobs": jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -9039,8 +9039,8 @@ async def _demo_run_schedule(job: dict):
                         "script_label": job.get("script_label", ""),
                         "ts": now.strftime("%H:%M")})
     result = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: finance.execute("commit_run_script",
-                                      {"script_id": job["script_id"], "confirmed": True}))
+        None, lambda: __import__("tools_v2").commit_run_script(
+                                      job["script_id"], actor="scheduler"))
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
     await push_display({"type": "schedule_done", "job_id": job.get("id", ""),
                         "script_label": job.get("script_label", ""),
@@ -9160,7 +9160,10 @@ async def push_display(payload: dict):
     dead = set()
     for ws in list(display_sockets) + list(all_sockets):
         try:
-            await ws.send_text(msg)
+            # 🚨 2026-08-06（ZH 排程盤點連兩天卡死案，兩版同修）：隔夜半死
+            #   連線的 send_text 永久 pending 不 raise → 排程/警示推播的
+            #   coroutine 掛死。per-send 3 秒上限。
+            await asyncio.wait_for(ws.send_text(msg), timeout=3.0)
         except Exception:
             dead.add(ws)
     display_sockets.difference_update(dead)
