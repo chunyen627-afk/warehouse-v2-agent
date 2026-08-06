@@ -856,7 +856,8 @@ pn(s)
 
 # ─── S11b 自動測試迭代流程（收尾階段報告）★ 2026-08-06 ──────────
 s = slide_blank()
-title_bar(s, "AUTOMATED TESTING", "自動測試迭代：百句實測 → 修 → 回歸，重複跑到收斂")
+title_bar(s, "AUTOMATED TESTING",
+          "自動測試迭代：百句實測 → 修 → 回歸；逐條功能線收斂，換角度再測")
 
 # 上半：五步循環流程卡
 _steps = [
@@ -884,15 +885,19 @@ add_text(s, _sx0, _sy0 + _sh + Inches(0.08), Inches(11.87), Inches(0.34),
          "↺  一輪修完不算完——換一批全新句子、換一種訪客講話方式，再跑下一輪，直到連續兩輪幾乎抓不到新問題",
          size=12.5, color=TEALDK, bold=True)
 
-# 下半左：五輪破口收斂柱狀圖（原生 chart）
+# 下半左：破口收斂柱狀圖（原生 chart）
+# 2026-08-06 user 校正：原本只畫英文互動五輪（38→3）＝看起來全案收斂完，
+#   但那只是**一條功能線**。之後換新角度（排程專項）又抓到 4 個、實際
+#   使用回報 4 件 ⇒ 補上第六柱，讓「換角度就會再冒」這件事在圖上看得見，
+#   老闆才不會誤以為已結案。
 _cd = CategoryChartData()
-_cd.categories = ["第一輪", "第二輪", "第三輪", "第四輪", "第五輪"]
-_cd.add_series("每輪新抓到的問題數", (38, 31, 19, 9, 3))
+_cd.categories = ["第一輪", "第二輪", "第三輪", "第四輪", "第五輪", "換角度\n(排程專項)"]
+_cd.add_series("每輪新抓到的問題數", (38, 31, 19, 9, 3, 4))
 _gc = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, MX, Inches(4.42),
                          Inches(5.9), Inches(2.1), _cd).chart
 _gc.has_legend = False
 _gc.has_title = True
-_gc.chart_title.text_frame.text = "五輪破口收斂軌跡"
+_gc.chart_title.text_frame.text = "破口收斂軌跡：換新角度仍會再冒"
 for _r in _gc.chart_title.text_frame.paragraphs[0].runs:
     _r.font.size = Pt(12.5); _r.font.name = FONT_ZH; _r.font.bold = True; _r.font.color.rgb = DARK
 _pl = _gc.plots[0]
@@ -916,24 +921,32 @@ add_text(s, Inches(7.22), Inches(4.58), Inches(5.1), Inches(0.38),
          "收斂判準（工程標準）", size=14, bold=True, color=DARK)
 add_rich(s, Inches(7.22), Inches(5.02), Inches(5.2), Inches(0.42),
          [{"text": "連續兩輪新問題 ≤ 5 且全為優雅降級  ", "size": 12.5, "color": GREY44},
-          {"text": "→ ✅ 已達標", "size": 13.5, "bold": True, "color": TEALDK}])
-add_text(s, Inches(7.22), Inches(5.5), Inches(5.2), Inches(0.9),
-         "剩餘 3 個屬極端罕見打法（三連黏字、同音錯字撞真英文單字），\n"
-         "已列冊追蹤；每一輪修復都經全量守衛回歸，確保不踩壞舊功能。",
-         size=12, color=GREY44, line_spacing=1.3)
+          {"text": "→ 英文互動線已達標", "size": 13, "bold": True, "color": TEALDK}])
+add_text(s, Inches(7.22), Inches(5.5), Inches(5.2), Inches(0.95),
+         "但收斂是「逐條功能線」達標，不是全案結案：換新角度測（排程專項）\n"
+         "仍抓到 4 個破口，實際使用回報 4 件。⇒ 下週持續：新角度輪 + 守衛\n"
+         "庫補課（近期修復尚未全數納入回歸語料）。",
+         size=11.5, color=GREY44, line_spacing=1.28)
 
 # 底部狀態條（交付訊息）
 add_round(s, MX, Inches(6.72), Inches(11.87), Inches(0.6), fill=TEALBG)
 add_rich(s, MX + Inches(0.35), Inches(6.83), Inches(11.3), Inches(0.4),
-         [{"text": "✅ 網頁互動已收斂   ", "size": 13.5, "bold": True, "color": TEALDK},
-          {"text": "▸  收尾中：真人語音驗證＋長尾補強   ", "size": 13, "color": GREY44},
-          {"text": "▸  預計下週交付廠商", "size": 13.5, "bold": True, "color": DARK}])
+         [{"text": "收尾階段   ", "size": 13.5, "bold": True, "color": TEALDK},
+          {"text": "▸  下週續辦：新角度輪、守衛庫補課、真人語音驗證   ",
+           "size": 13, "color": GREY44},
+          {"text": "▸  展前（9/2）完成交付", "size": 13.5, "bold": True, "color": DARK}])
 set_notes(s, "這頁講測試方法論與現況。核心觀念：不是測一次就好，而是「百句實測→修→"
              "全量回歸」的循環，每輪刻意換訪客講話的角度（口語、邊界、連續對話、語音"
-             "錯字），修完一輪再跑下一輪。柱狀圖是五輪的收斂軌跡：第一輪抓到 38 個問題，"
-             "一路降到 3 個，且連續兩輪低於 5＝工程上宣告收斂。剩的 3 個是極端罕見打法，"
-             "已列冊。每輪修復都跑中文 1122＋英文 892 句全量守衛，確保修新不壞舊。"
-             "結論：目前收尾階段（真人語音驗證＋長尾），預計下週可交付廠商。")
+             "錯字），修完一輪再跑下一輪。\n"
+             "柱狀圖：英文互動線五輪從 38 個問題降到 3 個，連續兩輪低於 5 ⇒ **那條線**"
+             "達到收斂判準。但第六柱是關鍵——換一個沒測過的角度（排程專項百句）又抓到 "
+             "4 個，同期實際使用回報 4 件。\n"
+             "★ 這頁要傳達的重點不是『測完了』，而是『收斂是逐條功能線達標，換角度就會"
+             "再冒』。老闆若問「那到底何時算好」：判準是每條功能線各自連兩輪 ≤5，"
+             "加上實際使用回報趨近於零；目前英文互動線已達標，排程線剛開始測。\n"
+             "誠實揭露：近期修復尚未全數納入守衛語料（回歸庫停在 7/20 的 1122 句），"
+             "下週要補課，否則新修的功能沒有防退步保護。\n"
+             "結論：收尾階段，下週續辦新角度輪＋守衛補課＋真人語音驗證，展前（9/2）完成交付。")
 pn(s)
 
 # ─── S14a 英文版 · 為何不是翻譯（路線決策）★ ──────────────────────
