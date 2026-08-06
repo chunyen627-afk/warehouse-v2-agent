@@ -1225,14 +1225,14 @@ for i, hd in enumerate(headers):
 #   混入容錯層會變成比「模型＋工程」，模糊掉判斷依據。
 #   容錯層接手後的成品表現見「100 句最終實測」頁。
 rows = [
-    ("whisper small-q8_0", "252 MB", "壓中等（8-bit）", "2.5s",
-     "真人 39% · TTS 87%", "★ 定案採用：又快又準", True),
-    ("whisper small 全精度", "465 MB", "不壓縮", "10 秒以上", "—",
-     "× 慢一倍以上 ⇒ 壓縮是必要的", False),
-    ("whisper tiny.en", "74 MB", "英文專用", "0.94s", "WER 9.3%",
-     "英文版初選 → 升級 small", False),
-    ("whisper base", "141 MB", "多語（含中文）", "2.15s", "純模型 36%",
-     "中文版初選 → 升級 small", False),
+    ("whisper small + 量化 q8", "252 MB", "多語（中英同檔）", "2.5s",
+     "真人 39% / 合成 87%", "★ 定案：準度夠又壓得下來", True),
+    ("whisper small 未量化", "465 MB", "多語（中英同檔）", "10 秒以上",
+     "同上（量化不損準度）", "準度夠但太慢 ⇒ 量化解決", False),
+    ("whisper base", "141 MB", "多語（含中文）", "2.2s",
+     "真人明顯較差", "× 準度不足，升級 small", False),
+    ("whisper tiny.en", "74 MB", "英文專用", "0.9s",
+     "合成音好、真人差", "× 台灣腔真人辨識不堪用", False),
 ]
 ry = ty + th
 # 2026-08-06：加了 q8_0 與全精度兩列（5→6 列）。原列高 0.68 會讓表格底部
@@ -1256,35 +1256,32 @@ for r, (m, p, rt, off, cer, verd, chosen) in enumerate(rows):
              cer, size=11.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
     add_text(s, col_x[5] + Inches(0.12), y + Inches(0.04), col_w[5] - Inches(0.2), Inches(0.47),
              verd, size=11.5, bold=chosen, color=(TEALDK if chosen else GREY55), anchor=MSO_ANCHOR.MIDDLE)
-# 底部：q5 vs q8 的反直覺故事（2026-08-06 user 定調的敘事角度）
+# 底部：兩段結論（2026-08-06 user 定調敘事——不提其他量化版本，簡潔有力）
 add_round(s, MX, Inches(5.98), Inches(11.87), Inches(1.18), fill=DARK, shadow=True)
 add_rich(s, MX + Inches(0.4), Inches(6.12), Inches(11.1), Inches(0.5),
-         [[{"text": "反直覺 ①  ", "size": 13, "bold": True, "color": TEAL},
-           {"text": "壓得更小，反而更慢", "size": 13, "bold": True, "color": WHITE},
-           {"text": "——一般以為位元數越少越快。但壓縮就像真空收納：壓得太扁，"
-                    "每次取用都得先「還原」，拆封的功夫比省下的搬運還多。"
-                    "q8 壓得剛好，總時間最短（2.5s vs 4.2s）。",
+         [[{"text": "選型邏輯  ", "size": 13, "bold": True, "color": TEAL},
+           {"text": "small 夠準但太慢 → 量化壓縮 → q8_0", "size": 13, "bold": True, "color": WHITE},
+           {"text": "——小模型（tiny/base）準度不足；small 準度夠卻要 10 秒以上，"
+                    "展場站著等不了。量化把它壓到 252 MB、2.5 秒，準度幾乎不損。",
             "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 add_rich(s, MX + Inches(0.4), Inches(6.63), Inches(11.1), Inches(0.42),
-         [[{"text": "反直覺 ②  ", "size": 13, "bold": True, "color": AMBER},
-           {"text": "純模型只有 39%，為何仍可用", "size": 12.5, "bold": True, "color": WHITE},
-           {"text": "——判準是**一字不差**才算對。實際上字元正確率有 89%（每 10 字才錯 1 字），"
-                    "多為 earphones→earphone 這類小差異，正是容錯層要接手的部分。",
+         [[{"text": "為何純模型 39% 仍可用  ", "size": 13, "bold": True, "color": AMBER},
+           {"text": "判準是「一字不差」才算對", "size": 12.5, "bold": True, "color": WHITE},
+           {"text": "——實際字元正確率 89%（每 10 字才錯 1 字），多為 earphones→earphone "
+                    "這類小差異。容錯層接手後端到端 80%，那才是訪客體驗到的。",
             "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "【2026-08-06 定案：q8_0 —— 實測打敗直覺】\n"
-             "① 直覺一：位元越少應該越快 → 錯。壓最小的 q5（167MB）要 4.2 秒，"
-             "壓中等的 q8（252MB）只要 2.5 秒。白話：壓縮像真空收納，壓太扁每次取用"
-             "都得先還原，拆封的功夫比省下的搬運還多。（機轉無定論，依實測選型。）\n"
-             "② 直覺二：模型聽得越準、系統就答得越對 → 也錯。首輪 q8「整句聽對」較多，"
-             "端到端卻輸 3 分。追下去發現關鍵是**錯在哪裡**：q8 常錯在商品名"
-             "（steam iron→stain iron）那是查詢命脈；q5 錯在語助詞，無傷大雅。\n"
-             "③ 於是針對 q8 的聽錯型態補 11 條容錯規則（每條都先撞守衛 892 句、商品主檔、"
-             "以及 q5 現有正解確認零誤傷），端到端 73.7% → 78.0%，反超 q5 的 77.3%，"
-             "且保有快 40% 優勢 ⇒ 定案 q8_0。訪客體感 5.9 秒 → 4.2 秒。\n"
-             "④ 若問「為何不早點選 q8」：因為未調校時它是輸的（73.7%）——先量出弱點型態、"
-             "再補規則才變最佳解，這正是測試方法論的價值。\n\n"
+set_notes(s, "【2026-08-06 定案：small + 量化 q8_0，中英同一顆】\n"
+             "① 為何是 small：tiny.en 與 base 對**台灣腔真人**明顯不夠——tiny 在合成音"
+             "表現不錯，換真人就掉下來（選型不能只信 TTS）。small 才撐得住。\n"
+             "② 為何要量化：small 未量化 465MB、每句 10 秒以上，展場站著等不了。"
+             "量化壓到 252MB、2.5 秒，準度幾乎不損 ⇒ 用 q8_0。\n"
+             "③ 為何是多語版不是英文專用版：多語模型訓練時看過大量非母語者講的英文，"
+             "對台灣腔更寬容；英文專用版聽慣標準英美腔反而不適應。中英共用同一顆檔案，"
+             "只靠 -l 旗標切語言，不必維護兩套框架。\n"
+             "④ 純模型 39% 看起來低，是因為判準「一字不差」。字元正確率 89%，"
+             "容錯層接手後端到端 80% —— 那才是訪客體驗到的數字。\n\n"
              "★語音選型頁（技術評審向）。**這一頁 2026-07-27 全面改版**：原本用阿里的 "
              "Fun-ASR-Nano，後來定調**只用歐美模型**（供應鏈來源可控），中英兩版都換成 "
              "OpenAI whisper.cpp。換完的額外好處：中英共用同一套 runtime，不必維護兩套框架。"

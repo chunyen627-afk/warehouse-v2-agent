@@ -6785,7 +6785,12 @@ _VOICE_CLI = _VOICE_DIR / "build/bin/whisper-cli"
 #   容錯層救不動；EN 版早已驗證 small-q5_0＋ac640 配方（1.1s/句、準度大升），
 #   模型檔 175MB 兩台本就都在。倉管句 1-3 秒，-ac 640 削掉的是空白 encoder
 #   運算（whisper 預設 30 秒上下文），速度可回到 2 秒級。
-_VOICE_MODEL = _VOICE_DIR / "models/ggml-small-q5_0.bin"
+# 2026-08-06：q5_0 → q8_0，與英文版統一（真正做到「中英同一顆模型檔」）。
+#   英文端到端 A/B 實測 q8 平均 78.0% 勝 q5 的 77.3% 且**快 40%**；
+#   純模型中文表現兩者相同（28% vs 28%），故中文換過去只賺速度。
+#   改成環境變數可切（原本寫死），要退回：WAREHOUSE_ASR_MODEL=small-q5_0
+_ASR_MODEL_NAME = os.getenv("WAREHOUSE_ASR_MODEL", "small-q8_0")
+_VOICE_MODEL = _VOICE_DIR / f"models/ggml-{_ASR_MODEL_NAME}.bin"
 
 try:
     from opencc import OpenCC as _OpenCC
@@ -6836,6 +6841,20 @@ _ASR_FIX = [
     # ── 商品名同音（挑**通用**的：這些字組在正常中文幾乎不出現）─────
     (_re.compile(r"蘭亞|南亞(?=耳機)"), "藍牙"),
     (_re.compile(r"雅琳"), "啞鈴"),
+    # ── 2026-08-06 換 q8_0 後補：**它的錯法又跟 q5_0 不同**（同一教訓第三次）
+    #   實測 12 句：瑜珈墊→瑜伽店、帳篷→賬盆、臂套→筆套、滑鼠→花樹、
+    #   啞鈴→亞林、進→金/禁（動詞同音，開不出寫入卡）。
+    #   ⚠️ 全部撞過守衛 1149 句＋商品主檔 60 項：零命中才收。
+    #   ⚠️ 「藍芽」「衛生只」**刻意不收**——守衛已有這兩句錯字且現在就會過
+    #     （後端模糊比對已處理），加規則是多餘且可能干擾。
+    (_re.compile(r"瑜伽店"), "瑜珈墊"),
+    (_re.compile(r"帳盆|賬盆|賬篷"), "帳篷"),
+    (_re.compile(r"(?<=壓縮)筆套"), "臂套"),
+    (_re.compile(r"(?<=倉的)花樹"), "滑鼠"),
+    (_re.compile(r"亞林"), "啞鈴"),
+    (_re.compile(r"燃鴨(?=喇叭)"), "藍牙"),
+    # 動詞「進」被聽成金/禁——限定「倉+X+數字」窄模式，不碰正常用語
+    (_re.compile(r"(?<=倉)[金禁](?=\d)"), "進"),
     (_re.compile(r"反昆伊|防瘟疫"), "防蚊液"),
     (_re.compile(r"漫跑"), "慢跑"),
     # r97 真人聲實測：「中」zhong 特別不穩，「中倉」被聽成「總」zong 倉（捲舌
