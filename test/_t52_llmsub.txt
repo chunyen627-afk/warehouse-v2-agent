@@ -1,4 +1,0 @@
-# LLM-hit 子集（自動產生：_t52.txt 全量跑完側錄，1/6 情境進過 LLM）
-### t5
-> 咖啡還剩多少 | clarify
-> 最上面那個 | inventory_single

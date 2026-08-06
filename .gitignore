@@ -1,42 +1,23 @@
-# ── 模型權重（全排除，太大）──
-*.gguf
-*.bin
-*.safetensors
-*.pt
-*.pth
-models/
+# 2026-08-06：一次 `git add -A` 誤把 115 個檔案推上 GitHub（247 萬行），
+#   包含備份、測試記錄、模型 tokenizer、憑證備份。加這份清單防止再犯。
+*.bak
+*.bak-*
+*.bak2
+*.bak3
+*.zh.bak
+_eval_*.txt
+_probe_*.txt
+_local_*.err
+_items60.txt
+_zh_ui.txt
+_rerun_*.txt
+_e2e_*.txt
+_noise_*.txt
+_prec_*.json
+functiongemma-270m-it-fine-tune-en/
 functiongemma-270m-it-fine-tune/
-test/models/
-
-# ── 微調產物（本機跑的，不需備份）──
-training_data.jsonl
-*.jsonl
-
-# ── Python cache ──
-__pycache__/
-*.pyc
-*.pyo
-
-# ── 暫存 / log ──
-*.log
-_ft*.log
-_backups/
-*.zip
-
-# ── 測試產物（動態產生，不入版控）──
-test/warehouse_data/reports/
-test/intent_clf_report.txt
-
-# ── 系統 ──
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# 雲端金鑰
-*-key.json
-*credentials*.json
-*service-account*.json
-
-# 動態日期平移的「看過的最大日期」記錄（每台機器各自狀態，不進版控）
-en/.last_demo_date
-test/.last_demo_date
+*.ftz
+*.gguf
+warehouse_data_backup*/
+warehouse_data_new_tmp/
+warehouse_data_old_tmp/
