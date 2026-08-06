@@ -329,6 +329,8 @@ _GATEKEEPER_BLACKLIST = (
     "誰做的你", "什麼模型", "你是不是", "你多聰明", "你會說",
     "你好笨", "你好棒", "好厲害", "沒用的東西", "白癡", "廢物",
     "你很慢", "回答快一點", "你答錯", "當機",
+    # zh-r2 #87：「把系統關掉」曾回「查無此商品」
+    "把系統", "系統關掉", "關掉系統",
     "罵我", "罵人", "罵一下",   # r58：「罵我一下」曾回「沒有『罵我』這個商品」
     "講中文", "說中文",         # r59：「講中文好嗎」曾回「沒有『講中文』這個商品」
     "加油好嗎", "加加油",       # r60：「中倉加油好嗎」曾回「沒有『加油』這個商品」
@@ -655,7 +657,8 @@ _HOT_INTENT_WORDS_SLOW = (
     #   的正式行話，詞表卻沒收；「最不受歡迎」同批
     "呆滯", "不受歡迎", "沒人要",
     # zh-r1：不熱門/生灰塵/呆料（守門放行後 C4 靠這裡轉 slow）
-    "不熱門", "生灰塵", "呆料",
+    # zh-r2 #5/#4：積灰/呆滯料件 變體
+    "不熱門", "生灰塵", "呆料", "積灰", "呆滯料",
     "worst selling", "slow", "slow mover",
 )
 
@@ -3461,10 +3464,13 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             _rank_c4 = "slow" if _sp > _hp else "hot"
         else:
             _rank_c4 = "slow" if is_slow else "hot"
-        # r16 回查（EN #34 同款）：「除了滯銷以外的排行」——排除語境反轉
+        # r16 回查（EN #34 同款）：「除了滯銷以外的排行」——排除語境反轉。
+        # zh-r2 #12 修正：排除的**對象要是滯銷詞本身**（除了滯銷/不要滯銷）
+        #   才反轉——「不含食品的滯銷排行」排除的是類別、訪客就是要滯銷，
+        #   曾被過寬條件反轉成熱銷。改成排除詞後 0-4 字內緊鄰滯銷詞。
         if (_rank_c4 == "slow" and not is_hot
-                and any(w in user_text for w in ("除了", "以外", "之外", "不含", "不算", "排除", "扣掉"))
-                and any(w in user_text for w in ("滯銷", "賣不動", "呆滯", "冷門"))):
+                and _re.search(r"(?:除了|不含|不算|排除|扣掉|不要)\s*.{0,2}?"
+                               r"(?:滯銷|賣不動|呆滯|冷門)", user_text)):
             log.info("[校正 C4] 排除滯銷語境 → 反轉 rank=hot")
             _rank_c4 = "hot"
         new_args = {
@@ -3503,9 +3509,9 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
             log.info(f"[校正 C4] 雙類詞後講的贏 → {func_args['rank_type']}")
         elif is_slow and func_args.get("rank_type") != "slow":
             # r27：「電子類滯銷有哪些」LLM 給 rank_type=hot（合法但方向反）→ 以原句為準
-            # r16：排除語境（除了滯銷以外）反轉——與上段同步
-            if (any(w in user_text for w in ("除了", "以外", "之外", "不含", "不算", "排除", "扣掉"))
-                    and any(w in user_text for w in ("滯銷", "賣不動", "呆滯", "冷門"))):
+            # r16：排除語境反轉——zh-r2 #12 同步收窄（排除詞緊鄰滯銷詞才反轉）
+            if _re.search(r"(?:除了|不含|不算|排除|扣掉|不要)\s*.{0,2}?"
+                          r"(?:滯銷|賣不動|呆滯|冷門)", user_text):
                 func_args = {**func_args, "rank_type": "hot"}
                 log.info("[校正 C4] 排除滯銷語境 → rank_type=hot")
             else:
@@ -7067,7 +7073,11 @@ async def ws_handler(ws: WebSocket):
                     _vc_ok = (not _vc_neg
                               and (_vc_txt.lower() in _PEND_OK
                                    or (len(_vc_txt) <= 8 and any(w in _vc_txt for w in _PEND_OK_SUB))
-                                   or (len(_vc_txt) <= 6 and ("確認" in _vc_txt or "送出" in _vc_txt))
+                                   # zh-r2 #63：「確定刪除」（刪警示確認卡上）曾被
+                                   #   item_delete 搶——「確定」也是代按詞（負向
+                                   #   「不確定」由 _vc_neg 的「不」擋）
+                                   or (len(_vc_txt) <= 6 and ("確認" in _vc_txt or "確定" in _vc_txt
+                                                              or "送出" in _vc_txt))
                                    or (len(_vc_txt) <= 10 and _vc_qty_ok
                                        and _re.search(r"(確認|送出)$", _vc_txt))))
                     if _vc_ok:
@@ -10470,6 +10480,30 @@ async def ws_handler(ws: WebSocket):
 
                 # Context carry-over：追問句補 keyword/warehouse（按訪客 vid 隔離）
                 func_name, func_args = _resolve_followup(vid, user_text, func_name, func_args)
+                # zh-r2 #57/#59 危險級：劇情中「安全庫存改成50」「低於45就
+                #   通知我」承接前句商品、卻開「全部商品 180 項」的卡——
+                #   訪客順手確認就改全店。句面沒指名商品、也沒明講全部、
+                #   而 ctx 有商品 → 接 ctx 商品（卡上仍有確認擋）。
+                _cfg_tgt_now = str(func_args.get("item") or func_args.get("target") or "")
+                # zh-r2 #59 二修：LLM 幻覺 target（'item_count'）不在字面清單
+                #   → 改成「比不到真商品就算未指名」
+                _cfg_tgt_solid = False
+                if _cfg_tgt_now and _cfg_tgt_now not in ("全部商品", "全部", "all", "所有商品"):
+                    try:
+                        import warehouse as _W_cc
+                        _m_cc = _W_cc.match_items(_cfg_tgt_now)
+                        _cfg_tgt_solid = bool(_m_cc and _m_cc[0].get("score", 0) >= 3)
+                    except Exception:
+                        _cfg_tgt_solid = False
+                if (func_name in ("manage_config", "set_alert")
+                        and not _cfg_tgt_solid
+                        and not any(w in user_text for w in ("全部", "所有", "全店",
+                                                             "全倉", "每個", "任何"))
+                        and (_ctx_by_vid.get(vid) or {}).get("last_sku")):
+                    _cfg_ctx_sku = _ctx_by_vid[vid]["last_sku"]
+                    _k = "item" if func_name == "manage_config" else "target"
+                    func_args = {**func_args, _k: _cfg_ctx_sku}
+                    log.info(f"[ctx-cfg] {func_name} 接 carry-over 商品 → {_cfg_ctx_sku!r}")
                 corrected_call = f"{func_name}({func_args})"
 
                 # ── C18：clf mismatch 檢查（hard_corrected 時不蓋過）──
