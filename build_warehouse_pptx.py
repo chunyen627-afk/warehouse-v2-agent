@@ -1181,9 +1181,11 @@ pn(s)
 
 # ─── S13a2 語音 POC · ASR 選型（全面改用歐美模型）★ ────────────────
 s = slide_blank()
-title_bar(s, "VOICE POC · 選型", "全面改用歐美模型：中英各選最適尺寸")
+title_bar(s, "VOICE POC · 選型",
+          "已鎖定 small 的兩種壓縮版本：q5_0 與 q8_0，正在二選一")
 add_text(s, MX, Inches(1.38), Inches(11.8), Inches(0.4),
-         "選型鐵律：① 供應鏈來源可控（歐美模型）② RPi5 CPU 純離線跑 ③ 中英共用同一套 whisper.cpp runtime。",
+         "選型鐵律：① 供應鏈來源可控（歐美模型）② RPi5 CPU 純離線跑 ③ 中英共用同一套 whisper.cpp runtime。"
+         "候選已收斂到 small 的兩個壓縮版本——差別只在「壓多小」，其餘完全相同。",
          size=13, color=GREY55)
 # 對照表：欄位 = 模型 / 體積 / 語言 / RPi5 延遲 / 準確度 / 判定
 col_x = [MX, Inches(3.05), Inches(4.35), Inches(6.05), Inches(7.95), Inches(10.05)]
@@ -1195,50 +1197,75 @@ add_round(s, MX, ty, Inches(11.87), th, fill=DARK)
 for i, hd in enumerate(headers):
     add_text(s, col_x[i] + Inches(0.12), ty + Inches(0.09), col_w[i] - Inches(0.2), Inches(0.36),
              hd, size=12, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+# 2026-08-06 全面重量：所有數字改用**當日同一套方法**實測（舊值作廢）。
+#   延遲＝英文版·機二·走網頁真實路徑·只計 ASR 段（不含 270M 推論）。
+#   準確度＝端到端含容錯層（訪客實際體驗），100 句 × 三層噪音平均。
 rows = [
-    ("whisper small-q5_0", "175 MB", "多語（中英同檔）", "中英皆 ~3.5s",
-     "ZH 端到端 66/100", "★ 現役（8 月中英統一＋-ac 640）", True),
+    ("whisper small-q5_0", "167 MB", "壓最小（5-bit）", "4.2s",
+     "端到端均 76.7%", "★ 目前上線中：準度領先", True),
+    ("whisper small-q8_0", "252 MB", "壓中等（8-bit）", "2.5s（快 40%）",
+     "端到端均 73.7%", "★ 挑戰者：速度大勝，補容錯中", True),
+    ("whisper small 全精度", "465 MB", "不壓縮", "10 秒以上", "—",
+     "× 慢一倍以上 ⇒ 壓縮是必要的", False),
     ("whisper tiny.en", "74 MB", "英文專用", "0.94s", "WER 9.3%", "英文版初選 → 升級 small", False),
     ("whisper base", "141 MB", "多語（含中文）", "2.15s", "端到端 36/100", "中文版初選 → 升級 small", False),
-    ("whisper base.en", "141 MB", "英文專用", "2.33s", "WER 10.2%", "比 tiny.en 慢又沒更準", False),
     ("Fun-ASR-Nano（原用）", "~800M", "中文強", "2.5s", "真人 4/8", "× 來源不符，已汰換", False),
 ]
 ry = ty + th
-rh = Inches(0.68)
+# 2026-08-06：加了 q8_0 與全精度兩列（5→6 列）。原列高 0.68 會讓表格底部
+#   落到 y=6.53，壓到下方 y=5.98 的深色摘要框 ⇒ 列高收到 0.55，
+#   表格底部回到 6.00 附近，與摘要框不重疊。
+rh = Inches(0.55)
 for r, (m, p, rt, off, cer, verd, chosen) in enumerate(rows):
     y = ry + rh * r
     bg = TEALBG if chosen else (LIGHT if r % 2 else WHITE)
     add_rect(s, MX, y, Inches(11.87), rh, fill=bg, line=GREYE6, line_w=0.5)
-    add_text(s, col_x[0] + Inches(0.12), y + Inches(0.1), col_w[0] - Inches(0.2), Inches(0.48),
+    add_text(s, col_x[0] + Inches(0.12), y + Inches(0.04), col_w[0] - Inches(0.2), Inches(0.47),
              m, size=12.5, bold=chosen, color=(TEALDK if chosen else DARK), anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, col_x[1] + Inches(0.12), y + Inches(0.1), col_w[1] - Inches(0.2), Inches(0.48),
+    add_text(s, col_x[1] + Inches(0.12), y + Inches(0.04), col_w[1] - Inches(0.2), Inches(0.47),
              p, font=FONT_EN, size=12, bold=chosen, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, col_x[2] + Inches(0.12), y + Inches(0.1), col_w[2] - Inches(0.2), Inches(0.48),
+    add_text(s, col_x[2] + Inches(0.12), y + Inches(0.04), col_w[2] - Inches(0.2), Inches(0.47),
              rt, size=11, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, col_x[3] + Inches(0.12), y + Inches(0.1), col_w[3] - Inches(0.2), Inches(0.48),
+    add_text(s, col_x[3] + Inches(0.12), y + Inches(0.04), col_w[3] - Inches(0.2), Inches(0.47),
              off, font=FONT_EN, size=11.5, color=(TEALDK if chosen else GREY55), bold=chosen,
              anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, col_x[4] + Inches(0.12), y + Inches(0.1), col_w[4] - Inches(0.2), Inches(0.48),
+    add_text(s, col_x[4] + Inches(0.12), y + Inches(0.04), col_w[4] - Inches(0.2), Inches(0.47),
              cer, size=11.5, color=GREY44, anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, col_x[5] + Inches(0.12), y + Inches(0.1), col_w[5] - Inches(0.2), Inches(0.48),
+    add_text(s, col_x[5] + Inches(0.12), y + Inches(0.04), col_w[5] - Inches(0.2), Inches(0.47),
              verd, size=11.5, bold=chosen, color=(TEALDK if chosen else GREY55), anchor=MSO_ANCHOR.MIDDLE)
-# 底部：兩個關鍵洞見
+# 底部：q5 vs q8 的反直覺故事（2026-08-06 user 定調的敘事角度）
 add_round(s, MX, Inches(5.98), Inches(11.87), Inches(1.18), fill=DARK, shadow=True)
 add_rich(s, MX + Inches(0.4), Inches(6.12), Inches(11.1), Inches(0.5),
-         [[{"text": "反直覺  ", "size": 13, "bold": True, "color": TEAL},
-           {"text": "模型越大不一定越準：base.en 比 tiny.en 大、慢 2.5 倍，WER 反而略差",
-            "size": 13, "bold": True, "color": WHITE},
-           {"text": "——倉管查詢句短、句型固定，tiny 容量已足夠。",
+         [[{"text": "反直覺 ①  ", "size": 13, "bold": True, "color": TEAL},
+           {"text": "壓得更小的 q5 竟然「比較慢」", "size": 13, "bold": True, "color": WHITE},
+           {"text": "——一般以為位元數越少越快，但壓縮過頭時，每算一次都要先「解壓縮」"
+                    "還原成模型看得懂的數字；q8 壓得剛好、算起來最順。",
             "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
 add_rich(s, MX + Inches(0.4), Inches(6.63), Inches(11.1), Inches(0.42),
-         [[{"text": "演進 8月  ", "size": 13, "bold": True, "color": AMBER},
-           {"text": "真人 100 句把 8 句測不出的差距逼出來", "size": 12, "bold": True, "color": WHITE},
-           {"text": "——base 端到端 36/100、small 47/100（同無修正層）；掛回容錯層 66/100。"
-                    "慢 1.4s 買 +30 分，中英自此同一顆模型檔。",
+         [[{"text": "反直覺 ②  ", "size": 13, "bold": True, "color": AMBER},
+           {"text": "但慢的那顆答對率反而高", "size": 12.5, "bold": True, "color": WHITE},
+           {"text": "——q8 聽對的「整句」比較多，錯的卻常落在商品名；q5 錯得零碎、"
+                    "容錯層修得動 ⇒ 端到端 76.7% vs 73.7%。**現正實驗：補 q8 專用容錯規則，"
+                    "能否拿到「又快又準」**。",
             "size": 12, "color": GREYBB}]],
          anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "★語音選型頁（技術評審向）。**這一頁 2026-07-27 全面改版**：原本用阿里的 "
+set_notes(s, "【2026-08-06 改版：講「二選一」的故事，不是講已定案】\n"
+             "★ 講法：候選已經收斂到只剩兩個——**同一顆模型的兩種壓縮程度**。\n"
+             "① 先講直覺：一般都認為壓越小（q5，167MB）應該越快，所以本來預期選 q8 的人"
+             "會覺得奇怪，為什麼上線的是 q5？\n"
+             "② 反直覺一（速度）：實測**壓最小的反而最慢**（4.2s vs 2.5s）。白話解釋——"
+             "壓縮就像把東西真空收納，取用前得先「還原」；壓得太扁，每次拆封的功夫反而"
+             "比省下的搬運時間還多。q8 壓得剛好，拆封快、搬運也不重，總時間最短。\n"
+             "   （誠實補充：確切機轉我們沒有定論，這是依實測結果選型，不是理論推導。）\n"
+             "③ 反直覺二（準度）：慢的那顆 q5 端到端反而較準（76.7% vs 73.7%）。原因在"
+             "**錯的位置不同**——q8 常錯在商品名（steam iron 聽成 stain iron），那是查詢"
+             "的命脈；q5 錯得零碎（stock 聽成 stuck），關鍵字還在，容錯層修得動。\n"
+             "④ 現在進行式：既然 q8 只輸在「特定幾種固定聽錯」，我們正在幫它補專用容錯"
+             "規則。若能補到追平，就能同時拿到快 40% 與同等準度——那才是最佳解。\n"
+             "⑤ 若老闆問何時定案：判準已訂——三層噪音端到端平均不低於現行、且最吵那層"
+             "不落後 2 分以上，就切換；否則維持 q5。展前一週內定案，不會拖到展場。\n\n"
+             "★語音選型頁（技術評審向）。**這一頁 2026-07-27 全面改版**：原本用阿里的 "
              "Fun-ASR-Nano，後來定調**只用歐美模型**（供應鏈來源可控），中英兩版都換成 "
              "OpenAI whisper.cpp。換完的額外好處：中英共用同一套 runtime，不必維護兩套框架。"
              "選型結果：英文版 tiny.en（74MB / 0.94s / WER 9.3%）、中文版 base（141MB / 2.15s）。"
@@ -1708,7 +1735,8 @@ pn(s)
 
 # ─── S14e 真人語音實測（誠實面對落差）★ ────────────────────────────
 s = slide_blank()
-title_bar(s, "VOICE · 真人實測", "合成音 92%，真人 55%——這個落差才是真相")
+title_bar(s, "VOICE · 真人實測",
+          "合成音 92%，真人首測 55%——合成音會嚴重高估（下頁為補滿 100 句的現況）")
 add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
          "先前所有英文語音數據都來自 TTS。這次請真人（非母語者）先錄 38 句抽樣（後補滿 100 句，見下頁），"
          "用展場實際會部署的模型與麥克風測完整語音鏈。",
@@ -1793,17 +1821,21 @@ pn(s)
 
 # ─── S14f 真人 100 句最終實測 ★（2026-08-02）────────────────────
 s = slide_blank()
-title_bar(s, "VOICE · 100 句最終實測", "錄滿 100 句 + 修 13 個破口，展場噪音下 84%")
+title_bar(s, "VOICE · 100 句最終實測",
+          "錄滿 100 句 · 展場噪音下 78%（2026-08-06 全量重測）")
 add_text(s, MX, Inches(1.32), Inches(11.8), Inches(0.4),
          "上一頁的 38 句版本有兩個問題必須修正：①樣本只有 38 句 "
          "②混噪參數失真，把數據壓得過度悲觀。這頁是修正後的完整結果。",
          size=13, color=GREY55)
 
 # 三層通過率
+# 2026-08-06 全量重測（同一套方法、同一批 100 句錄音，數字全部更新）：
+#   舊值 87/84/76% 來自 8/2，且含 4 句「多輪追問句因逐句獨立測試而假失敗」
+#   的人工複判。這次改成**不做任何複判**的原始通過率，口徑更乾淨。
 tiers = [
-    ("安靜環境", "87%", "SNR 31.4 dB", TEALDK),
-    ("展場一般噪音", "84%", "SNR 27.1 dB · 真實賣場人潮音", TEAL),
-    ("尖峰吵雜", "76%", "SNR 22.7 dB", GREY77),
+    ("安靜環境", "81%", "SNR 31.4 dB", TEALDK),
+    ("展場一般噪音", "78%", "SNR 27.1 dB · 真實賣場人潮音", TEAL),
+    ("尖峰吵雜", "71%", "SNR 22.7 dB", GREY77),
 ]
 for i, (nm, pct, desc, col) in enumerate(tiers):
     x = MX + Inches(4.02) * i
@@ -1816,7 +1848,8 @@ for i, (nm, pct, desc, col) in enumerate(tiers):
              desc, size=10.5, color=GREY55, line_spacing=1.15)
 
 add_text(s, MX, Inches(3.58), Inches(11.8), Inches(0.32),
-         "噪音只讓通過率掉 3 個百分點（87 → 84）",
+         "展場一般噪音只讓通過率掉 3 個百分點（81 → 78）；純模型辨識僅 32%，"
+         "容錯層補上 46 個百分點",
          size=13, bold=True, color=TEALDK)
 
 # 為何要修正舊數據
@@ -1829,15 +1862,18 @@ rows = [
      "amix 未設 normalize=0（人聲被砍 12dB）、aecho 再砍 54%、噪音音量過大", CORAL),
     ("13 項系統修正",
      "同一批錄音、沒有重錄任何一句，通過率從 74% 提升到 83%", TEALDK),
+    ("2026-08-06 全量重測（本頁數字）",
+     "同批錄音重跑三層噪音，不做任何人工複判 → 81 / 78 / 71%；"
+     "另測 q8_0 候選（快 40%）端到端平均低 3 分，維持現役 q5_0", DARK),
 ]
 y = Inches(4.02)
 for nm, desc, col in rows:
-    add_round(s, MX, y, Inches(11.8), Inches(0.62), fill=WHITE, line=GREYE6)
-    add_text(s, MX + Inches(0.28), y + Inches(0.07), Inches(3.5), Inches(0.34),
+    add_round(s, MX, y, Inches(11.8), Inches(0.52), fill=WHITE, line=GREYE6)
+    add_text(s, MX + Inches(0.28), y + Inches(0.04), Inches(3.5), Inches(0.30),
              nm, size=12, bold=True, color=col)
-    add_text(s, MX + Inches(3.95), y + Inches(0.07), Inches(7.6), Inches(0.46),
+    add_text(s, MX + Inches(3.95), y + Inches(0.04), Inches(7.6), Inches(0.44),
              desc, size=11, color=GREY55, line_spacing=1.12)
-    y += Inches(0.72)
+    y += Inches(0.575)
 
 add_rect(s, MX, Inches(6.98), Inches(11.8), Inches(0.44), fill=DARK)
 add_rich(s, MX + Inches(0.4), Inches(7.02), Inches(11.1), Inches(0.34),

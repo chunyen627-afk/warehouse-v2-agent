@@ -10341,6 +10341,27 @@ _ASR_FIX_EN = [
     #   ⚠️ 限定「後接數字」——`today's inbound` 這種所有格是正常英文，不能碰。
     (_re.compile(r"\bship'?s\b(?=\s+\d)", _re.I), "shipped"),
     (_re.compile(r"\breceive'?s\b(?=\s+\d)", _re.I), "received"),
+    # ── asr-fix-en batch4：q8_0 候選模型的特有錯法（2026-08-06）────────
+    #   來源：q8 端到端三層落後 q5 的 13 句，扣掉 2 句「數字聽錯」（救不回，
+    #   25→22 / 30→13 這種容錯層無從判斷）。剩 11 條全是功能詞/固定聽錯。
+    #   ⚠️ 全數通過既有紀律的誤傷檢查（_q8_rules_check.py）：
+    #     ① 守衛語料 892 句 0 命中 ② 商品主檔 60 個 0 命中
+    #     ③ **q5 現行通過句 230 筆 0 命中**（新增這道——規則不可讓 q5 變差）
+    #   ⚠️ `cap in tent → camping tent` 已剔除：q5 也會這樣聽錯，但它靠後端
+    #     模糊比對本來就答對，硬修反而可能改壞既有正解。
+    #   ⓘ 這批對 q5 是**無害的**（0 命中），所以直接放進共用表；
+    #     q8 若最終不採用，這些規則留著也不影響 q5。
+    (_re.compile(r"\bstain\b(?=\s+iron)", _re.I), "steam"),
+    (_re.compile(r"\bsteel\b(?=\s+iron)", _re.I), "steam"),
+    (_re.compile(r"\bwire\s+house\b", _re.I), "warehouse"),
+    (_re.compile(r"\bcap\s+in\s+hand\b", _re.I), "camping tent"),
+    (_re.compile(r"\btrace\s+bags\b", _re.I), "trash bags"),
+    (_re.compile(r"\bwireless\s+mounts\b", _re.I), "wireless mouse"),
+    (_re.compile(r"\bexpelling\b", _re.I), "expiring"),
+    (_re.compile(r"\bit'?s\s+firing\b", _re.I), "expiring"),
+    (_re.compile(r"\bbatch\s+rest\b", _re.I), "batches"),
+    (_re.compile(r"(?<=\bi\s)thought\b(?=\s+the\s+most)", _re.I), "sold"),
+    (_re.compile(r"(\d+)-down\s+jacket\b", _re.I), r"\1 down jackets"),
 ]
 
 
