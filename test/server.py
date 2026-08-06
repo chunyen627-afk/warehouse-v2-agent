@@ -249,6 +249,23 @@ def is_meaningful_input(text: str) -> bool:
     # 閒聊（「放音樂給我聽」描述命中但無查詢語氣 → 不放行、續走黑名單擋下）。
     if _descriptor_hit(text) and any(c in s for c in _DESC_GATE_CUES):
         return True
+    # ── r20 展場情境批（2026-08-07）：這幾類實測被守門員擋成 rejected，
+    #   但它們**不是搗蛋**——訪客站在機器前很自然會這樣講。英文版同款已修。
+    #   ① 自介/等待語：「這是誰做的」「等一下」（等待語原本掉 60 項概覽）
+    #   ② 真查詢：「今天」「昨天」「最近的動態」「幫我加總」
+    #   ⚠️ 放行只是進門，路由由下方 Pre-C-B20zh 的完全比對決定，
+    #     「今天藍牙耳機庫存」不會被當裸時間詞。
+    if any(w in s for w in (
+            "這是誰做的", "誰做的", "誰寫的", "誰開發", "哪來的",
+            "等一下", "等等", "稍等", "先等", "讓我想",
+            "最近的動態", "最近動態", "有什麼動靜", "最近有什麼",
+            # 裸時間詞：「今天」「本週」本來就在 GATEKEEPER_KEYWORDS，
+            #   「昨天」「上週」卻不在 → 同樣講一個時間詞、一個過一個被拒
+            #   （英文版 today/yesterday 是同一個不一致）。
+            #   ⚠️ 只是放行；路由由 Pre-C-B20zh 的完全比對決定。
+            "昨天", "昨日", "上週", "上周",
+            "幫我加總", "加總", "總共多少", "全部加起來", "加起來多少")):
+        return True
     # r81 寫入契約：破壞動詞 × 全稱詞的組合一律擋（不枚舉個案）。
     # 「全部商品歸零」曾漏黑名單→吐 60 項清單。破壞語意 + 全稱範圍 = 搗蛋。
     # 查詢語（「快歸零的有哪些」）不含全稱詞、或含查詢語尾，不會誤中。
@@ -573,6 +590,13 @@ _INVENTORY_INTENT_WORDS = (
 
 # 缺貨意圖詞（C3 用）
 _LOW_STOCK_INTENT_WORDS = (
+    # ── r20 展場情境批（2026-08-07）：「哪個最急」實測回**熱銷榜**——
+    #   訪客問最急要補什麼，看到的是賣最好的排行（完全相反的誤導，
+    #   同 r19「缺最兇的前三名」那次）。缺貨清單本來就照撐天排序，
+    #   第 1 筆就是最急的。英文版同款已修（most urgent 等片語）。
+    #   ⚠️ 用「最急/最緊急」不用裸「急」：裸字會撞「急單」「急件」。
+    "最急", "最緊急", "哪個急", "哪些急", "最先補", "先補哪",
+    "最優先", "優先補", "最嚴重", "最慘", "最危險的", "問題最大",
     "快沒", "缺貨", "補貨", "庫存警示", "庫存告急", "存量不足",
     "庫存不足", "低庫存", "存量警報", "警示", "告急", "補不上", "見底",
     "斷貨", "斷貨危機", "需要進貨", "該進貨", "警戒線", "緊急補", "該補",
@@ -7710,6 +7734,56 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {
                     "ok": True, "view": "guide", "summary": _lq_msg, "data": {}}})
                 continue
+            #   ①-a2 等待語（r20 2026-08-07）：訪客邊想邊講「等一下」，
+            #     實測掉 60 項全店概覽（拿商品清單當回應更怪）。短應一聲就好。
+            #     ⚠️ 完全比對：「等一下藍牙耳機的庫存」有受詞，不吃。
+            if _re.fullmatch(r"(?:那?麼?)?(?:等一下|等等|稍等|先等|等我一下|"
+                             r"讓我想一下|讓我想想|我想一下|嗯+|呃+)[，,。.！!？? ]*",
+                             user_text.strip()):
+                _wa_msg = "好的，你慢慢來，我在這裡等你。"
+                log.info(f"[wait-ack] {user_text!r} → 等待語短回應")
+                for ch in _wa_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _wa_msg, "data": {}}})
+                continue
+            #   ①-a3 問「誰做的」（r20 2026-08-07）：展場訪客很常問，先前 rejected。
+            #     誠實回答這是什麼、跑在哪，不吹噓不亂掰（同英文版 who-qa）。
+            if _re.search(r"(?:這|它|你)?(?:是)?誰(?:做|寫|開發|設計|弄)的|"
+                          r"誰(?:做|寫|開發)(?:的)?(?:這|它)|哪(?:一)?家(?:做|開發)的",
+                          user_text):
+                _wm_msg = ("這是一個倉管助理 demo——一顆 270M 參數的小語言模型，"
+                           "針對倉管問題微調過，完全跑在你眼前這台 Raspberry Pi 上，"
+                           "不連雲端。它負責聽懂你在問什麼，庫存數字則是從倉庫"
+                           "資料庫查出來的。你可以直接問我庫存狀況，"
+                           "例如「哪些快缺貨」。")
+                log.info(f"[who-qa] {user_text!r} → 自介")
+                for ch in _wm_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _wm_msg, "data": {}}})
+                continue
+            #   ①-a4 加總請求（r20 2026-08-07）：「幫我加總」先前 rejected。
+            #     但這句**沒講要加總什麼**——硬猜全店總值可能不是訪客要的
+            #     （user 定調：不確定不猜，反問）。有上一輪卡片時讓 ctx 先展開。
+            if not _ctx_for(vid).get("last_sku") \
+                    and not _ctx_for(vid).get("last_view") \
+                    and _re.fullmatch(r"(?:幫我|請|麻煩)?(?:加總|總和|加一加|"
+                                      r"全部加起來|加起來|算總數|算一下總共)"
+                                      r"[一下吧喔呢嗎，,。.！!？? ]*", user_text.strip()):
+                _sum_msg = ("好的，你想加總什麼呢？我可以算全倉總值"
+                            "（說「庫存總值」）、單一類別（「食品飲料類庫存」），"
+                            "或某個商品在三個倉的合計（「藍牙耳機庫存」）。")
+                log.info(f"[sum-ask] {user_text!r} → 反問要加總什麼")
+                for ch in _sum_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _sum_msg,
+                    "data": {"question": _sum_msg, "options": [], "hint": ""}}})
+                continue
             #   ①-b 信任類問句（r20 展場情境批 2026-08-07）：訪客站在機器前
             #     很自然會質疑「你確定嗎」「會不會算錯」「資料是假的吧」，
             #     先前全被 rejected（回「這是倉管助理」＝答非所問，像在迴避）。
@@ -10221,6 +10295,41 @@ async def ws_handler(ws: WebSocket):
             # ── intent_clf 命中時也走到這裡（跟 LLM 分支匯流，同一縮排層繼續
             #   下面共用的 Pre-C 規則 / 校正流程，維持跟 HTTP 版一致的行為）──
             if True:
+                # ── Pre-C-B20zh（r20 展場情境批，2026-08-07）───────────────
+                #   「今天」「昨天」「最近的動態」實測全 rejected——訪客講一個
+                #   時間詞就是要看「那天發生什麼事」。英文版同款已修。
+                #   ⚠️ 完全比對 + 無商品名護欄：「今天藍牙耳機進了多少」
+                #     有受詞，走既有查詢線不被這裡吃掉。
+                _b20z_routed = False
+                _b20z_ok = True
+                try:
+                    import warehouse as _W_b20z
+                    _m_b20z = _W_b20z.match_items(user_text)
+                    if _m_b20z and _m_b20z[0].get("score", 0) >= 6:
+                        _b20z_ok = False
+                except Exception:
+                    pass
+                _b20z_t = user_text.strip()
+                if _b20z_ok and _re.fullmatch(
+                        r"(?:那?麼?)?(?:今天|今日|昨天|昨日|本週|這週|上週)"
+                        r"(?:的|呢|咧)?[，,。.！!？? ]*", _b20z_t):
+                    _p_b20z = ("yesterday" if ("昨" in _b20z_t) else
+                               "last_week" if ("上週" in _b20z_t) else
+                               "this_week" if ("本週" in _b20z_t or "這週" in _b20z_t)
+                               else "today")
+                    func_name = "query_movement"
+                    func_args = {"period": _p_b20z, "direction": "both"}
+                    _b20z_routed = True
+                    log.info(f"[Pre-C-B20zh] 裸時間詞 → query_movement period={_p_b20z}")
+                elif _b20z_ok and _re.fullmatch(
+                        r"(?:最近|這幾天|這陣子)(?:的)?(?:動態|動靜|狀況|情形)"
+                        r"(?:如何|怎樣|怎麼樣)?[，,。.！!？? ]*|"
+                        r"(?:最近|這幾天)有(?:什麼|啥)(?:動靜|動態|事)"
+                        r"[嗎呢啊]?[，,。.！!？? ]*", _b20z_t):
+                    func_name = "query_movement"
+                    func_args = {"period": "this_week", "direction": "both"}
+                    _b20z_routed = True
+                    log.info("[Pre-C-B20zh] 最近動態 → query_movement this_week")
                 # ── Pre-C-Schedule：定時排程意圖攔截 ──
                 # r16 回查：「我的警示清單」曾被 clf 判 list_low_stock（與
                 #   HTTP 版 _list_alert_kws_h 同步）
@@ -10588,6 +10697,14 @@ async def ws_handler(ws: WebSocket):
                 #   餵給 OOV 找不到商品會誤判成查詢失敗，task_plan 也會顯示錯的步驟，
                 #   see HTTP 版 api_query 的同一個順序，2026-07-02 修 WS/HTTP 不同步）──
                 func_name, func_args, _hard = _correct_function_call(user_text, func_name, func_args)
+                # ⚠️ 坑 4（r20 2026-08-07）：Pre-C-B20zh 的定案要標 _hard，
+                #   否則下游 C18 會拿 clf 的單句高信心蓋回去（英文版實測：
+                #   clf=query_inventory(1.00) 把 query_movement 蓋掉，
+                #   訪客問「昨天」收到 60 項全店概覽）。
+                #   ⚠️ 必須寫在 _correct_function_call **之後**——它會重新
+                #     賦值 _hard，寫前面會被抹掉（英文版第一次就是這樣漏的）。
+                if _b20z_routed:
+                    _hard = True
 
                 # ── 長度閘門收尾（r30）：長句只走確定性層，若整條校正鏈都沒接手
                 #   （佔位 query_inventory 原樣出來）→ 優雅引導，不硬答 ──
@@ -11003,7 +11120,11 @@ async def ws_handler(ws: WebSocket):
                         log.info(f"[dispatch-ws] keyword 清理: 「{_raw2}」→「{_ck2}」")
                         func_args = {**func_args, _kw_f2: _ck2}
                 # ── 意圖閘門：LLM 對閒聊句幻覺出寫入/複雜工具時擋下（第18輪）──
-                if not _tool_intent_ok(func_name, user_text):
+                # ⚠️ Pre-C-B20zh 的定案不受意圖閘門管（r20 2026-08-07）：
+                #   裸時間詞「今天」句中只有時間詞、沒有進出動作詞 →
+                #   會被判「query_movement 缺意圖詞」打回 rejected
+                #   （英文版實測過同一條，坑 3：修一層下一層再擋一次）。
+                if not _tool_intent_ok(func_name, user_text) and not _b20z_routed:
                     # reject 前先試降級救援（口語前綴害 LLM 輸出錯 function，RPI5 v21）
                     _rescue = _intent_guard_rescue(func_name, func_args, user_text)
                     if not _rescue and _re.search(r'[進出]的?貨', user_text):

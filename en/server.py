@@ -15376,8 +15376,17 @@ async def ws_handler(ws: WebSocket):
                                 if _amb:
                                     import warehouse as _W_amb
                                     _m_amb = _W_amb.match_items(_amb)
-                                    _top = [x for x in (_m_amb or [])
-                                            if x.get("score", 0) >= 6][:4]
+                                    # ⚠️ 歧義＝**同分**，不是「都超過門檻」
+                                    #   （守衛 tf 回歸抓到）：'phone case' 是
+                                    #   9 vs 5 分，Phone Protective Case 明顯
+                                    #   勝出、根本不歧義，用 score>=6 收會把
+                                    #   5 分雜訊算成候選 → 正常轉倉句被反問。
+                                    #   真歧義長這樣：'coffee' 四個都 11 分。
+                                    _m_amb = [x for x in (_m_amb or [])
+                                              if x.get("score", 0) >= 6]
+                                    _best = _m_amb[0].get("score", 0) if _m_amb else 0
+                                    _top = [x for x in _m_amb
+                                            if x.get("score", 0) == _best][:4]
                                     if len(_top) >= 2:
                                         _names = [x["item"]["name"] for x in _top]
                                         _amb_msg = (
