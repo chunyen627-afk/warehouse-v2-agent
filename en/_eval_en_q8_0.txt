@@ -1,0 +1,35 @@
+OK|query_inventory|query_inventory|how many bluetooth earphones are in stock|<start_function_call>call:query_inventory{keyword:<escape>ea
+OK|query_inventory|query_inventory|got any power banks|<start_function_call>call:query_inventory{keyword:<escape>po
+OK|query_inventory|query_inventory|is there any yoga mats left|<start_function_call>call:query_inventory{keyword:<escape>yo
+OK|query_inventory|query_inventory|check the coffee machine numbers|<start_function_call>call:query_inventory{keyword:<escape>co
+OK|query_inventory|query_inventory|running shoes availability|<start_function_call>call:query_inventory{keyword:<escape>ru
+OK|query_inventory|query_inventory|whats the tent situation|<start_function_call>call:query_inventory{keyword:<escape>te
+OK|query_inventory|query_inventory|electronics stock overview|<start_function_call>call:query_inventory{category:<escape>e
+OK|query_inventory|query_inventory|show all the sports gear we have|<start_function_call>call:query_inventory{category:<escape>s
+OK|query_inventory|query_inventory|bluetooth earphone stok|<start_function_call>call:query_inventory{keyword:<escape>sm
+OK|query_inventory|query_inventory|powr bank inventory|<start_function_call>call:query_inventory{keyword:<escape>ph
+OK|query_inventory|query_inventory|how many wireles mouse left|<start_function_call>call:query_inventory{keyword:<escape>mo
+OK|query_inventory|query_inventory|coffe machine stock|<start_function_call>call:query_inventory{keyword:<escape>co
+MISS|query_inventory|query_related_items|the thing that charges my phone|<start_function_call>call:query_related_items{keyword:<escap
+MISS|query_inventory|query_related_items|those wireless ear things|<start_function_call>call:query_related_items{keyword:<escap
+OK|query_inventory|query_inventory|the mat for yoga|<start_function_call>call:query_inventory{keyword:<escape>yo
+MISS|query_inventory|query_related_items|something to clean teeth|<start_function_call>call:query_related_items{keyword:<escap
+OK|query_movement|query_movement|what came in today|<start_function_call>call:query_movement{period:<escape>toda
+OK|query_movement|query_movement|this weeks shipments|<start_function_call>call:query_movement{period:<escape>this
+OK|query_movement|query_movement|how much coffee moved this month|<start_function_call>call:query_movement{period:<escape>this
+MISS|list_low_stock|query_inventory|whats about to run out|<start_function_call>call:query_inventory{keyword:<escape>co
+MISS|list_low_stock|list_hot_items|which items need reordering|<start_function_call>call:list_hot_items{rank_type:<escape>s
+OK|list_hot_items|list_hot_items|best sellers this month|<start_function_call>call:list_hot_items{rank_type:<escape>h
+MISS|list_hot_items|list_low_stock|what isnt selling|<start_function_call>call:list_low_stock{}
+OK|compare_warehouses|compare_warehouses|which warehouse has more stock north or south|<start_function_call>call:compare_warehouses{warehouse_a:<es
+OK|compare_warehouses|compare_warehouses|compare central and south by value|<start_function_call>call:compare_warehouses{warehouse_a:<es
+OK|search_log|search_log|why is the toothbrush count off|<start_function_call>call:search_log{keyword:<escape>toothbr
+OK|search_log|search_log|who moved the mouse stock|<start_function_call>call:search_log{keyword:<escape>mouse<e
+OK|search_log|search_log|the earphone numbers dont match|<start_function_call>call:search_log{keyword:<escape>headpho
+OK|query_related_items|query_related_items|what sells with coffee machine|<start_function_call>call:query_related_items{keyword:<escap
+OK|query_related_items|query_related_items|what goes with a tent|<start_function_call>call:query_related_items{keyword:<escap
+OK|set_alert|set_alert|alert me when earphones drop below 30|<start_function_call>call:set_alert{keyword:<escape>earphone
+MISS|rejected|query_inventory|order me a pizza|<start_function_call>call:query_inventory{keyword:<escape>pi
+MISS|rejected|query_movement|whats the weather today|<start_function_call>call:query_movement{period:<escape>toda
+MISS|rejected|query_related_items|asdfghjkl|<start_function_call>call:query_related_items{keyword:<escap
+TOTAL|25/34

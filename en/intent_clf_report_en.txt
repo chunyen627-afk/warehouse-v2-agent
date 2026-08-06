@@ -1,0 +1,15 @@
+EN intent_clf  valid n=629 precision=0.9968 recall=0.9968
+
+Per-label accuracy on valid set:
+  query_inventory           231/231  100%
+  query_movement            138/138  100%
+  search_log                 81/ 81  100%
+  query_related_items        77/ 77  100%
+  compare_warehouses         28/ 28  100%
+  list_hot_items             27/ 27  100%
+  list_low_stock             21/ 21  100%
+  manage_config              16/ 16  100%
+  set_alert                   7/  7  100%
+  run_script                  0/  1  0%
+  generate_report             1/  1  100%
+  generate_po                 0/  1  0%

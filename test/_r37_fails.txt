@@ -1,0 +1,4 @@
+情境 15 · 斷言失敗 1 · 可疑回答 0
+
+FAIL	N1 完全不存在的商品	Q: 鋼琴烤漆保養油庫存	view=hot_items，期望 ['clarify', 'error', 'inventory', 'rejected', 'related_empty'] | 本週全類別熱銷 TOP 10
+第 1 名:嬰兒濕紙巾（出 13 件，營收約 NT$ 1,287）

@@ -1,0 +1,210 @@
+含中文的非註解行: 209
+6: <title>管助理 Demo</title>
+31: --primary:   #2c5282;   /* 深藍 */
+32: --primary-2: #4299e1;   /* Central藍 */
+33: --accent:    #ed8936;   /* 出貨橘 */
+34: --success:   #38a169;   /* 進貨綠 */
+35: --warning:   #e53e3e;   /* 缺貨紅 */
+36: --gold:      #d69e2e;   /* TOP 3 金 */
+477: 整行可點 + 明顯邊框 + 按壓回饋，避免展場小螢幕難點 */
+672: 標題列 / 功能選單 / 異常警示這三條收矮，把垂直空間讓給對話區。
+673: 由 <body class="compact-top"> 啟用；展場要退回原版，移除該 class 即可。 */
+697: <!-- 右側警示規則 Panel -->
+717: <!-- 鉤子入口(隨機輪播、勾起好奇)由 JS 動態插入到這 -->
+718: <!-- 主打:會「改動庫存數字」的操作(進出貨/調貨/退貨)—— demo 訪客最直覺想玩的 -->
+732: <!-- 點同捆率彈出的算式說明 -->
+748: <div class="send-status" id="send-status">⏳ 處理Central，請稍候…</div>
+753: const pwd = prompt('重置展示資料需要密碼（此動作將清除all added items, movements、警示、排程，無法復原）：');
+885: <div class="schedule-card-next">上次執行：${lastRun}</div>
+925: let lastBotAnchor = null;   // 最後插入在訊息泡後的元素(卡片)、follow-up 鈕接在它後面
+985: return;   // 找不到掛載點就不顯示，絕不破壞頁面
+994: <b>⚠ 主動偵測到 ${crit + warn} 項需注意異常</b>
+1000: <span class="ab-toggle">展開 ▼</span>
+1013: setTimeout(pullAnomalies, 1200);   // 進站自動偵測（不靠使用者問）
+1180: let _traceContainer = null;  // 目前訊息泡的 trace 容器
+1181: let _pendingToolCalls = [];  // tool_call 訊息暫存，等 card 建好後插入
+1182: let _rcaCardId = null;       // 當次 agent_rca card 的 id，給 round2 handler 用
+1249: banner.innerHTML = `${icon} <b>${msg.script_label}</b> 執行${msg.ok ? 'done' : 'failed'}<br>
+1375: lastBotAnchor = currentBotMsg;   // 預設接在訊息泡後;有卡片時 renderViewCard 會改成卡片
+1426: : `<div class="label">🔔 警示規則（${alRules.length} 條）</div>
+1427: <table class="exp-table"><tr><th>ID</th><th>條件</th><th>範圍</th><th>狀態</th></tr>
+1437: : `<div class="label">⏰ 排程（${scJobs.length} 個）</div>
+1438: <table class="exp-table"><tr><th>ID</th><th>內容</th><th>頻率</th><th>狀態</th></tr>
+1453: <div class="label">📦 ${invCapt} stock list (${invTotal} 項${invRows.length < invTotal ? `，顯示前 ${invRows.length} 筆` : ''}）</div>
+1455: <tr><th>商品</th><th>類別</th><th>庫存</th></tr>
+1460: <td><b>${(r.qty ?? 0).toLocaleString()}</b> ${r.unit || '件'}</td>
+1467: <div class="label">找到 ${data.total_matches} 筆相關商品</div>
+1484: <div class="label">缺貨警示 (${warns.length} 項) — 按「撐幾天」排序</div>
+1486: <tr><th>商品</th><th>庫</th><th>現量</th><th>撐天</th><th>建議補</th></tr>
+1490: const daysTxt = days >= 999 ? '-' : (days >= 60 ? '60+' : (days + '天'));
+1495: <td><b>${w.qty}</b><div style="font-size:11px;color:var(--muted)">/ 安全 ${w.safety_stock}</div></td>
+1513: <span><span class="dot" style="background:var(--success)"></span>進貨</span>
+1514: <span><span class="dot" style="background:var(--accent)"></span>出貨</span>
+1532: <div class="label">${data.metric_label}比較</div>
+1565: <div class="rel-anchor">買 <b>${anchorName}</b> 的人,通常也會備這些貨:</div>
+1626: ⚠️ <b>${anchorName}</b> 近期出貨量高,連帶品「${data.restock_alerts[0].name}」庫存吃緊,
+1627: ${data.restock_alerts[0].suggest_after_days <= 1 ? 'restock today' : `restock within ${data.restock_alerts[0].suggest_after_days} days`},別等缺了才補。
+1629: <div class="rel-baseline-note">📊 點同捆率看「這數字怎麼算出來的」· 隨機商品同單僅約 ${data.random_baseline}%</div>
+1640: <div class="label">⏰ Expiry alerts — ${data.warehouse_label || 'All warehouses'} 最近 ${data.within_days} days內共 ${rows.length} 批 · 約 NT$ ${totalValue.t
+1647: <tr><th>商品</th><th>庫</th><th>剩餘</th><th>數量</th></tr>
+1657: <div class="rel-baseline-note">⏰ 紅(≤7天) / 橙(≤14天) / 黃(≤30天) — 主動下架 / 促銷 / 注意</div>
+1675: ⚠️ 發現 ${disc.length} 筆短收異常
+1678: <tr><th>採購單</th><th>商品</th><th>庫</th><th>應收</th><th>實收</th><th>短收</th></tr>
+1697: <div class="label agent-label">🤖 Agent investigation — <span id="rca-status-${card.id}" style="color:var(--muted)">分析Central…</span></div>
+1753: card.innerHTML = `<div class="label">⚙️ 安全庫存設定（${data.rows.length} 項）</div>
+1754: <table class="exp-table"><tr><th>商品</th><th>基準</th><th>分</th></tr>
+1759: card.innerHTML = `<div class="label">⚙️ 設定查詢</div>
+1766: <div class="hitl-header warn">📦 add item — 請Confirm</div>
+1768: <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+1769: <tr><td>名稱</td><td><b>${it.name}</b></td></tr>
+1770: <tr><td>SKU</td><td>${it.sku}（自動產生）</td></tr>
+1771: <tr><td>類別</td><td>${it.category}</td></tr>
+1772: <tr><td>單價</td><td>NT$ ${it.price}</td></tr>
+1773: <tr><td>安全庫存</td><td>${it.safety} units</td></tr>
+1774: <tr><td>初始庫存</td><td>North${it.stock_north||0} Central${it.stock_central||0} South${it.stock_south||0}</td></tr>
+1776: <div class="hitl-meta">Confirm後將寫入 items.csv 並自動重生種子資料。</div>
+1779: <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_create" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm新增</button>
+1788: <div class="hitl-header warn">${dirIcon} Confirm${data.direction_label} — 請Confirm</div>
+1790: <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+1791: <tr><td>商品</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
+1792: <tr><td>別</td><td>${data.warehouse_label}</td></tr>
+1793: <tr><td>數量</td><td style="color:${dirColor};font-weight:600">${data.direction === 'in' ? '+' : '-'}${data.qty} units</td></tr>
+1794: <tr><td>庫存變化</td><td>${data.before_qty} units → <b>${data.after_qty}</b> units</td></tr>
+1796: <div class="hitl-meta">Confirm後將直接寫入庫存資料，重開伺服器或重整頁面不會消失。</div>
+1809: <div class="hitl-header warn">🔄 Confirm調貨 — 請Confirm</div>
+1811: <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+1812: <tr><td>商品</td><td><b>${data.name}</b>（${data.sku}）</td></tr>
+1813: <tr><td>調貨數量</td><td style="font-weight:600">${data.qty} units</td></tr>
+1817: <div class="hitl-meta">Confirm後 ${data.from_label} 扣 ${data.qty} units、${data.to_label} 加 ${data.qty} units，總量不變。重開伺服器或重整頁面不會消失。</div>
+1820: <button class="hitl-approve" onclick="doConfirm(this)" data-action="create_transfer" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm調貨</but
+1825: card.innerHTML = `<div class="label">✅ 調貨Done</div>
+1846: <div class="label">📦 add item — 步驟 ${stepData.step}/4</div>
+1849: <button onclick="sendQuery('Cancel')" style="background:none;border:1px solid #ccc;border-radius:4px;padding:4px 12px;font-size:12px;color:#888;cursor
+1862: <div class="hitl-header danger">🗑 delete item — 請Confirm</div>
+1864: <table class="exp-table"><tr><th>SKU</th><th>商品</th><th>狀態</th></tr>
+1867: <div class="hitl-meta">⚠ 系統預設的 60 項商品不can be deleted。Delete後將從 items.csv 移除並重生種子資料。</div>
+1870: <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_delete" data-payload='${JSON.stringify({pending:data})}'>✅ ConfirmDelete (${d
+1875: card.innerHTML = `<div class="label">🔒 cannot be deleted</div><div style="padding:8px">${data.summary || 'This item is system protected，不can be delete
+1880: <div class="hitl-header danger">🗑 Delete排程 — 請Confirm</div>
+1882: <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+1884: <tr><td>作業</td><td>${j.script_label || ''}</td></tr>
+1885: <tr><td>頻率</td><td>${j.freq_label || ''} ${j.time_str || ''}</td></tr>
+1887: <div class="hitl-meta">⚠ Delete後此排程不再auto-run ，此動作無法復原。</div>
+1898: <div class="hitl-header danger">🗑 Delete警示規則 — 請Confirm</div>
+1900: <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+1902: <tr><td>條件</td><td>${data.condition_label || ''}</td></tr>
+1903: <tr><td>範圍</td><td>${r.scope_txt || 'all items'}</td></tr>
+1905: <div class="hitl-meta">⚠ Delete後此警示不再主動通知，此動作無法復原。</div>
+1944: <div class="hitl-meta">此操作將寫入正式資料，執行後可透過 audit log 查詢記錄。</div>
+1948: data-payload='${JSON.stringify(isCfg?{pending:data}:{script_id:data.script_id})}'>✅ 授權執行</button>
+1949: <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 退回重擬</button>
+1995: card.innerHTML = `<div class="label">🗂️ 資料區概覽（Agent 動態掃描）</div>
+1996: <table class="exp-table"><tr><th>區域</th><th>說明</th><th>檔數</th></tr>
+2000: card.innerHTML = `<div class="label">🗂️ ${data.area}/ — ${data.label||''}（${data.total||rows.length} 檔）</div>
+2013: <div class="hitl-header ${riskLevel}">✋ 採購授權 — 請Confirm後送出</div>
+2016: 共 <b>${lines.length}</b> 項商品需補貨，預估金額
+2020: <tr><th>商品</th><th></th><th>補貨量</th><th>金額</th><th>供應商</th></tr>
+2028: <div class="hitl-meta">Confirm後將建立採購草稿存入 PO_draft/，並記錄至 audit log。</div>
+2032: data-payload='${JSON.stringify({pending:data})}'>✅ 授權建立採購單</button>
+2033: <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 退回重擬</button>
+2038: card.innerHTML = `<div class="label">✅ 採購草稿已建立</div>
+2039: <div style="padding:8px;font-size:14px">${data.po_id||''} — ${data.lines||0} 項，存到 PO_draft/</div>
+2045: <div class="hitl-header warn">🔔 設定警示 — 請Confirm</div>
+2051: <div style="font-weight:700;font-size:14px">當【${scopeTxt}】發生「${data.condition_label}」</div>
+2052: <div style="font-size:12px;color:var(--muted);margin-top:2px">規則 ID：${data.rule_id} · 啟用後背景掃描自動套用</div>
+2055: <div class="hitl-meta">Confirm後寫入 alert_rules.json 並記錄 audit log。</div>
+2059: data-payload='${JSON.stringify({pending:data})}'>✅ 授權啟用警示</button>
+2060: <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 退回重擬</button>
+2065: <div style="padding:8px;font-size:14px">當【${(data.scope_names||[]).join('、')||'all items'}】發生「${data.condition_label}」時主動通知。</div>
+2070: <div class="hitl-header">⏰ 設定定時排程 — 請Confirm</div>
+2077: <div style="font-size:12px;color:var(--muted);margin-top:2px">排程 ID：${data.job_id} · 寫入 schedule_jobs.json，重啟不消失</div>
+2080: <div class="hitl-meta">Confirm後 Agent 將定時auto-run ，done後推送通知到此對話。</div>
+2084: data-payload='${JSON.stringify({pending:data})}'>✅ Confirm建立排程</button>
+2095: card.innerHTML = `<div class="label">📈 近兩個月出庫變化（變化最大）</div>
+2096: <table class="exp-table"><tr><th>商品</th><th>上月</th><th>本月</th><th>變化</th></tr>
+2110: const sub = c ? `<span class="clarify-sub">${esc(c.category||'')}｜total ${c.qty} ${esc(c.unit||'件')}</span>` : '';
+2113: <button class="clarify-row clarify-cancel" data-copt="cancel"><span class="clarify-num">✕</span><span class="clarify-text">Cancel，我不查了</span></button>
+2115: <div class="clarify-hint">點選項目，或輸入數字 1~${opts.length} / 直接輸入完整問題</div>
+2182: } else if (++tries >= 20) {   // 最多等 20 × 300ms = 6 秒
+2184: if (btnsEl) btnsEl.innerHTML = origHtml;   // 還原按鈕，可重按
+2185: appendBot('⚠️ 連線Central斷，your confirmation was not sent - please tap Confirm again.');
+2209: <h3>🔍 ${conf}% 是怎麼算出來的?</h3>
+2211: 在買「${aname}」的 <b>${anchorOrders}</b> 張訂單裡,<br>
+2212: 有 <b>${co}</b> 張也買了「${bname}」<br>
+2216: 📊 隨便兩個商品「剛好」同單的機率只有 <b>${baseline}%</b>。<br>
+2217: 這組高達 ${conf}%,是隨機的 <span class="hi">約 ${ratio.toFixed(0)} 倍</span> —
+2218: 代表它們是<span class="hi">真的常一起被買</span>,不是巧合。
+2221: 這就是「購物籃分析」,跟 Amazon「買了這個的人也買了」同一套作法 —
+2222: 系統真的去數了訂單算出來,不是寫死的。
+2224: <button class="calc-close" onclick="closeCalc()">懂了！</button>
+2247: <h3>⏳ 「${bname}」還能cover ${days} days?</h3>
+2249: 現有stock <b>${stock}</b> units<br>
+2250: ÷ 每天約賣 <b>${burn}</b> units<br>
+2254: 📈 每天賣多少 = 看近 30 days平均,再依趨勢加權:<br>
+2255: 趨勢 ${trendTxt}<br>
+2256: 🔔 庫存跌到安全線(${safety} units)或撐不到 7 days → 就提醒補貨。
+2264: <span style="font-size:11px;color:var(--muted)">每各自補到能cover ${target} days、含叫貨緩衝(缺最多的排前面)</span>
+2267: 這叫「線性消耗預測」— 依最近賣法往前推,儲補貨常用算法,不是亂猜。
+2269: <button class="calc-close" onclick="closeCalc()">懂了！</button>
+2328: items.push({ label: `🔗 ${r.name} 還連到啥`, query: `買${r.name}的人還會買什麼` });
+2332: items.push({ label: `📦 ${data.anchor_name} 庫存`, query: `${data.anchor_name}庫存` });
+2341: items.push({ label: `📦 ${r.name} 庫存`, query: `${r.name}庫存` });
+2344: items.push({ label: 'North到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'north', within_days: 30 } } });
+2345: items.push({ label: 'Central到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'central', within_days: 30 } } });
+2346: items.push({ label: 'South到期', direct_call: { function: 'list_expiring_items', args: { warehouse: 'south', within_days: 30 } } });
+2354: '氣泡水','野炊鍋','防蚊液','登山水壺','健身環','排汗衣','行動電源',
+2363: $('input-text').value = '';  // 通過 guard 才清空，避免文字不見但沒送出
+2386: const labelMap = { list_low_stock: '🚨 Low stock', list_expiring_items: '⏰ 到期警示' };
+2397: currentBotMsg = appendBot('想查哪一類庫存？');
+2401: query: `${CATEGORY_LABEL[c]}庫存`,
+2409: currentBotMsg = appendBot('想看哪個商品「買的人還會買什麼」?點一個試試:');
+2419: currentBotMsg = appendBot('📥 Inbound / Outbound，一句話就好（會先給你Confirm卡，Confirm後才寫入）。點一個試試:');
+2424: { label: '📤 North賣掉8支無線滑鼠', query: 'North賣掉8支無線滑鼠' },
+2429: currentBotMsg = appendBot('🔄 把貨從一個調到另一個（來源不夠會擋下）。點一個試試:');
+2433: { label: '🔄 South撥15個行動電源到Central', query: 'South撥15個行動電源到Central' },
+2438: currentBotMsg = appendBot('↩️ 客人退貨，庫存會加回來（一樣先給Confirm卡）。點一個試試:');
+2440: { label: '↩️ 客人退了3個bluetooth earphones', query: 'customer returned 3 bluetooth earphones at north' },
+2441: { label: '↩️ 顧客退2台藍牙喇叭', query: 'South顧客退2台藍牙喇叭' },
+2447: currentBotMsg = appendBot('🤖 智慧管家能「追原因 / 改設定 / 跑作業 / 管商品」。挑一個看看 Agent 怎麼多步思考:');
+2449: { label: '🔍 追check stock對不上', query: 'why are smart bands down so much' },
+2450: { label: '📄 產全體檢報告(含圖表)', query: 'give me a full warehouse report' },
+2451: { label: '📋 缺貨→自動產採購單', query: 'create a purchase order for low stock items' },
+2452: { label: '🔔 設警示(缺貨就通知)', query: 'bluetooth earphones缺貨就通知我' },
+2453: { label: '📈 這月vs上月變化', query: '這個月跟上個月哪些變化大' },
+2454: { label: '⚙️ South安全庫存全部+30', query: 'increase safety stock by 30 in south' },
+2457: { label: '🛠️ 跑月底盤點', query: '幫我跑一次月底盤點' },
+2512: let localASR = false;          // 後端回報本地 ASR 可用
+2515: let silenceTimer = null;       // VAD：靜音自動收尾
+2520: if (!localASR && s.reason) console.info('[voice] 本地 ASR 不可用：' + s.reason + '（回退瀏覽器辨識）');
+2539: let spoke = false;              // 要先講過話，才讓靜音收尾（防一開口前就被切）
+2561: } catch (e) { /* VAD failed不影響錄音，只是要手動再點一下 */ }
+2581: micStatus.textContent = '❌ 此瀏覽器不支援錄音';
+2594: micStatus.textContent = '🧠 辨識Central…';
+2603: micStatus.textContent = '⚠️ ' + (j.reason || '沒聽出內容') + '、請再試一次';
+2606: micStatus.textContent = '⚠️ 辨識failed、請再試一次';
+2613: micStatus.textContent = '🎤 聆聽Central… 講完會自動送出';
+2621: micBtn.title = '此瀏覽器不支援語音輸入（建議用 Chrome / Edge / Safari）';
+2637: micStatus.textContent = '🎤 聆聽Central... 請說話';
+2654: micStatus.textContent = '⚠️ 語音辨識需要網路（iOS Safari 離線可用）';
+2656: micStatus.textContent = `語音錯誤：${ev.error}`;
+2664: micStatus.textContent = '✓ 辨識done、送出Central...';
+2689: micStatus.textContent = '語音啟動failed：' + e.message;
+2705: { txt: '🍺 買diapers的也買了…?', kw: 'diapers' },
+2706: { txt: '☕ 買coffee machine還要囤啥?', kw: 'coffee machine' },
+2707: { txt: '🏕️ 買tent的人還扛了?', kw: 'tent' },
+2708: { txt: '🎧 買耳機順手帶了啥?', kw: 'bluetooth earphones' },
+2709: { txt: '💪 買yoga mat的還買?', kw: 'yoga mat' },
+2710: { txt: '🏃 跑者購物車有啥?', kw: 'running shoes' },
+2711: { txt: '❄️ 買down jacket還配?', kw: 'down jacket' },
+2712: { txt: '🧹 大掃除要囤哪些?', kw: 'laundry detergent' },
+2720: surprise.textContent = '🎲 隨機驚喜';
+2733: '👋 嗨！我是管 Agent。你可以「直接打字問我」，像跟同事講話一樣。\n\n' +
+2734: '我會這幾類事 —— 不知道怎麼問的話，下面的範例點一下就會幫你送出 👇'
+2751: <div id="perf-toggle" title="效能 (按 P)">⚡</div>
+2753: <div class="perf-title">⚡ FunctionGemma 270M<span class="perf-chip">自研晶片</span></div>
+2754: <div class="perf-row"><span>生成速度</span><b id="perf-tps">— tok/s</b></div>
+2755: <div class="perf-row"><span>本次推論</span><b id="perf-detail">—</b></div>
+2756: <div class="perf-hint" id="perf-close">CPU 推論 · 即時量測</div>
+2773: let _perfEma = null;  // 生成速度做輕微平滑，數字不亂跳
+2786: detEl.textContent = `⚡ 智慧路由 ${p.ms}ms`;
+2821: .perf-hint::after { content: ' ✕ 收合'; }

@@ -1,0 +1,3 @@
+MISS|query_inventory|(none)|how many bluetooth earphones are in stock
+MISS|query_movement|(none)|what came in today
+TOTAL|0/2

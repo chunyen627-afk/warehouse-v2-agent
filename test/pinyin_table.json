@@ -1,0 +1,323 @@
+{
+ "items": {
+  "藍牙耳機": {
+   "sku": "e01",
+   "full": "無線藍牙耳機",
+   "py": "lanyaerji"
+  },
+  "行動電源": {
+   "sku": "e02",
+   "full": "行動電源 10000mAh",
+   "py": "xingdongdianyuan"
+  },
+  "USB-C": {
+   "sku": "e03",
+   "full": "USB-C 快充線 2M",
+   "py": "USB-C"
+  },
+  "藍牙喇叭": {
+   "sku": "e04",
+   "full": "藍牙喇叭",
+   "py": "lanyalaba"
+  },
+  "智慧手環": {
+   "sku": "e05",
+   "full": "智慧手環",
+   "py": "zhihuishouhuan"
+  },
+  "手機防摔殼": {
+   "sku": "e06",
+   "full": "手機防摔殼",
+   "py": "shoujifangshuaike"
+  },
+  "滑鼠": {
+   "sku": "e07",
+   "full": "無線滑鼠",
+   "py": "huashu"
+  },
+  "機械式鍵盤": {
+   "sku": "e08",
+   "full": "機械式鍵盤",
+   "py": "jixieshijianpan"
+  },
+  "14吋筆電包": {
+   "sku": "e09",
+   "full": "14吋筆電包",
+   "py": "14cunbidianbao"
+  },
+  "桌上型": {
+   "sku": "e10",
+   "full": "桌上型 USB 風扇",
+   "py": "zhuoshangxing"
+  },
+  "不鏽鋼悶燒罐": {
+   "sku": "a01",
+   "full": "不鏽鋼悶燒罐",
+   "py": "buxiugangmenshaoguan"
+  },
+  "蒸氣電熨斗": {
+   "sku": "a02",
+   "full": "蒸氣電熨斗",
+   "py": "zhengqidianyundou"
+  },
+  "陶瓷不沾鍋": {
+   "sku": "a03",
+   "full": "陶瓷不沾鍋 28cm",
+   "py": "taocibuzhanguo"
+  },
+  "電動牙刷": {
+   "sku": "a04",
+   "full": "電動牙刷",
+   "py": "diandongyashua"
+  },
+  "迷你果汁機": {
+   "sku": "a05",
+   "full": "迷你果汁機",
+   "py": "miniguozhiji"
+  },
+  "咖啡機": {
+   "sku": "a06",
+   "full": "全自動咖啡機",
+   "py": "kafeiji"
+  },
+  "手沖咖啡壺組": {
+   "sku": "a07",
+   "full": "手沖咖啡壺組",
+   "py": "shouchongkafeihuzu"
+  },
+  "野炊鍋具組": {
+   "sku": "a08",
+   "full": "野炊鍋具組",
+   "py": "yechuiguojuzu"
+  },
+  "玻璃保鮮盒": {
+   "sku": "a09",
+   "full": "玻璃保鮮盒 5入",
+   "py": "bolibaoxianhe"
+  },
+  "除塵電動拖把": {
+   "sku": "a10",
+   "full": "除塵電動拖把",
+   "py": "chuchendiandongtuoba"
+  },
+  "氣泡水": {
+   "sku": "f01",
+   "full": "氣泡水 500ml",
+   "py": "qipaoshui"
+  },
+  "經典黑咖啡豆": {
+   "sku": "f02",
+   "full": "經典黑咖啡豆 1kg",
+   "py": "jingdianheikafeidou"
+  },
+  "蜂蜜檸檬茶": {
+   "sku": "f03",
+   "full": "蜂蜜檸檬茶 600ml",
+   "py": "fengminingmengcha"
+  },
+  "綜合堅果罐": {
+   "sku": "f04",
+   "full": "綜合堅果罐 500g",
+   "py": "zonghejianguoguan"
+  },
+  "全麥蘇打餅": {
+   "sku": "f05",
+   "full": "全麥蘇打餅 200g",
+   "py": "quanmaisudabing"
+  },
+  "啤酒": {
+   "sku": "f06",
+   "full": "精釀啤酒 6入",
+   "py": "pijiu"
+  },
+  "電解質運動飲": {
+   "sku": "f07",
+   "full": "電解質運動飲",
+   "py": "dianjiezhiyundongyin"
+  },
+  "高蛋白乳清飲": {
+   "sku": "f08",
+   "full": "高蛋白乳清飲",
+   "py": "gaodanbairuqingyin"
+  },
+  "熱可可粉": {
+   "sku": "f09",
+   "full": "熱可可粉 300g",
+   "py": "rekekefen"
+  },
+  "濾掛咖啡": {
+   "sku": "f10",
+   "full": "濾掛咖啡 20入",
+   "py": "lvguakafei"
+  },
+  "抗菌洗衣精": {
+   "sku": "d01",
+   "full": "抗菌洗衣精 4kg",
+   "py": "kangjunxiyijing"
+  },
+  "衛生紙": {
+   "sku": "d02",
+   "full": "三層抽取衛生紙",
+   "py": "weishengzhi"
+  },
+  "天然沐浴乳": {
+   "sku": "d03",
+   "full": "天然沐浴乳 1L",
+   "py": "tianranmuyuru"
+  },
+  "蚊香液補充瓶": {
+   "sku": "d04",
+   "full": "蚊香液補充瓶",
+   "py": "wenxiangyebuchongping"
+  },
+  "強力垃圾袋": {
+   "sku": "d05",
+   "full": "強力垃圾袋 50入",
+   "py": "qianglilajidai"
+  },
+  "紙尿布": {
+   "sku": "d06",
+   "full": "嬰兒紙尿布 L",
+   "py": "zhiniaobu"
+  },
+  "濕紙巾": {
+   "sku": "d07",
+   "full": "嬰兒濕紙巾",
+   "py": "shizhijin"
+  },
+  "防蚊液": {
+   "sku": "d08",
+   "full": "防蚊液",
+   "py": "fangwenye"
+  },
+  "橡膠清潔手套": {
+   "sku": "d09",
+   "full": "橡膠清潔手套",
+   "py": "xiangjiaoqingjieshoutao"
+  },
+  "咖啡濾紙": {
+   "sku": "d10",
+   "full": "咖啡濾紙 100入",
+   "py": "kafeilvzhi"
+  },
+  "純棉素T": {
+   "sku": "c01",
+   "full": "純棉素T 男款",
+   "py": "chunmiansuT"
+  },
+  "羊毛保暖襪": {
+   "sku": "c02",
+   "full": "羊毛保暖襪 3雙入",
+   "py": "yangmaobaonuanwa"
+  },
+  "輕量羽絨外套": {
+   "sku": "c03",
+   "full": "輕量羽絨外套",
+   "py": "qingliangyurongwaitao"
+  },
+  "牛仔長褲": {
+   "sku": "c04",
+   "full": "牛仔長褲 男款",
+   "py": "niuzaizhangku"
+  },
+  "彈性運動內衣": {
+   "sku": "c05",
+   "full": "彈性運動內衣",
+   "py": "danxingyundongneiyi"
+  },
+  "機能排汗衣": {
+   "sku": "c06",
+   "full": "機能排汗衣",
+   "py": "jinengpaihanyi"
+  },
+  "壓縮臂套": {
+   "sku": "c07",
+   "full": "運動壓縮臂套",
+   "py": "yasuobitao"
+  },
+  "連身衣": {
+   "sku": "c08",
+   "full": "嬰兒連身衣",
+   "py": "lianshenyi"
+  },
+  "保暖毛帽": {
+   "sku": "c09",
+   "full": "保暖毛帽",
+   "py": "baonuanmaomao"
+  },
+  "防曬遮陽帽": {
+   "sku": "c10",
+   "full": "防曬遮陽帽",
+   "py": "fangshaizheyangmao"
+  },
+  "瑜珈墊": {
+   "sku": "s01",
+   "full": "瑜珈墊 6mm",
+   "py": "yujiadian"
+  },
+  "登山水壺": {
+   "sku": "s02",
+   "full": "登山水壺 1L",
+   "py": "dengshanshuihu"
+  },
+  "彈力健身環": {
+   "sku": "s03",
+   "full": "彈力健身環",
+   "py": "danlijianshenhuan"
+  },
+  "啞鈴": {
+   "sku": "s04",
+   "full": "啞鈴 5kg 一對",
+   "py": "yaling"
+  },
+  "毛巾": {
+   "sku": "s05",
+   "full": "運動毛巾 100x30cm",
+   "py": "maojin"
+  },
+  "露營帳篷": {
+   "sku": "s06",
+   "full": "露營帳篷 4人",
+   "py": "luyingzhangpeng"
+  },
+  "折疊露營椅": {
+   "sku": "s07",
+   "full": "折疊露營椅",
+   "py": "zhedieluyingyi"
+  },
+  "慢跑鞋": {
+   "sku": "s08",
+   "full": "慢跑鞋 男款",
+   "py": "manpaoxie"
+  },
+  "露營馬克杯": {
+   "sku": "s09",
+   "full": "露營馬克杯",
+   "py": "luyingmakebei"
+  },
+  "LED": {
+   "sku": "s10",
+   "full": "LED 露營燈",
+   "py": "LED"
+  }
+ },
+ "kw": {
+  "北倉": "beicang",
+  "中倉": "zhongcang",
+  "南倉": "nancang",
+  "北區倉": "beiqucang",
+  "中區倉": "zhongqucang",
+  "南區倉": "nanqucang",
+  "庫存": "kucun",
+  "警示": "jingshi",
+  "熱銷": "rexiao",
+  "排行": "paihang",
+  "到期": "daoqi",
+  "缺貨": "quehuo",
+  "連帶": "liandai",
+  "比較": "bijiao",
+  "進貨": "jinhuo",
+  "出貨": "chuhuo",
+  "調貨": "diaohuo"
+ }
+}

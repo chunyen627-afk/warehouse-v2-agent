@@ -1,0 +1,60 @@
+1|無線藍牙耳機|electronics
+2|行動電源 10000mAh|electronics
+3|USB-C 快充線 2M|electronics
+4|藍牙喇叭|electronics
+5|智慧手環|electronics
+6|手機防摔殼|electronics
+7|無線滑鼠|electronics
+8|機械式鍵盤|electronics
+9|14吋筆電包|electronics
+10|桌上型 USB 風扇|electronics
+11|不鏽鋼悶燒罐|appliance_kitchen
+12|蒸氣電熨斗|appliance_kitchen
+13|陶瓷不沾鍋 28cm|appliance_kitchen
+14|電動牙刷|appliance_kitchen
+15|迷你果汁機|appliance_kitchen
+16|全自動咖啡機|appliance_kitchen
+17|手沖咖啡壺組|appliance_kitchen
+18|野炊鍋具組|appliance_kitchen
+19|玻璃保鮮盒 5入|appliance_kitchen
+20|除塵電動拖把|appliance_kitchen
+21|氣泡水 500ml|food_beverage
+22|經典黑咖啡豆 1kg|food_beverage
+23|蜂蜜檸檬茶 600ml|food_beverage
+24|綜合堅果罐 500g|food_beverage
+25|全麥蘇打餅 200g|food_beverage
+26|精釀啤酒 6入|food_beverage
+27|電解質運動飲|food_beverage
+28|高蛋白乳清飲|food_beverage
+29|熱可可粉 300g|food_beverage
+30|濾掛咖啡 20入|food_beverage
+31|抗菌洗衣精 4kg|daily_goods
+32|三層抽取衛生紙|daily_goods
+33|天然沐浴乳 1L|daily_goods
+34|蚊香液補充瓶|daily_goods
+35|強力垃圾袋 50入|daily_goods
+36|嬰兒紙尿布 L|daily_goods
+37|嬰兒濕紙巾|daily_goods
+38|防蚊液|daily_goods
+39|橡膠清潔手套|daily_goods
+40|咖啡濾紙 100入|daily_goods
+41|純棉素T 男款|apparel
+42|羊毛保暖襪 3雙入|apparel
+43|輕量羽絨外套|apparel
+44|牛仔長褲 男款|apparel
+45|彈性運動內衣|apparel
+46|機能排汗衣|apparel
+47|運動壓縮臂套|apparel
+48|嬰兒連身衣|apparel
+49|保暖毛帽|apparel
+50|防曬遮陽帽|apparel
+51|瑜珈墊 6mm|sports
+52|登山水壺 1L|sports
+53|彈力健身環|sports
+54|啞鈴 5kg 一對|sports
+55|運動毛巾 100x30cm|sports
+56|露營帳篷 4人|sports
+57|折疊露營椅|sports
+58|慢跑鞋 男款|sports
+59|露營馬克杯|sports
+60|LED 露營燈|sports

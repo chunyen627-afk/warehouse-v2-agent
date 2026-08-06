@@ -10217,7 +10217,15 @@ async def reset():
 #      或直接改下面的預設值。ac 用 `WAREHOUSE_ASR_AC`（0 = 不限，走完整 30 秒）。
 _VOICE_DIR = Path.home() / "whisper.cpp"
 _VOICE_CLI = _VOICE_DIR / "build/bin/whisper-cli"
-_ASR_MODEL_NAME = os.getenv("WAREHOUSE_ASR_MODEL", "small-q5_0")
+# 2026-08-06 選型定案：small-q5_0 → small-q8_0
+#   端到端 A/B（100 句 × 三層噪音 × 含容錯層，同日同方法實測）：
+#     q5_0  乾淨 81 / 一般噪音 79 / 尖峰 72  → 平均 77.3%
+#     q8_0  乾淨 80 / 一般噪音 82 / 尖峰 72  → 平均 78.0%  ★
+#   且 ASR 段快 40%（4.2s → 2.5s，訪客體感 5.9s → 4.2s）。
+#   ⓘ q8 首測平均僅 73.7%，是補了 batch4 的 11 條專用容錯規則後才反超
+#     （見 _ASR_FIX_EN 尾段）。該批規則對 q5 實測零影響（81/79/72 前後一致），
+#     所以留著也不會反傷——要退回 q5 只改這行即可。
+_ASR_MODEL_NAME = os.getenv("WAREHOUSE_ASR_MODEL", "small-q8_0")
 _VOICE_MODEL = _VOICE_DIR / f"models/ggml-{_ASR_MODEL_NAME}.bin"
 #   audio-ctx：0 或空 = 不加 -ac（完整 30 秒上下文，最慢）
 _ASR_AUDIO_CTX = os.getenv("WAREHOUSE_ASR_AC", "640").strip()

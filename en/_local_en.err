@@ -1,0 +1,61 @@
+10:36:21 [INFO] [health] starting: 初始化 seed 資料...
+10:36:21 [INFO] [anomaly] 背景異常掃描已啟動，間隔 300s
+10:36:22 [INFO] [intent_clf] 載入完成：781618 KB
+10:36:22 [INFO] [health] loading_model: 載入模型中... (en_q8_0.gguf)
+10:36:22 [INFO] 載入模型：C:\Users\pjunm\OneDrive\Desktop\FunctionGemma_Finetune\warehouse_v2\en\models\en_q8_0.gguf
+10:36:22 [INFO] CPU 設定: n_threads=10 n_threads_batch=10 n_batch=1024 n_ctx=1280
+llama_context: n_ctx_seq (1280) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+llama_kv_cache_iswa: using full-size SWA cache (ref: https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+10:36:22 [INFO] [health] self_check: 模型載入完成、正在自我檢測推論（最多等 10 秒）...
+10:36:22 [INFO] 模型載入完成、正在自我檢測推論...
+10:36:23 [INFO] 模型就緒 OK 自我檢測輸出: '<start_function_call>call:list_hot_items'
+10:36:23 [INFO] 快照日期：2026-05-26
+10:36:23 [INFO] SKU 數：60 / 倉庫：3 / 類別：6
+10:36:23 [INFO] URL: http://192.168.125.179:8002
+10:36:23 [INFO] [health] ready: 就緒 — 快照 2026-05-26、60 SKU、3 倉
+10:36:31 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+10:36:31 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+11:36:31 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+11:36:31 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+12:36:31 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+12:36:31 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+13:36:31 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+13:36:31 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+14:36:31 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+14:36:31 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+15:36:31 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+15:36:31 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+16:36:28 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+16:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+17:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+17:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+18:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+18:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+19:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+19:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+20:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+20:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+21:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+21:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+22:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+22:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+23:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+23:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+00:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+00:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+01:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+01:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+02:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+02:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+03:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+03:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+04:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+04:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+05:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+05:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+06:36:29 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+06:36:29 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+07:36:30 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+07:36:30 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+08:36:30 [INFO] [alert] 規則 AL001 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock
+08:36:30 [INFO] [alert] 規則 AL003 觸發：Electric Toothbrush, Bluetooth Speaker, Resistance Fitness Ring and 41 items below safety stock

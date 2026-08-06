@@ -1,0 +1,69 @@
+# 探針批：刻意用「我造句時不會寫」的句型
+# 目的不是量，是**句型多樣性**——r1-r11 全是同一個作者(Claude)造句，
+# 盲點會系統性重複。這批專挑我的習慣之外的講法。
+# 格式：句子|期望view（* = 不限，只要不出錯/不誤導）
+
+# ── ① 縮寫（撇號）——ASR 一定會產、打字訪客也會打 ──
+what's running low|low_stock
+where's the yoga mat|inventory_single
+what's left of the power bank|inventory_single
+how's the earphone stock|inventory_single
+we're out of trash bags aren't we|*
+don't we have any camping tents|inventory_single
+it's below safety stock isn't it|*
+that's not right|*
+
+# ── ② 口語省略/倒裝——訪客不會講完整句 ──
+earphones how many|inventory_single
+stock of the mouse|inventory_single
+yoga mat got any|inventory_single
+the coffee machine we have how many|inventory_single
+north got what|*
+any tents|inventory_single
+
+# ── ③ 禮貌用語包裹——展場訪客會客氣 ──
+could you tell me the earphone stock|inventory_single
+would you check the yoga mat inventory|inventory_single
+please show me what's running low|low_stock
+can you tell me how many mouse we have|inventory_single
+i'd like to know the tent stock|inventory_single
+sorry can i ask about the power bank|inventory_single
+
+# ── ④ 填充詞/口吃——真人講話會有 ──
+um how many earphones|inventory_single
+uh the yoga mat stock|inventory_single
+so like what's low|low_stock
+i mean the mouse count|inventory_single
+er sorry the tent stock|inventory_single
+
+# ── ⑤ 數字口語化——ASR 常吐英文字而非阿拉伯數字 ──
+north received fifty wireless mouse|movement_confirm
+central shipped twenty earphones|movement_confirm
+add a dozen yoga mats to south|movement_confirm
+alert me when earphones drop below thirty|alert_confirm
+set the mouse safety stock to one hundred|config_confirm
+
+# ── ⑥ 連寫/黏字——快打與 ASR 都會產 ──
+howmany earphones|inventory_single
+yogamat stock|inventory_single
+powerbank inventory|inventory_single
+whatsrunninglow|*
+theearphones stock|inventory_single
+
+# ── ⑦ 大小寫混雜——ASR 產物 ──
+What Is The Earphone Stock|inventory_single
+YOGA MAT STOCK|inventory_single
+Transfer 20 Wireless Mouse From North To Central|transfer_confirm
+whats Running Low|low_stock
+
+# ── ⑧ 句末標點/語助——whisper 一定加標點 ──
+how many earphones are left?|inventory_single
+what's running low!|low_stock
+the yoga mat stock, please.|inventory_single
+
+# ── ⑨ 展場真實情境（訪客不知道能問什麼）──
+what can i ask you|guide
+show me something interesting|*
+what's this demo about|guide
+is this real data|*
+how does this work|*
