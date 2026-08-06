@@ -7322,6 +7322,49 @@ async def ws_handler(ws: WebSocket):
             #   → 100 被 match 成「運動毛巾 100x30cm」幻覺回庫存。寫入授權只認按鈕，
             #   這裡一律引導，不寫入、不猜商品。新增商品流程中不套用（那是 step 值）。
             if not _item_create_state_ws.get(vid, {}).get("active"):
+                # 2026-08-06 user 實測：「每天一點自動執行盤點」被舊授權卡
+                #   纏住（「執行」撞代按詞表→pending-gate 引導、排程卡跳不
+                #   出來）。完整排程句＝新意圖 → 舊卡作廢（r60 先例）、
+                #   放行走正常路由。
+                if (vid in _pending_by_vid
+                        and _re.search(r"每[天日週周月]|每星期|每禮拜", user_text)
+                        and any(w in user_text for w in ("盤點", "報表", "報告",
+                                                         "匯出", "體檢", "執行",
+                                                         "跑", "排程"))):
+                    log.info(f"[pending-gate] 完整排程句 → 舊卡作廢放行: {user_text!r}")
+                    _pending_by_vid.pop(vid, None)
+                # zh-r2 結構性修（user 裁決）：修正句——進出/調貨卡在場時說
+                #   「等等 那筆是15不是10」「改成15」→ 用原卡參數換數量
+                #   **重開新卡**（仍要確認才寫入，不直接執行）。
+                _fx_pend = _pending_by_vid.get(vid) or {}
+                if (_fx_pend.get("view") in ("movement_confirm", "transfer_confirm")
+                        and _re.search(r"不是|改成|改為|應該是|等等|錯了|打錯", user_text)
+                        and _re.search(r"\d", user_text)):
+                    _fx_nums = _re.findall(r"\d+", user_text)
+                    _fx_qty = _fx_nums[-1]          # 修正語意＝最後講的數字
+                    _fx_d = _fx_pend.get("data") or {}
+                    import tools_v2 as _tv2_fx
+                    if _fx_pend["view"] == "movement_confirm":
+                        _fx_res = _tv2_fx.create_movement(
+                            keyword=_fx_d.get("keyword") or _fx_d.get("name", ""),
+                            warehouse=_fx_d.get("warehouse", ""),
+                            direction=_fx_d.get("direction", ""),
+                            qty=_fx_qty,
+                            is_return=bool(_fx_d.get("is_return")))
+                    else:
+                        _fx_res = _tv2_fx.create_transfer(
+                            keyword=_fx_d.get("keyword") or _fx_d.get("name", ""),
+                            from_wh=_fx_d.get("from_wh", ""),
+                            to_wh=_fx_d.get("to_wh", ""),
+                            qty=_fx_qty)
+                    if isinstance(_fx_res, dict) and _fx_res.get("ok"):
+                        log.info(f"[pending-fix] 修正數量 → {_fx_qty}（重開卡）")
+                        _ctx_absorb(vid, _fx_res)
+                        for ch in _fx_res.get("summary", ""):
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": _fx_res})
+                        continue
                 _pend_msg = _pending_reply(vid, user_text)
                 if _pend_msg:
                     log.info(f"[pending-gate] 對卡片講話 → 引導: {user_text!r}")
@@ -7814,10 +7857,21 @@ async def ws_handler(ws: WebSocket):
             # r19：「刪掉早上九點的排程」是排程管理不是刪商品——排程/警示對象
             # 讓給 Pre-C-Sched 的取消排程規則（列排程讓訪客選）
             if (any(w in user_text for w in _delete_kws_ws)
-                    and not any(w in user_text for w in ("排程", "警示", "提醒", "鬧鐘"))):
+                    and (not any(w in user_text for w in ("排程", "警示", "提醒", "鬧鐘"))
+                         # zh-r2 #62 第一步：「剛剛那條警示刪掉」有明確指代
+                         #   → 直指刪除（原本含警示/排程字一律讓給列表路，
+                         #   訪客得多繞一步唸 ID）
+                         or any(w in user_text for w in ("剛剛", "剛加", "剛設",
+                                                         "那條", "那個", "它",
+                                                         "最後", "最新")))):
                 # r74：schedule_list/alert_list 畫面後的短刪除句（「刪掉它」）是刪
                 # 排程/警示不是刪商品——曾誤入商品刪除流程回「電動牙刷無法刪除」
                 _lv74 = _ctx_for(vid).get("last_view")
+                # kind 依句面字面優先（「那條警示刪掉」明講警示就是警示）
+                if "排程" in user_text:
+                    _lv74 = "schedule_list"
+                elif any(w in user_text for w in ("警示", "提醒")):
+                    _lv74 = "alert_list"
                 _sj74 = (_ctx_for(vid).get("last_sched_jobs")
                          if _lv74 in ("schedule_list", "schedule_done")
                          else _ctx_for(vid).get("last_alert_rules")) or []
@@ -10173,15 +10227,22 @@ async def ws_handler(ws: WebSocket):
                                                              "下午", "晚上", "今天", "明天"))
                             and not any(w in user_text for w in ("現在", "馬上", "立刻"))):
                         _clk = _sched_clock_m.group(1)
-                        _q_sched1t = (f"你說的是 {_clk}——目前只支援「每天固定時間」的"
-                                      f"排程（不支援單次定時）。要怎麼做？")
+                        # 2026-08-06 user 實測：「下午一點跑盤點」點選項後建成
+                        #   **01:00**——組句只帶了「一點」把「下午」弄丟，
+                        #   解析少了 +12。時段詞要一起帶進選項句。
+                        _clk_period_m = _re.search(
+                            r"(早上|上午|中午|下午|晚上|傍晚|凌晨)", user_text)
+                        _clk_full = ((_clk_period_m.group(1) if _clk_period_m else "")
+                                     + _clk)
+                        _q_sched1t = (f"你說的是{_clk_full}——目前只支援「每天固定時間」"
+                                      f"的排程（不支援單次定時）。要怎麼做？")
                         await send({"type": "done", "result": {
                             "ok": True, "view": "clarify", "summary": _q_sched1t,
                             "data": {"question": _q_sched1t,
                                      "options": ["現在就跑一次盤點",
-                                                 f"設定每天{_clk}自動跑盤點"],
+                                                 f"設定每天{_clk_full}自動跑盤點"],
                                      "actions": ["現在跑一次盤點",
-                                                 f"每天{_clk}自動執行盤點"],
+                                                 f"每天{_clk_full}自動執行盤點"],
                                      "hint": ""}}})
                         log.info(f"[Pre-C-Sched] 單次定時句 → clarify: {user_text!r}")
                         continue

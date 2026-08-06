@@ -1334,6 +1334,13 @@ def _parse_schedule_intent(text: str) -> dict:
         # 下午/晚上 + 12 小時制轉換
         if h < 12 and any(w in text for w in ("下午", "晚上", "傍晚", "晚間", "夜裡")):
             h += 12
+        # 2026-08-06 user 實測：「每天一點自動執行盤點」建成 01:00——語意上
+        #   「對」但訪客十有八九指下午。無時段詞且 1-6 點 → 當下午（+12）；
+        #   要真凌晨講「凌晨/半夜」就不轉。
+        elif (1 <= h <= 6
+              and not any(w in text for w in ("凌晨", "半夜", "早上", "上午",
+                                              "清晨", "早晨"))):
+            h += 12
         time_str = f"{h:02d}:{mi:02d}"
     else:
         _t_hit = next((v for k, v in _SCHEDULE_TIME_MAP.items() if k in text), None)

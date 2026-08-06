@@ -1505,13 +1505,28 @@ def _parse_schedule_intent(text: str) -> dict:
     # 解析時間（幾點）——阿拉伯數字或中文數字（「八點」「十一點」，第9輪測試補：
     # 原本只認阿拉伯，「每天早上八點」落到「早上」預設 09:00 跟既有排程撞名）
     time_str = None
-    m = _re.search(r'([0-9]{1,2}|十[一二]?|[一兩二三四五六七八九])\s*[點:](\d{0,2})', text)
+    # ⚠️ EN build（單元測試抓到）：'at 7:30pm' 的 `:` 會中 [點:] 字元類被中文
+    #   分支搶走 → pm 資訊丟失變 07:30。句含英文 am/pm 鐘點就跳過中文分支，
+    #   交給下面的英文分支正確處理。
+    _has_en_ampm = _re.search(r'\b[0-9]{1,2}(?::[0-9]{2})?\s*[ap]\.?m\.?\b',
+                              text, _re.I)
+    m = None if _has_en_ampm else \
+        _re.search(r'([0-9]{1,2}|十[一二]?|[一兩二三四五六七八九])\s*[點:](\d{0,2})', text)
     if m:
         g = m.group(1)
         h = int(g) if g.isdigit() else _CN_HOUR.get(g, 9)
         mi = int(m.group(2)) if m.group(2) else 0
         # 下午/晚上 + 12 小時制轉換
-        if h < 12 and any(w in text for w in ("下午", "晚上", "傍晚", "晚間", "夜裡")):
+        # ⚠️ EN build：'at 1:30' 的 `:` 會中 [點:] 字元類走到**這條中文分支**
+        #   （單元測試抓到）→ 時段語境與 1-6 智慧預設要中英文一起看。
+        _pm_zh = _re.search(r'\b(?:afternoon|evening|tonight|night)\b', text, _re.I)
+        _am_zh = _re.search(r'\b(?:morning|dawn|sunrise|midnight)\b', text, _re.I)
+        if h < 12 and (any(w in text for w in ("下午", "晚上", "傍晚", "晚間", "夜裡"))
+                       or _pm_zh):
+            h += 12
+        elif (1 <= h <= 6 and not _am_zh
+              and not any(w in text for w in ("凌晨", "半夜", "早上", "上午",
+                                              "清晨", "早晨"))):
             h += 12
         time_str = f"{h:02d}:{mi:02d}"
     else:
@@ -1529,9 +1544,24 @@ def _parse_schedule_intent(text: str) -> dict:
                 h += 12
             time_str = f"{h:02d}:{mi:02d}"
         else:
-            _m_24 = _re.search(r'\bat\s+([0-9]{1,2}):([0-9]{2})\b', text, _re.I)
-            if _m_24 and int(_m_24.group(1)) < 24:
-                time_str = f"{int(_m_24.group(1)):02d}:{int(_m_24.group(2)):02d}"
+            # 2026-08-06 ZH 同款智慧預設：'daily at 1' 無 am/pm → 原本掉到
+            #   詞表→None→**默默變 09:00**（比建錯更難察覺）。裸鐘點 1-6 當
+            #   下午（+12）；morning/am 語境才留上午；evening/night 語境 7-11
+            #   也 +12。'at 15:00' 24h 直取（h≥12 不再加）。
+            _m_24 = _re.search(r'\bat\s+([0-9]{1,2})(?::([0-9]{2}))?\b', text, _re.I)
+            if _m_24 and int(_m_24.group(1)) <= 23 \
+                    and (not _m_24.group(2) or int(_m_24.group(2)) < 60):
+                h = int(_m_24.group(1))
+                mi = int(_m_24.group(2)) if _m_24.group(2) else 0
+                _pm_ctx = _re.search(r'\b(?:afternoon|evening|tonight|night)\b',
+                                     text, _re.I)
+                _am_ctx = _re.search(r'\b(?:morning|dawn|sunrise|midnight)\b',
+                                     text, _re.I)
+                if h < 12 and _pm_ctx:
+                    h += 12
+                elif 1 <= h <= 6 and not _am_ctx:
+                    h += 12
+                time_str = f"{h:02d}:{mi:02d}"
             else:
                 _t_hit = next((v for k, v in _SCHEDULE_TIME_MAP.items() if k in text), None)
                 if _t_hit is None:

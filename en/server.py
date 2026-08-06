@@ -10968,6 +10968,53 @@ async def ws_handler(ws: WebSocket):
                             user_text = _restated
                             _pending_by_vid.pop(vid, None)
             if not _item_create_state_ws.get(vid, {}).get("active"):
+                # ZH 同款（2026-08-06 user 實測）：完整排程句被舊授權卡纏住
+                #   （act 詞撞代按詞表 → pending-gate 引導、排程卡跳不出來）。
+                #   完整排程句＝新意圖 → 舊卡作廢（r60 先例）、放行走正常路由。
+                if (vid in _pending_by_vid
+                        and _re.search(r"\b(?:every\s+(?:day|morning|night|evening|"
+                                       r"week|month)|daily|weekly|monthly|nightly|"
+                                       r"each\s+(?:day|week|month))\b",
+                                       user_text, _re.I)
+                        and _re.search(r"\b(?:stock\s*count|stocktake|inventory|"
+                                       r"audit|report|export|health\s*check|"
+                                       r"schedule|run)\b", user_text, _re.I)):
+                    log.info(f"[pending-gate] 完整排程句 → 舊卡作廢放行: {user_text!r}")
+                    _pending_by_vid.pop(vid, None)
+                # ZH zh-r2 同款移植：修正句——movement/transfer 卡在場時
+                #   'wait that was 15 not 10' / 'change it to 15' → 用原卡
+                #   參數換數量重開卡（仍要確認）
+                _fx_pend = _pending_by_vid.get(vid) or {}
+                if (_fx_pend.get("view") in ("movement_confirm", "transfer_confirm")
+                        and _re.search(r"\b(?:wait|actually|not|should be|change|"
+                                       r"make (?:it|that)|meant)\b|不是|改成|等等",
+                                       user_text.lower())
+                        and _re.search(r"\d", user_text)):
+                    _fx_nums = _re.findall(r"\d+", user_text)
+                    _fx_qty = _fx_nums[-1]
+                    _fx_d = _fx_pend.get("data") or {}
+                    import tools_v2 as _tv2_fx
+                    if _fx_pend["view"] == "movement_confirm":
+                        _fx_res = _tv2_fx.create_movement(
+                            keyword=_fx_d.get("keyword") or _fx_d.get("name", ""),
+                            warehouse=_fx_d.get("warehouse", ""),
+                            direction=_fx_d.get("direction", ""),
+                            qty=_fx_qty,
+                            is_return=bool(_fx_d.get("is_return")))
+                    else:
+                        _fx_res = _tv2_fx.create_transfer(
+                            keyword=_fx_d.get("keyword") or _fx_d.get("name", ""),
+                            from_wh=_fx_d.get("from_wh", ""),
+                            to_wh=_fx_d.get("to_wh", ""),
+                            qty=_fx_qty)
+                    if isinstance(_fx_res, dict) and _fx_res.get("ok"):
+                        log.info(f"[pending-fix] qty corrected → {_fx_qty}")
+                        _ctx_absorb(vid, _fx_res)
+                        for ch in _fx_res.get("summary", ""):
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": _fx_res})
+                        continue
                 _pend_msg = _pending_reply(vid, user_text)
                 if _pend_msg:
                     log.info(f"[pending-gate] 對卡片講話 → 引導: {user_text!r}")
@@ -11705,24 +11752,42 @@ async def ws_handler(ws: WebSocket):
                               #   這個商品 → oov:noex 回「查無此商品」）
                               "delete item", "delete the item", "remove item",
                               "remove the item", "delete product", "remove product",
-                              "take down", "discontinue", "delist")
+                              "take down", "discontinue", "delist",
+                              # r16 #77（ZH zh-r2 #62 同款移植）：指代刪除片語
+                              #   'delete that alert' 曾只回列表繞一步
+                              "delete that", "remove that", "delete it",
+                              "remove it", "delete the last", "remove the last")
+            _ul_del = user_text.lower()
             # r19：「刪掉早上九點的排程」是排程管理不是刪商品——排程/警示對象
             # 讓給 Pre-C-Sched 的取消排程規則（列排程讓訪客選）
-            if (any(w in user_text for w in _delete_kws_ws)
-                    and not any(w in user_text for w in ("排程", "警示", "提醒", "鬧鐘"))
-                    # ⚠️ 這裡是 WS handler 作用域，沒有 text_low（那是
-                    #   _correct_function_call 的區域變數）→ 自己 lower()
-                    and not any(w in user_text.lower()
-                                for w in ("schedule", "alert", "reminder", "job"))):
+            _del_ref = any(w in _ul_del for w in ("that", "it", "the last",
+                                                  "just made", "just set",
+                                                  "剛剛", "那條", "它"))
+            if ((any(w in user_text for w in _delete_kws_ws)
+                 or any(w in _ul_del for w in ("delete that", "remove that",
+                                               "delete it", "remove it")))
+                    and (not (any(w in user_text for w in ("排程", "警示", "提醒", "鬧鐘"))
+                              or any(w in _ul_del
+                                     for w in ("schedule", "alert", "reminder", "job")))
+                         # 指代刪除（delete that alert）→ 直指路，不繞列表
+                         or _del_ref)):
                 # r74：schedule_list/alert_list 畫面後的短刪除句（「刪掉它」）是刪
                 # 排程/警示不是刪商品——曾誤入商品刪除流程回「電動牙刷無法刪除」
                 _lv74 = _ctx_for(vid).get("last_view")
+                # kind 依句面字面優先
+                if "schedule" in _ul_del or "排程" in user_text:
+                    _lv74 = "schedule_list"
+                elif any(w in _ul_del for w in ("alert", "reminder")) \
+                        or "警示" in user_text:
+                    _lv74 = "alert_list"
                 _sj74 = (_ctx_for(vid).get("last_sched_jobs")
                          if _lv74 in ("schedule_list", "schedule_done")
                          else _ctx_for(vid).get("last_alert_rules")) or []
                 if (_lv74 in ("schedule_list", "alert_list",
                               "schedule_done", "alert_done")
-                        and _sj74 and len(user_text) <= 10):
+                        and _sj74
+                        and (len(user_text) <= 10
+                             or len(user_text.split()) <= 5)):
                     import tools_v2 as _tv2_sd74
                     _sched74 = _lv74 in ("schedule_list", "schedule_done")
                     _obj74 = "排程" if _sched74 else "警示規則"
@@ -14466,6 +14531,42 @@ async def ws_handler(ws: WebSocket):
                                 log.info(f"[Pre-C-Sched] 英文排程句抽不到腳本 → 不攔截: {user_text!r}")
                         except Exception:
                             pass
+                    # ZH 同款移植（2026-08-06 user 實測）：「今天早上10點30分幫我跑盤點」
+                    #   曾**立即執行**——句有具體時刻＝訪客要定時，馬上跑是誤解意圖；
+                    #   一次性定時不支援（排程表是週期制）→ 不猜，反問。
+                    #   EN 版組句保真：排程選項直接「原句 + every day」，腳本/時刻
+                    #   全從原句重抽，零信息銷毀（rewrite 三次教訓）。
+                    _sched_clock_en = _re.search(
+                        r"\b(?:at\s+[0-9]{1,2}(?::[0-9]{2})?\s*(?:[ap]\.?m\.?)?|"
+                        r"[0-9]{1,2}(?::[0-9]{2})?\s*[ap]\.?m\.?)\b",
+                        user_text, _re.I)
+                    if (not _has_sched_time and _has_sched_act and _sched_clock_en
+                            and not _re.search(r"\b(?:now|right away|immediately|"
+                                               r"asap)\b", user_text, _re.I)):
+                        _sc1_ok = False
+                        try:
+                            import tools_v2 as _tv2_s1
+                            _sc1_ok = bool(_tv2_s1._parse_schedule_intent(
+                                user_text).get("script_id"))
+                        except Exception:
+                            pass
+                        if _sc1_ok:
+                            _clk_disp = _re.sub(r"^at\s+", "",
+                                                _sched_clock_en.group(0).strip(),
+                                                flags=_re.I)
+                            _q_sched1t = (f"You said {_clk_disp} — only fixed daily "
+                                          f"schedules are supported (no one-off "
+                                          f"timers). What would you like to do?")
+                            await send({"type": "done", "result": {
+                                "ok": True, "view": "clarify", "summary": _q_sched1t,
+                                "data": {"question": _q_sched1t,
+                                         "options": ["Run it once right now",
+                                                     f"Schedule it daily at {_clk_disp}"],
+                                         "actions": [f"{user_text} right now",
+                                                     f"{user_text} every day"],
+                                         "hint": ""}}})
+                            log.info(f"[Pre-C-Sched] 單次定時句 → clarify: {user_text!r}")
+                            continue
                     if _has_sched_time and _has_sched_act:
                         if func_name != "set_schedule":
                             func_name = "set_schedule"
