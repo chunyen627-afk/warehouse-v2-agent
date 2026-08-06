@@ -1306,11 +1306,31 @@ def _parse_schedule_intent(text: str) -> dict:
     # 解析時間（幾點）——阿拉伯數字或中文數字（「八點」「十一點」，第9輪測試補：
     # 原本只認阿拉伯，「每天早上八點」落到「早上」預設 09:00 跟既有排程撞名）
     time_str = None
-    m = _re.search(r'([0-9]{1,2}|十[一二]?|[一兩二三四五六七八九])\s*[點:](\d{0,2})', text)
+    # 2026-08-06 user 實測：「10點半」曾建成 10:00（「半」被丟）——補
+    #   半/一刻/三刻/中文分鐘（三十分/四十五分）。阿拉伯分鐘原本就支援
+    #   （「下午2點45分」→14:45）。
+    m = _re.search(r'([0-9]{1,2}|十[一二]?|[一兩二三四五六七八九])\s*[點:]\s*'
+                   r'([0-9]{1,2}|半|一刻|三刻|[一二三四五]?十[一二三四五六七八九]?)?', text)
     if m:
         g = m.group(1)
         h = int(g) if g.isdigit() else _CN_HOUR.get(g, 9)
-        mi = int(m.group(2)) if m.group(2) else 0
+        g2 = m.group(2) or ""
+        _CN_D = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+                 "六": 6, "七": 7, "八": 8, "九": 9}
+        if g2 == "半":
+            mi = 30
+        elif g2 == "一刻":
+            mi = 15
+        elif g2 == "三刻":
+            mi = 45
+        elif g2.isdigit():
+            mi = int(g2)
+        elif g2:
+            _p = g2.split("十")
+            mi = (_CN_D.get(_p[0], 1) if _p[0] else 1) * 10 \
+                 + (_CN_D.get(_p[1], 0) if len(_p) > 1 and _p[1] else 0)
+        else:
+            mi = 0
         # 下午/晚上 + 12 小時制轉換
         if h < 12 and any(w in text for w in ("下午", "晚上", "傍晚", "晚間", "夜裡")):
             h += 12

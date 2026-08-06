@@ -145,6 +145,9 @@ GATEKEEPER_KEYWORDS = {
     "呆滯", "不受歡迎",
     # r14+2：裸「調撥/調貨」單詞句曾被守門拒（EN transfers? 同款）
     "調撥", "調貨",
+    # zh-r1 #3/#9/#10/#4/#96：滯銷口語/業績問句誤擋（EN least popular/
+    #   collecting dust 同款 ZH 缺口）
+    "沒人要", "不熱門", "生灰塵", "灰塵", "呆料", "業績如何", "業績怎樣",
     # conv100-r6：缺貨/滯銷/連帶/RCA/明細 口語
     "斷炊", "吃緊", "急診", "快空", "墊底", "購物車", "黃金組合", "防蚊",
     "兜不上", "少掉", "流向", "吞吐", "業績", "存貨", "不能賣",
@@ -624,6 +627,8 @@ _HOT_INTENT_WORDS_HOT = (
     "夯", "最夯",
     # r30：賣況/買氣（帶商品名時 C4-prod 轉該商品銷況）
     "賣況怎樣", "賣況如何", "買氣",
+    # zh-r1 #96：「今天業績如何」clf 誤判 movement 被 guard 拒
+    "業績如何", "業績怎樣", "業績好嗎",
     # r14+2（EN #42 回查 ZH 同款）：「上週末賣了什麼」曾被匯出期間反問
     #   搶走——賣了什麼＝看熱銷清單。寫入句（賣了3個）不含「什麼」不衝突。
     "賣了什麼", "賣了些什麼", "賣掉了什麼",
@@ -649,6 +654,8 @@ _HOT_INTENT_WORDS_SLOW = (
     #   list_files 再被意圖閘門 rejected——呆滯是 anomaly.py 偵測器都在用
     #   的正式行話，詞表卻沒收；「最不受歡迎」同批
     "呆滯", "不受歡迎", "沒人要",
+    # zh-r1：不熱門/生灰塵/呆料（守門放行後 C4 靠這裡轉 slow）
+    "不熱門", "生灰塵", "呆料",
     "worst selling", "slow", "slow mover",
 )
 
@@ -1171,8 +1178,15 @@ _REWRITE_RULES: list[tuple] = [
     (_re.compile(r"^(誰改|誰動|是誰).*(庫存|帳|數量)"),            "庫存帳對不上"),
 
     # ── 執行腳本（明確動詞 + 品名）──
-    (_re.compile(r"(幫我跑|幫我執行|請執行|請跑|執行|跑).*(盤點|月底盤點)"),
+    # 2026-08-06 user 實測：「今天早上10點30分幫我跑盤點」被本條改寫成
+    #   「執行腳本 月底盤點」＝**時刻資訊銷毀**（rewrite 定律又一案）→
+    #   當場執行。含「數字+點」時刻或週期詞的句子不改寫，讓排程層接手。
+    #   （「盤點」自身的點前面不是數字，不會誤攔。）
+    (_re.compile(r"^(?!.*[0-9零一二兩三四五六七八九十]+\s*點)(?!.*每[天日週周月])"
+                 r".*(幫我跑|幫我執行|請執行|請跑|執行|跑).*(盤點|月底盤點)"),
                                                                     "執行腳本 月底盤點"),
+    # zh-r1 #4：「呆料清單」曾掉 guide（無參數查詢類 rewrite 合法）
+    (_re.compile(r"^呆料(?:清單|列表)?$"),                          "滯銷排行"),
     (_re.compile(r"(幫我跑|幫我執行|請執行|請跑|執行|跑|匯出|產出).*(進出|移動).*(記錄|匯出|CSV|表)"),
                                                                     "執行腳本 進出記錄匯出"),
     (_re.compile(r"(幫我跑|幫我執行|請執行|請跑|執行|跑|產|產出|生成|匯出).*(體檢|健診)"),
@@ -5129,7 +5143,10 @@ _CTX_GLOBAL = ("哪些", "所有", "全部", "每個", "各倉", "各個", "排�
                "警示", "清單", "列表", "比較", "前十", "前三", "前五", "總共", "整體",
                "有什麼", "缺什麼", "全店", "全倉", "都有",
                # r74：「那看庫存總值」被 ctx 注入變成單品查詢——總值類詞是全店視角
-               "總值", "總價值", "庫存價值", "總市值")
+               "總值", "總價值", "庫存價值", "總市值",
+               # zh-r1 #24：「今天凌晨有異動嗎」被低庫存榜首吸品（r34 設計）
+               #   補成藍牙喇叭——全店異動問句不可被鎖品（EN GLOBAL 同款修）
+               "有異動", "異動嗎", "有人動", "有進貨", "有出貨")
 
 
 # 「這個月」「那個星期」的代詞是時間片語，不是指商品
@@ -5584,11 +5601,19 @@ async def _run_due_schedules():
             # 更新 last_run
             job["last_run"] = now.isoformat(timespec="seconds")
             jobs_path.write_text(_json.dumps({"jobs": jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
+            # 2026-08-06 user 要求：排程產出要像「產報告」一樣給**可點開分頁**
+            #   的連結——output_tail 的 VIEW:xxx.html 轉成 /audit/ 連結
+            #   （banner 用 innerHTML 渲染，a 標籤可點；路徑是 server 自產檔名）
+            _sd_tail = str(result.get("data", {}).get("output_tail", ""))
+            _sd_view = _re.search(r"VIEW:\S*?(audit/[^\s/\\]+\.html)", _sd_tail)
+            _sd_link = (f'<br><a href="/{_sd_view.group(1)}" target="_blank" '
+                        f'style="color:#2b6cb0;font-weight:600">📊 開啟報告</a>'
+                        if _sd_view else "")
             await push_display({"type": "schedule_done", "job_id": job["id"],
                                 "script_label": job["script_label"],
                                 "ok": result.get("ok", False),
                                 "summary": result.get("summary", ""),
-                                "output_tail": result.get("data", {}).get("output_tail", ""),
+                                "output_tail": result.get("summary", "") + _sd_link,
                                 "ts": now.strftime("%H:%M")})
     except Exception as e:
         log.error(f"[_run_due_schedules] {e}", exc_info=True)
@@ -5631,10 +5656,16 @@ async def _demo_run_schedule(job: dict):
         None, lambda: __import__("tools_v2").commit_run_script(
                                       job["script_id"], actor="scheduler"))
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+    # 2026-08-06 user 實測回饋：「每天早上11點跑盤點」建完馬上跑一次，
+    #   看起來像亂執行——立跑是展場設計（訪客等不到 11 點），但橫幅跟
+    #   正式觸發長一樣＝設計沒講清楚自己。summary 前綴示範說明。
+    _kick_note = (f"🎬 排程建立成功——先示範執行一次給你看，"
+                  f"之後{job.get('freq_label', '每天')} "
+                  f"{job.get('time_str', '')} 會自動執行。\n")
     await push_display({"type": "schedule_done", "job_id": job.get("id", ""),
                         "script_label": job.get("script_label", ""),
                         "ok": ok,
-                        "summary": (result or {}).get("summary", "")})
+                        "summary": _kick_note + (result or {}).get("summary", "")})
 
 
 async def _alert_scheduler_loop():
@@ -5746,6 +5777,9 @@ async def push_display(payload: dict):
     ⇒ 改成兩個 set 都送。訪客沒開的推播型別前端會自然忽略（if-type 分派）。
     """
     msg  = json.dumps(payload, ensure_ascii=False)
+    # 排程 banner 消失案觀測點：型別+目標連線數
+    if payload.get("type", "").startswith("schedule"):
+        log.info(f"[push] {payload.get('type')} → display={len(display_sockets)} all={len(all_sockets)}")
     dead = set()
     for ws in list(display_sockets) + list(all_sockets):
         try:
@@ -7081,11 +7115,10 @@ async def ws_handler(ws: WebSocket):
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                         await push_display({"type": "schedule_created",
                                            "job": res.get("data", {}).get("job", {})})
-                        # 同上：排程要等到時鐘走到設定時刻（一天一次機會）
-                        #   → 立刻跑一次那支腳本，讓訪客看到完整因果。
-                        _demo_kick(
-                            _demo_run_schedule(res.get("data", {}).get("job", {})),
-                            "schedule")
+                        # 2026-08-06 user 定調：排程建立後**不再立跑示範**
+                        #   （「每天11點跑盤點」建完馬上跑一次看起來像亂執行；
+                        #   訪客想看盤點直接說「跑盤點」就好）。原 _demo_kick
+                        #   立跑已移除；警示的立跑檢查（上面 alert 分支）保留。
                     elif act == "item_create":
                         res = tools_v2.commit_create_item(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
@@ -8113,7 +8146,10 @@ async def ws_handler(ws: WebSocket):
                                  "週一", "週二", "週三", "週四", "週五", "週六", "週日",
                                  "星期一", "星期二", "星期三", "星期四", "星期五",
                                  "星期六", "星期日", "禮拜一", "禮拜二", "禮拜三",
-                                 "禮拜四", "禮拜五", "禮拜六", "禮拜日")
+                                 "禮拜四", "禮拜五", "禮拜六", "禮拜日",
+                                 # zh-r1 #28/#25：Q3/去年同期（EN q1-q4 同款）
+                                 "q1", "q2", "q3", "q4", "Q1", "Q2", "Q3", "Q4",
+                                 "同期")
             # （r62 撤回時段粒度 gate：「中午前的異動」「下午有出貨嗎」是既有守衛
             #   接受的整天近似行為——出手前要先查 corpus，守衛既定行為優先）
             # r26：「上個月跟這個月哪個賣得多」雙期間比較不支援（上個月單獨出現時
@@ -8128,7 +8164,11 @@ async def ws_handler(ws: WebSocket):
                                 and any(w in user_text for w in ("哪週", "哪個", "誰", "比", "差"))
                                 and not _extract_sku_keyword(user_text)))
             if ((any(w in user_text for w in _UNSUPPORTED_TIME) or _dual_period)
-                    and any(w in user_text for w in ("進", "出", "貨", "賣", "異動", "紀錄", "記錄"))
+                    and any(w in user_text for w in ("進", "出", "貨", "賣", "異動", "紀錄", "記錄",
+                                                     # zh-r1 #25：「去年同期的銷量」。⚠️ 裸「銷」
+                                                     #   會撞「上個月的熱銷」（排行句）——守衛
+                                                     #   1121/1122 實抓，只收片語
+                                                     "銷量", "銷售", "統計"))
                     # r15：排程句（每週五匯出…）不是查歷史，不可被本 gate 攔
                     and not any(w in user_text for w in ("每週", "每星期", "每禮拜",
                                                          "每天", "每月", "排程",
@@ -10110,6 +10150,31 @@ async def ws_handler(ws: WebSocket):
                         log.info(f"[Pre-C-Sched] 每日=形容詞、clf 高信心 → "
                                  f"hard-return generate_report: {user_text!r}")
                         _has_sched_time = False   # 不再進下面的排程攔截
+                    # zh-r1 user 實測（2026-08-06）：「今天早上10點30分幫我跑
+                    #   盤點」曾**立即執行**——句有具體時刻＝訪客要定時，馬上跑
+                    #   是誤解意圖；一次性定時結構不支援（排程表是週期制）→
+                    #   不猜，反問「現在跑 or 排每天這時間」。
+                    #   ⚠️ 時刻 regex 要「數字+點」，「盤點」的點前非數字不誤爆。
+                    _sched_clock_m = _re.search(
+                        r"([0-9零一二兩三四五六七八九十]+\s*點(?:\s*半|"
+                        r"\s*[0-9零一二三四五六七八九十]+\s*分)?)", user_text)
+                    if (not _has_sched_time and _has_sched_act and _sched_clock_m
+                            and any(w in user_text for w in ("早上", "上午", "中午",
+                                                             "下午", "晚上", "今天", "明天"))
+                            and not any(w in user_text for w in ("現在", "馬上", "立刻"))):
+                        _clk = _sched_clock_m.group(1)
+                        _q_sched1t = (f"你說的是 {_clk}——目前只支援「每天固定時間」的"
+                                      f"排程（不支援單次定時）。要怎麼做？")
+                        await send({"type": "done", "result": {
+                            "ok": True, "view": "clarify", "summary": _q_sched1t,
+                            "data": {"question": _q_sched1t,
+                                     "options": ["現在就跑一次盤點",
+                                                 f"設定每天{_clk}自動跑盤點"],
+                                     "actions": ["現在跑一次盤點",
+                                                 f"每天{_clk}自動執行盤點"],
+                                     "hint": ""}}})
+                        log.info(f"[Pre-C-Sched] 單次定時句 → clarify: {user_text!r}")
+                        continue
                     if _has_sched_time and _has_sched_act:
                         if func_name != "set_schedule":
                             func_name = "set_schedule"

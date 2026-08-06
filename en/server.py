@@ -8995,11 +8995,17 @@ async def _run_due_schedules():
             # 更新 last_run
             job["last_run"] = now.isoformat(timespec="seconds")
             jobs_path.write_text(_json.dumps({"jobs": jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
+            # 2026-08-06 user 要求（ZH 同款）：排程產出給可點開分頁的報告連結
+            _sd_tail = str(result.get("data", {}).get("output_tail", ""))
+            _sd_view = _re.search(r"VIEW:\S*?(audit/[^\s/\\]+\.html)", _sd_tail)
+            _sd_link = (f'<br><a href="/{_sd_view.group(1)}" target="_blank" '
+                        f'style="color:#2b6cb0;font-weight:600">📊 Open report</a>'
+                        if _sd_view else "")
             await push_display({"type": "schedule_done", "job_id": job["id"],
                                 "script_label": job["script_label"],
                                 "ok": result.get("ok", False),
                                 "summary": result.get("summary", ""),
-                                "output_tail": result.get("data", {}).get("output_tail", ""),
+                                "output_tail": result.get("summary", "") + _sd_link,
                                 "ts": now.strftime("%H:%M")})
     except Exception as e:
         log.error(f"[_run_due_schedules] {e}", exc_info=True)
@@ -9042,10 +9048,16 @@ async def _demo_run_schedule(job: dict):
         None, lambda: __import__("tools_v2").commit_run_script(
                                       job["script_id"], actor="scheduler"))
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+    # 2026-08-06（ZH 同款）：立跑是展場設計但橫幅與正式觸發同型＝像亂執行。
+    #   summary 前綴示範說明。
+    _kick_note = (f"🎬 Schedule created — running once now as a demo; "
+                  f"it will then run automatically "
+                  f"{job.get('freq_label', 'daily')} at "
+                  f"{job.get('time_str', '')}.\n")
     await push_display({"type": "schedule_done", "job_id": job.get("id", ""),
                         "script_label": job.get("script_label", ""),
                         "ok": ok,
-                        "summary": (result or {}).get("summary", "")})
+                        "summary": _kick_note + (result or {}).get("summary", "")})
 
 async def _alert_scheduler_loop():
     """背景每小時掃 alert_rules.json，觸發時推 WebSocket 通知。"""
@@ -10655,11 +10667,8 @@ async def ws_handler(ws: WebSocket):
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                         await push_display({"type": "schedule_created",
                                            "job": res.get("data", {}).get("job", {})})
-                        # 同上：排程要等到時鐘走到設定時刻（一天一次機會）
-                        #   → 立刻跑一次那支腳本，讓訪客看到完整因果。
-                        _demo_kick(
-                            _demo_run_schedule(res.get("data", {}).get("job", {})),
-                            "schedule")
+                        # 2026-08-06 user 定調（ZH 同款）：排程建立後不再立跑
+                        #   示範；警示立跑檢查保留。
                     elif act == "item_create":
                         res = tools_v2.commit_create_item(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
