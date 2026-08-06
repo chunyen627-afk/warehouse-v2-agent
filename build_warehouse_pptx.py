@@ -428,6 +428,46 @@ set_notes(s, "★Agent 定位頁。核心論點：這不是查詢工具，是會
 pn(s)
 
 
+# ─── S12c 動態倉庫模擬 Live 模式 ★（2026-08-03 新增）──────────────
+s = slide_blank()
+title_bar(s, "LIVE WAREHOUSE · 動態模擬", "倉庫自己會動：一天的進出貨濃縮成幾分鐘")
+add_text(s, MX, Inches(1.40), Inches(11.8), Inches(0.62),
+         "展場訪客盯著凍結快照看會覺得假。業界真實架構本來就是 perpetual inventory——庫存由條碼槍、"
+         "RFID、電商訂單多來源即時更新，AI 助理是其上的對話層。模擬不是特效，是把真實架構演出來。",
+         size=13, color=GREY55)
+kpi_row(s, Inches(2.18), [
+    ("200×", "時間加速（現場可調 1–400×）"),
+    ("2.7s", "一輪背景進出貨寫入"),
+    ("79%", "出庫占比＝seed 真值比例"),
+    ("0", "對測試的干擾（守衛自動隔離）"),
+], box_h=1.3, num_size=34)
+_live_pts = [
+    ("真實來源", "背景寫入掛 pda_scan / wms_sync / ecom_order 三種 actor——訪客查異動看到"
+                 "混合來源，正好證明 Agent 看得到整個倉庫，不是只看得到自己"),
+    ("護欄", "庫存在安全線 0.8–1.6 倍帶內波動、任何倉不低於 5 件——連跑三天不壞、"
+             "reset 一鍵回乾淨基準（開機自動歸零，斷電/離線都免時鐘）"),
+    ("誠實的代價", "模擬灌大資料曾把 CPU 燒滿（py-spy 抓到 /anomalies 每次輪詢全掃數十萬筆）"
+                   "——以 30 秒快取＋出貨日索引三層修復，CPU 200%→31%、查詢照常秒回"),
+    ("數據紀律", "「昨天/報表/撐天」的統計永遠只取乾淨歷史——模擬寫入被分析層隔離，"
+                 "看得到即時跳動、算得出正確數字，兩者不打架"),
+]
+for i, (k, v) in enumerate(_live_pts):
+    y = Inches(3.78) + Inches(0.80) * i
+    dot_icon(s, MX, y + Inches(0.05), "●", d=0.34, circle=TEAL, gsize=10)
+    add_text(s, MX + Inches(0.55), y, Inches(1.9), Inches(0.7), k, size=13.5, bold=True,
+             color=TEALDK)
+    add_text(s, MX + Inches(2.5), y, Inches(9.3), Inches(0.74), v, size=12.5, color=GREY44)
+set_notes(s, "★動態模擬頁（2026-08-03 上線）。訪客第一眼就看到三倉數字在跳、告警橫幅自己出現"
+             "——回應「倉庫不動很假」的展場回饋。查證過業界：現代倉儲就是 perpetual inventory，"
+             "多數庫存變動沒有人對系統下指令（條碼槍/RFID/電商自動寫入），對話式 AI 是其上的"
+             "查詢層——所以這不是演假資料，是把真實架構濃縮演出。工程重點四件事：①actor 不偽裝"
+             "訪客操作，查異動看得到混合來源；②護欄讓它跑三天不壞；③效能課金誠實講：模擬灌出"
+             "數十萬筆後，前端每 8 秒輪詢的異常掃描把兩核燒滿（py-spy 實錘），用 TTL 快取＋"
+             "出貨日索引修復——這段也是很好的工程故事；④統計紀律：分析層一律排除模擬寫入，"
+             "『昨天』永遠是乾淨歷史，數字對得起對帳。")
+pn(s)
+
+
 # ─── S4b OOV 招牌能力（訪客怎麼亂打都聽得懂）★重點 ─────────────
 s = slide_blank()
 title_bar(s, "SIGNATURE · OOV 容錯", "訪客怎麼亂打，系統照樣聽懂")
@@ -896,173 +936,203 @@ set_notes(s, "這頁講測試方法論與現況。核心觀念：不是測一次
              "結論：目前收尾階段（真人語音驗證＋長尾），預計下週可交付廠商。")
 pn(s)
 
-# ─── S12 RPI5 實戰驗收 ────────────────────────────────────
+# ─── S14a 英文版 · 為何不是翻譯（路線決策）★ ──────────────────────
 s = slide_blank()
-title_bar(s, "REAL HARDWARE", "不是實驗室數字：樹莓派上真的扛得住")
-kpi_row(s, Inches(1.85), [
-    ("33 hr", "連續運行"),
-    ("1600+", "次推論"),
-    ("44°C", "溫度穩定"),
-    ("20–30 t/s", "速度零衰減"),
-], num_size=26)
-add_round(s, MX, Inches(3.4), Inches(5.75), Inches(3.1), fill=LIGHT, shadow=True)
-add_text(s, MX + Inches(0.35), Inches(3.65), Inches(5.0), Inches(0.45),
-         "雙平台驗收原則", size=16, bold=True, color=TEALDK)
-add_text(s, MX + Inches(0.35), Inches(4.2), Inches(5.0), Inches(2.1),
-         "本機（Windows）快速迭代，\n樹莓派（RPi5 CPU）最終驗收。\n\n"
-         "單向規則：樹莓派過 = 過。\n首次上機就抓到本機測不出的\n平台精度差異句。",
-         size=14, color=GREY44, line_spacing=1.35)
-add_round(s, Inches(6.85), Inches(3.4), Inches(5.75), Inches(3.1), fill=DARK, shadow=True)
-add_text(s, Inches(7.2), Inches(3.65), Inches(5.0), Inches(0.45),
-         "展場穩定性設計", size=16, bold=True, color=TEAL)
-items = [("📶", "離線手機熱點運行，資料不出場"),
-         ("🔁", "Wi-Fi 掉線自癒 watchdog（10 秒自檢）"),
-         ("♻️", "一鍵重置回乾淨快照，玩壞也回得來"),
-         ("🔒", "寫入操作二次確認，防誤觸")]
-for i, (ic, t) in enumerate(items):
-    yy = Inches(4.2) + Inches(0.56) * i
-    dot_icon(s, Inches(7.2), yy, ic, d=0.38, circle=TEAL, gcolor=DARK, gsize=12)
-    add_text(s, Inches(7.72), yy + Inches(0.02), Inches(4.7), Inches(0.42),
-             t, size=13, color=GREYBB, anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "強調這不是實驗室數據，是真的在樹莓派硬體上跑過的。33 小時連續、1600 次推論、"
-             "溫度穩定不降速。右邊是展場特別做的穩定性設計：離線運行、斷線自癒、一鍵重置、"
-             "寫入二次確認。")
-pn(s)
-
-print("S11-S12 done")
-
-
-# ─── S12b 硬體路線圖（現在 CPU → 未來自研晶片）點綴 ───────────────
-s = slide_blank()
-title_bar(s, "ROADMAP · 硬體路線", "軟體已就緒，就等算力放大")
-add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
-         "同一套軟體架構，換上更強的算力就能跑更大的模型——這正是晶片團隊的下一步。",
-         size=13.5, color=GREY55)
-# 左：現在（實測，實色）
-add_round(s, MX, Inches(2.1), Inches(5.55), Inches(3.9), fill=LIGHT, shadow=True)
-add_text(s, MX + Inches(0.35), Inches(2.35), Inches(4.9), Inches(0.4),
-         "現在 · 已實測", size=16, bold=True, color=TEALDK)
-add_text(s, MX + Inches(0.35), Inches(2.8), Inches(4.9), Inches(0.5),
-         "RPi5 CPU（純軟體）", size=17, bold=True, color=DARK)
-now_pts = [("模型", "FunctionGemma 270M"),
-           ("速度", "20–30 tokens/s"),
-           ("品質", "六套回歸雙平台 100%"),
-           ("成本", "一台樹莓派，無 GPU / 無雲端")]
-for i, (k, v) in enumerate(now_pts):
-    y = Inches(3.5) + Inches(0.58) * i
-    add_text(s, MX + Inches(0.35), y, Inches(1.1), Inches(0.4), k, size=13,
-             bold=True, color=TEAL)
-    add_text(s, MX + Inches(1.45), y, Inches(3.8), Inches(0.4), v, size=13, color=GREY44)
-# 中：箭頭
-add_arrow(s, Inches(6.45), Inches(3.75), Inches(0.62), Inches(0.5), fill=TEAL)
-# 右：未來（roadmap，虛線淺色）
-rx = Inches(7.25)
-_fut = add_round(s, rx, Inches(2.1), Inches(5.35), Inches(3.9), fill=WHITE,
-                 line=TEAL, line_w=1.5)
-add_text(s, rx + Inches(0.35), Inches(2.35), Inches(4.7), Inches(0.4),
-         "下一階段 · Roadmap 目標", size=16, bold=True, color=TEAL)
-add_text(s, rx + Inches(0.35), Inches(2.8), Inches(4.7), Inches(0.5),
-         "RPi5 + 自研晶片加速", size=17, bold=True, color=DARK)
-fut_pts = [("模型", "跳階到 3B / 7B 更大 LLM"),
-           ("能力", "從「查詢路由」→ 真正的推理對話"),
-           ("架構", "軟體不動，換算力即可放大"),
-           ("狀態", "晶片開發中，應用已備妥")]
-for i, (k, v) in enumerate(fut_pts):
-    y = Inches(3.5) + Inches(0.58) * i
-    add_text(s, rx + Inches(0.35), y, Inches(1.1), Inches(0.4), k, size=13,
-             bold=True, color=AMBER)
-    add_text(s, rx + Inches(1.45), y, Inches(3.6), Inches(0.4), v, size=13, color=GREY44)
-add_text(s, MX, Inches(6.35), Inches(11.8), Inches(0.5),
-         "關鍵訊息：連純 CPU 都已跑出生產級品質——軟體、測試、落地全部就緒，就等自研晶片把天花板拉高。",
-         size=13, bold=True, color=TEALDK)
-set_notes(s, "★硬體路線圖頁（點綴，但對晶片團隊的參展定位很重要）。左邊實色=現在已實測："
-             "270M 在 RPi5 純 CPU、20–30 t/s（模擬全開時 ~20、關閉 ~30）、六套回歸雙平台 100%、極低成本。右邊白底虛線框"
-             "=下一階段 roadmap 目標（明確標成目標，不假裝已達成）：加自研晶片加速 → 跑 "
-             "3B/7B 更大模型 → 能力從查詢升級到真正對話。核心訊息：軟體與應用已就緒，"
-             "就等晶片把算力天花板拉高。誠實區分實測與目標，保住對評審的信任。")
-pn(s)
-
-
-# ─── S12c 動態倉庫模擬 Live 模式 ★（2026-08-03 新增）──────────────
-s = slide_blank()
-title_bar(s, "LIVE WAREHOUSE · 動態模擬", "倉庫自己會動：一天的進出貨濃縮成幾分鐘")
-add_text(s, MX, Inches(1.40), Inches(11.8), Inches(0.62),
-         "展場訪客盯著凍結快照看會覺得假。業界真實架構本來就是 perpetual inventory——庫存由條碼槍、"
-         "RFID、電商訂單多來源即時更新，AI 助理是其上的對話層。模擬不是特效，是把真實架構演出來。",
+title_bar(s, "ENGLISH BUILD · 路線", "做英文版不是翻譯——翻譯會讓招牌能力全滅")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "老闆要全英文版。動工前先用探針餵分級英文句給現有模型，量出「翻譯路線」到底會壞在哪——結論決定了整條路線。",
          size=13, color=GREY55)
-kpi_row(s, Inches(2.18), [
-    ("200×", "時間加速（現場可調 1–400×）"),
-    ("2.7s", "一輪背景進出貨寫入"),
-    ("79%", "出庫占比＝seed 真值比例"),
-    ("0", "對測試的干擾（守衛自動隔離）"),
-], box_h=1.3, num_size=34)
-_live_pts = [
-    ("真實來源", "背景寫入掛 pda_scan / wms_sync / ecom_order 三種 actor——訪客查異動看到"
-                 "混合來源，正好證明 Agent 看得到整個倉庫，不是只看得到自己"),
-    ("護欄", "庫存在安全線 0.8–1.6 倍帶內波動、任何倉不低於 5 件——連跑三天不壞、"
-             "reset 一鍵回乾淨基準（開機自動歸零，斷電/離線都免時鐘）"),
-    ("誠實的代價", "模擬灌大資料曾把 CPU 燒滿（py-spy 抓到 /anomalies 每次輪詢全掃數十萬筆）"
-                   "——以 30 秒快取＋出貨日索引三層修復，CPU 200%→31%、查詢照常秒回"),
-    ("數據紀律", "「昨天/報表/撐天」的統計永遠只取乾淨歷史——模擬寫入被分析層隔離，"
-                 "看得到即時跳動、算得出正確數字，兩者不打架"),
+# 左：探針結果（翻譯路線會壞的地方）
+add_round(s, MX, Inches(1.95), Inches(5.82), Inches(3.5), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(0.3), Inches(2.1), Inches(5.2), Inches(0.36),
+         "探針實測：純翻譯會壞在哪", size=14, bold=True, color=DARK)
+probe = [
+    ("✓", "乾淨查詢", "how many bluetooth earphones left → 答對", TEALDK),
+    ("×", "英文錯字", "earphon → 完全對不到", CORAL),
+    ("×", "模糊描述", "the thing that charges phone → 不懂", CORAL),
+    ("×", "寫入 / 調貨 / RCA", "add / move / why → 全歸零查詢", CORAL),
 ]
-for i, (k, v) in enumerate(_live_pts):
-    y = Inches(3.78) + Inches(0.80) * i
-    dot_icon(s, MX, y + Inches(0.05), "●", d=0.34, circle=TEAL, gsize=10)
-    add_text(s, MX + Inches(0.55), y, Inches(1.9), Inches(0.7), k, size=13.5, bold=True,
-             color=TEALDK)
-    add_text(s, MX + Inches(2.5), y, Inches(9.3), Inches(0.74), v, size=12.5, color=GREY44)
-set_notes(s, "★動態模擬頁（2026-08-03 上線）。訪客第一眼就看到三倉數字在跳、告警橫幅自己出現"
-             "——回應「倉庫不動很假」的展場回饋。查證過業界：現代倉儲就是 perpetual inventory，"
-             "多數庫存變動沒有人對系統下指令（條碼槍/RFID/電商自動寫入），對話式 AI 是其上的"
-             "查詢層——所以這不是演假資料，是把真實架構濃縮演出。工程重點四件事：①actor 不偽裝"
-             "訪客操作，查異動看得到混合來源；②護欄讓它跑三天不壞；③效能課金誠實講：模擬灌出"
-             "數十萬筆後，前端每 8 秒輪詢的異常掃描把兩核燒滿（py-spy 實錘），用 TTL 快取＋"
-             "出貨日索引修復——這段也是很好的工程故事；④統計紀律：分析層一律排除模擬寫入，"
-             "『昨天』永遠是乾淨歷史，數字對得起對帳。")
+for i, (mk, tag, ex, col) in enumerate(probe):
+    y = Inches(2.55) + Inches(0.68) * i
+    add_text(s, MX + Inches(0.3), y, Inches(0.3), Inches(0.3), mk,
+             font=FONT_EN, size=14, bold=True, color=col)
+    add_text(s, MX + Inches(0.66), y - Inches(0.02), Inches(1.9), Inches(0.32),
+             tag, size=12.5, bold=True, color=col)
+    add_text(s, MX + Inches(0.66), y + Inches(0.28), Inches(4.8), Inches(0.32),
+             ex, size=11, color=GREY55)
+# 右：三條路線比較
+add_round(s, MX + Inches(6.05), Inches(1.95), Inches(5.82), Inches(3.5), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(6.35), Inches(2.1), Inches(5.2), Inches(0.36),
+         "三條路線，選了中間那條", size=14, bold=True, color=DARK)
+routes = [
+    ("翻譯層", "最省事，但容錯層先崩就輪不到後面——等於白費版", GREY77, False),
+    ("補英文語料微調", "Gemma 英文底子還在，教它這套系統的 tool 慣例", TEALDK, True),
+    ("全部重訓", "成本最高，但 base 英文能力本來就在，沒必要", GREY77, False),
+]
+for i, (nm, desc, col, pick) in enumerate(routes):
+    y = Inches(2.6) + Inches(0.92) * i
+    add_round(s, MX + Inches(6.35), y, Inches(5.22), Inches(0.78),
+              fill=(TEALBG if pick else WHITE), line=(TEAL if pick else GREYE6),
+              line_w=(1.3 if pick else 0.6))
+    add_text(s, MX + Inches(6.55), y + Inches(0.06), Inches(1.85), Inches(0.32),
+             ("★ " if pick else "") + nm, size=12.5, bold=True, color=col)
+    add_text(s, MX + Inches(6.55), y + Inches(0.38), Inches(4.85), Inches(0.34),
+             desc, size=10.5, color=GREY55)
+# 底部：微調效益數字
+add_round(s, MX, Inches(5.62), Inches(11.87), Inches(1.54), fill=DARK, shadow=True)
+add_text(s, MX + Inches(0.4), Inches(5.78), Inches(11.1), Inches(0.34),
+         "三方對照：同一份 34 句英文評測集（本機 llama.cpp 實跑）",
+         size=12.5, bold=True, color=TEAL)
+tri = [("base 未微調", "11%", "看得懂英文，但不知道該叫哪個 tool"),
+       ("中文微調版", "32%", "tool 慣例**跨語言遷移**——用中文學的可套到英文"),
+       ("英文微調版", "73%", "基本查詢 12/12、錯字全中、RCA 3/3")]
+for i, (nm, sc, note) in enumerate(tri):
+    x = MX + Inches(0.4) + Inches(3.85) * i
+    add_text(s, x, Inches(6.18), Inches(1.5), Inches(0.42), sc,
+             font=FONT_EN, size=22, bold=True,
+             color=(TEAL if i == 2 else (WHITE if i == 1 else GREY77)))
+    add_text(s, x + Inches(1.45), Inches(6.2), Inches(2.3), Inches(0.36),
+             nm, size=11.5, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, x, Inches(6.66), Inches(3.6), Inches(0.34),
+             note.replace("**", ""), size=10.5, color=GREYBB)
+set_notes(s, "★英文版路線決策頁。老闆要全英文版，我沒有直接開始翻譯——先用探針餵分級英文句"
+             "給現有的中文微調模型，量出「純翻譯路線」會壞在哪。結果很清楚：乾淨查詢答得對"
+             "（Gemma 的英文底子還在），但**招牌能力全滅**——英文錯字、模糊描述、寫入/調貨/RCA "
+             "意圖全部救不到。而容錯層正是這個 demo 的賣點，翻譯層先崩就輪不到後面，等於做出一個"
+             "「白費版」。所以路線選**補英文語料微調**：不必全部重訓（base 英文能力本來就在），"
+             "但要教它這套系統的 tool 慣例。右下三方對照是實測數字：base 未微調只有 11%（看得懂"
+             "英文、不知道叫哪個 tool）；有趣的是**中文微調版跑英文有 32%**——證明 tool 慣例會"
+             "跨語言遷移，用中文學的可以套到英文，這是微調買到的『領域判斷』而不只是語言；"
+             "英文專訓版 73%。這頁的重點是：**決策有數據支撐，不是拍腦袋選路線**。")
 pn(s)
 
 
-# ─── S12d 雙機交付 · 第二台 RPI5 ★（2026-08-05 認證）──────────────
+# ─── S14b 英文版 · 19 類移植坑（真正的工作量）★ ────────────────────
 s = slide_blank()
-title_bar(s, "DUAL UNIT · 交付準備", "第二台 RPI5 重建完成：與主機同級認證、可交客戶")
-add_text(s, MX, Inches(1.40), Inches(11.8), Inches(0.4),
-         "客戶交機版與展場主機完全同構——同一份程式碼（md5 對版）、同一套守衛認證、同一條還原手冊。",
+title_bar(s, "ENGLISH BUILD · 真正的工作量", "移植的難處不在模型，在散落各處的語言假設")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "模型換好只是開始。真正吃時間的是三個月為中文磨出來的規則層——每一條都藏著「這是中文」的隱含假設。",
          size=13, color=GREY55)
-kpi_row(s, Inches(1.98), [
-    ("1122+892", "全量守衛 中/英 100%"),
-    ("26/26 ×6", "並發串線三輪零串線"),
-    ("65.9°C", "壓測峰值 · 全程零降頻"),
-    ("414/414", "交機快篩驗收"),
-], box_h=1.3, num_size=30)
-_du_pts = [
-    ("開機即就緒", "開機自動歸零回乾淨基準（uptime 閘門、離線免時鐘）→ 服務自啟 → "
-                   "kiosk 雙語分頁自開 → 模擬自動起跑——插電就是展示狀態"),
-    ("手機動線", "切熱點 → 掃 QR → 手機直連查詢/語音——DHCP、憑證、手機版面全鏈打通"
-                 "（iPhone 實測）"),
-    ("重建可複製", "重建缺口 9 類全數記錄成手冊 §15「一次還原到底」檢查表——"
-                   "下一台照抄指令＋9 項驗收，不再踩雷"),
-    ("遠端救援", "雙機 ZeroTier 就位（10.35.219.22 / .47）——展場斷網用手機熱點即可遠端搶修"),
+traps = [
+    ("詞表是中文", "`_ALL_INTENT_WORDS` 等 21 個詞表全中文 → 英文句一個都不命中",
+     "英文句被判成「只有商品名沒動作」，整批轉 clarify", NAVY),
+    ("對照表的**鍵**是中文", "`{\"電子\": \"electronics\"}` ——值是英文、鍵是中文",
+     "6 個類別 5 個查不到，整條類別查詢功能靜默失效", TEALDK),
+    ("門檻用中文字元數", "長句判定 >30 字元；英文字元數是中文的 2-3 倍",
+     "正常英文句被當長句，幾乎全部繞過 LLM", TEAL),
+    ("演算法假設中文形態", "`split()[0]` 剝規格尾巴——中文沒空白所以安全",
+     "`Wireless Mouse` 被腰斬成 `Wireless` → **改到錯的商品**", CORAL),
+    ("英文撇號炸掉 JS", "`'Didn't catch that'` ——英文化產生的撇號沒跳脫",
+     "整份 JS 停擺：畫面正常但 WebSocket 從沒建立", CORAL),
 ]
-for i, (k, v) in enumerate(_du_pts):
-    y = Inches(3.58) + Inches(0.80) * i
-    dot_icon(s, MX, y + Inches(0.05), "●", d=0.34, circle=NAVY, gsize=10)
-    add_text(s, MX + Inches(0.55), y, Inches(1.9), Inches(0.7), k, size=13.5, bold=True,
-             color=NAVY)
-    add_text(s, MX + Inches(2.5), y, Inches(9.3), Inches(0.74), v, size=12.5, color=GREY44)
-add_text(s, MX, Inches(6.9), Inches(11.8), Inches(0.5),
-         "關鍵訊息：不是「複製一台機器」，是「複製一整套可驗收的交付流程」——手冊在版控裡，第三台起照走。",
-         size=13, bold=True, color=TEALDK)
-set_notes(s, "★雙機交付頁（2026-08-05 認證完成）。第二台從重建到可交客戶的完整故事：全量守衛"
-             "1122+892 與 parity 跟主機同級全綠；耐力賽三輪（並發串線 26/26×6、長對話、劇情批）"
-             "零異常零降頻；散熱裝好後待機 42°C、壓測 65.9°C。重建過程實際踩出 9 類缺口"
-             "（字型/輸入法/DHCP/桌面圖示鏈/crontab/瀏覽器政策等），全部固化成還原手冊 §15"
-             "『一次還原到底』——缺口清單＋照抄指令＋9 項驗收清單，這份手冊跟程式碼一起進版控。"
-             "對客戶的意義：交付的不是一台調好的機器，是一套可重複、可驗收的交付流程。")
+ty2 = Inches(1.92); rh2 = Inches(0.94)
+for i, (tag, what, effect, col) in enumerate(traps):
+    y = ty2 + rh2 * i
+    add_round(s, MX, y, Inches(11.87), Inches(0.84), fill=(LIGHT if i % 2 == 0 else WHITE),
+              line=GREYE6, line_w=0.6)
+    add_rect(s, MX, y, Inches(0.07), Inches(0.84), fill=col)
+    add_text(s, MX + Inches(0.28), y + Inches(0.08), Inches(2.55), Inches(0.32),
+             tag.replace("**", ""), size=12.5, bold=True, color=col)
+    add_text(s, MX + Inches(0.28), y + Inches(0.44), Inches(2.55), Inches(0.32),
+             f"坑 {i + 1}", size=10, color=GREY77)
+    add_text(s, MX + Inches(3.0), y + Inches(0.08), Inches(4.4), Inches(0.34),
+             what.replace("`", "").replace("**", ""), size=11, color=GREY44)
+    add_text(s, MX + Inches(3.0), y + Inches(0.44), Inches(4.4), Inches(0.32),
+             "↓", font=FONT_EN, size=9, color=GREYBB)
+    add_text(s, MX + Inches(7.55), y + Inches(0.2), Inches(4.1), Inches(0.5),
+             effect.replace("**", ""), size=11, bold=True,
+             color=(CORAL if col == CORAL else GREY44), anchor=MSO_ANCHOR.MIDDLE)
+add_round(s, MX, Inches(6.62), Inches(11.87), Inches(0.62), fill=DARK, shadow=True)
+add_rich(s, MX + Inches(0.4), Inches(6.72), Inches(11.1), Inches(0.42),
+         [[{"text": "找法  ", "size": 12.5, "bold": True, "color": TEAL},
+           {"text": "逐句追 log 看實際執行路徑，不要只看輸入輸出猜",
+            "size": 12, "bold": True, "color": WHITE},
+           {"text": "——log 常見 clf 判對、模型也判對，卻被中文導向的守衛改掉。共歸納 19 類坑。",
+            "size": 11.5, "color": GREYBB}]],
+         anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "★這頁是給技術評審看的「移植的真實成本」。一般人以為做英文版＝翻譯 UI + 換模型，"
+             "實際上**真正的工作量在散落各處的語言假設**——三個月為中文磨出來的規則層，每一條都"
+             "藏著隱含假設。列五個最有代表性的（共歸納 19 類）：①21 個詞表全中文，英文句一個都不"
+             "命中，被判成「只有商品名沒動作」全部轉 clarify。②更隱形的一類：對照表的**鍵**是中文"
+             "（值反而是英文 slug），6 個類別 5 個查不到，而系統的導覽訊息還在教訪客這樣問。"
+             "③門檻用中文字元數：英文字元數是中文 2-3 倍，'alert me when earphones drop below 30' "
+             "才 7 個詞卻 31 字元，正常句被當長句。④最危險的一類——**演算法本身假設中文形態**："
+             "用 split()[0] 剝規格尾巴，中文沒空白所以取第一段＝取全名，英文商品名全用空白分隔，"
+             "`Wireless Mouse` 被腰斬成 `Wireless`，下一句追問就改到耳機的安全庫存＝**寫錯資料**。"
+             "這種 bug 讀程式碼很難看出來（邏輯本身沒錯），只有跨句對話測試會暴露。⑤英文獨有的："
+             "英文化產生的撇號沒跳脫，整份 JS 語法錯誤停擺，但 HTML/CSS 照常渲染——畫面看起來正常、"
+             "實際 WebSocket 從沒建立過。中文版永遠不會有這個 bug（中文沒撇號）。"
+             "方法論：**逐句追 log 看實際執行路徑**，不要從症狀猜成因。")
 pn(s)
 
 
-# ═══════════════════════════════════════════════════════════
+# ─── S14c 英文版 · 收斂成果（守衛 100%）★ ─────────────────────────
+s = slide_blank()
+title_bar(s, "ENGLISH BUILD · 收斂", "從 651 到 892/892：把「可靠」再證明一次")
+add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
+         "英文版建了獨立的 892 句守衛庫（不是翻譯中文守衛——英文有自己的邊界：錯字型態、俗稱、閒聊搗蛋）。",
+         size=13, color=GREY55)
+kpi_row(s, Inches(1.9), [
+    ("892/892", "英文守衛通過率 100%"),
+    ("19 類", "移植坑歸納"),
+    ("25 個", "view 逐一看過畫面"),
+    ("0", "已知未修破口"),
+])
+# 收斂曲線（分數演進）
+add_text(s, MX, Inches(3.35), Inches(11.8), Inches(0.34),
+         "收斂過程：每一次跳動都是一批結構性 bug 被找出來", size=13, bold=True, color=TEALDK)
+steps = [("651", "首跑"), ("873", "13 輪規則層英文化"), ("891", "錯字長尾靠修復層"),
+         ("892", "詞典把關收尾")]
+bw = Inches(2.72); bgap = Inches(0.32)
+for i, (sc, lb) in enumerate(steps):
+    x = MX + (bw + bgap) * i
+    last = (i == len(steps) - 1)
+    add_round(s, x, Inches(3.78), bw, Inches(1.12),
+              fill=(TEALBG if last else LIGHT), line=(TEAL if last else GREYE6),
+              line_w=(1.4 if last else 0.6), shadow=True)
+    add_text(s, x, Inches(3.92), bw, Inches(0.5), sc, font=FONT_EN,
+             size=26, bold=True, color=(TEALDK if last else GREY44),
+             align=PP_ALIGN.CENTER)
+    add_text(s, x + Inches(0.12), Inches(4.46), bw - Inches(0.24), Inches(0.36),
+             lb, size=10.5, color=GREY55, align=PP_ALIGN.CENTER)
+    if not last:
+        add_text(s, x + bw - Inches(0.04), Inches(4.16), Inches(0.34), Inches(0.4),
+                 "›", font=FONT_EN, size=17, bold=True, color=GREYBB,
+                 align=PP_ALIGN.CENTER)
+# 底部：兩個方法論收穫
+add_round(s, MX, Inches(5.15), Inches(5.82), Inches(1.42), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(0.28), Inches(5.28), Inches(5.3), Inches(0.32),
+         "「救不了」要有證據", size=13, bold=True, color=TEALDK)
+add_text(s, MX + Inches(0.28), Inches(5.62), Inches(5.3), Inches(0.82),
+         "兩次把「試過一種做法沒成功」寫成「這類問題無解」。"
+         "最後一句錯字靠系統內建英文詞典區分「真詞 vs 錯字」修掉——"
+         "訊號一直都在，只是沒接上。",
+         size=11, color=GREY44, line_spacing=1.25)
+add_round(s, MX + Inches(6.05), Inches(5.15), Inches(5.82), Inches(1.42), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(6.33), Inches(5.28), Inches(5.3), Inches(0.32),
+         "看畫面才算審完", size=13, bold=True, color=TEALDK)
+add_text(s, MX + Inches(6.33), Inches(5.62), Inches(5.3), Inches(0.82),
+         "守衛全綠不等於畫面對。改用截圖逐一看 25 個 view，"
+         "抓到 JSON 完全看不到的破口：卡片承諾「說 delete AL001」，"
+         "照打卻回查無此商品。",
+         size=11, color=GREY44, line_spacing=1.25)
+add_text(s, MX, Inches(6.76), Inches(11.87), Inches(0.4),
+         "中英雙版並存：RPi5 同時跑 8002（英文，展場主力）與 8001（中文備援），開機自啟、訪客點分頁切換",
+         size=12, bold=True, color=GREY55, align=PP_ALIGN.CENTER)
+set_notes(s, "★英文版收斂成果頁。重點一：英文守衛庫是**重新建的 892 句**，不是把中文守衛翻譯過來"
+             "——中文守衛大量測注音、同音字，英文沒有對應物；英文有自己的邊界（錯字型態、俗稱別名、"
+             "英文閒聊搗蛋）。重點二：收斂曲線 651→873→891→892，每次跳動都是一批結構性 bug 被找出來，"
+             "不是慢慢磨上去的。左下角這個教訓值得講：過程中**兩次**把『試過一種做法沒成功』寫成"
+             "『這類問題無解』——第一次是 19 句雙錯字長尾，後來拆解發現是 8 個獨立的結構性 bug；"
+             "第二次是最後那一句 `do we have scks`，記錄成『需要英文詞典依賴、救不了』，"
+             "實際上樹莓派系統**內建**英文詞典，而且真正的成因根本不是字元相似度，是被守門員擋在"
+             "門外。訊號一直都在，只是沒接上。右下角：守衛全綠≠畫面對，改用截圖逐一看過 25 個 view，"
+             "抓到 JSON 看不到的破口——最典型的是卡片上明明寫著『To remove, say delete AL001』，"
+             "訪客照打卻回『查無此商品』。最後一行：中英雙版在同一台樹莓派上並存，開機都自啟，"
+             "訪客點瀏覽器分頁就能切語言。")
+pn(s)
+
+
 # ─── S13a 語音 POC · 全鏈架構 ────────────────────────────────
 s = slide_blank()
 title_bar(s, "VOICE POC · 全離線語音輸入", "訪客用「講的」查倉管，ASR 全程跑在樹莓派")
@@ -1539,203 +1609,6 @@ set_notes(s, "★極限與對策頁（誠實加分）。技術評審最怕看到
 pn(s)
 
 
-# ─── S14a 英文版 · 為何不是翻譯（路線決策）★ ──────────────────────
-s = slide_blank()
-title_bar(s, "ENGLISH BUILD · 路線", "做英文版不是翻譯——翻譯會讓招牌能力全滅")
-add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
-         "老闆要全英文版。動工前先用探針餵分級英文句給現有模型，量出「翻譯路線」到底會壞在哪——結論決定了整條路線。",
-         size=13, color=GREY55)
-# 左：探針結果（翻譯路線會壞的地方）
-add_round(s, MX, Inches(1.95), Inches(5.82), Inches(3.5), fill=LIGHT, shadow=True)
-add_text(s, MX + Inches(0.3), Inches(2.1), Inches(5.2), Inches(0.36),
-         "探針實測：純翻譯會壞在哪", size=14, bold=True, color=DARK)
-probe = [
-    ("✓", "乾淨查詢", "how many bluetooth earphones left → 答對", TEALDK),
-    ("×", "英文錯字", "earphon → 完全對不到", CORAL),
-    ("×", "模糊描述", "the thing that charges phone → 不懂", CORAL),
-    ("×", "寫入 / 調貨 / RCA", "add / move / why → 全歸零查詢", CORAL),
-]
-for i, (mk, tag, ex, col) in enumerate(probe):
-    y = Inches(2.55) + Inches(0.68) * i
-    add_text(s, MX + Inches(0.3), y, Inches(0.3), Inches(0.3), mk,
-             font=FONT_EN, size=14, bold=True, color=col)
-    add_text(s, MX + Inches(0.66), y - Inches(0.02), Inches(1.9), Inches(0.32),
-             tag, size=12.5, bold=True, color=col)
-    add_text(s, MX + Inches(0.66), y + Inches(0.28), Inches(4.8), Inches(0.32),
-             ex, size=11, color=GREY55)
-# 右：三條路線比較
-add_round(s, MX + Inches(6.05), Inches(1.95), Inches(5.82), Inches(3.5), fill=LIGHT, shadow=True)
-add_text(s, MX + Inches(6.35), Inches(2.1), Inches(5.2), Inches(0.36),
-         "三條路線，選了中間那條", size=14, bold=True, color=DARK)
-routes = [
-    ("翻譯層", "最省事，但容錯層先崩就輪不到後面——等於白費版", GREY77, False),
-    ("補英文語料微調", "Gemma 英文底子還在，教它這套系統的 tool 慣例", TEALDK, True),
-    ("全部重訓", "成本最高，但 base 英文能力本來就在，沒必要", GREY77, False),
-]
-for i, (nm, desc, col, pick) in enumerate(routes):
-    y = Inches(2.6) + Inches(0.92) * i
-    add_round(s, MX + Inches(6.35), y, Inches(5.22), Inches(0.78),
-              fill=(TEALBG if pick else WHITE), line=(TEAL if pick else GREYE6),
-              line_w=(1.3 if pick else 0.6))
-    add_text(s, MX + Inches(6.55), y + Inches(0.06), Inches(1.85), Inches(0.32),
-             ("★ " if pick else "") + nm, size=12.5, bold=True, color=col)
-    add_text(s, MX + Inches(6.55), y + Inches(0.38), Inches(4.85), Inches(0.34),
-             desc, size=10.5, color=GREY55)
-# 底部：微調效益數字
-add_round(s, MX, Inches(5.62), Inches(11.87), Inches(1.54), fill=DARK, shadow=True)
-add_text(s, MX + Inches(0.4), Inches(5.78), Inches(11.1), Inches(0.34),
-         "三方對照：同一份 34 句英文評測集（本機 llama.cpp 實跑）",
-         size=12.5, bold=True, color=TEAL)
-tri = [("base 未微調", "11%", "看得懂英文，但不知道該叫哪個 tool"),
-       ("中文微調版", "32%", "tool 慣例**跨語言遷移**——用中文學的可套到英文"),
-       ("英文微調版", "73%", "基本查詢 12/12、錯字全中、RCA 3/3")]
-for i, (nm, sc, note) in enumerate(tri):
-    x = MX + Inches(0.4) + Inches(3.85) * i
-    add_text(s, x, Inches(6.18), Inches(1.5), Inches(0.42), sc,
-             font=FONT_EN, size=22, bold=True,
-             color=(TEAL if i == 2 else (WHITE if i == 1 else GREY77)))
-    add_text(s, x + Inches(1.45), Inches(6.2), Inches(2.3), Inches(0.36),
-             nm, size=11.5, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, x, Inches(6.66), Inches(3.6), Inches(0.34),
-             note.replace("**", ""), size=10.5, color=GREYBB)
-set_notes(s, "★英文版路線決策頁。老闆要全英文版，我沒有直接開始翻譯——先用探針餵分級英文句"
-             "給現有的中文微調模型，量出「純翻譯路線」會壞在哪。結果很清楚：乾淨查詢答得對"
-             "（Gemma 的英文底子還在），但**招牌能力全滅**——英文錯字、模糊描述、寫入/調貨/RCA "
-             "意圖全部救不到。而容錯層正是這個 demo 的賣點，翻譯層先崩就輪不到後面，等於做出一個"
-             "「白費版」。所以路線選**補英文語料微調**：不必全部重訓（base 英文能力本來就在），"
-             "但要教它這套系統的 tool 慣例。右下三方對照是實測數字：base 未微調只有 11%（看得懂"
-             "英文、不知道叫哪個 tool）；有趣的是**中文微調版跑英文有 32%**——證明 tool 慣例會"
-             "跨語言遷移，用中文學的可以套到英文，這是微調買到的『領域判斷』而不只是語言；"
-             "英文專訓版 73%。這頁的重點是：**決策有數據支撐，不是拍腦袋選路線**。")
-pn(s)
-
-
-# ─── S14b 英文版 · 19 類移植坑（真正的工作量）★ ────────────────────
-s = slide_blank()
-title_bar(s, "ENGLISH BUILD · 真正的工作量", "移植的難處不在模型，在散落各處的語言假設")
-add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
-         "模型換好只是開始。真正吃時間的是三個月為中文磨出來的規則層——每一條都藏著「這是中文」的隱含假設。",
-         size=13, color=GREY55)
-traps = [
-    ("詞表是中文", "`_ALL_INTENT_WORDS` 等 21 個詞表全中文 → 英文句一個都不命中",
-     "英文句被判成「只有商品名沒動作」，整批轉 clarify", NAVY),
-    ("對照表的**鍵**是中文", "`{\"電子\": \"electronics\"}` ——值是英文、鍵是中文",
-     "6 個類別 5 個查不到，整條類別查詢功能靜默失效", TEALDK),
-    ("門檻用中文字元數", "長句判定 >30 字元；英文字元數是中文的 2-3 倍",
-     "正常英文句被當長句，幾乎全部繞過 LLM", TEAL),
-    ("演算法假設中文形態", "`split()[0]` 剝規格尾巴——中文沒空白所以安全",
-     "`Wireless Mouse` 被腰斬成 `Wireless` → **改到錯的商品**", CORAL),
-    ("英文撇號炸掉 JS", "`'Didn't catch that'` ——英文化產生的撇號沒跳脫",
-     "整份 JS 停擺：畫面正常但 WebSocket 從沒建立", CORAL),
-]
-ty2 = Inches(1.92); rh2 = Inches(0.94)
-for i, (tag, what, effect, col) in enumerate(traps):
-    y = ty2 + rh2 * i
-    add_round(s, MX, y, Inches(11.87), Inches(0.84), fill=(LIGHT if i % 2 == 0 else WHITE),
-              line=GREYE6, line_w=0.6)
-    add_rect(s, MX, y, Inches(0.07), Inches(0.84), fill=col)
-    add_text(s, MX + Inches(0.28), y + Inches(0.08), Inches(2.55), Inches(0.32),
-             tag.replace("**", ""), size=12.5, bold=True, color=col)
-    add_text(s, MX + Inches(0.28), y + Inches(0.44), Inches(2.55), Inches(0.32),
-             f"坑 {i + 1}", size=10, color=GREY77)
-    add_text(s, MX + Inches(3.0), y + Inches(0.08), Inches(4.4), Inches(0.34),
-             what.replace("`", "").replace("**", ""), size=11, color=GREY44)
-    add_text(s, MX + Inches(3.0), y + Inches(0.44), Inches(4.4), Inches(0.32),
-             "↓", font=FONT_EN, size=9, color=GREYBB)
-    add_text(s, MX + Inches(7.55), y + Inches(0.2), Inches(4.1), Inches(0.5),
-             effect.replace("**", ""), size=11, bold=True,
-             color=(CORAL if col == CORAL else GREY44), anchor=MSO_ANCHOR.MIDDLE)
-add_round(s, MX, Inches(6.62), Inches(11.87), Inches(0.62), fill=DARK, shadow=True)
-add_rich(s, MX + Inches(0.4), Inches(6.72), Inches(11.1), Inches(0.42),
-         [[{"text": "找法  ", "size": 12.5, "bold": True, "color": TEAL},
-           {"text": "逐句追 log 看實際執行路徑，不要只看輸入輸出猜",
-            "size": 12, "bold": True, "color": WHITE},
-           {"text": "——log 常見 clf 判對、模型也判對，卻被中文導向的守衛改掉。共歸納 19 類坑。",
-            "size": 11.5, "color": GREYBB}]],
-         anchor=MSO_ANCHOR.MIDDLE)
-set_notes(s, "★這頁是給技術評審看的「移植的真實成本」。一般人以為做英文版＝翻譯 UI + 換模型，"
-             "實際上**真正的工作量在散落各處的語言假設**——三個月為中文磨出來的規則層，每一條都"
-             "藏著隱含假設。列五個最有代表性的（共歸納 19 類）：①21 個詞表全中文，英文句一個都不"
-             "命中，被判成「只有商品名沒動作」全部轉 clarify。②更隱形的一類：對照表的**鍵**是中文"
-             "（值反而是英文 slug），6 個類別 5 個查不到，而系統的導覽訊息還在教訪客這樣問。"
-             "③門檻用中文字元數：英文字元數是中文 2-3 倍，'alert me when earphones drop below 30' "
-             "才 7 個詞卻 31 字元，正常句被當長句。④最危險的一類——**演算法本身假設中文形態**："
-             "用 split()[0] 剝規格尾巴，中文沒空白所以取第一段＝取全名，英文商品名全用空白分隔，"
-             "`Wireless Mouse` 被腰斬成 `Wireless`，下一句追問就改到耳機的安全庫存＝**寫錯資料**。"
-             "這種 bug 讀程式碼很難看出來（邏輯本身沒錯），只有跨句對話測試會暴露。⑤英文獨有的："
-             "英文化產生的撇號沒跳脫，整份 JS 語法錯誤停擺，但 HTML/CSS 照常渲染——畫面看起來正常、"
-             "實際 WebSocket 從沒建立過。中文版永遠不會有這個 bug（中文沒撇號）。"
-             "方法論：**逐句追 log 看實際執行路徑**，不要從症狀猜成因。")
-pn(s)
-
-
-# ─── S14c 英文版 · 收斂成果（守衛 100%）★ ─────────────────────────
-s = slide_blank()
-title_bar(s, "ENGLISH BUILD · 收斂", "從 651 到 892/892：把「可靠」再證明一次")
-add_text(s, MX, Inches(1.35), Inches(11.8), Inches(0.4),
-         "英文版建了獨立的 892 句守衛庫（不是翻譯中文守衛——英文有自己的邊界：錯字型態、俗稱、閒聊搗蛋）。",
-         size=13, color=GREY55)
-kpi_row(s, Inches(1.9), [
-    ("892/892", "英文守衛通過率 100%"),
-    ("19 類", "移植坑歸納"),
-    ("25 個", "view 逐一看過畫面"),
-    ("0", "已知未修破口"),
-])
-# 收斂曲線（分數演進）
-add_text(s, MX, Inches(3.35), Inches(11.8), Inches(0.34),
-         "收斂過程：每一次跳動都是一批結構性 bug 被找出來", size=13, bold=True, color=TEALDK)
-steps = [("651", "首跑"), ("873", "13 輪規則層英文化"), ("891", "錯字長尾靠修復層"),
-         ("892", "詞典把關收尾")]
-bw = Inches(2.72); bgap = Inches(0.32)
-for i, (sc, lb) in enumerate(steps):
-    x = MX + (bw + bgap) * i
-    last = (i == len(steps) - 1)
-    add_round(s, x, Inches(3.78), bw, Inches(1.12),
-              fill=(TEALBG if last else LIGHT), line=(TEAL if last else GREYE6),
-              line_w=(1.4 if last else 0.6), shadow=True)
-    add_text(s, x, Inches(3.92), bw, Inches(0.5), sc, font=FONT_EN,
-             size=26, bold=True, color=(TEALDK if last else GREY44),
-             align=PP_ALIGN.CENTER)
-    add_text(s, x + Inches(0.12), Inches(4.46), bw - Inches(0.24), Inches(0.36),
-             lb, size=10.5, color=GREY55, align=PP_ALIGN.CENTER)
-    if not last:
-        add_text(s, x + bw - Inches(0.04), Inches(4.16), Inches(0.34), Inches(0.4),
-                 "›", font=FONT_EN, size=17, bold=True, color=GREYBB,
-                 align=PP_ALIGN.CENTER)
-# 底部：兩個方法論收穫
-add_round(s, MX, Inches(5.15), Inches(5.82), Inches(1.42), fill=LIGHT, shadow=True)
-add_text(s, MX + Inches(0.28), Inches(5.28), Inches(5.3), Inches(0.32),
-         "「救不了」要有證據", size=13, bold=True, color=TEALDK)
-add_text(s, MX + Inches(0.28), Inches(5.62), Inches(5.3), Inches(0.82),
-         "兩次把「試過一種做法沒成功」寫成「這類問題無解」。"
-         "最後一句錯字靠系統內建英文詞典區分「真詞 vs 錯字」修掉——"
-         "訊號一直都在，只是沒接上。",
-         size=11, color=GREY44, line_spacing=1.25)
-add_round(s, MX + Inches(6.05), Inches(5.15), Inches(5.82), Inches(1.42), fill=LIGHT, shadow=True)
-add_text(s, MX + Inches(6.33), Inches(5.28), Inches(5.3), Inches(0.32),
-         "看畫面才算審完", size=13, bold=True, color=TEALDK)
-add_text(s, MX + Inches(6.33), Inches(5.62), Inches(5.3), Inches(0.82),
-         "守衛全綠不等於畫面對。改用截圖逐一看 25 個 view，"
-         "抓到 JSON 完全看不到的破口：卡片承諾「說 delete AL001」，"
-         "照打卻回查無此商品。",
-         size=11, color=GREY44, line_spacing=1.25)
-add_text(s, MX, Inches(6.76), Inches(11.87), Inches(0.4),
-         "中英雙版並存：RPi5 同時跑 8002（英文，展場主力）與 8001（中文備援），開機自啟、訪客點分頁切換",
-         size=12, bold=True, color=GREY55, align=PP_ALIGN.CENTER)
-set_notes(s, "★英文版收斂成果頁。重點一：英文守衛庫是**重新建的 892 句**，不是把中文守衛翻譯過來"
-             "——中文守衛大量測注音、同音字，英文沒有對應物；英文有自己的邊界（錯字型態、俗稱別名、"
-             "英文閒聊搗蛋）。重點二：收斂曲線 651→873→891→892，每次跳動都是一批結構性 bug 被找出來，"
-             "不是慢慢磨上去的。左下角這個教訓值得講：過程中**兩次**把『試過一種做法沒成功』寫成"
-             "『這類問題無解』——第一次是 19 句雙錯字長尾，後來拆解發現是 8 個獨立的結構性 bug；"
-             "第二次是最後那一句 `do we have scks`，記錄成『需要英文詞典依賴、救不了』，"
-             "實際上樹莓派系統**內建**英文詞典，而且真正的成因根本不是字元相似度，是被守門員擋在"
-             "門外。訊號一直都在，只是沒接上。右下角：守衛全綠≠畫面對，改用截圖逐一看過 25 個 view，"
-             "抓到 JSON 看不到的破口——最典型的是卡片上明明寫著『To remove, say delete AL001』，"
-             "訪客照打卻回『查無此商品』。最後一行：中英雙版在同一台樹莓派上並存，開機都自啟，"
-             "訪客點瀏覽器分頁就能切語言。")
-pn(s)
-
-
 # ─── S14d 換輸入源測試（TTS 基準批 + 探針批）★ ────────────────────
 s = slide_blank()
 title_bar(s, "TESTING · 換輸入源", "測了 11 輪還有破口？因為造句的人一直是同一個")
@@ -2052,6 +1925,133 @@ set_notes(s, "★收斂日測試方法頁（2026-08-02）。核心訊息：**守
 pn(s)
 
 
+# ─── S12 RPI5 實戰驗收 ────────────────────────────────────
+s = slide_blank()
+title_bar(s, "REAL HARDWARE", "不是實驗室數字：樹莓派上真的扛得住")
+kpi_row(s, Inches(1.85), [
+    ("33 hr", "連續運行"),
+    ("1600+", "次推論"),
+    ("44°C", "溫度穩定"),
+    ("20–30 t/s", "速度零衰減"),
+], num_size=26)
+add_round(s, MX, Inches(3.4), Inches(5.75), Inches(3.1), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(0.35), Inches(3.65), Inches(5.0), Inches(0.45),
+         "雙平台驗收原則", size=16, bold=True, color=TEALDK)
+add_text(s, MX + Inches(0.35), Inches(4.2), Inches(5.0), Inches(2.1),
+         "本機（Windows）快速迭代，\n樹莓派（RPi5 CPU）最終驗收。\n\n"
+         "單向規則：樹莓派過 = 過。\n首次上機就抓到本機測不出的\n平台精度差異句。",
+         size=14, color=GREY44, line_spacing=1.35)
+add_round(s, Inches(6.85), Inches(3.4), Inches(5.75), Inches(3.1), fill=DARK, shadow=True)
+add_text(s, Inches(7.2), Inches(3.65), Inches(5.0), Inches(0.45),
+         "展場穩定性設計", size=16, bold=True, color=TEAL)
+items = [("📶", "離線手機熱點運行，資料不出場"),
+         ("🔁", "Wi-Fi 掉線自癒 watchdog（10 秒自檢）"),
+         ("♻️", "一鍵重置回乾淨快照，玩壞也回得來"),
+         ("🔒", "寫入操作二次確認，防誤觸")]
+for i, (ic, t) in enumerate(items):
+    yy = Inches(4.2) + Inches(0.56) * i
+    dot_icon(s, Inches(7.2), yy, ic, d=0.38, circle=TEAL, gcolor=DARK, gsize=12)
+    add_text(s, Inches(7.72), yy + Inches(0.02), Inches(4.7), Inches(0.42),
+             t, size=13, color=GREYBB, anchor=MSO_ANCHOR.MIDDLE)
+set_notes(s, "強調這不是實驗室數據，是真的在樹莓派硬體上跑過的。33 小時連續、1600 次推論、"
+             "溫度穩定不降速。右邊是展場特別做的穩定性設計：離線運行、斷線自癒、一鍵重置、"
+             "寫入二次確認。")
+pn(s)
+
+print("S11-S12 done")
+
+
+# ─── S12b 硬體路線圖（現在 CPU → 未來自研晶片）點綴 ───────────────
+s = slide_blank()
+title_bar(s, "ROADMAP · 硬體路線", "軟體已就緒，就等算力放大")
+add_text(s, MX, Inches(1.42), Inches(11.8), Inches(0.4),
+         "同一套軟體架構，換上更強的算力就能跑更大的模型——這正是晶片團隊的下一步。",
+         size=13.5, color=GREY55)
+# 左：現在（實測，實色）
+add_round(s, MX, Inches(2.1), Inches(5.55), Inches(3.9), fill=LIGHT, shadow=True)
+add_text(s, MX + Inches(0.35), Inches(2.35), Inches(4.9), Inches(0.4),
+         "現在 · 已實測", size=16, bold=True, color=TEALDK)
+add_text(s, MX + Inches(0.35), Inches(2.8), Inches(4.9), Inches(0.5),
+         "RPi5 CPU（純軟體）", size=17, bold=True, color=DARK)
+now_pts = [("模型", "FunctionGemma 270M"),
+           ("速度", "20–30 tokens/s"),
+           ("品質", "六套回歸雙平台 100%"),
+           ("成本", "一台樹莓派，無 GPU / 無雲端")]
+for i, (k, v) in enumerate(now_pts):
+    y = Inches(3.5) + Inches(0.58) * i
+    add_text(s, MX + Inches(0.35), y, Inches(1.1), Inches(0.4), k, size=13,
+             bold=True, color=TEAL)
+    add_text(s, MX + Inches(1.45), y, Inches(3.8), Inches(0.4), v, size=13, color=GREY44)
+# 中：箭頭
+add_arrow(s, Inches(6.45), Inches(3.75), Inches(0.62), Inches(0.5), fill=TEAL)
+# 右：未來（roadmap，虛線淺色）
+rx = Inches(7.25)
+_fut = add_round(s, rx, Inches(2.1), Inches(5.35), Inches(3.9), fill=WHITE,
+                 line=TEAL, line_w=1.5)
+add_text(s, rx + Inches(0.35), Inches(2.35), Inches(4.7), Inches(0.4),
+         "下一階段 · Roadmap 目標", size=16, bold=True, color=TEAL)
+add_text(s, rx + Inches(0.35), Inches(2.8), Inches(4.7), Inches(0.5),
+         "RPi5 + 自研晶片加速", size=17, bold=True, color=DARK)
+fut_pts = [("模型", "跳階到 3B / 7B 更大 LLM"),
+           ("能力", "從「查詢路由」→ 真正的推理對話"),
+           ("架構", "軟體不動，換算力即可放大"),
+           ("狀態", "晶片開發中，應用已備妥")]
+for i, (k, v) in enumerate(fut_pts):
+    y = Inches(3.5) + Inches(0.58) * i
+    add_text(s, rx + Inches(0.35), y, Inches(1.1), Inches(0.4), k, size=13,
+             bold=True, color=AMBER)
+    add_text(s, rx + Inches(1.45), y, Inches(3.6), Inches(0.4), v, size=13, color=GREY44)
+add_text(s, MX, Inches(6.35), Inches(11.8), Inches(0.5),
+         "關鍵訊息：連純 CPU 都已跑出生產級品質——軟體、測試、落地全部就緒，就等自研晶片把天花板拉高。",
+         size=13, bold=True, color=TEALDK)
+set_notes(s, "★硬體路線圖頁（點綴，但對晶片團隊的參展定位很重要）。左邊實色=現在已實測："
+             "270M 在 RPi5 純 CPU、20–30 t/s（模擬全開時 ~20、關閉 ~30）、六套回歸雙平台 100%、極低成本。右邊白底虛線框"
+             "=下一階段 roadmap 目標（明確標成目標，不假裝已達成）：加自研晶片加速 → 跑 "
+             "3B/7B 更大模型 → 能力從查詢升級到真正對話。核心訊息：軟體與應用已就緒，"
+             "就等晶片把算力天花板拉高。誠實區分實測與目標，保住對評審的信任。")
+pn(s)
+
+
+# ─── S12d 雙機交付 · 第二台 RPI5 ★（2026-08-05 認證）──────────────
+s = slide_blank()
+title_bar(s, "DUAL UNIT · 交付準備", "第二台 RPI5 重建完成：與主機同級認證、可交客戶")
+add_text(s, MX, Inches(1.40), Inches(11.8), Inches(0.4),
+         "客戶交機版與展場主機完全同構——同一份程式碼（md5 對版）、同一套守衛認證、同一條還原手冊。",
+         size=13, color=GREY55)
+kpi_row(s, Inches(1.98), [
+    ("1122+892", "全量守衛 中/英 100%"),
+    ("26/26 ×6", "並發串線三輪零串線"),
+    ("65.9°C", "壓測峰值 · 全程零降頻"),
+    ("414/414", "交機快篩驗收"),
+], box_h=1.3, num_size=30)
+_du_pts = [
+    ("開機即就緒", "開機自動歸零回乾淨基準（uptime 閘門、離線免時鐘）→ 服務自啟 → "
+                   "kiosk 雙語分頁自開 → 模擬自動起跑——插電就是展示狀態"),
+    ("手機動線", "切熱點 → 掃 QR → 手機直連查詢/語音——DHCP、憑證、手機版面全鏈打通"
+                 "（iPhone 實測）"),
+    ("重建可複製", "重建缺口 9 類全數記錄成手冊 §15「一次還原到底」檢查表——"
+                   "下一台照抄指令＋9 項驗收，不再踩雷"),
+    ("遠端救援", "雙機 ZeroTier 就位（10.35.219.22 / .47）——展場斷網用手機熱點即可遠端搶修"),
+]
+for i, (k, v) in enumerate(_du_pts):
+    y = Inches(3.58) + Inches(0.80) * i
+    dot_icon(s, MX, y + Inches(0.05), "●", d=0.34, circle=NAVY, gsize=10)
+    add_text(s, MX + Inches(0.55), y, Inches(1.9), Inches(0.7), k, size=13.5, bold=True,
+             color=NAVY)
+    add_text(s, MX + Inches(2.5), y, Inches(9.3), Inches(0.74), v, size=12.5, color=GREY44)
+add_text(s, MX, Inches(6.9), Inches(11.8), Inches(0.5),
+         "關鍵訊息：不是「複製一台機器」，是「複製一整套可驗收的交付流程」——手冊在版控裡，第三台起照走。",
+         size=13, bold=True, color=TEALDK)
+set_notes(s, "★雙機交付頁（2026-08-05 認證完成）。第二台從重建到可交客戶的完整故事：全量守衛"
+             "1122+892 與 parity 跟主機同級全綠；耐力賽三輪（並發串線 26/26×6、長對話、劇情批）"
+             "零異常零降頻；散熱裝好後待機 42°C、壓測 65.9°C。重建過程實際踩出 9 類缺口"
+             "（字型/輸入法/DHCP/桌面圖示鏈/crontab/瀏覽器政策等），全部固化成還原手冊 §15"
+             "『一次還原到底』——缺口清單＋照抄指令＋9 項驗收清單，這份手冊跟程式碼一起進版控。"
+             "對客戶的意義：交付的不是一台調好的機器，是一套可重複、可驗收的交付流程。")
+pn(s)
+
+
+# ═══════════════════════════════════════════════════════════
 # ─── S13 總結（深底）─────────────────────────────────────
 s = slide_blank()
 add_rect(s, 0, 0, SLIDE_W, SLIDE_H, fill=DARK)
