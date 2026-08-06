@@ -916,8 +916,8 @@ add_text(s, _sx0, _sy0 + _sh + Inches(0.08), Inches(11.87), Inches(0.34),
 #   怎麼累積的」。改成**守衛庫成長折線**（中英雙線，20+ 輪），資料點多用
 #   折線才擠得下；每個轉折都是一輪「測 → 修 → 補句」。
 _cd = CategoryChartData()
-_cd.categories = ["起步", "r30", "r45", "r55", "r60", "r65", "r70",
-                  "r75", "r81", "8/6 補課"]
+_cd.categories = ["第 1 輪", "第 5 輪", "第 10 輪", "第 15 輪", "第 20 輪",
+                  "第 25 輪", "第 30 輪", "第 35 輪", "第 40 輪", "目前"]
 _cd.add_series("中文守衛庫", (138, 352, 918, 989, 1025, 1039, 1050,
                           1075, 1122, 1149))
 _cd.add_series("英文守衛庫", (None, None, None, 651, 873, 887, 892,
@@ -930,7 +930,7 @@ _gc.legend.include_in_layout = False
 _gc.legend.font.size = Pt(10)
 _gc.legend.font.name = FONT_ZH
 _gc.has_title = True
-_gc.chart_title.text_frame.text = "守衛庫累積：每輪測完把破口存成守衛句"
+_gc.chart_title.text_frame.text = "每測一輪就把抓到的問題存成測試句，累積成防護網"
 for _r in _gc.chart_title.text_frame.paragraphs[0].runs:
     _r.font.size = Pt(12); _r.font.name = FONT_ZH; _r.font.bold = True; _r.font.color.rgb = DARK
 for _si, _col in enumerate((TEAL, NAVY)):
