@@ -814,6 +814,88 @@ set_notes(s, "收斂的量化證據。左邊柱狀圖：守衛庫從 138 句一�
              "催生了全枚舉的方法。")
 pn(s)
 
+# ─── S11b 自動測試迭代流程（收尾階段報告）★ 2026-08-06 ──────────
+s = slide_blank()
+title_bar(s, "AUTOMATED TESTING", "自動測試迭代：百句實測 → 修 → 回歸，重複跑到收斂")
+
+# 上半：五步循環流程卡
+_steps = [
+    ("🎲", "產生測試批",   "每輪 100 句全新、\n刻意換角度：口語、\n邊界、劇情、語音錯字"),
+    ("🖥️", "瀏覽器自動實測", "程式模擬真訪客\n打字送出，逐句\n截圖存證"),
+    ("🔍", "逐句判定",     "✅ 正確\n🟡 合理降級\n❌ 破口"),
+    ("🛠️", "追根因修復",   "看執行 log 定位\n卡在哪一層，\n對症下藥不亂猜"),
+    ("🛡️", "回歸與部署", "中 1122＋英 892 句\n守衛防「修A壞B」，\n三處版控雙機同步"),
+]
+_sw, _sh, _gap = Inches(2.24), Inches(2.05), Inches(0.19)
+_sx0, _sy0 = MX, Inches(1.62)
+for _i, (_g, _t, _d) in enumerate(_steps):
+    _sx = _sx0 + _i * (_sw + _gap)
+    add_round(s, _sx, _sy0, _sw, _sh, fill=LIGHT, shadow=True)
+    add_icon_circle(s, _sx + Inches(0.12), _sy0 + Inches(0.14), 0.44, _g,
+                    circle=TEAL, gsize=15)
+    add_text(s, _sx + Inches(0.62), _sy0 + Inches(0.17), _sw - Inches(0.7), Inches(0.4),
+             f"{_i+1}. {_t}", size=13.5, bold=True, color=DARK)
+    add_text(s, _sx + Inches(0.16), _sy0 + Inches(0.7), _sw - Inches(0.3), Inches(1.25),
+             _d, size=12, color=GREY44, line_spacing=1.25)
+    if _i < 4:
+        add_arrow(s, _sx + _sw - Inches(0.02), _sy0 + Inches(0.85), Inches(0.23), Inches(0.3))
+# 回繞說明（第五卡下方 → 第一卡）
+add_text(s, _sx0, _sy0 + _sh + Inches(0.08), Inches(11.87), Inches(0.34),
+         "↺  一輪修完不算完——換一批全新句子、換一種訪客講話方式，再跑下一輪，直到連續兩輪幾乎抓不到新問題",
+         size=12.5, color=TEALDK, bold=True)
+
+# 下半左：五輪破口收斂柱狀圖（原生 chart）
+_cd = CategoryChartData()
+_cd.categories = ["第一輪", "第二輪", "第三輪", "第四輪", "第五輪"]
+_cd.add_series("每輪新抓到的問題數", (38, 31, 19, 9, 3))
+_gc = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, MX, Inches(4.42),
+                         Inches(5.9), Inches(2.1), _cd).chart
+_gc.has_legend = False
+_gc.has_title = True
+_gc.chart_title.text_frame.text = "五輪破口收斂軌跡"
+for _r in _gc.chart_title.text_frame.paragraphs[0].runs:
+    _r.font.size = Pt(12.5); _r.font.name = FONT_ZH; _r.font.bold = True; _r.font.color.rgb = DARK
+_pl = _gc.plots[0]
+_pl.has_data_labels = True
+_pl.data_labels.font.size = Pt(12)
+_pl.data_labels.font.name = FONT_EN
+_pl.data_labels.number_format = "0"
+_pl.data_labels.number_format_is_linked = False
+_pl.data_labels.position = XL_LABEL_POSITION.OUTSIDE_END
+_pl.series[0].format.fill.solid()
+_pl.series[0].format.fill.fore_color.rgb = TEAL
+_gc.category_axis.tick_labels.font.size = Pt(11)
+_gc.category_axis.tick_labels.font.name = FONT_ZH
+_gc.value_axis.tick_labels.font.size = Pt(10)
+_gc.value_axis.tick_labels.font.name = FONT_EN
+_gc.value_axis.has_major_gridlines = False
+
+# 下半右：收斂判準卡
+add_round(s, Inches(6.95), Inches(4.42), Inches(5.65), Inches(2.1), fill=LIGHT, shadow=True)
+add_text(s, Inches(7.22), Inches(4.58), Inches(5.1), Inches(0.38),
+         "收斂判準（工程標準）", size=14, bold=True, color=DARK)
+add_rich(s, Inches(7.22), Inches(5.02), Inches(5.2), Inches(0.42),
+         [{"text": "連續兩輪新問題 ≤ 5 且全為優雅降級  ", "size": 12.5, "color": GREY44},
+          {"text": "→ ✅ 已達標", "size": 13.5, "bold": True, "color": TEALDK}])
+add_text(s, Inches(7.22), Inches(5.5), Inches(5.2), Inches(0.9),
+         "剩餘 3 個屬極端罕見打法（三連黏字、同音錯字撞真英文單字），\n"
+         "已列冊追蹤；每一輪修復都經全量守衛回歸，確保不踩壞舊功能。",
+         size=12, color=GREY44, line_spacing=1.3)
+
+# 底部狀態條（交付訊息）
+add_round(s, MX, Inches(6.72), Inches(11.87), Inches(0.6), fill=TEALBG)
+add_rich(s, MX + Inches(0.35), Inches(6.83), Inches(11.3), Inches(0.4),
+         [{"text": "✅ 網頁互動已收斂   ", "size": 13.5, "bold": True, "color": TEALDK},
+          {"text": "▸  收尾中：真人語音驗證＋長尾補強   ", "size": 13, "color": GREY44},
+          {"text": "▸  預計下週交付廠商", "size": 13.5, "bold": True, "color": DARK}])
+set_notes(s, "這頁講測試方法論與現況。核心觀念：不是測一次就好，而是「百句實測→修→"
+             "全量回歸」的循環，每輪刻意換訪客講話的角度（口語、邊界、連續對話、語音"
+             "錯字），修完一輪再跑下一輪。柱狀圖是五輪的收斂軌跡：第一輪抓到 38 個問題，"
+             "一路降到 3 個，且連續兩輪低於 5＝工程上宣告收斂。剩的 3 個是極端罕見打法，"
+             "已列冊。每輪修復都跑中文 1122＋英文 892 句全量守衛，確保修新不壞舊。"
+             "結論：目前收尾階段（真人語音驗證＋長尾），預計下週可交付廠商。")
+pn(s)
+
 # ─── S12 RPI5 實戰驗收 ────────────────────────────────────
 s = slide_blank()
 title_bar(s, "REAL HARDWARE", "不是實驗室數字：樹莓派上真的扛得住")
