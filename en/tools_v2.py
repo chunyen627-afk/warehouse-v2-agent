@@ -1159,6 +1159,27 @@ _ALERT_COND_ALIASES = {
     "expiring":     ["到期", "過期", "效期", "快過期", "保存期限", "expiring"],
 }
 
+# 2026-08-06 user 定調（ZH 同款）：排程/警示都可以一直新增，**但要有上限**——
+#   展場一天下來訪客可能各堆出幾十筆，排程每筆到點都真的跑腳本（推論資源被
+#   排隊佔用）、警示每筆都進背景掃描，清單也會長到看不完。
+_MAX_SCHEDULE_JOBS  = 10
+_MAX_ALERT_RULES    = 10
+
+
+def _next_seq_id(existing: list, prefix: str) -> str:
+    """產下一個不撞號的流水 ID（SCH001 / AL001）。
+
+    ⚠️ 原本是 `f"{prefix}{len(rules)+1:03d}"`——**刪除後必撞號**：
+      3 筆刪掉中間那筆 → len=2 → 下一個又生 003，跟現存的 AL003 同 ID
+      ⇒ 刪除時 ID 比對會砍錯/砍雙筆。改成「取現存最大號 +1」。
+    """
+    mx = 0
+    for r in existing or []:
+        _v = str(r.get("id", ""))
+        if _v.startswith(prefix) and _v[len(prefix):].isdigit():
+            mx = max(mx, int(_v[len(prefix):]))
+    return f"{prefix}{mx + 1:03d}"
+
 
 def _resolve_condition(text: str) -> str | None:
     if not text:
@@ -1194,7 +1215,28 @@ def set_alert(condition: str = "", target: str = "",
     rules = []
     if rules_path.exists():
         rules = json.load(open(rules_path, encoding="utf-8")).get("rules", [])
-    rule_id = f"AL{len(rules) + 1:03d}"
+
+    # 上限（同排程）。⚠️ 存檔規則只有 id/condition/scope/scope_names（實機驗過），
+    #   沒有 scope_txt/cond_label ⇒ 標籤在這裡自己組。
+    if len(rules) >= _MAX_ALERT_RULES:
+        _cl = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
+               "expiring": "expiring soon", "below_threshold": "below a set quantity"}
+        _cur_al = ", ".join(
+            f"{', '.join(r.get('scope_names') or []) or 'all items'}"
+            f" -> {_cl.get(r.get('condition', ''), r.get('condition', ''))}"
+            for r in rules[:5])
+        return {"ok": True, "view": "clarify",
+                "summary": (f"You've reached the limit of {_MAX_ALERT_RULES} alert "
+                            f"rules, so I can't add another one.\n"
+                            f"Current: {_cur_al}\n"
+                            f'To free up a slot, say "my alerts" and tell me which '
+                            f"one to delete."),
+                "data": {"question": f"Alert limit of {_MAX_ALERT_RULES} reached. "
+                                     f"Delete an old one first?",
+                         "options": ["Show my alerts"],
+                         "actions": ["my alert list"],
+                         "hint": ""}}
+    rule_id = _next_seq_id(rules, "AL")
 
     _cond_labels = {"below_safety": "below safety stock", "out_of_stock": "out of stock",
                     "expiring": "expiring soon",
@@ -1602,6 +1644,22 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
     if jobs_path.exists():
         jobs = json.loads(jobs_path.read_text("utf-8")).get("jobs", [])
 
+    # 上限（擋在確認卡出現前，訪客不會白按一次授權才被拒）
+    if len(jobs) >= _MAX_SCHEDULE_JOBS:
+        _cur = ", ".join(f"{j.get('freq_label', '')} {j.get('time_str', '')} "
+                         f"[{j.get('script_label', '')}]" for j in jobs[:5])
+        return {"ok": True, "view": "clarify",
+                "summary": (f"You've reached the limit of {_MAX_SCHEDULE_JOBS} "
+                            f"schedules, so I can't add another one.\n"
+                            f"Current: {_cur}\n"
+                            f'To free up a slot, say "my schedules" and tell me '
+                            f"which one to delete."),
+                "data": {"question": f"Schedule limit of {_MAX_SCHEDULE_JOBS} reached. "
+                                     f"Delete an old one first?",
+                         "options": ["Show my schedules"],
+                         "actions": ["what schedules do i have"],
+                         "hint": ""}}
+
     # 防止重複——script + freq + 時間三者都相同才算重複
     # （同腳本同頻率但不同時間是合法的兩個排程，第9輪測試修）
     existing = next((j for j in jobs if j["script_id"] == sc["id"]
@@ -1622,7 +1680,7 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
 
     _freq_labels = {"daily": "daily", "weekly": "weekly", "monthly": "monthly"}
     freq_label = _freq_labels.get(freq, freq)
-    job_id = f"SCH{len(jobs)+1:03d}"
+    job_id = _next_seq_id(jobs, "SCH")
 
     summary = f"On confirm, a schedule will be set: run [{sc['label']}] automatically {freq_label} at {time_str}"
     return {"ok": True, "summary": summary, "view": "schedule_confirm",

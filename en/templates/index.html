@@ -719,7 +719,11 @@
   text-align: right; font-weight: 700; font-size: 13px; color: var(--text);
   transition: color .25s, transform .25s; display: inline-block;
 }
-.lg-row .lg-tot { text-align: right; font-weight: 700; font-size: 13px; color: #90cdf4; }
+/* 2026-08-06 user 回報「最右邊 TOTAL 顏色太淺了不清楚」：原 #90cdf4 是
+   為深底挑的淺藍，實際渲染在白底表格上 → 幾乎看不見。
+   改深藍 #1c4f8f（白底對比 ~7:1 過 WCAG AA），字重升 800 讓合計欄
+   仍與各倉數字有層次區別。 */
+.lg-row .lg-tot { text-align: right; font-weight: 800; font-size: 13px; color: #1c4f8f; }
 .lg-row .lg-q.low { color: #fc8181; }         /* 該倉低於安全庫存 */
 .lg-row .lg-q.up   { color: #68d391; transform: scale(1.35); }
 .lg-row .lg-q.down { color: #fc8181; transform: scale(1.35); }

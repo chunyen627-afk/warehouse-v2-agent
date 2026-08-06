@@ -1029,6 +1029,29 @@ _ALERT_COND_ALIASES = {
     "expiring":     ["到期", "過期", "效期", "快過期", "保存期限", "expiring"],
 }
 
+# 2026-08-06 user 定調：排程/警示都可以一直新增（「改時間」的正解就是
+#   新增+刪舊），**但要有上限**——展場一天下來訪客可能各堆出幾十筆，
+#   排程每筆到點都真的跑腳本（推論資源被排隊佔用）、警示每筆都進背景
+#   掃描，清單也會長到看不完。10 個對 demo 綽綽有餘（baseline 各 1 個）。
+_MAX_SCHEDULE_JOBS  = 10
+_MAX_ALERT_RULES    = 10
+
+
+def _next_seq_id(existing: list, prefix: str) -> str:
+    """產下一個不撞號的流水 ID（SCH001 / AL001）。
+
+    ⚠️ 原本是 `f"{prefix}{len(rules)+1:03d}"`——**刪除後必撞號**：
+      3 筆刪掉中間那筆 → len=2 → 下一個又生 003，跟現存的 AL003 同 ID
+      ⇒ 刪除時 `rule_id` 比對會一次砍掉兩筆、或砍錯那筆。
+      改成「取現存最大號 +1」，刪完再新增也不會回頭撞既有 ID。
+    """
+    mx = 0
+    for r in existing or []:
+        _v = str(r.get("id", ""))
+        if _v.startswith(prefix) and _v[len(prefix):].isdigit():
+            mx = max(mx, int(_v[len(prefix):]))
+    return f"{prefix}{mx + 1:03d}"
+
 
 def _resolve_condition(text: str) -> str | None:
     if not text:
@@ -1064,7 +1087,27 @@ def set_alert(condition: str = "", target: str = "",
     rules = []
     if rules_path.exists():
         rules = json.load(open(rules_path, encoding="utf-8")).get("rules", [])
-    rule_id = f"AL{len(rules) + 1:03d}"
+
+    # 上限（同排程，擋在確認卡出現前，訪客不會白按一次授權）
+    if len(rules) >= _MAX_ALERT_RULES:
+        # ⚠️ 存檔的規則只有 id/condition/scope/scope_names（實機驗過），
+        #   沒有 scope_txt/cond_label ⇒ 標籤要在這裡自己組，不能直接 .get。
+        _cl = {"below_safety": "低於安全庫存", "out_of_stock": "缺貨/斷貨",
+               "expiring": "快到期", "below_threshold": "低於指定數量"}
+        _cur_al = "、".join(
+            f"{'、'.join(r.get('scope_names') or []) or '全部商品'}"
+            f"→{_cl.get(r.get('condition', ''), r.get('condition', ''))}"
+            for r in rules[:5])
+        return {"ok": True, "view": "clarify",
+                "summary": (f"警示規則已達上限（{_MAX_ALERT_RULES} 條），無法再新增。\n"
+                            f"目前：{_cur_al}\n"
+                            f"要騰位子的話，可以說「警示清單」再指定刪掉不要的。"),
+                "data": {"question": f"警示已達上限 {_MAX_ALERT_RULES} 條，"
+                                     f"要先刪掉舊的嗎？",
+                         "options": ["看警示清單"],
+                         "actions": ["我的警示清單"],
+                         "hint": ""}}
+    rule_id = _next_seq_id(rules, "AL")
 
     _cond_labels = {"below_safety": "低於安全庫存", "out_of_stock": "缺貨/斷貨",
                     "expiring": "快到期",
@@ -1309,11 +1352,32 @@ def _parse_schedule_intent(text: str) -> dict:
     # 2026-08-06 user 實測：「10點半」曾建成 10:00（「半」被丟）——補
     #   半/一刻/三刻/中文分鐘（三十分/四十五分）。阿拉伯分鐘原本就支援
     #   （「下午2點45分」→14:45）。
-    m = _re.search(r'([0-9]{1,2}|十[一二]?|[一兩二三四五六七八九])\s*[點:]\s*'
+    # 2026-08-06 排程百句抓到：「每天二十三點跑盤點」→ **15:00**、
+    #   「每天二十五點」→ 17:00。原 regex 只認「十/十一/十二」，「二十三點」
+    #   的前綴「二十」沒被吃掉 → 只match到後半「三點」→ 再被 1-6 智慧預設
+    #   +12 = 15:00（錯得很隱蔽：訪客講 23 點，系統顯示成功、建在 15:00）。
+    #   ⇒ 補中文 13-24（二十一~二十四）；超過 24 的視為無效不解析（沿用
+    #     EN 版 'at 25pm' 的邊界教訓：無效時間不可被編造成合法值）。
+    m = _re.search(r'((?:[一二兩]?十[一二三四五六七八九]?)|[0-9]{1,2}|'
+                   r'[一兩二三四五六七八九])\s*[點:]\s*'
                    r'([0-9]{1,2}|半|一刻|三刻|[一二三四五]?十[一二三四五六七八九]?)?', text)
     if m:
         g = m.group(1)
-        h = int(g) if g.isdigit() else _CN_HOUR.get(g, 9)
+        if g.isdigit():
+            h = int(g)
+        elif g in _CN_HOUR:
+            h = _CN_HOUR[g]
+        else:
+            # 中文十位數（二十三 / 十五 / 二十）——_CN_HOUR 只到十二
+            _mm = _re.fullmatch(r'([一二兩])?十([一二三四五六七八九])?', g)
+            if _mm:
+                _tens = 2 if _mm.group(1) in ("二", "兩") else 1
+                h = _tens * 10 + (_CN_HOUR.get(_mm.group(2), 0) if _mm.group(2) else 0)
+            else:
+                h = 9
+        if h > 23:
+            m = None                       # 無效時刻 → 當作沒解析到（不編造）
+    if m:
         g2 = m.group(2) or ""
         _CN_D = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
                  "六": 6, "七": 7, "八": 8, "九": 9}
@@ -1377,6 +1441,24 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
     if jobs_path.exists():
         jobs = json.loads(jobs_path.read_text("utf-8")).get("jobs", [])
 
+    # 2026-08-06 user 定調：排程可無限新增（「改時間」的正解就是新增+刪舊），
+    #   但要有上限——展場一天下來訪客可能堆出幾十筆，每筆到點都真的跑腳本
+    #   ⇒ 清單難看 + 推論資源被排隊佔用。
+    #   擋在**確認卡出現前**：訪客不會白按一次「授權執行」才被拒（比 commit
+    #   端才擋體驗好），並直接告訴他怎麼騰位子。
+    if len(jobs) >= _MAX_SCHEDULE_JOBS:
+        _cur = "、".join(f"{j.get('freq_label','')}{j.get('time_str','')}"
+                         f"【{j.get('script_label','')}】" for j in jobs[:5])
+        _q_lim = f"排程已達上限 {_MAX_SCHEDULE_JOBS} 個，要先刪掉舊的嗎？"
+        return {"ok": True, "view": "clarify",
+                "summary": (f"排程數量已達上限（{_MAX_SCHEDULE_JOBS} 個），無法再新增。\n"
+                            f"目前：{_cur}\n"
+                            f"要騰位子的話，可以說「排程清單」再指定刪掉不要的。"),
+                "data": {"question": _q_lim,
+                         "options": ["看排程清單"],
+                         "actions": ["我有哪些排程"],
+                         "hint": ""}}
+
     # 防止重複——script + freq + 時間三者都相同才算重複
     # （同腳本同頻率但不同時間是合法的兩個排程，第9輪測試修）
     existing = next((j for j in jobs if j["script_id"] == sc["id"]
@@ -1394,7 +1476,7 @@ def set_schedule(script_name: str = "", freq: str = "daily", time_str: str = "09
 
     _freq_labels = {"daily": "每天", "weekly": "每週", "monthly": "每月"}
     freq_label = _freq_labels.get(freq, freq)
-    job_id = f"SCH{len(jobs)+1:03d}"
+    job_id = _next_seq_id(jobs, "SCH")
 
     summary = f"確認後將設定排程：{freq_label} {time_str} 自動執行【{sc['label']}】"
     return {"ok": True, "summary": summary, "view": "schedule_confirm",

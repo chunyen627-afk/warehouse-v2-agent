@@ -10246,7 +10246,41 @@ async def ws_handler(ws: WebSocket):
                                      "hint": ""}}})
                         log.info(f"[Pre-C-Sched] 單次定時句 → clarify: {user_text!r}")
                         continue
+                    # 2026-08-06 排程百句抓到：「每天早上八點跑判點」「跑盤ㄉ」
+                    #   「每天8點跑ㄆㄢˊ點」「每天跑」——Pre-C-Sched 正確判成排程
+                    #   意圖，但腳本詞表沒有這些錯字/殘字 → set_schedule 拿空字串
+                    #   查白名單 → 訪客看到 **`找不到腳本「」，可用：…`** 的系統
+                    #   內部訊息（技術訊息外洩，展場最傷）。
+                    #   EN 版早有「抽不到腳本就不攔」的保險，ZH 一直沒補。
+                    #   ⇒ 這裡做得比 EN 更進一步：既然頻率＋動作詞都齊備、已確定
+                    #     是排程意圖，**反問要排哪個腳本**比放生回查詢更有用
+                    #     （放生的話「每天跑」會掉回商品查詢一樣答非所問）。
                     if _has_sched_time and _has_sched_act:
+                        try:
+                            import tools_v2 as _tv2_sc0
+                            if not _tv2_sc0._parse_schedule_intent(
+                                    user_text).get("script_id"):
+                                _sc0_labels = [s["label"] for s in
+                                               _tv2_sc0._load_manifest().get("scripts", [])]
+                                # 原句的頻率＋時刻要保留進 actions，訪客選完
+                                #   才不會把講好的「每天早上八點」弄丟（rewrite
+                                #   信息銷毀定律：組句一律從原句帶，不重編）。
+                                _p_sc0 = _tv2_sc0._parse_schedule_intent(user_text)
+                                _fq_sc0 = {"daily": "每天", "weekly": "每週",
+                                           "monthly": "每月"}.get(_p_sc0.get("freq"), "每天")
+                                _tm_sc0 = _p_sc0.get("time_str") or "09:00"
+                                _q_sc0 = f"要排哪一個？（{_fq_sc0} {_tm_sc0} 自動執行）"
+                                await send({"type": "done", "result": {
+                                    "ok": True, "view": "clarify", "summary": _q_sc0,
+                                    "data": {"question": _q_sc0,
+                                             "options": _sc0_labels,
+                                             "actions": [f"{_fq_sc0}{_tm_sc0}自動執行{_l}"
+                                                         for _l in _sc0_labels],
+                                             "hint": ""}}})
+                                log.info(f"[Pre-C-Sched] 排程句抽不到腳本 → 反問: {user_text!r}")
+                                continue
+                        except Exception as _e_sc0:
+                            log.warning(f"[Pre-C-Sched] 腳本檢查失敗（放行）: {_e_sc0}")
                         if func_name != "set_schedule":
                             func_name = "set_schedule"
                             func_args = {"raw_text": user_text}

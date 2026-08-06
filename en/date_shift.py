@@ -115,10 +115,22 @@ def shift_bundle(bundle: dict, target: _date | None = None) -> dict:
         if m.get("date"):
             m["date"] = _shift_hist(m["date"])
 
+    # 🚨 批次日期一律**無條件平移**（2026-08-06 user 回報「快過期警告是否固定」
+    #   時追出來的實害）：`_shift_hist` 的判準「日期 > 原始快照日 = 執行期資料」
+    #   對 movements 正確（歷史異動一定在快照日之前），但 **`expire_date`
+    #   天生就在未來**——154 批有 138 批的到期日晚於原始快照日，全被誤判成
+    #   執行期資料而留在原地。⇒ 庫存/歷史平移了 72 天、到期日沒動 = 被時間
+    #   追過去：實測 28 批到期警示裡 **15 批顯示已過期**、最急的「剩 -69 天」
+    #   （訪客看到負數天數會直接認定系統壞掉），而且**逐日惡化**。
+    #   安全性：`expire_date`/`mfg_date` 沒有執行期寫入來源（訪客新增商品不建
+    #   批次、模擬器只寫 movement），不存在重複平移風險；冪等性仍由原始 config
+    #   的固定 snapshot_date（2026-05-26）保證。
+    #   驗證：原始資料 vs 原始快照日 = 已過期 0 批/紅燈 3 批（設計本意），
+    #        修好後 vs 今天 = 已過期 0 批/紅燈 3 批 ✅ 完全還原。
     for b in bundle.get("batches", []) or []:
         for k in ("mfg_date", "expire_date"):
             if b.get(k):
-                b[k] = _shift_hist(b[k])
+                b[k] = _shift_str(b[k], off)
 
     for o in bundle.get("orders", []) or []:
         if o.get("date"):
