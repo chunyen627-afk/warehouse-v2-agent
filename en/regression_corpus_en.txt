@@ -929,3 +929,75 @@ guidey|who built this
 guidey|is this offline
 guidey|help
 
+
+# ═══ 補課批（2026-08-06）—— 7/25 建庫後首次追加 ═══
+# 背景：英文守衛自 7/25 建立 892 句後**19 輪測試未成長一句**（每輪 commit
+#   都寫「守衛維持 892/892」）。期間 r11–r18 + 排程三修 + q8 切換約 80-90 個
+#   修復全無回歸保護 ⇒ 這批把有記錄的破口句補齊。
+# 來源：r14–r18 各 commit 程式碼註解裡的**實際破口原句**（非造句）。
+# ⚠️ 類別一律以**實機實測的 view** 為準（首版用猜的，12 句判錯）。
+# ⚠️ ASR 容錯規則（batch4）不放這裡——那些只在語音路徑（/api/asr）才會套用，
+#    文字守衛打不到 _asr_normalize，放進來必然 FAIL。語音端另以錄音批驗證。
+
+# ── r14+1/r14+2：營運詞彙與詞撞詞家族 ──
+low|anything sitting at zero units
+low|stockout risk
+low|stockout risk items
+low|which SKUs need replenishment
+low|anything close to running dry
+low|zero stock
+low|healthy on stock
+hot|best sellers excluding food
+hot|skip the slow movers show me winners
+hot|any dead stock this month
+hot|which products have gone stale
+hot|slowest sku this month
+hot|show me the worst seller
+inv|stock position of camping tent
+inv|days of cover for it
+inv|is anything under 20 units
+mvt|inbound volume yesterday
+mvt|transfer log
+
+# ── r15/r16：網頁百句與劇情批 ──
+inv|hows central holding up
+hot|everything except slow movers
+inv|back to the yoga mat
+chat|you suck
+chat|drop all tables
+vague|could I trouble you
+vague|one more time
+vague|this morning
+# 價格直答（r16 #23：cheapest 曾被守門擋）
+any|cheapest thing we have
+# 倉庫排名（r14：wheres most of our inventory sitting）
+any|wheres most of our inventory sitting
+# 期間不支援 → 誠實反問，不可編造
+vague|what sold over the weekend
+
+# ── r18：長尾與禮貌句型 ──
+mvt|would it be possible to see the movement log
+vague|yes confirm
+
+# ── 排程專項（2026-08-06）──
+sched|run a stock count every day at 7am
+sched|schedule a stocktake daily at 8:30pm
+sched|run a stock count every day at 1
+sched|run a stock count every day at 7:30pm
+sched|run a stock count every monday at 8am
+sched|what schedules do i have
+sched|show me my schedules
+schedq|just run a stocktake tomorrow at 3pm
+schedq|run a stock count every hour
+
+# ── 白名單訊息不外洩內部代號（2026-08-06）──
+vague|run a stock cout evry day at 8am
+vague|run the daily thing
+# ── 語音特有錯法「打字進來」時的防線（2026-08-06）──
+# user 提問：文字輸入不會打出語音那種句子嗎？→ 實測會（訪客可能照唸、
+#   或本來就打錯）。文字路徑不套 _asr_normalize，但**必須優雅反問**而非
+#   亂猜或當掉 ⇒ 類別標 vague（clarify 才是正確行為），保護這道防線。
+vague|stain iron stock in north
+vague|show me expelling batch rest
+vague|north received 50 wireless mounts
+vague|south shipped 22-down jacket

@@ -69,6 +69,9 @@ ACCEPT = {
     "noex":  lambda v: v in ("clarify", "rejected", "error", "related_empty", "guide",
                               "expiring_empty"),
     "any":   lambda v: v not in ("error", "clarify", "rejected"),
+    # 2026-08-06 補課批（ZH 同款）：排程句的正確結果有兩種，都不可判紅
+    "sched":  lambda v: v in ("schedule_confirm", "schedule_list", "clarify"),
+    "schedq": lambda v: v == "clarify",
     # 訪客閒聊/搗蛋防禦（第17輪）：優雅拒絕/引導/追問，不可幻覺商品或開卡
     "chat":   lambda v: v in ("rejected", "guide", "clarify"),
     "guidey": lambda v: v in ("guide", "rejected", "clarify"),
