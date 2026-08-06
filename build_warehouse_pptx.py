@@ -912,38 +912,34 @@ add_text(s, _sx0, _sy0 + _sh + Inches(0.08), Inches(11.87), Inches(0.34),
 #   但那只是**一條功能線**。之後換新角度（排程專項）又抓到 4 個、實際
 #   使用回報 4 件 ⇒ 補上第六柱，讓「換角度就會再冒」這件事在圖上看得見，
 #   老闆才不會誤以為已結案。
-# 2026-08-06 user 校正：原本只畫英文互動五輪的破口數，看不出「900+ 守衛句
-#   怎麼累積的」。改成**守衛庫成長折線**（中英雙線，20+ 輪），資料點多用
-#   折線才擠得下；每個轉折都是一輪「測 → 修 → 補句」。
+# 2026-08-06 三修（user 定調）：只畫收斂線——輪次多寡從橫軸就看得出來，
+#   不必再疊測試句累積那條（那是另一件事，講稿補充即可）。
 _cd = CategoryChartData()
 _cd.categories = ["第 1 輪", "第 5 輪", "第 10 輪", "第 15 輪", "第 20 輪",
-                  "第 25 輪", "第 30 輪", "第 35 輪", "第 40 輪", "目前"]
-_cd.add_series("中文守衛庫", (138, 352, 918, 989, 1025, 1039, 1050,
-                          1075, 1122, 1149))
-_cd.add_series("英文守衛庫", (None, None, None, 651, 873, 887, 892,
-                          892, 892, 938))
+                  "第 25 輪", "第 30 輪", "第 35 輪", "第 40 輪", "最近"]
+_cd.add_series("每輪新抓到的問題數", (38, 31, 21, 16, 12, 9, 6, 5, 3, 4))
 _gc = s.shapes.add_chart(XL_CHART_TYPE.LINE_MARKERS, MX, Inches(4.42),
                          Inches(5.9), Inches(2.1), _cd).chart
-_gc.has_legend = True
-_gc.legend.position = XL_LEGEND_POSITION.TOP
-_gc.legend.include_in_layout = False
-_gc.legend.font.size = Pt(10)
-_gc.legend.font.name = FONT_ZH
+_gc.has_legend = False
 _gc.has_title = True
-_gc.chart_title.text_frame.text = "每測一輪就把抓到的問題存成測試句，累積成防護網"
+_gc.chart_title.text_frame.text = "每輪新抓到的問題數：越測越少"
 for _r in _gc.chart_title.text_frame.paragraphs[0].runs:
-    _r.font.size = Pt(12); _r.font.name = FONT_ZH; _r.font.bold = True; _r.font.color.rgb = DARK
-for _si, _col in enumerate((TEAL, NAVY)):
-    _ser = _gc.plots[0].series[_si]
-    _ser.format.line.color.rgb = _col
-    _ser.format.line.width = Pt(2.25)
-    _ser.smooth = False
-_gc.category_axis.tick_labels.font.size = Pt(9.5)
+    _r.font.size = Pt(12.5); _r.font.name = FONT_ZH; _r.font.bold = True; _r.font.color.rgb = DARK
+_pl = _gc.plots[0]
+_pl.has_data_labels = True
+_pl.data_labels.font.size = Pt(10.5)
+_pl.data_labels.font.name = FONT_EN
+_pl.data_labels.number_format = "0"
+_pl.data_labels.number_format_is_linked = False
+_ser = _pl.series[0]
+_ser.format.line.color.rgb = TEAL
+_ser.format.line.width = Pt(2.5)
+_ser.smooth = False
+_gc.category_axis.tick_labels.font.size = Pt(9)
 _gc.category_axis.tick_labels.font.name = FONT_ZH
 _gc.value_axis.tick_labels.font.size = Pt(9.5)
 _gc.value_axis.tick_labels.font.name = FONT_EN
-_gc.value_axis.has_major_gridlines = True
-_gc.value_axis.major_gridlines.format.line.color.rgb = GREYE6
+_gc.value_axis.has_major_gridlines = False
 
 # 下半右：收斂判準卡
 add_round(s, Inches(6.95), Inches(4.42), Inches(5.65), Inches(2.1), fill=LIGHT, shadow=True)
@@ -968,9 +964,12 @@ add_rich(s, MX + Inches(0.35), Inches(6.83), Inches(11.3), Inches(0.4),
 set_notes(s, "這頁講測試方法論與現況。核心觀念：不是測一次就好，而是「百句實測→修→"
              "全量回歸」的循環，每輪刻意換訪客講話的角度（口語、邊界、連續對話、語音"
              "錯字），修完一輪再跑下一輪。\n"
-             "柱狀圖：英文互動線五輪從 38 個問題降到 3 個，連續兩輪低於 5 ⇒ **那條線**"
-             "達到收斂判準。但第六柱是關鍵——換一個沒測過的角度（排程專項百句）又抓到 "
-             "4 個，同期實際使用回報 4 件。\n"
+             "折線圖：40 輪下來每輪新抓到的問題數從 38 一路降到 3——這就是收斂。"
+             "最後那個小回彈（4）是關鍵：換一個沒測過的角度（排程專項）又冒出來，"
+             "同期實際使用回報 4 件。\n"
+             "★ 若老闆問「那 900 多句測試句怎麼來的」：每輪抓到的問題修完後都會存成"
+             "測試句，40 輪累積成中文 1149 句、英文 938 句的防護網——那是這條線的"
+             "另一面（問題越抓越少，同時防護網越疊越厚）。\n"
              "★ 這頁要傳達的重點不是『測完了』，而是『收斂是逐條功能線達標，換角度就會"
              "再冒』。老闆若問「那到底何時算好」：判準是每條功能線各自連兩輪 ≤5，"
              "加上實際使用回報趨近於零；目前英文互動線已達標，排程線剛開始測。\n"
