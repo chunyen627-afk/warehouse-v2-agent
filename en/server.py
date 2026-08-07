@@ -4418,14 +4418,19 @@ _CAT_WORDS_EN = {
     #     「這類還沒有商品」（warehouse.query_inventory 已有該分支）。
     #   ⚠️ 一律詞界比對（坑 1）：'tool' 會出現在商品名裡，靠上游的
     #     「無扎實商品名命中才採用類別」把關。
-    "hardware":   (r"hardware", r"tools?", r"hand tools?", r"power tools?",
-                   r"diy"),
+    # ⚠️ 不可收裸 "tools"：'what tools do you have for this' 是在問**功能**。
+    "hardware":   (r"hardware", r"hand tools?", r"power tools?", r"diy",
+                   r"tools? (?:stock|inventory|category|section)",
+                   r"hardware (?:stock|inventory|items?)"),
     "beauty":     (r"beauty", r"cosmetics?", r"skin\s*care", r"skincare",
                    r"make\s*up", r"makeup", r"personal care"),
     "medical":    (r"medical", r"health\s*care", r"healthcare", r"medicine",
                    r"pharmacy", r"first aid"),
+    # ⚠️ 不可收裸 "office"：'how many chairs for the office' 的 office 是
+    #   **地點**不是類別（守衛 noex 類抓到，被誤導到「文具類沒有商品」）。
+    #   用明確的類別片語。
     "stationery": (r"stationery", r"stationary", r"office supplies",
-                   r"office"),
+                   r"office products", r"office items"),
     "pet":        (r"pet supplies", r"pets?", r"pet food"),
     "automotive": (r"automotive", r"auto parts", r"car parts?",
                    r"vehicles?", r"motorcycles?"),
@@ -4436,10 +4441,17 @@ _CAT_WORDS_EN = {
     "baby":       (r"baby (?:products?|items?|goods|supplies|category)",
                    r"babies", r"toddlers?", r"infants?", r"nursery",
                    r"mother\s*&?\s*baby"),
-    "media":      (r"books?", r"media", r"magazines?", r"audio\s*books?"),
+    # ⚠️ 不可收裸 "book"（動詞：do we **book** stock in advance）
+    #   或裸 "media"（媒體報導）。用類別語境片語。
+    "media":      (r"books? (?:stock|inventory|category|section)",
+                   r"magazines?", r"audio\s*books?",
+                   r"books? (?:&|and) media", r"media (?:products?|items?)"),
     "industrial": (r"industrial", r"business supplies", r"machinery",
                    r"spare parts?"),
-    "toys":       (r"toys?", r"games?", r"toys\s*&?\s*games"),
+    # ⚠️ 不可收裸 "games"（'any games running this week' 是活動）。
+    "toys":       (r"toys?", r"toys\s*&?\s*games",
+                   r"games? (?:stock|inventory|category|section)",
+                   r"board games?", r"video games?"),
     "luggage":    (r"luggage", r"bags?\s*&?\s*luggage", r"suitcases?"),
     "other":      (r"other items?", r"uncategori[sz]ed", r"misc(?:ellaneous)?"),
 }
