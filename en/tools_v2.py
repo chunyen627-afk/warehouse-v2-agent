@@ -2152,6 +2152,59 @@ def _en_guess_category(name: str) -> tuple:
     return None, f"unclear:{len(mod_hits)}cats"
 
 
+def classify_add_intent(text: str, has_item_in_master: bool) -> str:
+    """`add X 50` 這種模糊句是**建檔**還是**進貨**？回 'create'/'inbound'/'ambiguous'。
+
+    ⚠️ 為什麼需要這支（user 指出的真實衝突）：
+      `add` / 中文「加」**兩個意思都通**——加一個「品項」是建檔、
+      加「數量」是進貨。而 user 的語感是 `add keyboard 50` 比較像進貨。
+    ⚠️ 判準優先序（明確講法照字面走，模糊講法看主檔）：
+      ① 品項名詞（item/product/sku/商品/品項）→ 一定是建檔
+      ② 建檔動詞（create/register/set up/建立/登錄）→ 建檔
+      ③ 進貨動詞（received/restock/got/進貨/收到）→ 進貨
+      ④ 帶**只有建檔才需要的欄位**（售價/類別/安全庫存）→ 建檔
+         （進貨不會講「這個賣 800」）
+      ⑤ 都沒有 → 看主檔：有這個商品就進貨，沒有就 ambiguous 讓上層決定
+    """
+    t = (text or "").lower()
+    # ① 品項名詞——⚠️ **必須跟建檔動詞連用**。誤傷檢查抓到裸 item/items
+    #   誤傷 20 句查詢（'which items need reordering' / 'top selling items' /
+    #   'expiring stock list'）：items 在查詢句裡太常見，不能單獨當訊號。
+    if re.search(r"\b(?:add|create|new|register|set\s*up)\s+(?:an?\s+|the\s+)?"
+                 r"(?:new\s+)?(?:item|product|sku|listing)\b", t) \
+            or re.search(r"(?:新增|建立|新建|加入|增加|登錄|上架)\s*(?:一[個支件款]?)?\s*"
+                         r"(?:新的?)?(?:商品|品項)", text or ""):
+        return "create"
+    # ② 建檔動詞——⚠️ 不可收 `list`（'expiring stock list' 是查詢）。
+    #   create/register/set up 這三個在倉管語境只會是建檔。
+    if re.search(r"\b(?:create|register)\b", t) \
+            or re.search(r"\bset\s+up\s+(?:an?\s+)?(?:new\s+)?\w", t) \
+            or re.search(r"建立|新建|登錄|上架", text or ""):
+        return "create"
+    # ③ 進貨動詞
+    if re.search(r"\b(?:received|receive|restock|restocked|stock\s*in|"
+                 r"inbound|arrived|delivered)\b", t) \
+            or re.search(r"進貨|收到|入庫|到貨|補貨|"
+                         r"[北中南](?:區)?倉?\s*(?:進|收|補)\s*\d", text or ""):
+        return "inbound"
+    # ④ 建檔專屬欄位——⚠️ **只認「欄位+數值」的組合**，不可只看詞。
+    #   誤傷檢查（守衛 981 句）抓到：原本「含類別詞 → create」誤傷 **89 句**
+    #   查詢（'electronics stock' / 'kitchen appliances' / 'daily goods stock'
+    #   全被判成建檔）——類別詞在查詢句裡太常見，不能當建檔訊號。
+    #   同理裸 price/safety 也不行（'whats the mouse safety stock' 是查設定）。
+    #   ⇒ 要求**數值同時出現**：進貨句不會講「賣 800」或「安全庫存 30」。
+    if re.search(r"\bprice\s*(?:is|:)?\s*\d|\bsafety\s*(?:stock)?\s*(?:is|:)?\s*\d|"
+                 r"\bsells?\s+for\s+\d|\bcosts?\s+\d|\d+\s*each\b", t) \
+            or re.search(r"售價\s*\d|單價\s*\d|安全庫存\s*\d|\d+\s*元", text or ""):
+        return "create"
+    # ⑤ 看主檔
+    return "inbound" if has_item_in_master else "ambiguous"
+
+
+# r22：安全庫存的保底預設（明講 > 初始庫存 > 這個值）。
+#   只是佔位值——建檔當下常常還沒想過水位，建完講一句就能改。
+_DEFAULT_SAFETY = 20
+
 _CATEGORY_PREFIX = {
     "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
     "daily_goods": "d", "apparel": "c", "sports": "s",
@@ -2334,36 +2387,12 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             if _g_cat:
                 _found_cat = _g_cat
                 _cat_guessed = True
-        # ── r22：**出卡判準收緊**（user 定調「一律問到齊才出卡」，同中文版）
-        #   原本只要 name+category 就出確認卡，價格/安全庫存抽不到就填 0
-        #   ⇒ 假成功：卡片看起來正常、按下去建出價格 0 的商品。
-        #   ⚠️ 倉庫初始量不列必填（新品可先建檔後進貨，0 是合理值）。
-        if _name and _found_cat and not (_price_m and _safety_m):
-            if any(_norm_item_name(it["name"]) == _norm_item_name(_name)
-                   for it in W.state().items):
-                return {"ok": True,
-                        "summary": f'⚠️ Item "{_name}" already exists. '
-                                   "Please use a different name.",
-                        "view": "item_create_step1",
-                        "data": {"step": 1, "prompt": "Please enter a different item name"}}
-            _miss = []
-            if not _price_m:
-                _miss.append("price")
-            if not _safety_m:
-                _miss.append("safety stock")
-            _lbl = W.CATEGORY_LABEL.get(_found_cat, _found_cat)
-            _got = (f" (price {_price_m.group(1)} recorded)" if _price_m else
-                    f" (safety stock {_safety_m.group(1)} recorded)" if _safety_m else "")
-            # ⚠️ 一律回 step 3——該步是「price + safety **一起問**」，
-            #   不可回 step 4（那是初始庫存，safety 會被當成 north 量）。
-            return {"ok": True,
-                    "summary": (f'Got it — "{_name}" ({_lbl}).{_got}\n'
-                                f"Still need the {' and '.join(_miss)} — "
-                                f"please enter: price safety\n"
-                                f'e.g. "150 100" (say "cancel" to exit)'),
-                    "view": "item_create_step3",
-                    "data": {"step": 3, "name": _name, "category": _found_cat,
-                             "prompt": 'Format: price safety (e.g. 150 100, or say cancel)'}}
+        # ── r22（user 定調「一句話就進去」）：**不再因為缺欄位反問**。
+        #   先前版本缺售價/安全庫存就回 step 3 追問，但實務上：
+        #     · 建檔當下**本來就常不知道售價**（掃碼建檔也是這樣）
+        #     · 安全庫存可以從初始庫存推（進多少就維持多少）
+        #   ⇒ 缺的欄位填合理預設，直接出確認卡，卡上秀出來讓人看。
+        #   ⚠️ 商品名仍是唯一必填（沒名字這筆資料沒意義，見 suspicious 檢查）。
         if _name and _found_cat:
             # 防呆：檢查同名
             if any(_norm_item_name(it["name"]) == _norm_item_name(_name)
@@ -2371,24 +2400,53 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 return {"ok": True, "summary": f'⚠️ Item "{_name}" already exists. Please use a different name.',
                         "view": "item_create_step1", "data": {"step": 1, "prompt": "Please enter a different item name"}}
             new_sku = _next_sku(_found_cat)
+            _n_qty = int(_north_m.group(1)) if _north_m else 0
+            _c_qty = int(_central_m.group(1)) if _central_m else 0
+            _s_qty = int(_south_m.group(1)) if _south_m else 0
+            _init_total = _n_qty + _c_qty + _s_qty
+            # ── r22 安全庫存三層 fallback（user 定調，節省建檔步驟）──────
+            #   ① 明講的最優先
+            #   ② 沒明講但有初始庫存 → **安全庫存 = 初始庫存**
+            #      （倉管直覺：進了多少就維持多少水位；也讓新品建完
+            #        不會立刻跳缺貨警示）
+            #   ③ 都沒有 → 預設 20（只是佔位值，建完講一句就能改）
+            if _safety_m:
+                _safety_val, _safety_src = int(_safety_m.group(1)), "stated"
+            elif _init_total > 0:
+                _safety_val, _safety_src = _init_total, "from_stock"
+            else:
+                _safety_val, _safety_src = _DEFAULT_SAFETY, "default"
+            _price_val = int(_price_m.group(1)) if _price_m else 0
             pending = {
                 "name": _name, "category": _found_cat,
                 "category_label": W.CATEGORY_LABEL.get(_found_cat, _found_cat),
-                "price": int(_price_m.group(1)) if _price_m else 0,
-                "safety": int(_safety_m.group(1)) if _safety_m else 0,
-                "stock_north": int(_north_m.group(1)) if _north_m else 0,
-                "stock_central": int(_central_m.group(1)) if _central_m else 0,
-                "stock_south": int(_south_m.group(1)) if _south_m else 0,
+                "price": _price_val,
+                "safety": _safety_val,
+                "stock_north": _n_qty,
+                "stock_central": _c_qty,
+                "stock_south": _s_qty,
                 "sku": new_sku,
                 # r22：類別是系統猜的 → 前端可據此標示「可修改」
                 "category_guessed": _cat_guessed,
+                # r22：價格沒講 → 標記未定價（跟「真的賣 0 元」區分開，
+                #   庫存價值統計可據此排除，不汙染報表）
+                "price_unset": not bool(_price_m),
+                # r22：安全庫存哪來的（stated/from_stock/default）
+                "safety_src": _safety_src,
             }
-            # ⚠️ 類別用猜的時候要**講出來**，讓人有機會改（HITL 原則）。
-            _sum = ("Item details parsed — please confirm"
-                    if not _cat_guessed else
-                    f'Item details parsed — I put it under '
-                    f'"{W.CATEGORY_LABEL.get(_found_cat, _found_cat)}" based on '
-                    f'the name; change it on the card if that is wrong.')
+            # ⚠️ 猜的/推的欄位要**講出來**，讓人有機會改（HITL 原則）。
+            _notes = []
+            if _cat_guessed:
+                _notes.append(f'category "{W.CATEGORY_LABEL.get(_found_cat, _found_cat)}"')
+            if _safety_src == "from_stock":
+                _notes.append(f"safety stock {_safety_val} (same as opening stock)")
+            elif _safety_src == "default":
+                _notes.append(f"safety stock {_safety_val} (default)")
+            if not _price_m:
+                _notes.append("price not set")
+            _sum = ("Item details parsed — please confirm" if not _notes else
+                    "Item details parsed — I filled in " + ", ".join(_notes)
+                    + ". Change anything on the card before confirming.")
             return {"ok": True, "summary": _sum, "view": "item_confirm",
                     "data": {"pending": True, "item": pending}}
         # r75：只給了名稱沒給類別（「新增商品 保溫杯」）→ 名稱接進分步流程，

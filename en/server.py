@@ -14911,6 +14911,56 @@ async def ws_handler(ws: WebSocket):
                 #   days_left 排序，第 1 筆就是最急的，不必另寫排序）。
                 #   ⚠️ 一律 fullmatch + 無商品名護欄：帶商品名的走既有查詢線
                 #     （'add up the earphones' 該查那顆商品，不是全店加總）。
+                # ── Pre-C-Create（r22，2026-08-07）：建檔 vs 進貨的邊界 ────
+                #   ⚠️ 順序問題：建檔攔截原本在 16450，但進貨校正 C13b 在
+                #     `_correct_function_call`（15455）**先跑** → 想建檔的句子
+                #     被搶去進貨（實測 'just got ... bamboo toothbrush' 被判成
+                #     Electric Toothbrush 進貨）。⇒ 建檔判斷要提前到這裡。
+                #   ⚠️ `add` / 中文「加」兩義都通（加品項=建檔、加數量=進貨），
+                #     user 語感是 `add keyboard 50` 偏進貨 ⇒ 明確講法照字面走、
+                #     模糊講法看主檔（見 tools_v2.classify_add_intent）。
+                try:
+                    import tools_v2 as _tv2_ci0
+                    # ⚠️ 用**切出來的商品名**比對，不可用整句（實測
+                    #   'create bluetooth keyboard 50' 整句拿 9 分——那是
+                    #   `bluetooth` 撞到既有兩個藍牙商品，且**同分平手**
+                    #   （Earphones 9 / Speaker 9）＝沒真正命中任何一個。
+                    #   同分判準見 r20：同分代表比到修飾詞不是商品本身。
+                    _ci0_has = False
+                    try:
+                        import warehouse as _W_ci0
+                        _nm_ci0 = _tv2_ci0._en_cut_item_name(user_text) \
+                            if _tv2_ci0._is_mostly_en_text(user_text) else ""
+                        _m_ci0 = _W_ci0.match_items(_nm_ci0 or user_text)
+                        if _m_ci0 and _m_ci0[0].get("score", 0) >= 6:
+                            # 同分平手 → 不算命中（比到的是修飾詞）
+                            _top_ci0 = _m_ci0[0].get("score", 0)
+                            _tie_ci0 = sum(1 for x in _m_ci0
+                                           if x.get("score", 0) == _top_ci0)
+                            _ci0_has = _tie_ci0 == 1
+                    except Exception:
+                        pass
+                    _ci0_intent = _tv2_ci0.classify_add_intent(user_text, _ci0_has)
+                    if _ci0_intent == "create" and not _ci0_has:
+                        _raw_ci0 = _text_with_comma or user_text
+                        for _kw_ci0 in ("新增商品", "建立商品", "加一個商品",
+                                        "新增一個", "加入商品", "增加商品",
+                                        "新建商品", "add item", "add an item",
+                                        "add a item", "add new item",
+                                        "add a new item", "create item",
+                                        "create an item", "create a item",
+                                        "new item", "new product",
+                                        "add product", "register item"):
+                            _raw_ci0 = _raw_ci0.replace(_kw_ci0, "").strip()
+                        _r_ci0 = (_tv2_ci0.create_item_collect(step=1, raw_text=_raw_ci0)
+                                  if _raw_ci0 else _tv2_ci0.create_item_start())
+                        log.info(f"[Pre-C-Create] 建檔意圖（主檔查無）→ "
+                                 f"{_r_ci0.get('view')}: {user_text!r}")
+                        _ctx_absorb(vid, _r_ci0)
+                        await send({"type": "done", "result": _r_ci0})
+                        continue
+                except Exception as _e_ci0:
+                    log.info(f"[Pre-C-Create] 略過（{_e_ci0!r}）")
                 _b20_routed = False     # 本層親自定案 → 豁免下游意圖閘門
                 # ── Pre-C-B21（r21 業務深水區批，2026-08-07）──────────────
                 #   倉管行話問句被 clf 判成 query_inventory(conf=1.00, 無 keyword)
