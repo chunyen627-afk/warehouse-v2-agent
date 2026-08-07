@@ -11674,7 +11674,16 @@ async def ws_handler(ws: WebSocket):
                  r"\brestock\s+date\b|\beta\b", "lead times / delivery dates"),
                 (r"\bprofit|\bmargin|\bcost\b|\bcosts\b|\bcarrying\s+cost|"
                  r"\brevenue\b|\bpurchase\s+price\b", "cost and profit figures"),
-                (r"\bcustomer|\bbuyer\b|\bwho\s+(?:is|are)\s+our\b", "customer data"),
+                # ⚠️ 守衛回歸抓到（957/961）：裸 \bcustomer 把 'customer
+                #   returned 10 smartwatch at central' 這種**退貨入庫寫入句**
+                #   吃掉了——那是真的要記一筆庫存異動，不是在問客戶資料。
+                #   ⚠️ match_items 護欄接不住：俗稱商品（smartwatch/phone cover/
+                #     mini fan）整句比對只有 2-5 分，低於 ≥6 門檻。
+                #   ⇒ 用**句型**排除寫入動詞，比調分數門檻可靠。
+                (r"(?<!\w)who\s+(?:is|are)\s+our\b|\bcustomer\s+(?:list|data|"
+                 r"info|information|details|names?)\b|\bbiggest\s+customer\b|"
+                 r"\bwhich\s+customer\b|\bbuyer\s+(?:list|data|info)\b",
+                 "customer data"),
                 (r"\bcontract\b|\bagreement\b|\binvoice\b", "contracts and invoices"),
                 (r"\bbackorder", "backorder tracking"),
                 (r"\bshrinkage\b|\bfill\s+rate\b|\bcycle\s+count\b",
@@ -11699,7 +11708,17 @@ async def ws_handler(ws: WebSocket):
                     _nd_item = bool(_m_nd and _m_nd[0].get("score", 0) >= 6)
                 except Exception:
                     _nd_item = False
-            if _nd_en and _is_mostly_english(user_text) and not _nd_item:
+            # ⚠️ 全域護欄（守衛回歸 957/961 後補）：nodata-qa **一律不吃寫入句**。
+            #   'customer returned 10 smartwatch at central' 是退貨入庫，
+            #   不是在問客戶資料。逐條收窄詞表治標，這道句型護欄才治本。
+            #   判準＝寫入動詞 + 數量，兩者同時出現就是要記一筆異動。
+            _nd_is_write = bool(_re.search(
+                r"\b(?:received|receive|returned|return|shipped|ship|sent|send|"
+                r"sold|sell|added|add|put|took|take|removed|remove|moved|move|"
+                r"transferred|transfer|scrapped|damaged)\b", user_text, _re.I)
+                and _re.search(r"\b\d+\b", user_text))
+            if _nd_en and _is_mostly_english(user_text) and not _nd_item \
+                    and not _nd_is_write:
                 _nd_msg = (f"This demo doesn't hold {_nd_en} — the data here is "
                            f"stock levels, movements, safety stock and expiry "
                            f"dates.\nWhat I can check: stock ("
