@@ -2252,7 +2252,16 @@ def _next_sku(category: str) -> str:
     _used_max = _sku_seq_peek(prefix)
     next_num = max(max(nums) + 1 if nums else 1, _used_max + 1)
     _sku_seq_bump(prefix, next_num)
-    return f"{prefix}{next_num:02d}"
+    # ⚠️ 位數（r22）：原本寫死 `:02d`，配上「料號永不重用」＝**累計建過
+    #   99 個該類商品就用完**（不是同時有 99 個——刪掉的號也不還）。
+    #   小店用兩三年就可能撞到。超過 99 不會報錯但會吐 3 碼的 e100，
+    #   跟既有 3 碼料號並排時**字串排序會錯**（e10 < e100 < e11）。
+    #   ⇒ 100 起改補零到 4 位（e0100），上限 9,999 個。
+    #   ⚠️ 既有 60 筆是 2 位（e01~e10）**保持原樣不動**——料號是主鍵，
+    #     改了歷史進出紀錄全部對不上（3,193 個檔案含料號）。
+    #     新舊並存不影響比對（都是字串精確比對，不靠位數）。
+    _width = 2 if next_num <= 99 else 4
+    return f"{prefix}{next_num:0{_width}d}"
 
 
 # 料號流水號高水位（只增不減，防重用）。存在 warehouse_data 供重啟後延續。
