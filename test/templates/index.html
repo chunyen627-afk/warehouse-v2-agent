@@ -2041,9 +2041,20 @@ function renderViewCard(view, data, topSummary) {
           <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
             <tr><td>名稱</td><td><b>${it.name}</b></td></tr>
             <tr><td>SKU</td><td>${it.sku}（自動產生）</td></tr>
-            <tr><td>類別</td><td>${it.category}</td></tr>
-            <tr><td>單價</td><td>NT$ ${it.price}</td></tr>
-            <tr><td>安全庫存</td><td>${it.safety} 件</td></tr>
+            <tr><td>類別</td><td>${it.category_label || it.category}${
+              it.category_guessed
+                ? ' <span style="color:var(--warn,#e8a33d);font-size:12px">· 系統判斷，不對可以改</span>'
+                : ''}</td></tr>
+            <tr><td>單價</td><td>${
+              it.price_unset
+                ? '<span style="color:var(--warn,#e8a33d)">尚未設定</span>'
+                : 'NT$ ' + it.price}</td></tr>
+            <tr><td>安全庫存</td><td>${it.safety} 件${
+              it.safety_src === 'from_stock'
+                ? ' <span style="color:var(--muted);font-size:12px">· 同初始庫存</span>'
+                : it.safety_src === 'default'
+                ? ' <span style="color:var(--muted);font-size:12px">· 預設值</span>'
+                : ''}</td></tr>
             <tr><td>初始庫存</td><td>北${it.stock_north||0} 中${it.stock_central||0} 南${it.stock_south||0}</td></tr>
           </table>
           <div class="hitl-meta">確認後將寫入 items.csv 並自動重生種子資料。</div>

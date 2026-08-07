@@ -1691,23 +1691,85 @@ def compare_periods(metric: str = "out") -> dict:
 # ════════════════════════════════════════════════════════════
 # ④ create_item — 自然語言新增商品（分步引導 + HITL）
 # ════════════════════════════════════════════════════════════
-_CATEGORY_PREFIX = {
-    "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
-    "daily_goods": "d", "apparel": "c", "sports": "s",
-}
+# r22：安全庫存的保底預設（明講 > 初始庫存 > 這個值）。
+#   只是佔位值——建檔當下常常還沒想過水位，建完講一句就能改。
+_DEFAULT_SAFETY = 20
+
+# ⚠️ r22：既有 60 筆已全量轉成 **ELE-0001** 三碼格式，新建商品也要用
+#   同一套前綴，否則會生出 `e01` 這種舊格式跟主檔不一致（英文版 CDP
+#   畫面驗證抓到過）。⇒ 一律取 categories.py 的三碼 prefix。
+_CATEGORY_PREFIX = {}
+try:
+    from categories import CATEGORY_PREFIX as _CAT19_PFX3
+    _CATEGORY_PREFIX.update(_CAT19_PFX3)
+except Exception:
+    _CATEGORY_PREFIX.update({
+        "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
+        "daily_goods": "d", "apparel": "c", "sports": "s",
+    })
+
+# 料號流水號高水位（只增不減，防重用）。存在 warehouse_data 供重啟後延續。
+_SKU_SEQ_FILE = "sku_seq.json"
+
+
+def _sku_seq_path():
+    from pathlib import Path as _P
+    try:
+        d = getattr(W.state(), "v2_data_dir", "") or ""
+        base = _P(d) if d else _P(__file__).resolve().parent
+    except Exception:
+        base = _P(__file__).resolve().parent
+    return base / _SKU_SEQ_FILE
+
+
+def _sku_seq_peek(prefix: str) -> int:
+    try:
+        import json as _j
+        p = _sku_seq_path()
+        if p.exists():
+            return int(_j.loads(p.read_text(encoding="utf-8")).get(prefix, 0))
+    except Exception:
+        pass
+    return 0
+
+
+def _sku_seq_bump(prefix: str, n: int) -> None:
+    try:
+        import json as _j
+        p = _sku_seq_path()
+        d = {}
+        if p.exists():
+            d = _j.loads(p.read_text(encoding="utf-8"))
+        if n > int(d.get(prefix, 0)):
+            d[prefix] = n
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(_j.dumps(d, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass          # 寫不進去不影響建檔（退化成原本的 max+1 行為）
+
 
 def _next_sku(category: str) -> str:
     """自動產生下一個 SKU 流水號"""
-    prefix = _CATEGORY_PREFIX.get(category, "x")
-    existing = [it["sku_id"] for it in W.state().items if it["sku_id"].startswith(prefix)]
+    prefix = _CATEGORY_PREFIX.get(category, "OTH")
+    existing = [it["sku_id"] for it in W.state().items
+                if it["sku_id"].startswith(prefix)]
     nums = []
     for sid in existing:
+        # 三碼格式 `ELE-0001` 數字在連字號後；舊格式 `e01` 在前綴後。
+        _tail = sid.split("-", 1)[1] if "-" in sid else sid[len(prefix):]
         try:
-            nums.append(int(sid[1:]))
+            nums.append(int(_tail))
         except ValueError:
             pass
-    next_num = max(nums) + 1 if nums else 1
-    return f"{prefix}{next_num:02d}"
+    # ⚠️ 料號**絕不可重用**（業界硬規則）：原本 max(現有)+1，若 ELE-0010
+    #   被刪除，下一個新品會再拿到它 → 跟歷史進出紀錄撞號。
+    #   ⇒ 記錄「用過的最大號」高水位，只增不減。
+    _used_max = _sku_seq_peek(prefix)
+    next_num = max(max(nums) + 1 if nums else 1, _used_max + 1)
+    _sku_seq_bump(prefix, next_num)
+    if len(prefix) >= 3:
+        return f"{prefix}-{next_num:04d}"
+    return f"{prefix}{next_num:02d}" if next_num <= 99 else f"{prefix}{next_num:04d}"
 
 
 def create_item_start() -> dict:
@@ -1840,46 +1902,54 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         #   ⇒ 價格與安全庫存是**營運關鍵欄位**（影響缺貨警示與估值），
         #     缺一個就不出卡，交給分步流程逐項補問。
         #   ⚠️ 倉庫初始量不列入必填——新品可以先建檔、之後再進貨（0 是合理值）。
-        if _name and _found_cat and not (_price_m and _safety_m):
-            _miss = []
-            if not _price_m:
-                _miss.append("售價")
-            if not _safety_m:
-                _miss.append("安全庫存")
-            if any(it["name"] == _name for it in W.state().items):
-                return {"ok": True, "summary": f"⚠️ 商品「{_name}」已存在，請改用其他名稱。",
-                        "view": "item_create_step1",
-                        "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
-            # ⚠️ 一律回 step 3——這道分步是「單價＋安全庫存**一起問**」
-            #   （見下方 elif step == 3：它期待 "150 100" 這種兩個數字）。
-            #   不可回 step 4：那是初始庫存步驟，安全庫存會被當成北倉量。
-            _lbl = W.CATEGORY_LABEL.get(_found_cat, _found_cat)
-            _got = (f"（已記下售價 {_price_m.group(1)} 元）" if _price_m else
-                    f"（已記下安全庫存 {_safety_m.group(1)} 件）" if _safety_m else "")
-            return {"ok": True,
-                    "summary": (f"好的，商品「{_name}」（{_lbl}）。{_got}\n"
-                                f"還差{('、'.join(_miss))}——請輸入：單價 安全庫存\n"
-                                f"例如「150 100」（輸入「取消」可退出）"),
-                    "view": "item_create_step3",
-                    "data": {"step": 3, "name": _name, "category": _found_cat,
-                             "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
+        # ── r22（user 定調「一句話就進去」，同英文版）：**不再因為缺欄位
+        #   反問**。實務上建檔當下常常還不知道售價（掃碼建檔也是這樣），
+        #   安全庫存則可以從初始庫存推（進多少就維持多少水位）。
+        #   ⇒ 缺的欄位填合理預設、直接出確認卡，卡上把來源標出來讓人看。
         if _name and _found_cat:
             # 防呆：檢查同名
             if any(it["name"] == _name for it in W.state().items):
                 return {"ok": True, "summary": f"⚠️ 商品「{_name}」已存在，請改用其他名稱。",
                         "view": "item_create_step1", "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
             new_sku = _next_sku(_found_cat)
+            _n_qty = int(_north_m.group(1)) if _north_m else 0
+            _c_qty = int(_central_m.group(1)) if _central_m else 0
+            _s_qty = int(_south_m.group(1)) if _south_m else 0
+            _init_total = _n_qty + _c_qty + _s_qty
+            # 安全庫存三層 fallback：①明講 ②沒講但有初始庫存 → 等於初始庫存
+            #   （倉管直覺：進多少就維持多少，也讓新品不會立刻跳缺貨）
+            #   ③都沒有 → 預設 20（佔位值，建完講一句就能改）
+            if _safety_m:
+                _safety_val, _safety_src = int(_safety_m.group(1)), "stated"
+            elif _init_total > 0:
+                _safety_val, _safety_src = _init_total, "from_stock"
+            else:
+                _safety_val, _safety_src = _DEFAULT_SAFETY, "default"
             pending = {
                 "name": _name, "category": _found_cat,
                 "category_label": W.CATEGORY_LABEL.get(_found_cat, _found_cat),
                 "price": int(_price_m.group(1)) if _price_m else 0,
-                "safety": int(_safety_m.group(1)) if _safety_m else 0,
-                "stock_north": int(_north_m.group(1)) if _north_m else 0,
-                "stock_central": int(_central_m.group(1)) if _central_m else 0,
-                "stock_south": int(_south_m.group(1)) if _south_m else 0,
+                "safety": _safety_val,
+                "stock_north": _n_qty,
+                "stock_central": _c_qty,
+                "stock_south": _s_qty,
                 "sku": new_sku,
+                # 價格沒講 → 標記未定價（跟「真的賣 0 元」區分開，
+                #   庫存價值統計可據此排除，不汙染報表）
+                "price_unset": not bool(_price_m),
+                "safety_src": _safety_src,
             }
-            return {"ok": True, "summary": "已解析商品資訊，請確認", "view": "item_confirm",
+            _notes = []
+            if _safety_src == "from_stock":
+                _notes.append(f"安全庫存 {_safety_val}（同初始庫存）")
+            elif _safety_src == "default":
+                _notes.append(f"安全庫存 {_safety_val}（預設值）")
+            if not _price_m:
+                _notes.append("售價未設定")
+            _sum = ("已解析商品資訊，請確認" if not _notes else
+                    "已解析商品資訊——我幫你填了「" + "、".join(_notes)
+                    + "」，確認前可以在卡片上改。")
+            return {"ok": True, "summary": _sum, "view": "item_confirm",
                     "data": {"pending": True, "item": pending}}
         # r75：只給了名稱沒給類別（「新增商品 保溫杯」）→ 名稱接進分步流程，
         # 從第二步問類別（過去靜默丟掉名稱、空名前進）
