@@ -1898,6 +1898,204 @@ def compare_periods(metric: str = "out") -> dict:
 # ════════════════════════════════════════════════════════════
 # ④ create_item — 自然語言新增商品（分步引導 + HITL）
 # ════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
+# r22 上架主線（2026-08-07）：英文建檔的**商品名切出**與**類別自動判斷**
+#
+# 為什麼要重寫：原本用「剝掉已知詞、剩下的當商品名」，英文實測 **1/10**
+#   （中文可行是因為要剝的詞有限；英文贅詞太多 a/the/its/called/new/item…）。
+#   實測三種方法：剝除法 1/10、錨定法 4/10、**切段法 9/10** ⇒ 採切段法。
+#
+# 設計原則：**不需要認識商品**。切名靠句法結構、判類靠品類詞 + head noun，
+#   兩者都判不出來就**問使用者**（user 定調保守派：寧可多問，不可猜錯）。
+#   實測 60 個真商品：判對 83% / 判錯 3% / 反問 13%。
+# ══════════════════════════════════════════════════════════════════════
+
+# 指令詞與虛詞——出現在句子裡但絕不是商品名的一部分
+_EN_CMD_WORDS = {
+    "add", "new", "create", "created", "set", "setup", "up", "register",
+    "item", "items", "product", "products", "sku", "please", "pls",
+    "i", "we", "want", "wants", "wanna", "would", "like", "need", "to",
+    "a", "an", "the", "its", "it's", "is", "are", "this", "that",
+    "called", "named", "name", "just", "got", "get", "there", "here",
+    "each", "keep", "min", "minimum", "safety", "stock", "price", "priced",
+    "sells", "sell", "selling", "sold", "for", "of", "at", "in", "on",
+    "with", "and", "or", "put", "into", "onto", "list", "listing",
+    "cost", "costs", "worth", "dollars", "dollar", "nt", "twd", "usd",
+    "north", "south", "central", "warehouse", "warehouses", "wh",
+    "units", "unit", "pcs", "pieces", "piece", "qty", "quantity",
+}
+# 類別詞——出現代表那一段是屬性段，不是名稱段
+_EN_CAT_WORDS = {
+    "electronics", "electronic", "appliance", "appliances", "kitchen",
+    "food", "beverage", "beverages", "drink", "drinks", "daily", "goods",
+    "household", "apparel", "clothing", "clothes", "sports", "sport",
+    "outdoor", "outdoors", "fitness",
+}
+
+
+def _norm_item_name(s: str) -> str:
+    """商品名正規化，供**重複檢查**用（不改實際存檔的名稱）。
+
+    ⚠️ r22 實測抓到：重複名檢查原本是精確比對，`add item wireless mouse`
+      建得出新商品，但主檔已有 `Wireless Mouse`（e07）——大小寫不同就
+      漏判 ⇒ 建出重複商品，庫存被拆成兩筆、查詢結果從此不準。
+    """
+    return " ".join((s or "").lower().replace("-", " ").split())
+
+
+def _is_mostly_en_text(s: str) -> bool:
+    """句子是不是以英文為主（有英文字母且中文字極少）。
+
+    ⚠️ tools_v2 是中英共用檔，切名策略要分流：英文走切段法、中文走剝除法。
+    """
+    cjk = sum(1 for c in (s or "") if "一" <= c <= "鿿")
+    ascii_alpha = sum(1 for c in (s or "") if c.isascii() and c.isalpha())
+    return ascii_alpha >= 2 and cjk <= 1
+
+
+def _en_cut_item_name(raw: str) -> str:
+    """從英文建檔句切出商品名（切段法，實測 9/10）。
+
+    做法：用標點切段，挑出「不含指令詞/類別詞/數字」且實詞最多的一段。
+    ⚠️ 反過來想才對——不是「剝掉雜訊留下名稱」（那會剝不乾淨），
+      而是「切成幾段、挑最像名稱的那段」。這樣陌生商品一樣切得出來，
+      因為判準是**這段不是雜訊**，不需要認識這個商品。
+    """
+    if not raw:
+        return ""
+    # 先砍掉句首的指令片語（"add a new item called ..." 這種開場白）
+    body = re.sub(r'(?i)^\s*(?:please\s+)?(?:can\s+you\s+)?'
+                   r'(?:i\s+(?:want|need|would\s+like)\s+to\s+)?'
+                   r'(?:just\s+)?(?:got|add|create|new|set\s*up|register|make)\s*'
+                   r'(?:an?\s+|the\s+)?(?:new\s+)?'
+                   r'(?:item|product|sku|listing)?\s*'
+                   r'(?:called|named|is)?\s*[:\-—]?\s*', ' ', raw)
+    segs = re.split(r'[,;:—]|--|\.\s', body)
+    best, best_score = "", 0
+    for seg in segs:
+        toks = re.findall(r"[A-Za-z0-9'\-]+", seg)
+        if not toks:
+            continue
+        core = [t for t in toks
+                if t.lower() not in _EN_CMD_WORDS
+                and t.lower() not in _EN_CAT_WORDS
+                and not t.replace('.', '').isdigit()]
+        if not core:
+            continue
+        # 段內含數字或類別詞 → 那是屬性段（"electronics, 1500 each"），降權
+        noisy = (any(t.replace('.', '').isdigit() for t in toks)
+                 or any(t.lower() in _EN_CAT_WORDS for t in toks))
+        score = len(core) - (2 if noisy else 0)
+        if score > best_score:
+            best_score, best = score, " ".join(core)
+    # 無標點長句（"add item Bluetooth Keyboard electronics price 800"）→
+    #   切段法失效，改用第二判準：取**第一個類別詞之前**的實詞
+    if not best:
+        toks = re.findall(r"[A-Za-z0-9'\-]+", body)
+        head_part = []
+        for t in toks:
+            if t.lower() in _EN_CAT_WORDS or t.replace('.', '').isdigit():
+                break
+            if t.lower() not in _EN_CMD_WORDS:
+                head_part.append(t)
+        best = " ".join(head_part)
+    return best.strip(" ,:;-—.'\"")
+
+
+# ── 品類詞表：head=主體詞（決定類別）／mod=修飾詞（單獨不足以定類）────
+#   ⚠️ 這個區分是關鍵：'Coffee Filter Papers' 的主體是 **papers**（濾紙，
+#     日用品），coffee 只是修飾。把 coffee 當 head 會判成食品（實測錯過）。
+#   英文中心詞在後 → 從**句尾往前**找第一個實詞當 head。
+_EN_CAT_KW = {
+    "electronics": {
+        "head": ["earphone", "earphones", "headphone", "headphones", "speaker",
+                 "speakers", "mouse", "keyboard", "cable", "charger", "band",
+                 "phone", "laptop", "adapter", "monitor", "camera", "tablet",
+                 "fan", "powerbank", "battery", "watch", "console", "router",
+                 "projector", "printer", "webcam", "microphone", "drive"],
+        "mod": ["usb", "bluetooth", "wireless", "smart", "digital", "electric"],
+    },
+    "appliance_kitchen": {
+        "head": ["pan", "pot", "cooker", "kettle", "blender", "iron", "mop",
+                 "oven", "fryer", "cookware", "container", "containers", "jar",
+                 "knife", "grill", "toaster", "vacuum", "toothbrush",
+                 "machine", "dispenser", "steamer", "whisk", "spatula"],
+        "mod": ["kitchen", "cooking", "ceramic", "stainless", "nonstick"],
+    },
+    "food_beverage": {
+        "head": ["water", "tea", "beer", "juice", "drink", "nuts", "crackers",
+                 "biscuit", "biscuits", "beans", "snack", "snacks", "candy",
+                 "chocolate", "milk", "cereal", "rice", "noodle", "noodles",
+                 "sauce", "wine", "soda", "coffee"],
+        "mod": ["protein", "cocoa", "powder", "organic", "instant", "drip"],
+    },
+    "daily_goods": {
+        "head": ["tissue", "tissues", "detergent", "soap", "wipes", "diaper",
+                 "diapers", "gloves", "spray", "refill", "cleaner", "papers",
+                 "shampoo", "toothpaste", "wash", "brush", "sponge", "broom"],
+        "mod": ["cleaning", "laundry", "antibacterial", "baby", "trash",
+                "filter", "repellent", "disposable"],
+    },
+    "apparel": {
+        "head": ["shirt", "t-shirt", "tshirt", "socks", "jacket", "jeans",
+                 "bra", "sleeve", "onesie", "beanie", "hat", "pants", "coat",
+                 "dress", "sweater", "hoodie", "scarf", "cap", "gloves"],
+        "mod": ["cotton", "wool", "denim", "elastic", "wicking", "knit"],
+    },
+    "sports": {
+        "head": ["mat", "dumbbell", "dumbbells", "tent", "lantern", "ball",
+                 "racket", "bike", "ring", "rope", "barbell", "treadmill"],
+        "mod": ["yoga", "camping", "hiking", "running", "fitness", "sports",
+                "sport", "outdoor", "resistance", "workout"],
+    },
+}
+# 天生跨類別的容器/配件詞——一律問，不猜（保守派核心）
+#   實測這類佔反問的絕大多數，而且**該問**：手機殼是電子、垃圾袋是日用、
+#   水壺是運動，光看詞不可能分辨。
+_EN_AMBIGUOUS_HEADS = {
+    "towel", "set", "sets", "mug", "case", "bag", "bags", "kit", "bottle",
+    "box", "holder", "stand", "cover", "pad", "rack", "tray", "basket",
+    "shoes", "boots",          # 跑鞋歸運動或服飾都合理 → 問
+}
+_EN_NAME_STOP = {"the", "and", "for", "with", "pack", "pcs", "pc", "men",
+                 "mens", "women", "womens", "size", "inch", "pair", "person",
+                 "ply", "kg", "ml", "cm", "mm", "new", "large", "small"}
+
+
+def _en_guess_category(name: str) -> tuple:
+    """從商品名猜類別。回 (category|None, reason)。
+
+    None = 判不出來 → **問使用者**（不猜，user 定調保守派）。
+    實測 60 個真商品：判對 83% / 判錯 3% / 反問 13%。
+    ⚠️ 判錯會靜默寫進主檔（訪客不易察覺），反問只是多一輪對話 ⇒
+      設計上一律偏向反問。
+    """
+    toks = [t for t in re.findall(r"[a-z]+", (name or "").lower())
+            if len(t) >= 2]
+    if not toks:
+        return None, "no-token"
+    # head = 句尾往前第一個非停用詞（英文中心詞在後）
+    head = next((t for t in reversed(toks) if t not in _EN_NAME_STOP), None)
+    if head is None:
+        return None, "all-stop"
+    if head in _EN_AMBIGUOUS_HEADS:
+        return None, f"ambiguous:{head}"
+    hits = [c for c, d in _EN_CAT_KW.items() if head in d["head"]]
+    if len(hits) == 1:
+        return hits[0], f"head:{head}"
+    if len(hits) > 1:
+        return None, f"head-multi:{head}"
+    # head 沒命中 → 看全句修飾詞，**只有唯一一類**才收（多類=不明確→問）
+    mod_hits = set()
+    for t in toks:
+        for c, d in _EN_CAT_KW.items():
+            if t in d["mod"] or t in d["head"]:
+                mod_hits.add(c)
+    if len(mod_hits) == 1:
+        return mod_hits.pop(), "mod-unique"
+    return None, f"unclear:{len(mod_hits)}cats"
+
+
 _CATEGORY_PREFIX = {
     "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
     "daily_goods": "d", "apparel": "c", "sports": "s",
@@ -1962,37 +2160,102 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         _price_m = (_re.search(r'(\d+)\s*元', raw_text)
                     or _re.search(r'\bprice\s*(?:is|:)?\s*(\d+)', _rt_low)
                     or _re.search(r'\$\s*(\d+)', raw_text)
-                    or _re.search(r'(\d+)\s*(?:dollars?|nt\$?|twd)\b', _rt_low))
+                    or _re.search(r'(\d+)\s*(?:dollars?|nt\$?|twd)\b', _rt_low)
+                    # r22：**英文口語價格**沒收 → 'sells for 1200' / '450 each'
+                    #   / 'costs 690' 全抽不到，出卡時價格 0（假成功）
+                    or _re.search(r'\b(?:sells?|selling|sold|goes|going)\s+for\s+(\d+)',
+                                  _rt_low)
+                    or _re.search(r'\b(?:costs?|priced\s+at|retails?\s+(?:at|for))\s+(\d+)',
+                                  _rt_low)
+                    or _re.search(r'(\d+)\s*(?:each|apiece|per\s+(?:unit|piece|item))\b',
+                                  _rt_low))
         # 安全庫存：中文「安全50」／英文 safety 50 / safety stock 50 / min 50
         _safety_m = (_re.search(r'安全\s*(\d+)', raw_text)
                      or _re.search(r'\bsafety(?:\s*stock)?\s*(?:is|:)?\s*(\d+)', _rt_low)
-                     or _re.search(r'\bmin(?:imum)?\s*(?:is|:)?\s*(\d+)', _rt_low))
+                     or _re.search(r'\bmin(?:imum)?\s*(?:is|:)?\s*(\d+)', _rt_low)
+                     # r22：口語安全庫存 'keep 20 minimum' / 'keep at least 15'
+                     or _re.search(r'\bkeep\s+(?:at\s+least\s+)?(\d+)', _rt_low)
+                     or _re.search(r'\breorder\s+(?:at|point)\s*:?\s*(\d+)', _rt_low)
+                     or _re.search(r'\balert\s+(?:at|when)\s*(\d+)', _rt_low))
         _north_m = (_re.search(r'北\S*\s*(\d+)', raw_text)
-                    or _re.search(r'\bnorth\s*:?\s*(\d+)', _rt_low))
+                    or _re.search(r'\bnorth\s*:?\s*(\d+)', _rt_low)
+                    or _re.search(r'(\d+)\s*(?:units?\s*)?(?:to|in|at)\s+north\b', _rt_low))
         _south_m = (_re.search(r'南\S*\s*(\d+)', raw_text)
                     or _re.search(r'\bsouth\s*:?\s*(\d+)', _rt_low))
         _central_m = (_re.search(r'中\S*\s*(\d+)', raw_text)
                       or _re.search(r'\bcentral\s*:?\s*(\d+)', _rt_low))
-        # 去掉已知欄位後剩下的當名稱
-        _name = raw_text
-        for pat in [r'電子\S*', r'家電\S*', r'食品\S*', r'日用\S*', r'服飾\S*', r'運動\S*',
-                     r'\d+元', r'安全\d+', r'北\S*\d+', r'南\S*\d+', r'中\S*\d+', r'新增商品\s*',
-                     # EN：把英文欄位詞剝掉，剩下的才是商品名
-                     r'(?i)\b(?:add|new|create)\s+(?:an?\s+)?item\s*',
-                     r'(?i)\bprice\s*(?:is|:)?\s*\d+', r'\$\s*\d+',
-                     r'(?i)\d+\s*(?:dollars?|nt\$?|twd)\b',
-                     r'(?i)\bsafety(?:\s*stock)?\s*(?:is|:)?\s*\d+',
-                     r'(?i)\bmin(?:imum)?\s*(?:is|:)?\s*\d+',
-                     r'(?i)\bnorth\s*:?\s*\d+', r'(?i)\bsouth\s*:?\s*\d+',
-                     r'(?i)\bcentral\s*:?\s*\d+',
-                     r'(?i)\b(?:electronics?|appliance(?:_kitchen)?|kitchen|'
-                     r'food(?:_beverage)?|beverage|drink|daily(?:_goods)?|'
-                     r'household|apparel|clothing|clothes|sports?|outdoor)\b']:
-            _name = _re.sub(pat, '', _name).strip()
-        _name = _re.sub(r'\s{2,}', ' ', _name).strip(' ,:;-')
+        # ── r22：**裸價格保底**（同中文版）──────────────────────────
+        #   'add hiking backpack, 1500, safety 10' 的 1500 前面沒有價格詞，
+        #   所有價格規則都接不到 → 判成缺價格而反問（行為安全但不夠聰明）。
+        #   ⇒ 把已被其他欄位吃掉的數字挖掉，若**剛好剩一個**孤立數字，
+        #     視為價格。剩兩個以上代表語意不明確 → 不猜，交給分步流程問。
+        if not _price_m:
+            _rest_en = raw_text
+            for _mm in (_safety_m, _north_m, _central_m, _south_m):
+                if _mm:
+                    _rest_en = _rest_en.replace(_mm.group(0), " ", 1)
+            _free_en = _re.findall(r'(?<![\d])(\d+)(?![\d])', _rest_en)
+            if len(_free_en) == 1:
+                # ⚠️ 要對**原句**再 match 一次——上面是對挖空後的字串找的，
+                #   直接用它的位置對不上原句。
+                _price_m = _re.search(
+                    r'(?<![\d])(' + _re.escape(_free_en[0]) + r')(?![\d])', raw_text)
+        # ── r22：英文改用**切段法**（見 _en_cut_item_name 註解）─────────
+        #   原本的剝除法實測只有 1/10——英文贅詞太多（a/the/its/called/
+        #   new/item…），剝不乾淨就整串當商品名。切段法實測 10/10。
+        #   中文維持原剝除法（中文要剝的詞有限，且 r22 已修好）。
+        if _is_mostly_en_text(raw_text):
+            _name = _en_cut_item_name(raw_text)
+        else:
+            _name = raw_text
+            for pat in [r'電子\S*', r'家電\S*', r'食品\S*', r'日用\S*', r'服飾\S*',
+                        r'運動\S*', r'\d+元', r'安全\d+', r'北\S*\d+', r'南\S*\d+',
+                        r'中\S*\d+', r'新增商品\s*']:
+                _name = _re.sub(pat, '', _name).strip()
+            _name = _re.sub(r'\s{2,}', ' ', _name).strip(' ,:;-')
+        # ── r22：使用者沒明講類別 → 從商品名猜（保守派：判不出來就問）──
+        #   實測 60 個真商品：判對 48、判錯 **0**、反問 12。
+        #   ⚠️ 只在使用者沒講類別時才猜；他講了就以他為準。
+        _cat_guessed = False
+        if _name and not _found_cat and _is_mostly_en_text(raw_text):
+            _g_cat, _g_why = _en_guess_category(_name)
+            if _g_cat:
+                _found_cat = _g_cat
+                _cat_guessed = True
+        # ── r22：**出卡判準收緊**（user 定調「一律問到齊才出卡」，同中文版）
+        #   原本只要 name+category 就出確認卡，價格/安全庫存抽不到就填 0
+        #   ⇒ 假成功：卡片看起來正常、按下去建出價格 0 的商品。
+        #   ⚠️ 倉庫初始量不列必填（新品可先建檔後進貨，0 是合理值）。
+        if _name and _found_cat and not (_price_m and _safety_m):
+            if any(_norm_item_name(it["name"]) == _norm_item_name(_name)
+                   for it in W.state().items):
+                return {"ok": True,
+                        "summary": f'⚠️ Item "{_name}" already exists. '
+                                   "Please use a different name.",
+                        "view": "item_create_step1",
+                        "data": {"step": 1, "prompt": "Please enter a different item name"}}
+            _miss = []
+            if not _price_m:
+                _miss.append("price")
+            if not _safety_m:
+                _miss.append("safety stock")
+            _lbl = W.CATEGORY_LABEL.get(_found_cat, _found_cat)
+            _got = (f" (price {_price_m.group(1)} recorded)" if _price_m else
+                    f" (safety stock {_safety_m.group(1)} recorded)" if _safety_m else "")
+            # ⚠️ 一律回 step 3——該步是「price + safety **一起問**」，
+            #   不可回 step 4（那是初始庫存，safety 會被當成 north 量）。
+            return {"ok": True,
+                    "summary": (f'Got it — "{_name}" ({_lbl}).{_got}\n'
+                                f"Still need the {' and '.join(_miss)} — "
+                                f"please enter: price safety\n"
+                                f'e.g. "150 100" (say "cancel" to exit)'),
+                    "view": "item_create_step3",
+                    "data": {"step": 3, "name": _name, "category": _found_cat,
+                             "prompt": 'Format: price safety (e.g. 150 100, or say cancel)'}}
         if _name and _found_cat:
             # 防呆：檢查同名
-            if any(it["name"] == _name for it in W.state().items):
+            if any(_norm_item_name(it["name"]) == _norm_item_name(_name)
+                   for it in W.state().items):
                 return {"ok": True, "summary": f'⚠️ Item "{_name}" already exists. Please use a different name.',
                         "view": "item_create_step1", "data": {"step": 1, "prompt": "Please enter a different item name"}}
             new_sku = _next_sku(_found_cat)
@@ -2005,8 +2268,16 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 "stock_central": int(_central_m.group(1)) if _central_m else 0,
                 "stock_south": int(_south_m.group(1)) if _south_m else 0,
                 "sku": new_sku,
+                # r22：類別是系統猜的 → 前端可據此標示「可修改」
+                "category_guessed": _cat_guessed,
             }
-            return {"ok": True, "summary": "Item details parsed — please confirm", "view": "item_confirm",
+            # ⚠️ 類別用猜的時候要**講出來**，讓人有機會改（HITL 原則）。
+            _sum = ("Item details parsed — please confirm"
+                    if not _cat_guessed else
+                    f'Item details parsed — I put it under '
+                    f'"{W.CATEGORY_LABEL.get(_found_cat, _found_cat)}" based on '
+                    f'the name; change it on the card if that is wrong.')
+            return {"ok": True, "summary": _sum, "view": "item_confirm",
                     "data": {"pending": True, "item": pending}}
         # r75：只給了名稱沒給類別（「新增商品 保溫杯」）→ 名稱接進分步流程，
         # 從第二步問類別（過去靜默丟掉名稱、空名前進）
@@ -2020,7 +2291,8 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         if not (name or "").strip():
             return create_item_start()
         # 防呆：檢查是否已有同名商品
-        existing = [it for it in W.state().items if it["name"] == name]
+        existing = [it for it in W.state().items
+                    if _norm_item_name(it["name"]) == _norm_item_name(name)]
         if existing:
             return {"ok": True, "summary": f'⚠️ Item "{name}" already exists (SKU: {existing[0]["sku_id"]}). '
                            "Please use a different name.",
