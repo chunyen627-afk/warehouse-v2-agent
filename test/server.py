@@ -8069,6 +8069,19 @@ async def ws_handler(ws: WebSocket):
                     and any(q in user_text for q in ("哪些", "有哪", "有沒有",
                                                      "清單", "幾個", "幾項", "列出"))):
                 _bl_hit_ws = None
+            # r21（2026-08-07）：「下單/採購」黑名單擋的是**要系統去採購**
+            #   （「幫我下單給供應商」「打電話叫貨」——那超出系統權限，該拒），
+            #   但它連「哪些**要下單**了」「要不要現在下單」這種**查詢句**
+            #   也一起擋掉——那是倉管最核心的需求，缺貨清單答得出來。
+            #   ⇒ 問句型（哪些/要不要/該不該/什麼要）+ 無外部動作受詞 → 豁免。
+            #   ⚠️ 同既有的退貨/歸零豁免模式；「給供應商/打電話/叫廠商」照擋。
+            if (_bl_hit_ws and _re.search(r"下單|採購|叫貨|訂貨", str(_bl_hit_ws))
+                    and _re.search(r"哪些|哪個|要不要|該不該|什麼要|需不需要|"
+                                   r"有沒有.{0,4}要|清單|列出", user_text)
+                    and not _re.search(r"給(?:供應商|廠商|對方)|打電話|寄信|"
+                                       r"聯絡|發(?:單|信)|幫我(?:去|向)", user_text)):
+                log.info(f"[gate-豁免] 下單類**查詢句**放行: {user_text!r}")
+                _bl_hit_ws = None
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",

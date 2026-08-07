@@ -14904,10 +14904,13 @@ async def ws_handler(ws: WebSocket):
                                     r"\btied\s+up\s+in\s+stock\b|"
                                     r"\bhow\s+much\s+(?:money|cash|capital)\b|"
                                     r"\bcapital\s+tied\b", _b21_t, _re.I):
-                        # 「錢卡在哪」＝庫存總值（老闆視角問法）
-                        func_name, func_args = "query_inventory", {}
+                        # 「錢卡在哪」＝各倉庫存總值。⚠️ 不可導 query_inventory{}
+                        #   ——那就是 60 項商品清單本身（實測繞回原破口）。
+                        #   compare_warehouses 會列出三倉的 stock_value 總值，
+                        #   正是老闆問「錢壓在哪」要看的。
+                        func_name, func_args = "compare_warehouses", {}
                         _b20_routed = True
-                        log.info("[Pre-C-B21] 資金佔用 → query_inventory 總覽")
+                        log.info("[Pre-C-B21] 資金佔用 → compare_warehouses 總值")
                     elif _re.search(r"\bbiggest\s+(?:swing|change|move|movement)s?\b|"
                                     r"\bmost\s+volatile\b", _b21_t, _re.I):
                         func_name, func_args = "query_movement", {
@@ -14915,6 +14918,16 @@ async def ws_handler(ws: WebSocket):
                             "direction": "both"}
                         _b20_routed = True
                         log.info("[Pre-C-B21] 波動最大 → query_movement")
+                    elif _re.fullmatch(r"(?:so\s+)?(?:whats|what's|what\s+is)\s+"
+                                       r"the\s+situation[\s?.!]*|"
+                                       r"(?:how\s+are\s+we\s+doing|how\s+is\s+it\s+"
+                                       r"going|status\s+update|give\s+me\s+the\s+"
+                                       r"numbers)[\s?.!]*", _b21_t, _re.I):
+                        # 含糊問「狀況如何」→ 倉庫概況（三倉總值＋比較）
+                        #   比 60 項商品清單有意義得多
+                        func_name, func_args = "compare_warehouses", {}
+                        _b20_routed = True
+                        log.info("[Pre-C-B21] 含糊狀況問句 → compare_warehouses")
                     elif _re.search(r"\b(?:is\s+)?stock\s+balanced\b|"
                                     r"\bbalanced\s+across\b|"
                                     r"\bwhere\s+should\s+i\s+move\s+stock\b|"
