@@ -75,6 +75,14 @@ ACCEPT = {
     # 訪客閒聊/搗蛋防禦（第17輪）：優雅拒絕/引導/追問，不可幻覺商品或開卡
     "chat":   lambda v: v in ("rejected", "guide", "clarify"),
     "guidey": lambda v: v in ("guide", "rejected", "clarify"),
+    # r22 建檔線：這功能上線兩個多月只有 1 句守衛且期望值 any（不驗內容），
+    #   假成功那種 bug 才能存活那麼久。這裡分兩個標籤：
+    #   crt  = 一句話直達確認卡（**搭配 must 驗商品名/欄位**才有意義）
+    #   crtq = 資訊不足走分步流程（問類別/問名稱都算對）
+    "crt":   lambda v: v == "item_confirm",
+    "crtq":  lambda v: v in ("item_create_step1", "item_create_step2",
+                              "item_create_step3", "item_create_step4",
+                              "clarify"),
     # r21（2026-08-07）：採購決策句的正解有兩種——缺貨清單、或直接產出
     #   採購單草稿（po_confirm），兩者都對（同中文版）。
     "po":     lambda v: v in ("po_confirm", "low_stock", "clarify"),
