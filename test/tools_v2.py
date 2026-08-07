@@ -1776,6 +1776,48 @@ def _next_sku(category: str) -> str:
     return f"{prefix}{next_num:02d}" if next_num <= 99 else f"{prefix}{next_num:04d}"
 
 
+_ZH_ALIAS_PAIRS: list | None = None
+
+_ZH_DIGITS = {"零": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4,
+              "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+
+
+def _zh_num(s: str) -> int:
+    """中文數字 → int（語音 ASR 常吐「八百元」「一千二」「三十五」）。
+
+    支援口語縮讀：八百五=850、一千二=1200（尾數依前一單位降一級）。
+    """
+    total, cur, unit_seen = 0, 0, 0
+    for ch in s:
+        if ch in _ZH_DIGITS:
+            cur = _ZH_DIGITS[ch]
+        elif ch in ("十", "百", "千"):
+            u = {"十": 10, "百": 100, "千": 1000}[ch]
+            total += (cur or 1) * u
+            unit_seen, cur = u, 0
+    if cur:
+        total += cur * (unit_seen // 10) if unit_seen >= 10 else cur
+    return total
+
+
+def _zh_alias_pairs() -> list:
+    """(別名, 類別key) 列表，長詞在前——19 類單一來源 categories.py。
+
+    r23：建檔的類別詞判定與 step-2 驗證共用這張表（過去兩處各自硬編
+    6 個 seed 類，加類別要改多處還會漏）。單字別名不收（誤傷商品名）。
+    """
+    global _ZH_ALIAS_PAIRS
+    if _ZH_ALIAS_PAIRS is None:
+        from categories import CATEGORIES as _C19
+        pairs = {}
+        for _ck, _cv in _C19.items():
+            for _al in list(_cv["aliases_zh"]) + [_cv["label_zh"]]:
+                if len(_al) >= 2 and not _al.isascii():
+                    pairs.setdefault(_al, _ck)
+        _ZH_ALIAS_PAIRS = sorted(pairs.items(), key=lambda p: -len(p[0]))
+    return _ZH_ALIAS_PAIRS
+
+
 def create_item_start() -> dict:
     """觸發新增商品流程，回第一步問題"""
     return {
@@ -1794,10 +1836,33 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
     # 如果 raw_text 有內容，嘗試從中解析多個欄位（老手一句話模式）
     if raw_text and step == 1:
         import re as _re
+        # r23b（語音優先）：ASR 會吐中文數字價格（「八百元」「一千二塊」），
+        #   先正規化成阿拉伯數字，後面所有價格規則就都接得到。
+        #   只轉**後面跟著 元/塊**的，商品名裡的中文數字（三合一、二代）不動。
+        raw_text = _re.sub(r'[一二三四五六七八九十百千兩零]{1,8}(?=元|塊)',
+                           lambda m: str(_zh_num(m.group(0))), raw_text)
         # 嘗試解析：名稱 + 類別 + 價格 + 安全庫存 + 倉庫庫存
-        _cat_map = {"電子": "electronics", "家電": "appliance_kitchen", "食品": "food_beverage",
-                     "飲料": "food_beverage", "日用": "daily_goods", "服飾": "apparel", "運動": "sports"}
-        _found_cat = next((v for k, v in _cat_map.items() if k in raw_text), "")
+        # ── r23（create100 首輪 2026-08-08）：類別詞認 **19 類**──────────
+        #   舊版硬編 6 個 seed 類 → 「五金」「美妝」等 13 類明講了也抽不到，
+        #   句子掉進分步流程、再卡死在 step-2（實測第 21→63 句連環卡）。
+        #   ⇒ 改由 categories.py 單一來源生成別名表（aliases_zh + label_zh）。
+        #   判準：別名後面必須是**分隔符/數字/句尾**（可帶 類/品/用品/的 字尾）。
+        #   ⚠️ 別名後面還是中文字就**不算**——「電子鍋」的電子、「露營燈」的
+        #     露營都是商品名的一部分，硬吃 substring 就判錯類；判不出來
+        #     寧可走分步流程反問（不確定不猜原則）。
+        #   ⚠️ 單字別名（書/床/貓/狗/衣）一律不收——「書櫃」「狗鍊」是商品名。
+        # r23b（語音優先）：ASR 輸出**全部黏在一起**（無空格無標點），
+        #   「新增商品測試品乙電子安全30」的類別詞後面接的是欄位詞不是
+        #   分隔符 ⇒ lookahead 除了 分隔符/數字/句尾，還要認**欄位起始詞**
+        #   （安全/北/中/南/賣/售/單價/定價/三倉/每倉/各）。
+        _found_cat = ""
+        for _al, _ck in _zh_alias_pairs():
+            if _re.search(_re.escape(_al)
+                          + r'(?:類|品|用品|的)?'
+                          + r'(?=[\s，,、。.：:；;]|\d|$|安全|北|中|南|三倉|每倉|各|賣|售|單價|定價|一個|一件|一支|一組|每個|每件)',
+                          raw_text):
+                _found_cat = _ck
+                break
         # ── r22 上架主線（2026-08-07）：**口語價格/安全庫存/倉量** ────────
         #   原本只認「800元」「安全30」「北50」這種標準寫法，真人講的
         #   「賣800」「一個350」「安全庫存抓20」「三倉各50」全抽不到 →
@@ -1867,18 +1932,29 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         #     商品名內含類別字的不動。
         #   ⚠️ 分隔符要含**中文標點**——「藍牙鍵盤，電子類，賣800」的
         #     類別詞被逗號黏住，只認空白會剝不掉（實測殘留「，電子類」）。
-        _CAT_TOK = r'(?:電子|家電|食品|飲料|日用|服飾|運動)'
+        # r23：剝除表跟上面判定共用 19 類別名表（過去只剝 6 個 seed 類，
+        #   新類別詞會殘留在商品名裡）。仍只剝**獨立出現**的類別詞。
+        _CAT_TOK = '(?:' + '|'.join(_re.escape(a) for a, _ in _zh_alias_pairs()) + ')'
         _SEP = r'[\s，,、。.：:；;]'
         for pat in [r'(?:^|' + _SEP + r')' + _CAT_TOK + r'(?:類|品|用品|的)?'
                     r'(?=' + _SEP + r'|$)',
+                     # r23b（語音優先）：ASR 全黏連 →「無線滑鼠電子590元」的
+                     #   數字被移除後變「無線滑鼠電子」，類別詞黏在名字尾端、
+                     #   前面沒有分隔符 ⇒ 補一條**只看後界**的剝除：類別詞後面
+                     #   是分隔符/句尾才剝。中段類別字（電解質運動飲、運動壓縮
+                     #   臂套）後面是中文字，不會中，r22 的誤傷保護不變。
+                     _CAT_TOK + r'(?:類|品|用品|的)?(?=' + _SEP + r'|$)',
                      r'新增商品\s*',
                      # r22：**指令詞/口語前綴**沒剝掉 → 混進商品名（實測建出
                      #   「幫我新增一個藍牙鍵盤，」「我要加一款新商品叫無線
                      #   充電盤 一個1200 安全庫存抓20」這種垃圾名稱）。
                      #   ⚠️ 長詞排前面（「新增一個」先於「新增」），否則剝完
                      #     會留下殘字。
-                     r'(?:幫我|請|麻煩|我要|我想|要)?\s*(?:新增|加入|建立|新建|登錄|上架|加)'
-                     r'\s*(?:一個|一款|一支|一件|一項|個|款)?\s*(?:新的?)?'
+                     # r23b：禮貌詞改 `*` 連用——「請幫我加入新品」是**兩個**
+                     #   禮貌詞（請＋幫我），`?` 只吃得掉一個（實測名稱殘留）。
+                     #   「新品」補進動詞後的修飾組且排「新的?」前（同下條的坑）。
+                     r'(?:幫我|請|麻煩|我要|我想|想要|想|要)*\s*(?:新增|加入|建立|新建|登錄|上架|加)'
+                     r'\s*(?:一個|一款|一支|一件|一項|個|款)?\s*(?:新品|新的?)?'
                      r'(?:商品|品項|東西|產品)?\s*(?:叫做|叫|名字是|名稱是|是)?\s*',
                      # ⚠️ 這條要能吃掉「供應商送來新品」整串——原本只剝到
                      #   「供應商送來」，剩下的「新品」被下一條的「新」吃掉
@@ -1894,6 +1970,9 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                      #   ⚠️ 只剝句尾/獨立的殘字，不碰商品名本體。
                      r'\s*(?:先|再|另外)?\s*(?:進|放|收|擺|給)\s*$',
                      r'\s*(?:各|都)\s*$',
+                     # r23：「建立藍牙耳機商品」→ 前綴剝掉「建立」後，黏在
+                     #   名字尾巴的「商品」也要剝（不連續觸發型的殘字）
+                     r'(?:商品|產品|品項)\s*$',
                      r'\d+\s*(?:個|件|台|支|組)']:
             _name = _re.sub(pat, '', _name).strip()
         _name = _re.sub(r'\s{2,}', ' ', _name).strip(' ，,、。.：:；;-')
@@ -1926,7 +2005,11 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             if _safety_m:
                 _safety_val, _safety_src = int(_safety_m.group(1)), "stated"
             elif _init_total > 0:
-                _safety_val, _safety_src = _init_total, "from_stock"
+                # r23b：從初始庫存推的水位取**單倉最大值**不是總和——缺貨判定
+                #   是「每倉各自 < 安全庫存」，「三倉各40」若推成 120，建完
+                #   三個倉立刻全跳缺貨（假成功；函式探針實抓）。取 40 剛好
+                #   不觸發；「北倉80」推 80、中南倉 0 跳缺貨仍符合 user 定調。
+                _safety_val, _safety_src = max(_n_qty, _c_qty, _s_qty), "from_stock"
             else:
                 _safety_val, _safety_src = _DEFAULT_SAFETY, "default"
             # ⚠️ **沒講倉庫量 → 三倉都補成安全庫存值**（user 定調
@@ -1985,20 +2068,19 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
     elif step == 2:
         # r75：類別欄要驗證＋正規化成主檔 key——「陶瓷馬克杯」曾被當類別吸收
         # 造成整條流程欄位錯位；中文原字入檔會生出幻影類別（SKU 也拿到 x 前綴）
-        _cat_zh2key = {"電子": "electronics", "3c": "electronics",
-                       "家電": "appliance_kitchen", "廚具": "appliance_kitchen", "廚房": "appliance_kitchen",
-                       "食品": "food_beverage", "飲料": "food_beverage",
-                       "日用": "daily_goods", "生活": "daily_goods",
-                       "服飾": "apparel", "衣": "apparel",
-                       "運動": "sports"}
-        _cat_key = next((v for k, v in _cat_zh2key.items()
-                         if k in (category or "").lower()), "")
-        if not _cat_key and category in _cat_zh2key.values():
-            _cat_key = category
+        # r23：改共用 19 類別名表（categories.py 單一來源）——過去只認 6 個
+        #   seed 類，「五金」「美妝」等打了也被拒，流程卡死在 step-2
+        _cat_key = next((v for k, v in _zh_alias_pairs()
+                         if k in (category or "")), "")
+        if not _cat_key:
+            from categories import CATEGORIES as _C19s2
+            if category in _C19s2:
+                _cat_key = category
         if not _cat_key:
             return {"ok": True,
-                    "summary": (f"「{category}」不是類別喔。請從：電子產品／家電廚具／"
-                                "食品飲料／日用品／服飾／運動用品 選一個（輸入「取消」可退出）"),
+                    "summary": (f"「{category}」不是類別喔。可以講：電子／家電／食品／"
+                                "日用／服飾／運動／五金／美妝／醫療／文具／寵物／汽車／"
+                                "家具／母嬰／圖書／工業／玩具／箱包（輸入「取消」可退出）"),
                     "view": "item_create_step2",
                     "data": {"step": 2, "name": name,
                              "prompt": "請選擇類別（或輸入「取消」退出）"}}

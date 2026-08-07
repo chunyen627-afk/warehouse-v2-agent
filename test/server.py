@@ -305,6 +305,13 @@ def is_meaningful_input(text: str) -> bool:
     if "歸零" in s and any(q in s for q in ("哪些", "有哪", "有沒有", "清單",
                                             "幾個", "幾項", "列出")):
         return True
+    # r23：**建檔句豁免黑名單**——「新增一個音樂CD影音350元」的「音樂」
+    #   撞到防閒聊黑名單被擋成歡迎詞（create100 r1 唯一 ❌）。圖書影音是
+    #   正式類別，音樂/電影當商品名合法。注入字串類不豁免（前端會渲染名稱）。
+    if _zh_create_trigger(s) and not any(
+            k in s.lower() for k in ("<script", "</script", "select * from",
+                                     "onerror=")):
+        return True
     # 黑名單：明顯非倉管領域 → 直接擋
     for kw in _GATEKEEPER_BLACKLIST:
         if kw in s:
@@ -4846,6 +4853,32 @@ _item_create_state: dict = {}          # HTTP 端用（單請求無並發）
 # WS 端改 per-vid（2026-07-08 抓到全域污染重大 bug：一個訪客觸發新增商品流程
 # 後，所有後續訪客/句子被吸進流程當步驟，展場多人玩必爆；同 pending 的 per-vid 修法）
 _item_create_state_ws: dict = {}       # {vid: {active, step, name, ...}}
+
+
+def _zh_create_trigger(text: str) -> bool:
+    """建檔觸發判定（r23 抽出共用，dispatch 兩處 + 流程中重啟共 4 個呼叫點）。
+
+    字面觸發詞之外補「建立/新建 Ｘ 商品」**不連續型**——create100 首輪實測
+    『建立藍牙耳機商品 電子類 1200元』無連續觸發詞，掉去 LLM 變成庫存查詢。
+    ⚠️ 中段掃到查詢功能詞（報表/清單/庫存…）就不觸發——「建立缺貨商品清單」
+      是報表需求不是建檔。誤傷三重檢查（2026-08-08）：守衛 1704 行 0 句含
+      「建立」、60 商品名 0 撞、regression_ws 複驗全綠後才收。
+    """
+    _kws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品",
+            "增加商品", "新建商品",
+            # r23b（語音口語）：「我要加一款新商品叫Ｘ」「請幫我加入新品Ｘ」
+            #   「供應商送來新品Ｘ」首輪實測全掉去 LLM 變查詢。
+            #   守衛語料掃描 0 撞（2026-08-08）。
+            "新商品叫", "加一款", "加入新品", "送來新品")
+    if any(w in text for w in _kws):
+        return True
+    import re as _re23
+    _m = _re23.search(r'(?:建立|新建)(\S{1,12})(?:商品|的?品項)', text)
+    if not _m:
+        return False
+    return not any(w in _m.group(1) for w in
+                   ("缺貨", "熱銷", "滯銷", "庫存", "報表", "清單",
+                    "警示", "排程", "紀錄", "統計"))
 _item_delete_state: dict = {}  # 刪除模式的 session state
 # r74：排程/警示「刪掉它」多筆 clarify 後的一次性選擇模式（{vid: {kind, ids}}）
 _del_select_by_vid: dict = {}
@@ -8107,6 +8140,18 @@ async def ws_handler(ws: WebSocket):
                                        r"聯絡|發(?:單|信)|幫我(?:去|向)", user_text)):
                 log.info(f"[gate-豁免] 下單類**查詢句**放行: {user_text!r}")
                 _bl_hit_ws = None
+            # r23：**建檔句豁免**（同 is_meaningful_input 的豁免，兩處要同步）
+            #   ——「新增一個音樂CD影音350元」的「音樂」是商品名不是閒聊；
+            #   破壞/注入類（_BL_NEVER_EXEMPT）照擋。
+            #   ⚠️ 「0元/1元」不能用 substring——「1800元」「350元」都含
+            #     「0元」，建檔句全被誤擋（r3 實抓）。改獨立數字判定：
+            #     只有真的講 0 元/1 元（前面沒有別的數字）才算惡意改價。
+            _never23 = tuple(w for w in _BL_NEVER_EXEMPT if w not in ("0元", "1元"))
+            if (_bl_hit_ws and _zh_create_trigger(user_text)
+                    and not any(w in user_text.lower() for w in _never23)
+                    and not _re.search(r'(?<![\d])[01]元', user_text)):
+                log.info(f"[gate-豁免] 建檔句放行（黑名單 {_bl_hit_ws!r}）: {user_text!r}")
+                _bl_hit_ws = None
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",
@@ -9582,6 +9627,14 @@ async def ws_handler(ws: WebSocket):
                     continue
 
             # ── item_create 流程中 → 攔截處理，不進 LLM（per-vid）──
+            # r23：流程中打了一句**完整的新建句** → 放棄舊流程、當新句重來
+            #   （en 版本來就有；中文缺這段 → create100 首輪一句 dup 掉進
+            #   流程後，第 21→63 句全被連環吞成欄位值）。要放在查詢閘門
+            #   **之前**——「新增商品Ｘ 安全庫存15」含「庫存」會被閘門攔錯。
+            if _ic_st.get("active") and _zh_create_trigger(user_text):
+                log.info(f"[create-gate] 流程中偵測到新建句 → 重啟流程: {user_text!r}")
+                _item_create_state_ws.pop(vid, None)
+                _ic_st = {}
             if _ic_st.get("active"):
                 # r32：流程中訪客常常改問別的（「無線滑鼠還剩幾個」），過去整句被
                 #   吞成欄位值 → 商品類別變成「無線滑鼠還剩幾個」。明顯的查詢句不
@@ -9646,8 +9699,9 @@ async def ws_handler(ws: WebSocket):
                 continue
 
             # ── 新增商品 keyword 攔截（首次進入流程，per-vid）──
+            # r23：觸發判定抽成 _zh_create_trigger（補「建立Ｘ商品」不連續型）
             _create_item_kws_ws2 = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
-            if any(w in user_text for w in _create_item_kws_ws2):
+            if _zh_create_trigger(user_text):
                 import tools_v2 as _tv2_ci2
                 raw = user_text
                 for kw in _create_item_kws_ws2: raw = raw.replace(kw, "").strip()
@@ -9657,6 +9711,9 @@ async def ws_handler(ws: WebSocket):
                 for _fw75 in ("幫我", "幫忙", "麻煩", "請", "我要", "我想", "想要",
                               "一下", "喔", "啊", "吧", "了"):
                     raw = raw.replace(_fw75, "").strip()
+                # r23b：**開頭殘留的單字贅詞**（「想新增商品折疊傘」剝掉觸發詞
+                #   剩「想折疊傘」）——只剝句首，不碰名字中段（理想牌Ｘ不受影響）
+                raw = _re.sub(r'^(?:想|要|再|就|那就|然後)+', '', raw).strip()
                 result = _tv2_ci2.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci2.create_item_start()
                 if result.get("view") != "item_confirm":
                     d = result.get("data", {})
@@ -11094,6 +11151,11 @@ async def ws_handler(ws: WebSocket):
                                 break
 
                 # ── dispatch-ws：item_create 分步流程（per-vid）──
+                # r23：完整新建句 → 重啟流程（同前段 create-gate 的修法）
+                if (_item_create_state_ws.get(vid, {}).get("active")
+                        and _zh_create_trigger(user_text)):
+                    log.info(f"[dispatch-ws] 流程中偵測到新建句 → 重啟流程: {user_text!r}")
+                    _item_create_state_ws.pop(vid, None)
                 if _item_create_state_ws.get(vid, {}).get("active"):
                     if user_text.strip() == "取消":
                         _item_create_state_ws.pop(vid, None)
@@ -11132,12 +11194,15 @@ async def ws_handler(ws: WebSocket):
                     continue
 
                 # ── dispatch-ws：新增商品 keyword 攔截（per-vid）──
+                # r23：觸發判定抽成 _zh_create_trigger（補「建立Ｘ商品」不連續型）
                 _create_item_kws_ws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品")
-                if any(w in user_text for w in _create_item_kws_ws):
+                if _zh_create_trigger(user_text):
                     import tools_v2 as _tv2_ci
                     log.info(f"[dispatch-ws] 新增商品攔截: {user_text!r}")
                     raw = user_text
                     for kw in _create_item_kws_ws: raw = raw.replace(kw, "").strip()
+                    # r23b：同前段——句首贅詞只剝開頭（見 create-gate 註解）
+                    raw = _re.sub(r'^(?:想|要|再|就|那就|然後|幫我|幫忙|麻煩|請|我要|我想|想要)+', '', raw).strip()
                     result = _tv2_ci.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci.create_item_start()
                     for ch in result.get("summary", ""):
                         await send({"type": "token", "text": ch})
