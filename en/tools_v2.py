@@ -15,6 +15,7 @@ tools_v2.py — v2 Agent 進階工具（search_log / manage_config / run_script�
   state().items / stock / _items_by_sku  （沿用 v1 索引做 keyword→SKU）
 """
 import csv
+import io
 import json
 import re
 import subprocess
@@ -2212,9 +2213,12 @@ def classify_add_intent(text: str, has_item_in_master: bool) -> str:
     return "inbound" if has_item_in_master else "ambiguous"
 
 
-# r22：安全庫存的保底預設（明講 > 初始庫存 > 這個值）。
-#   只是佔位值——建檔當下常常還沒想過水位，建完講一句就能改。
-_DEFAULT_SAFETY = 20
+# r22：新商品建檔時的預設值（安全庫存 + 三倉初始庫存都用這個）。
+#   ⚠️ user 定調：不講數量時，安全庫存與三倉庫存**都給同一個預設值**，
+#     這樣建好的商品在三個倉庫就不會是 0——展場能立刻查到庫存、
+#     看得到三倉分布，也不會跳缺貨警示（剛好等於水位）。
+#   50 是跟 live_sim.LiveConfig.default_safety 對齊的數字。
+_DEFAULT_SAFETY = 50
 
 # ── r22：19 類的料號前綴（新增 13 類用 categories.py 的 prefix_legacy）──
 #   ⚠️ 既有 6 類的前綴**不可改**（e/a/f/d/c/s）——料號是主鍵，
@@ -2456,13 +2460,20 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             #   ② 沒明講但有初始庫存 → **安全庫存 = 初始庫存**
             #      （倉管直覺：進了多少就維持多少水位；也讓新品建完
             #        不會立刻跳缺貨警示）
-            #   ③ 都沒有 → 預設 20（只是佔位值，建完講一句就能改）
+            #   ③ 都沒有 → 預設值（_DEFAULT_SAFETY，見該常數註解）
             if _safety_m:
                 _safety_val, _safety_src = int(_safety_m.group(1)), "stated"
             elif _init_total > 0:
                 _safety_val, _safety_src = _init_total, "from_stock"
             else:
                 _safety_val, _safety_src = _DEFAULT_SAFETY, "default"
+            # ⚠️ **沒講倉庫量 → 三倉都補成安全庫存值**（user 定調
+            #   「安全庫存預設不是 0，這樣建好的商品在三個倉庫就不會是 0」）。
+            #   缺貨判定是「每個倉各自 < 安全庫存」，若三倉留 0 而安全庫存
+            #   有值（不論是明講的 30 還是預設 50），建好**三倉立刻全跳缺貨**
+            #   （實測確認）。補成等於水位 ⇒ 剛好不觸發、展場也查得到數字。
+            if _init_total == 0 and _safety_val > 0:
+                _n_qty = _c_qty = _s_qty = _safety_val
             _price_val = int(_price_m.group(1)) if _price_m else 0
             pending = {
                 "name": _name, "category": _found_cat,
@@ -3040,6 +3051,9 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
         except Exception:
             pass
 
+    # ⚠️ r22（已移除「第一次進貨自動設安全庫存」）：改成**建檔當下**就把
+    #   安全庫存與三倉庫存都設成預設值（user 定調），進貨就回歸純進貨，
+    #   不再有隱含的水位副作用。相關邏輯在 create_item_collect。
     _done = {**p, "before_qty": current, "after_qty": after_qty}
     return {"ok": True,
             "summary": f"✅ {p['direction_label']} recorded. {p['name']} now has "

@@ -20,7 +20,7 @@ CATEGORIES = {
     "electronics": {
         "prefix_legacy": "e",
         "prefix": "ELE",
-        "label_zh": "電子3C",
+        "label_zh": "電子產品",
         "label_en": "Electronics",
         "aliases_zh": ['電子', '3c', '電子產品'],
         "aliases_en": ['electronics', 'electronic', '3c'],
@@ -47,7 +47,7 @@ CATEGORIES = {
     "daily_goods": {
         "prefix_legacy": "d",
         "prefix": "DLY",
-        "label_zh": "家居日用",
+        "label_zh": "日用品",
         "label_en": "Daily Goods",
         "aliases_zh": ['日用', '日用品', '家居', '清潔'],
         "aliases_en": ['daily', 'household', 'cleaning'],
@@ -56,7 +56,7 @@ CATEGORIES = {
     "apparel": {
         "prefix_legacy": "c",
         "prefix": "CLO",
-        "label_zh": "服飾配件",
+        "label_zh": "服飾",
         "label_en": "Apparel",
         "aliases_zh": ['服飾', '衣服', '衣物'],
         "aliases_en": ['apparel', 'clothing', 'clothes'],
@@ -65,7 +65,7 @@ CATEGORIES = {
     "sports": {
         "prefix_legacy": "s",
         "prefix": "SPT",
-        "label_zh": "運動戶外",
+        "label_zh": "運動用品",
         "label_en": "Sports & Outdoors",
         "aliases_zh": ['運動', '戶外', '健身', '露營'],
         "aliases_en": ['sports', 'outdoor', 'fitness', 'camping'],
