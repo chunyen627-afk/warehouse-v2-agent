@@ -4091,6 +4091,27 @@ def _extract_sku_keyword(text: str) -> str:
             if _fz_tie and any(r["item"]["name"] == _fz_tie for r in _tied):
                 log.info(f"[EN ambiguous→fuzzy] {len(_tied)} 並列 → 模糊層決勝 {_fz_tie!r}")
                 return _fz_tie
+            # ⚠️ 回詞幹前先確認「**用完整詞組是不是分得出勝負**」（r22）。
+            #   實測守衛唯一 FAIL `send 30 phone case from south to central`：
+            #   上游只拿 `phone` 去 match → Earphones 與 Phone Case **同分 10**
+            #   （earPHONEs 也含 phone）→ 這裡回詞幹 'phone' → 下游反問
+            #   「phone matches 2 items」。但原句明明有 `case` 能區分：
+            #   `phone case` 的分數是 9 vs 5，分得很開。
+            #   ⇒ 拿**原句核心**再 match 一次，若有唯一最高分就用它，
+            #     不要退回詞幹。真歧義（'stock of coffee'）分數仍會平手，
+            #     照樣走列清單，不影響 user 定調的「不確定不猜」。
+            try:
+                _full_m = _W.match_items(_en_core or text)
+            except Exception:
+                _full_m = None
+            if _full_m and len(_full_m) >= 2:
+                _f_top = _full_m[0].get("score", 0)
+                _f_tie = sum(1 for r in _full_m if r.get("score", 0) == _f_top)
+                if _f_tie == 1 and _f_top > _full_m[1].get("score", 0):
+                    log.info(f"[EN ambiguous→full] 完整詞組分得出勝負 "
+                             f"{_full_m[0]['item']['name']!r}（{_f_top} vs "
+                             f"{_full_m[1].get('score')}），不退詞幹")
+                    return _full_m[0]["item"]["name"]
             if (_stem and len(_stem) >= 4 and _stem not in _STEM_STOP
                     and _re.search(rf"\b{_re.escape(_stem)}\b", text, _re.I)
                     and all(_stem in r["item"]["name"].lower() for r in _tied)):
@@ -4791,13 +4812,22 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                 r'shifting|send|sends|sending|ship|ships|shipping|relocate|'
                 r'reallocate|redistribute|rebalance|reroute|divert|bring|take|'
                 r'pull|push|please|pls|can you|could you|i want to|i need to|'
-                # en-r20：packs/bags/cartons/bottles 等量詞未收 → 'south shipped
-                #   3 packs of coffee' 剝不乾淨、開不了卡（實測 error）
-                r'from|to|into|over|across|the|units?|pcs|pieces?|boxes?|box|'
-                r'packs?|packets?|bags?|cartons?|cases?|bottles?|cans?|rolls?|'
-                r'sets?|pairs?|dozens?|'
+                r'from|to|into|over|across|the|units?|pcs|pieces?|'
                 r'north|central|south|warehouse|wh|stock|inventory)\b',
                 ' ', _pre13a, flags=_re13a.I)
+            # ── r22：量詞**只在數字後面**才剝 ─────────────────────────
+            #   en-r20 為了 'south shipped 3 packs of coffee' 把
+            #   packs/bags/cases/sets 等收進上面的通用剝詞表，但這些詞
+            #   **同時是商品名的成分**：Phone **Case** / Laptop **Bag** /
+            #   Cookware **Set** / Coffee **Bags**。
+            #   ⇒ 守衛唯一 FAIL `send 30 phone case from south to central`
+            #     被剝成 '30 phone' → 只剩 phone → 撞 Earphones 同分 → 反問。
+            #   判準：量詞前面要有數字才是量詞（3 packs），否則是商品名。
+            _pre13a = _re13a.sub(
+                r'\b(\d+)\s*(?:packs?|packets?|bags?|cartons?|cases?|'
+                r'bottles?|cans?|rolls?|sets?|pairs?|dozens?|boxes?|box)\b'
+                r'(?:\s+of\b)?',
+                r'\1 ', _pre13a, flags=_re13a.I)
             _pre13a = _re13a.sub(r'\s+', ' ', _pre13a).strip()
         _kw13a = _extract_sku_keyword(_pre13a) or _extract_sku_keyword(user_text) or ""
         # 商品名防呆（RPI5 conv100-r3：「把中倉庫存移一些去南倉」抽成雜訊
