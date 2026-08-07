@@ -63,15 +63,12 @@ ACCEPT = {
     "noex":  lambda v: v in ("clarify", "rejected", "error", "related_empty", "guide",
                               "expiring_empty"),
     "any":   lambda v: v not in ("error", "clarify", "rejected"),
-    # 2026-08-06 補課批新增：排程句的正確結果分兩種，都不可判紅
-    #   sched  = 成功攔進排程 → 確認卡（或已存在同排程的 clarify）
-    #   schedq = 正確**反問**（錯字抽不到腳本、單次定時、已達上限）
-    #            ⇒ 這些 clarify 是設計行為，用 any 會誤判成失敗
-    "sched":  lambda v: v in ("schedule_confirm", "schedule_list", "clarify"),
-    "schedq": lambda v: v == "clarify",
     # 訪客閒聊/搗蛋防禦（第17輪）：優雅拒絕/引導/追問，不可幻覺商品或開卡
     "chat":   lambda v: v in ("rejected", "guide", "clarify"),
     "guidey": lambda v: v in ("guide", "rejected", "clarify"),
+    # r21（2026-08-07）：採購決策句（「哪些要下單了」）的正解有兩種——
+    #   缺貨清單、或直接產出採購單草稿（po_confirm），兩者都對。
+    "po":     lambda v: v in ("po_confirm", "low_stock", "clarify"),
     "probe":  lambda v: v in ("rejected", "guide", "clarify", "error"),
     # 半倉管（第19輪）：問有沒有賣/多少錢，顯示庫存是好回答；只擋寫入確認卡
     "semi":   lambda v: v not in ("movement_confirm", "transfer_confirm",

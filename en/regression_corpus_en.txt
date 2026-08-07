@@ -1024,3 +1024,23 @@ vague|add it up for me
 vague|south shipped 3 packs of coffee
 mv|south shipped 3 packs of coffee beans
 mv|north received 2 bags of rice crackers
+low|whats runnin lowe
+hot|whats our busiest item
+guidey|whats the shrinkage
+guidey|whats our fill rate
+guidey|show me the SKU velocity
+guidey|cycle count status
+guidey|whats sitting too long
+guidey|when is the next delivery
+guidey|what is our profit margin
+guidey|any backorders
+guidey|what is the carrying cost
+po|what do i need to order
+low|which items need reordering
+low|anything critical this week
+low|what runs out first
+any|is stock balanced across warehouses
+any|where should i move stock from
+any|whats the situation
+any|how much money is tied up in stock
+any|which items had the biggest swing

@@ -75,6 +75,9 @@ ACCEPT = {
     # 訪客閒聊/搗蛋防禦（第17輪）：優雅拒絕/引導/追問，不可幻覺商品或開卡
     "chat":   lambda v: v in ("rejected", "guide", "clarify"),
     "guidey": lambda v: v in ("guide", "rejected", "clarify"),
+    # r21（2026-08-07）：採購決策句的正解有兩種——缺貨清單、或直接產出
+    #   採購單草稿（po_confirm），兩者都對（同中文版）。
+    "po":     lambda v: v in ("po_confirm", "low_stock", "clarify"),
     "probe":  lambda v: v in ("rejected", "guide", "clarify", "error"),
     # 半倉管（第19輪）：問有沒有賣/多少錢，顯示庫存是好回答；只擋寫入確認卡
     "semi":   lambda v: v not in ("movement_confirm", "transfer_confirm",

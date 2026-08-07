@@ -1690,3 +1690,15 @@ guidey|等一下
 guidey|你確定嗎
 guidey|撐幾天是什麼
 vague|幫我加總
+po|哪些要下單了
+po|要不要現在下單
+hot|壓最多錢的是哪個
+hot|多久沒動的
+hot|最慢的是哪個
+guidey|供應商有幾家
+guidey|交期多久
+guidey|庫齡分析
+guidey|批號追蹤
+guidey|利潤多少
+chat|幫我下單給供應商
+chat|幫我打電話給廠商
