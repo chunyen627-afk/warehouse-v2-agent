@@ -4413,6 +4413,35 @@ _CAT_WORDS_EN = {
                           r"wear"),
     "sports":            (r"sports?", r"sporting goods", r"fitness", r"outdoor",
                           r"camping", r"gym"),
+    # ── r22：新增 13 類（19 類體系，見 categories.py）────────────────
+    #   ⚠️ user 定調：這些是**預留的空倉庫結構**，查到沒商品就老實說
+    #     「這類還沒有商品」（warehouse.query_inventory 已有該分支）。
+    #   ⚠️ 一律詞界比對（坑 1）：'tool' 會出現在商品名裡，靠上游的
+    #     「無扎實商品名命中才採用類別」把關。
+    "hardware":   (r"hardware", r"tools?", r"hand tools?", r"power tools?",
+                   r"diy"),
+    "beauty":     (r"beauty", r"cosmetics?", r"skin\s*care", r"skincare",
+                   r"make\s*up", r"makeup", r"personal care"),
+    "medical":    (r"medical", r"health\s*care", r"healthcare", r"medicine",
+                   r"pharmacy", r"first aid"),
+    "stationery": (r"stationery", r"stationary", r"office supplies",
+                   r"office"),
+    "pet":        (r"pet supplies", r"pets?", r"pet food"),
+    "automotive": (r"automotive", r"auto parts", r"car parts?",
+                   r"vehicles?", r"motorcycles?"),
+    "furniture":  (r"furniture", r"bedding", r"home furniture"),
+    # ⚠️ 不可收裸 "baby"：主檔的 Baby Diapers / Baby Wet Wipes / Baby Onesie
+    #   都以 baby 開頭——誤傷檢查抓到 15 句商品查詢會命中（雖然上游的
+    #   「扎實商品名優先」擋得住，但不該賭那道防線）。用**類別語境片語**。
+    "baby":       (r"baby (?:products?|items?|goods|supplies|category)",
+                   r"babies", r"toddlers?", r"infants?", r"nursery",
+                   r"mother\s*&?\s*baby"),
+    "media":      (r"books?", r"media", r"magazines?", r"audio\s*books?"),
+    "industrial": (r"industrial", r"business supplies", r"machinery",
+                   r"spare parts?"),
+    "toys":       (r"toys?", r"games?", r"toys\s*&?\s*games"),
+    "luggage":    (r"luggage", r"bags?\s*&?\s*luggage", r"suitcases?"),
+    "other":      (r"other items?", r"uncategori[sz]ed", r"misc(?:ellaneous)?"),
 }
 
 

@@ -2112,6 +2112,11 @@ _EN_AMBIGUOUS_HEADS = {
     "towel", "set", "sets", "mug", "case", "bag", "bags", "kit", "bottle",
     "box", "holder", "stand", "cover", "pad", "rack", "tray", "basket",
     "shoes", "boots",          # 跑鞋歸運動或服飾都合理 → 問
+    # r22（19 類上線後補）：跨**新舊類別**的歧義詞——實測
+    #   'Folding Camping Chair' 因為新增家具類的 chair 被判成家具（真實=運動）。
+    #   辦公椅=家具、露營椅=運動；桌燈=家具、露營燈=運動；電扇=電子、
+    #   吊扇=家具。這些光看 head 分不出來 ⇒ 一律讓修飾詞決定或反問。
+    "chair", "chairs", "table", "tables", "lamp", "mirror", "clock",
 }
 _EN_NAME_STOP = {"the", "and", "for", "with", "pack", "pcs", "pc", "men",
                  "mens", "women", "womens", "size", "inch", "pair", "person",
@@ -2137,6 +2142,12 @@ def _en_guess_category(name: str) -> tuple:
     if head in _EN_AMBIGUOUS_HEADS:
         return None, f"ambiguous:{head}"
     hits = [c for c, d in _EN_CAT_KW.items() if head in d["head"]]
+    # r22：既有 6 類沒命中 → 查**新增 13 類**的品類詞（categories.py）。
+    #   ⚠️ 順序有意義：既有 6 類的 head/mod 區分是實測判錯 0 的關鍵，
+    #     一定要先讓它表態；新類別只在它沒話說時才補位。
+    if not hits and _CAT19_KW:
+        hits = [c for c, ws in _CAT19_KW.items()
+                if head in ws and c not in _EN_CAT_KW]
     if len(hits) == 1:
         return hits[0], f"head:{head}"
     if len(hits) > 1:
@@ -2205,10 +2216,25 @@ def classify_add_intent(text: str, has_item_in_master: bool) -> str:
 #   只是佔位值——建檔當下常常還沒想過水位，建完講一句就能改。
 _DEFAULT_SAFETY = 20
 
+# ── r22：19 類的料號前綴（新增 13 類用 categories.py 的 prefix_legacy）──
+#   ⚠️ 既有 6 類的前綴**不可改**（e/a/f/d/c/s）——料號是主鍵，
+#     改了既有 60 筆的歷史進出紀錄全部對不上。
+try:
+    from categories import CATEGORY_PREFIX_LEGACY as _CAT19_PFX, CATEGORIES as _CAT19
+    # 新增 13 類的品類詞（既有 6 類維持 _EN_CAT_KW 的 head/mod 結構——
+    #   那是實測判錯 0 的關鍵，不可被覆蓋）
+    _CAT19_KW = {k: set(v["keywords"]) for k, v in _CAT19.items()}
+except Exception:
+    _CAT19_PFX, _CAT19, _CAT19_KW = {}, {}, {}
+
 _CATEGORY_PREFIX = {
     "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
     "daily_goods": "d", "apparel": "c", "sports": "s",
 }
+# 新增 13 類的前綴（h=五金 b=美妝 m=醫療 t=文具 p=寵物 v=車用
+#   n=家具 y=母嬰 k=圖書 i=工業 g=玩具 l=箱包 x=其他）
+for _k19, _p19 in _CAT19_PFX.items():
+    _CATEGORY_PREFIX.setdefault(_k19, _p19)
 
 def _next_sku(category: str) -> str:
     """自動產生下一個 SKU 流水號"""

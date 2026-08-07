@@ -160,6 +160,18 @@ CATEGORY_LABEL = {
     "apparel":           "Apparel",
     "sports":            "Sports",
 }
+# ── r22（2026-08-07）：擴充到 19 類 ─────────────────────────────────
+#   體系參照 Google Product Taxonomy 21 個頂層調整（有國際標準背書）。
+#   ⚠️ user 定調：這是**預留的空倉庫結構**，現有 60 筆商品只是 demo 資料、
+#     本來就只填滿其中 6 類。查到沒商品的類別就**老實說還沒有商品**——
+#     那是事實，也讓客戶看得出系統預留了哪些分類。
+#   ⚠️ 定義集中在 categories.py（一處定義、各處引用）；載不到就退回上面
+#     的 6 類，不影響既有功能。
+try:
+    from categories import CATEGORY_LABEL_EN as _CAT19_EN, SEEDED_CATEGORIES
+    CATEGORY_LABEL = dict(_CAT19_EN)
+except Exception:      # categories.py 不在（舊部署）→ 維持 6 類
+    SEEDED_CATEGORIES = tuple(CATEGORY_LABEL.keys())
 
 WAREHOUSE_LABEL = {
     "north":   "North",
@@ -709,6 +721,21 @@ def query_inventory(
         if _frags:
             matches = [{"item": it, "score": 5} for it in s.items
                        if any(f in it["name"] for f in _frags)]
+    # r22：**合法類別但目前沒商品** → 老實說，不要回「查無此商品」的模糊訊息。
+    #   19 類是預留的倉庫結構，新開的類別本來就是空的（user 定調）。
+    #   ⚠️ 只在「純類別查詢」時走這條；帶 keyword 的照原路（那是真的查無商品）。
+    if not matches and category and not keyword and category in CATEGORY_LABEL:
+        _cl = CATEGORY_LABEL.get(category, category)
+        return {"ok": True,
+                "summary": (f"{_cl}: no items yet — this category is set up but "
+                            f"nothing has been added to it.\n"
+                            f'You can add one by saying e.g. '
+                            f'"add item <name>, {_cl.lower()}, 500, safety 20".'),
+                "view": "inventory",
+                "data": {"category": category, "category_label": _cl,
+                         "warehouse": warehouse,
+                         "warehouse_label": WAREHOUSE_LABEL.get(warehouse, "All warehouses"),
+                         "total_items": 0, "rows": [], "empty_category": True}}
     if not matches:
         return _suggest_on_empty(keyword or category or "", action="庫存")
 
