@@ -9496,10 +9496,16 @@ async def startup():
     asyncio.create_task(_alert_scheduler_loop())
     # ── 定時腳本排程 ──
     asyncio.create_task(_schedule_runner_loop())
-    # ── 動態倉庫模擬：開機自動啟動（user 定調 2026-08-03）──
-    #   展場開機就要看到數據在跳，不必手動按。預設 200× + 60 商品全動。
-    #   ⚠️ 跑守衛/寫入測試前務必先關（run_guard_en.sh 已內建 stop）。
-    asyncio.create_task(_live_autostart())
+    # ── 動態倉庫模擬：**開機不自動啟動**（user 定調 2026-08-07 改）──
+    #   原本開機自動跑（2026-08-03 定調「展場開機就要看到數據在跳」），
+    #   但實務上代價大於效益：
+    #     · 老闆對模擬沒興趣（主線是自然語言建檔）
+    #     · 持續寫入 transactions（單日 7,766 筆），檔案無限長大
+    #     · 吃 CPU（機二 load 一度 3.31）、拖慢查詢
+    #     · 跑測試/轉換資料前都得先停，每次都要記得
+    #   ⇒ 改成預設關閉，要 demo 時用 UI 或 POST /api/live_mode
+    #     {"action":"start"} 開。
+    # asyncio.create_task(_live_autostart())
 
 
 @app.get("/reports/{fname}")
