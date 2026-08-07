@@ -491,6 +491,14 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
     # 前端畫面上看得到代號，訪客會直接打）
     _kw_id = keyword.strip().lower()
     _id_hit = next((it for it in items if it["sku_id"].lower() == _kw_id), None)
+    # ⚠️ r22 料號改 ELE-0001 後**只做完全相等會失效**：`ELE-0001 stock`
+    #   這種黏字就對不上（中文版守衛 6 句 FAIL 全是這個）。
+    #   ⇒ 改成**在句中找料號**（含連字號的格式夠獨特，不會誤命中一般文字）。
+    if not _id_hit:
+        for it in sorted(items, key=lambda x: -len(x["sku_id"])):
+            if it["sku_id"].lower() in _kw_id:
+                _id_hit = it
+                break
     if _id_hit:
         return [{"item": _id_hit, "score": 99}]
 

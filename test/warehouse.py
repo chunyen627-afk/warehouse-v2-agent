@@ -461,8 +461,19 @@ def match_items(keyword: str, category: str | None = None) -> list[dict]:
 
     # SKU 代號直查（r18：「給我看看s01的庫存」「e01跟e02哪個賣得好」——
     # 前端畫面上看得到代號，訪客會直接打）
+    # ⚠️ r22 料號改 ELE-0001 後**只做完全相等會失效**：舊格式 `e01庫存`
+    #   靠別的路徑救得回來，但 `ELE-0001庫存` 黏字就對不上（實測守衛
+    #   6 句 FAIL 全是這個）。⇒ 改成**在句中找料號**（含連字號的格式
+    #   本身就夠獨特，不會誤命中一般文字）。
     _kw_id = keyword.strip().lower()
     _id_hit = next((it for it in items if it["sku_id"].lower() == _kw_id), None)
+    if not _id_hit:
+        # 句中內嵌（「ELE-0001庫存」「查ELE-0001」）——長料號優先，
+        #   避免 ELE-0001 被 ELE-000 之類的前綴搶走
+        for it in sorted(items, key=lambda x: -len(x["sku_id"])):
+            if it["sku_id"].lower() in _kw_id:
+                _id_hit = it
+                break
     if _id_hit:
         return [{"item": _id_hit, "score": 99}]
 
