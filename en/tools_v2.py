@@ -1912,7 +1912,10 @@ def compare_periods(metric: str = "out") -> dict:
 
 # 指令詞與虛詞——出現在句子裡但絕不是商品名的一部分
 _EN_CMD_WORDS = {
-    "add", "new", "create", "created", "set", "setup", "up", "register",
+    # ⚠️ 不可收 "set"：它是商品名的常見成分（Cookware Set / wrench set /
+    #   tool set），收進來會把 'hex wrench set' 剝成 'hex wrench'（實測）。
+    #   句首的 "set up a new item" 由下方的開場白 regex 整段處理，不靠這裡。
+    "add", "new", "create", "created", "setup", "register",
     "item", "items", "product", "products", "sku", "please", "pls",
     "i", "we", "want", "wants", "wanna", "would", "like", "need", "to",
     "a", "an", "the", "its", "it's", "is", "are", "this", "that",
@@ -1953,6 +1956,38 @@ def _is_mostly_en_text(s: str) -> bool:
     return ascii_alpha >= 2 and cjk <= 1
 
 
+# 泛稱詞——出現在句子裡但**不足以當商品名**（'some stuff' / 'a thing'）。
+#   ⚠️ 實測 'just got some new stuff, bamboo toothbrush, 45 each' 曾挑到
+#     'some stuff' 那段（它跟 'bamboo toothbrush' 都通過雜訊檢查，
+#     但排在前面）⇒ 泛稱詞降權，且整段都是泛稱時視為可疑。
+_EN_VAGUE_WORDS = {
+    "stuff", "thing", "things", "something", "some", "few", "several",
+    "batch", "lot", "bunch", "goods", "material", "materials", "misc",
+    "other", "others", "etc", "more", "another",
+}
+
+
+def _en_name_is_suspicious(name: str) -> bool:
+    """挖出來的名稱看起來不像真商品名 → 回 True（呼叫端應改成**反問**）。
+
+    ⚠️ 這是最後一道保險：世界上的商品名無限，切名規則不可能永遠對。
+      挖錯不可怕，**靜默建出爛資料才可怕** ⇒ 可疑就問，不出卡。
+    """
+    toks = [t for t in re.findall(r"[A-Za-z0-9'\-]+", name or "")]
+    if not toks:
+        return True
+    real = [t for t in toks
+            if t.lower() not in _EN_VAGUE_WORDS
+            and t.lower() not in _EN_CMD_WORDS
+            and not t.replace('.', '').isdigit()]
+    if not real:
+        return True                      # 整串都是泛稱/虛詞（'some stuff'）
+    # 只剩單一過短的 token（'ab'）也可疑
+    if len(real) == 1 and len(real[0]) <= 2:
+        return True
+    return False
+
+
 def _en_cut_item_name(raw: str) -> str:
     """從英文建檔句切出商品名（切段法，實測 9/10）。
 
@@ -1976,16 +2011,37 @@ def _en_cut_item_name(raw: str) -> str:
         toks = re.findall(r"[A-Za-z0-9'\-]+", seg)
         if not toks:
             continue
-        core = [t for t in toks
-                if t.lower() not in _EN_CMD_WORDS
-                and t.lower() not in _EN_CAT_WORDS
-                and not t.replace('.', '').isdigit()]
+        # ⚠️ 數字要分兩種（實測 'SKF 6204 ball bearing' 曾被剝成
+        #   'SKF ball bearing'——**型號是商品名的一部分**，不能剝）：
+        #     · 夾在實詞中間 → 型號/規格，保留（6204 在 SKF 與 ball 之間）
+        #     · 落在段落頭尾 → 屬性值，剝掉（'890 each' 的 890）
+        _keep = []
+        for _i, t in enumerate(toks):
+            tl = t.lower()
+            if tl in _EN_CMD_WORDS or tl in _EN_CAT_WORDS:
+                continue
+            if t.replace('.', '').isdigit():
+                _prev = [x for x in toks[:_i]
+                         if not x.replace('.', '').isdigit()
+                         and x.lower() not in _EN_CMD_WORDS
+                         and x.lower() not in _EN_CAT_WORDS]
+                _next = [x for x in toks[_i + 1:]
+                         if not x.replace('.', '').isdigit()
+                         and x.lower() not in _EN_CMD_WORDS
+                         and x.lower() not in _EN_CAT_WORDS]
+                if not (_prev and _next):
+                    continue          # 頭尾的孤立數字 = 屬性值，剝掉
+            _keep.append(t)
+        core = _keep
         if not core:
             continue
         # 段內含數字或類別詞 → 那是屬性段（"electronics, 1500 each"），降權
         noisy = (any(t.replace('.', '').isdigit() for t in toks)
                  or any(t.lower() in _EN_CAT_WORDS for t in toks))
-        score = len(core) - (2 if noisy else 0)
+        # 泛稱段降權（'some stuff' 不該贏過 'bamboo toothbrush'）——
+        #   實詞裡泛稱佔比越高、分數扣越多
+        _vague_n = sum(1 for t in core if t.lower() in _EN_VAGUE_WORDS)
+        score = len(core) - (2 if noisy else 0) - _vague_n * 2
         if score > best_score:
             best_score, best = score, " ".join(core)
     # 無標點長句（"add item Bluetooth Keyboard electronics price 800"）→
@@ -2111,8 +2167,53 @@ def _next_sku(category: str) -> str:
             nums.append(int(sid[1:]))
         except ValueError:
             pass
-    next_num = max(nums) + 1 if nums else 1
+    # ⚠️ 料號**絕不可重用**（業界硬規則）：原本用 max(現有)+1，若 e10 被
+    #   刪除，下一個新品會再拿到 e10 → 跟歷史進出紀錄撞號，過去那筆
+    #   e10 的交易看起來變成新商品的。⇒ 記錄「用過的最大號」，只增不減。
+    _used_max = _sku_seq_peek(prefix)
+    next_num = max(max(nums) + 1 if nums else 1, _used_max + 1)
+    _sku_seq_bump(prefix, next_num)
     return f"{prefix}{next_num:02d}"
+
+
+# 料號流水號高水位（只增不減，防重用）。存在 warehouse_data 供重啟後延續。
+_SKU_SEQ_FILE = "sku_seq.json"
+
+
+def _sku_seq_path():
+    from pathlib import Path as _P
+    try:
+        d = getattr(W.state(), "v2_data_dir", "") or ""
+        base = _P(d) if d else _P(__file__).resolve().parent
+    except Exception:
+        base = _P(__file__).resolve().parent
+    return base / _SKU_SEQ_FILE
+
+
+def _sku_seq_peek(prefix: str) -> int:
+    try:
+        import json as _j
+        p = _sku_seq_path()
+        if p.exists():
+            return int(_j.loads(p.read_text(encoding="utf-8")).get(prefix, 0))
+    except Exception:
+        pass
+    return 0
+
+
+def _sku_seq_bump(prefix: str, n: int) -> None:
+    try:
+        import json as _j
+        p = _sku_seq_path()
+        d = {}
+        if p.exists():
+            d = _j.loads(p.read_text(encoding="utf-8"))
+        if n > int(d.get(prefix, 0)):
+            d[prefix] = n
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(_j.dumps(d, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass          # 寫不進去不影響建檔（退化成原本的 max+1 行為）
 
 
 def create_item_start() -> dict:
@@ -2206,6 +2307,17 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         #   中文維持原剝除法（中文要剝的詞有限，且 r22 已修好）。
         if _is_mostly_en_text(raw_text):
             _name = _en_cut_item_name(raw_text)
+            # ⚠️ 最後一道保險（r22）：切出來的名稱看起來不像真商品名
+            #   （'some stuff' / 'a thing' / 單一過短 token）→ **不往下走**，
+            #   回第一步重問。世界上的商品名無限，切名規則不可能永遠對；
+            #   挖錯不可怕，靜默建出爛資料才可怕。
+            if _name and _en_name_is_suspicious(_name):
+                return {"ok": True,
+                        "summary": ("Sorry — I couldn't work out the item name "
+                                    "from that.\nStep 1: what is the item called? "
+                                    '(say "cancel" to exit)'),
+                        "view": "item_create_step1",
+                        "data": {"step": 1, "prompt": "Please enter the item name"}}
         else:
             _name = raw_text
             for pat in [r'電子\S*', r'家電\S*', r'食品\S*', r'日用\S*', r'服飾\S*',

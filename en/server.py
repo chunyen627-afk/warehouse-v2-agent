@@ -10963,6 +10963,11 @@ async def ws_handler(ws: WebSocket):
             #   qty（實測 create_movement qty=''）→ 反問「幾個？」。
             #   `/api/asr` 出口本來就有剝，但**打字路徑沒有** → 補在這。
             #   ⚠️ 只碰逗號/分號，**連字號要留**（14-inch／usb-c 是商品名）。
+            # ⚠️ r22：**建檔句要留逗號**——新增商品的切段法靠逗號分段
+            #   （'new item hex wrench set, 450 each, keep 20' 剝掉逗號後
+            #   切不了段，商品名抽取品質掉一截，實測 e2e 與函式測試結果不同）。
+            #   ⇒ 剝逗號前先存一份「已修錯字、但保留逗號」的版本給建檔用。
+            _text_with_comma = user_text
             if _is_mostly_english(user_text):
                 _cm = _re.sub(r"\s*[,;]\s*", " ", user_text)
                 _cm = _re.sub(r"\s{2,}", " ", _cm).strip()
@@ -13949,7 +13954,8 @@ async def ws_handler(ws: WebSocket):
                           "register item", "register a new item")
             if any(w in user_text for w in _create_item_kws_ws2):
                 import tools_v2 as _tv2_ci2
-                raw = user_text
+                # r22：用**保留逗號**的版本（切段法靠逗號分段，見 en-comma 註解）
+                raw = _text_with_comma or user_text
                 for kw in _create_item_kws_ws2: raw = raw.replace(kw, "").strip()
                 # r75 危險級：「幫我新增商品」剝掉關鍵字剩「幫我」，曾被當 raw_text
                 # 解析→靜默落到 step1 空名前進→建出商品「」。填充詞剝乾淨，
@@ -16444,7 +16450,8 @@ async def ws_handler(ws: WebSocket):
                 if any(w in user_text for w in _create_item_kws_ws):
                     import tools_v2 as _tv2_ci
                     log.info(f"[dispatch-ws] 新增商品攔截: {user_text!r}")
-                    raw = user_text
+                    # r22：同上，用保留逗號的版本餵切段法
+                    raw = _text_with_comma or user_text
                     for kw in _create_item_kws_ws: raw = raw.replace(kw, "").strip()
                     result = _tv2_ci.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci.create_item_start()
                     for ch in result.get("summary", ""):
