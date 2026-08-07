@@ -526,6 +526,89 @@ GATEKEEPER_REJECT_MSG = (
 #   ⚠️ **不逐詞列舉**是刻意的：`_NOEX_STOP` 已累積 60+ 個、每輪都在加，
 #     那是結構性問題的徵兆。這裡靠「已知抽象詞 + 形容詞字尾規則」涵蓋，
 #     具體名詞（office/microwave/bicycle）不在其中，照常誠實查無。
+#   r21（2026-08-07）：上面那條註解說「靠已知抽象詞 + 形容詞字尾規則涵蓋」，
+#   但該規則**當時只有註解、沒有實作**——所以 r21 業務深水區批整類破口：
+#     'whats our busiest item'    → No item matching "busiest"
+#     'how much money is tied up' → "money tied"
+#     'whats the shrinkage'       → "shrinkage"   'whats sitting too long' → "long"
+#   訪客用倉管行話問業務問題，卻收到「查無此商品」——比婉拒更糟，
+#   看起來像系統壞了。這裡把那條規則補上，取代繼續往停用詞表堆詞。
+#   ⚠️ 字尾規則實測只接到 5/23（零誤傷但覆蓋不足）——它的價值是**安全網**：
+#     未來新增的抽象詞（-tion/-ity/-ness）自動被接住，不必每輪回來補表。
+#     覆蓋不到的倉管行話另列 _WH_JARGON_WORDS，兩者互補。
+#   ⚠️ "ship" 不放進字尾表：它會讓 relationship 以外的短詞誤中，
+#     且 ship/shipped 本身是進出貨動詞，放行話表更精確。
+_ABSTRACT_SUFFIX = ("ness", "ity", "ities", "ance", "ence", "ment",
+                    "tion", "sion", "ology", "ancy", "ency", "ism", "est")
+#   倉管/財務行話——字尾規則接不到、但絕不可能是商品名的具體詞。
+#   ⚠️ 每個詞都對照過商品主檔（145 個詞彙）確認零碰撞。
+_WH_JARGON_WORDS = frozenset({
+    "turnover", "swing", "swings", "balanced", "balance", "money", "cash",
+    "capital", "tied", "worth", "margin", "profit", "carrying", "cost",
+    "costs", "rate", "rates", "ratio", "cycle", "backorder", "backorders",
+    "discrepancy", "discrepancies", "supplier", "suppliers", "vendor",
+    "vendors", "delivery", "deliveries", "lead", "sitting", "sits",
+    "idle", "stale", "obsolete", "dead", "aging", "long", "short",
+    "longest", "shortest", "slowest", "fastest", "stored", "storage",
+    "located", "location", "ship", "ships", "shipped", "shipment",
+    "shipments", "grew", "grown", "dropped", "unusual", "fill",
+    # "age" 字尾未收進 _ABSTRACT_SUFFIX（會讓 ship 之類短詞誤中），
+    #   這幾個 -age 行話改在這裡列舉
+    # ⚠️ 不收 "shortage"：它是既有缺貨意圖詞，收進停用詞表會兩邊打架。
+    "shrinkage", "spoilage", "breakage", "usage", "coverage",
+})
+_ITEM_VOCAB_CACHE: set[str] | None = None
+
+
+def _item_vocab() -> set[str]:
+    """商品主檔的詞彙集（小寫、≥3 字母）。快取一次。
+
+    ⚠️ 純字尾規則會誤傷真商品詞——實測主檔裡 running / camping / sparkling /
+      compression / resistance / fitness / wicking 等 12 個詞命中抽象字尾。
+      所以字尾規則一定要拿主檔擋，且主檔會隨資料更新，比逐詞列舉穩固。
+    """
+    global _ITEM_VOCAB_CACHE
+    if _ITEM_VOCAB_CACHE is not None:
+        return _ITEM_VOCAB_CACHE
+    vocab: set[str] = set()
+    try:
+        import warehouse as _W_iv
+        for _it in _W_iv.state().items:
+            for _f in (_it.get("name", ""), _it.get("category", "")):
+                for _w in _re.split(r"[^A-Za-z]+", str(_f).lower()):
+                    if len(_w) >= 3:
+                        vocab.add(_w)
+        try:
+            from alias_en import ALIAS_EN as _AL_iv
+            for _k in _AL_iv:
+                for _w in _re.split(r"[^A-Za-z]+", str(_k).lower()):
+                    if len(_w) >= 3:
+                        vocab.add(_w)
+        except Exception:
+            pass
+    except Exception:
+        return set()        # 主檔還沒 init → 回空集，判準自動失效（不誤傷）
+    _ITEM_VOCAB_CACHE = vocab
+    return vocab
+
+
+def _is_abstract_non_item(word: str) -> bool:
+    """這個詞是不是「抽象功能詞而非商品名」——字尾像抽象詞、且不在商品主檔。
+
+    只在主檔載得到時生效；載不到就回 False（寧可誠實查無，不誤殺商品）。
+    """
+    w = word.strip().lower()
+    if len(w) < 4 or not w.isalpha():
+        return False
+    if not (w.endswith(_ABSTRACT_SUFFIX) or w in _WH_JARGON_WORDS):
+        return False
+    vocab = _item_vocab()
+    if not vocab:
+        return False
+    # 主檔有這個詞（或其去複數形）→ 是商品詞，不可當功能詞
+    return w not in vocab and w.rstrip("s") not in vocab
+
+
 def _period_from_en(text: str) -> str | None:
     """r20：從英文句抽期間。抽不到回 None（讓呼叫端決定預設值）。
 
@@ -934,6 +1017,16 @@ _EN_FUNC_WORDS = (
     #   'exprot' 根本沒有修復目標可配）
     "export", "exports", "download", "audit", "stocktake",
     "generate", "quarter", "yesterday",
+    # r21（2026-08-07）：**缺貨線的功能詞**沒收 → 'whats runnin lowe'
+    #   （訪客想問「什麼快沒貨」打錯字）的 lowe 沒被還原、runnin 被 clf
+    #   自信配成 **Running Shoes**（conf=1.00 跳過 LLM）——不是查無，
+    #   是給了無關答案，比 rejected 危險（訪客以為系統在亂講）。
+    #   加 low 後 lowe→low（實測 ratio 0.857 過門檻），整句還原成
+    #   'whats runnin low' 就能被 C3 缺貨詞表接住。
+    #   ⚠️ **不可加 running**：它在商品主檔（Running Shoes）——註解開頭
+    #     「候選集已撞商品主檔」講的就是這種，實測確認撞。
+    #   ⚠️ runnin 本身分數只有 0.429 不會被亂修（留給商品比對），這是對的。
+    "low", "lows", "urgent", "reorder", "reordering", "expiry",
 )
 
 
@@ -1302,6 +1395,23 @@ _LOW_STOCK_INTENT_WORDS = (
     "most urgent", "most critical", "most pressing", "biggest problem",
     "needs attention", "need attention", "which is worst", "whats worst",
     "what's worst", "worst off", "top priority", "first priority",
+    # ── r21 業務深水區批（2026-08-07）：補貨決策是**倉管最核心的需求**，
+    #   缺貨清單已有 days_left/suggest_qty 答得出來，卻整類被拒。
+    "critical", "runs out", "run out first", "runs out first",
+    "least days", "lowest days",
+    # ⚠️ 誤傷檢查擋下 "days of cover"／"cover left"：撞守衛 2 句——
+    #   'what is days of cover' 是**問名詞解釋**（r20 term-qa 的正解）、
+    #   'days of cover for it' 是問某商品。收進缺貨詞表會把兩者搶成缺貨清單。
+    #   要「最少撐天」的語意已由 least days / lowest days 涵蓋。
+    "anything critical", "what to reorder", "need ordering",
+    # ── r21 P0（2026-08-07）：'whats runnin lowe' 訪客想問「什麼快沒貨」
+    #   打錯字 → clf 自信配成 **Running Shoes**（conf=1.00 跳過 LLM），
+    #   不是查無而是給無關答案，比 rejected 危險（訪客以為系統亂講）。
+    #   ⚠️ 走不了錯字容錯：`lowe` 是系統字典收的真詞（Lowe 姓氏），
+    #     容錯層判定「不是錯字」直接跳過——加 low 到 _EN_FUNC_WORDS 無效。
+    #   ⇒ 改收**片語組合**：runnin/running + low/lowe 明確是缺貨語意。
+    #     實測不誤傷 'running shoes stock' / 'buy running shoes'。
+    "runnin low", "runnin lowe", "running lowe", "runing low",
     # 守衛第 10 輪：這些常見講法沒收 → 落到商品比對/RCA
     "getting low", "gets low", "getting short", "running short",
     "should i order", "should we order", "what to order",
@@ -6444,7 +6554,10 @@ def _correct_function_call(user_text: str, func_name: str, func_args: dict) -> t
                     pass
                 for _t in _re.split(r"[\s\-/]+", user_text.lower()):
                     _t = _t.strip(" ?.!,'\"")
-                    if len(_t) < 4 or _t in _oov_stop or any(c.isdigit() for c in _t):
+                    # r21：結構性判準（抽象字尾/倉管行話 且不在商品主檔）——
+                    #   兌現 526 行那條「不逐詞列舉」的設計註解
+                    if len(_t) < 4 or _t in _oov_stop or _is_abstract_non_item(_t) \
+                            or any(c.isdigit() for c in _t):
                         continue
                     # ── DEMO 演練抓到：**打錯的功能詞**也要當停用詞 ─────────
                     #   `powr bank invntory`（訪客同時打錯兩個詞）→ keyword
@@ -8514,6 +8627,11 @@ _CTX_GLOBAL_RE_EN = _re.compile(
     r"alerts?|clearance|expiring|expire|expiry|"
     r"compare|comparison|versus|vs|overview|summary|"
     r"total value|stock value|inventory value|overall|"
+    # r21：「錢卡在哪」＝問庫存總值（老闆視角的問法），先前掉 60 項概覽
+    r"money (?:is )?tied up|tied up in stock|capital tied|"
+    r"how much (?:money|cash|capital)|worth in stock|"
+    # r21：「最忙/波動最大」＝全店排行問句
+    r"busiest item|busiest sku|biggest swing|biggest change|"
     # r14+2（#42）：what sold/came in/moved 是**全店** movement 問句——
     #   'what sold over the weekend' 曾被 C2c carry-over 補成前句商品
     r"what (?:sold|was sold|came in|moved|shipped|arrived|happened)|"
@@ -11544,6 +11662,57 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": {
                     "ok": True, "view": "clarify", "summary": _sum_msg,
                     "data": {"question": _sum_msg, "options": [], "hint": ""}}})
+                continue
+            #   ①-a0 沒有這份資料（r21 業務深水區批 2026-08-07）：真倉管/採購
+            #     會問供應商、交期、成本、利潤，但這個 demo 只有庫存與進出。
+            #     先前整類 rejected（罐頭婉拒）——訪客問的明明是倉管問題卻被
+            #     當閒聊擋掉，看起來像不懂裝懂。⇒ 誠實說明邊界＋指出能查什麼。
+            #     ⚠️ 帶商品名的讓路（'earphones supplier stock' 該走查詢）。
+            _nodata_en = [
+                (r"\bsupplier|\bvendor|\bsourcing\b", "supplier information"),
+                (r"\blead\s*time\b|\bwhen\s+is\s+the\s+next\s+deliver|"
+                 r"\brestock\s+date\b|\beta\b", "lead times / delivery dates"),
+                (r"\bprofit|\bmargin|\bcost\b|\bcosts\b|\bcarrying\s+cost|"
+                 r"\brevenue\b|\bpurchase\s+price\b", "cost and profit figures"),
+                (r"\bcustomer|\bbuyer\b|\bwho\s+(?:is|are)\s+our\b", "customer data"),
+                (r"\bcontract\b|\bagreement\b|\binvoice\b", "contracts and invoices"),
+                (r"\bbackorder", "backorder tracking"),
+                (r"\bshrinkage\b|\bfill\s+rate\b|\bcycle\s+count\b",
+                 "that KPI"),
+                # r21 二輪：這幾類原本掉 60 項全店概覽（不再誤導但答非所問）。
+                #   系統確實沒有「庫齡/週轉率」這種需要歷史成本的指標。
+                (r"\bsku\s+velocity\b|\bvelocity\b|\bturnover\s+rate\b|"
+                 r"\baging\s+report\b|\bstock\s+aging\b|\bhow\s+long\s+"
+                 r"(?:has|have)\s+.{0,20}\bbeen\s+sitting\b|"
+                 r"\bsitting\s+too\s+long\b|\bwhats?\s+sitting\b",
+                 "stock-aging or turnover metrics"),
+                (r"\blot\s+number|\bbatch\s+trace|\bserial\s+number\b",
+                 "lot / batch tracing"),
+            ]
+            _nd_en = next((_lbl for _pat, _lbl in _nodata_en
+                           if _re.search(_pat, user_text, _re.I)), None)
+            _nd_item = False
+            if _nd_en:
+                try:
+                    import warehouse as _W_nd
+                    _m_nd = _W_nd.match_items(user_text)
+                    _nd_item = bool(_m_nd and _m_nd[0].get("score", 0) >= 6)
+                except Exception:
+                    _nd_item = False
+            if _nd_en and _is_mostly_english(user_text) and not _nd_item:
+                _nd_msg = (f"This demo doesn't hold {_nd_en} — the data here is "
+                           f"stock levels, movements, safety stock and expiry "
+                           f"dates.\nWhat I can check: stock ("
+                           f"\"bluetooth earphones stock\"), movements "
+                           f"(\"movements this month\"), low stock "
+                           f"(\"what's running low\") and expiry "
+                           f"(\"what's expiring soon\").")
+                log.info(f"[nodata-qa] {user_text!r} → 誠實說明無此資料（{_nd_en}）")
+                for ch in _nd_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "guide", "summary": _nd_msg, "data": {}}})
                 continue
             #   ①-a 等待語（en-r20 2026-08-07）：訪客邊想邊講「hold on a sec」，
             #     既不是查詢也不是搗蛋。先前 rejected（等於催客人走），
@@ -14718,6 +14887,43 @@ async def ws_handler(ws: WebSocket):
                 #   ⚠️ 一律 fullmatch + 無商品名護欄：帶商品名的走既有查詢線
                 #     （'add up the earphones' 該查那顆商品，不是全店加總）。
                 _b20_routed = False     # 本層親自定案 → 豁免下游意圖閘門
+                # ── Pre-C-B21（r21 業務深水區批，2026-08-07）──────────────
+                #   倉管行話問句被 clf 判成 query_inventory(conf=1.00, 無 keyword)
+                #   → 回 60 項全店概覽（不再誤導但答非所問）。系統其實答得出來，
+                #   接到對的工具即可；答不出來的走上面的 nodata-qa。
+                #   ⚠️ 放在 B20 之前、同樣標 _hard（坑 4）。
+                if _is_mostly_english(user_text):
+                    _b21_t = user_text.strip()
+                    if _re.search(r"\bbusiest\s+(?:item|sku|product)\b|"
+                                  r"\bmost\s+active\s+(?:item|sku|product)\b",
+                                  _b21_t, _re.I):
+                        func_name, func_args = "list_hot_items", {}
+                        _b20_routed = True
+                        log.info("[Pre-C-B21] 最忙商品 → list_hot_items")
+                    elif _re.search(r"\bmoney\s+(?:is\s+)?tied\s+up\b|"
+                                    r"\btied\s+up\s+in\s+stock\b|"
+                                    r"\bhow\s+much\s+(?:money|cash|capital)\b|"
+                                    r"\bcapital\s+tied\b", _b21_t, _re.I):
+                        # 「錢卡在哪」＝庫存總值（老闆視角問法）
+                        func_name, func_args = "query_inventory", {}
+                        _b20_routed = True
+                        log.info("[Pre-C-B21] 資金佔用 → query_inventory 總覽")
+                    elif _re.search(r"\bbiggest\s+(?:swing|change|move|movement)s?\b|"
+                                    r"\bmost\s+volatile\b", _b21_t, _re.I):
+                        func_name, func_args = "query_movement", {
+                            "period": _period_from_en(user_text) or "this_week",
+                            "direction": "both"}
+                        _b20_routed = True
+                        log.info("[Pre-C-B21] 波動最大 → query_movement")
+                    elif _re.search(r"\b(?:is\s+)?stock\s+balanced\b|"
+                                    r"\bbalanced\s+across\b|"
+                                    r"\bwhere\s+should\s+i\s+move\s+stock\b|"
+                                    r"\bwhich\s+warehouse\s+(?:has\s+(?:the\s+)?"
+                                    r"most|is\s+(?:the\s+)?(?:emptiest|fullest))\b",
+                                    _b21_t, _re.I):
+                        func_name, func_args = "compare_warehouses", {}
+                        _b20_routed = True
+                        log.info("[Pre-C-B21] 倉別均衡 → compare_warehouses")
                 _b20_ok = _is_mostly_english(user_text)
                 if _b20_ok:
                     try:
@@ -15615,7 +15821,10 @@ async def ws_handler(ws: WebSocket):
                         #   先 unglue 再切。
                         for _tx in _re.split(r"[\s\-/]+", _en_unglue(user_text).lower()):
                             _tx = _tx.strip(" ?.!,'\"")
-                            if len(_tx) < 3 or _tx in _NOEX_STOP or any(c.isdigit() for c in _tx):
+                            # r21：同 _oov_stop 那處，結構性判準兩處同步
+                            if len(_tx) < 3 or _tx in _NOEX_STOP \
+                                    or _is_abstract_non_item(_tx) \
+                                    or any(c.isdigit() for c in _tx):
                                 continue
                             if _tx in _nx_words or _tx.rstrip("s") in _nx_words:
                                 continue
