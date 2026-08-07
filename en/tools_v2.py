@@ -2227,23 +2227,32 @@ try:
 except Exception:
     _CAT19_PFX, _CAT19, _CAT19_KW = {}, {}, {}
 
-_CATEGORY_PREFIX = {
-    "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
-    "daily_goods": "d", "apparel": "c", "sports": "s",
-}
-# 新增 13 類的前綴（h=五金 b=美妝 m=醫療 t=文具 p=寵物 v=車用
-#   n=家具 y=母嬰 k=圖書 i=工業 g=玩具 l=箱包 x=其他）
-for _k19, _p19 in _CAT19_PFX.items():
-    _CATEGORY_PREFIX.setdefault(_k19, _p19)
+# ⚠️ r22：既有 60 筆已轉成 **ELE-0001** 三碼格式（全量轉換完成），
+#   新建商品也要用同一套前綴，否則會生出 `a01` 這種舊格式跟主檔不一致
+#   （CDP 畫面驗證抓到：建檔卡秀 `a01` 而主檔是 ELE-0001）。
+#   ⇒ 一律取 categories.py 的三碼 prefix；載不到才退回舊單字母。
+_CATEGORY_PREFIX = {}
+try:
+    from categories import CATEGORY_PREFIX as _CAT19_PFX3
+    _CATEGORY_PREFIX.update(_CAT19_PFX3)
+except Exception:
+    _CATEGORY_PREFIX.update({
+        "electronics": "e", "appliance_kitchen": "a", "food_beverage": "f",
+        "daily_goods": "d", "apparel": "c", "sports": "s",
+    })
 
 def _next_sku(category: str) -> str:
     """自動產生下一個 SKU 流水號"""
-    prefix = _CATEGORY_PREFIX.get(category, "x")
-    existing = [it["sku_id"] for it in W.state().items if it["sku_id"].startswith(prefix)]
+    prefix = _CATEGORY_PREFIX.get(category, "OTH")
+    existing = [it["sku_id"] for it in W.state().items
+                if it["sku_id"].startswith(prefix)]
     nums = []
     for sid in existing:
+        # ⚠️ 三碼格式是 `ELE-0001`，數字在連字號後（舊格式 `e01` 在第 1 碼後）。
+        #   用 split("-") 同時吃得下兩種，不必判斷格式。
+        _tail = sid.split("-", 1)[1] if "-" in sid else sid[len(prefix):]
         try:
-            nums.append(int(sid[1:]))
+            nums.append(int(_tail))
         except ValueError:
             pass
     # ⚠️ 料號**絕不可重用**（業界硬規則）：原本用 max(現有)+1，若 e10 被
@@ -2260,8 +2269,11 @@ def _next_sku(category: str) -> str:
     #   ⚠️ 既有 60 筆是 2 位（e01~e10）**保持原樣不動**——料號是主鍵，
     #     改了歷史進出紀錄全部對不上（3,193 個檔案含料號）。
     #     新舊並存不影響比對（都是字串精確比對，不靠位數）。
-    _width = 2 if next_num <= 99 else 4
-    return f"{prefix}{next_num:0{_width}d}"
+    # r22：三碼前綴用 `ELE-0001` 格式（既有 60 筆已全量轉成這個）；
+    #   舊式單字母前綴（categories.py 載不到時的退路）維持 `e01`。
+    if len(prefix) >= 3:
+        return f"{prefix}-{next_num:04d}"
+    return f"{prefix}{next_num:02d}" if next_num <= 99 else f"{prefix}{next_num:04d}"
 
 
 # 料號流水號高水位（只增不減，防重用）。存在 warehouse_data 供重啟後延續。

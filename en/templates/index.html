@@ -2061,9 +2061,20 @@ function renderViewCard(view, data, topSummary) {
           <table class="exp-table"><tr><th>Field</th><th>Details</th></tr>
             <tr><td>Name</td><td><b>${it.name}</b></td></tr>
             <tr><td>SKU</td><td>${it.sku} (auto-generated)</td></tr>
-            <tr><td>Category</td><td>${it.category}</td></tr>
-            <tr><td>Unit price</td><td>NT$ ${it.price}</td></tr>
-            <tr><td>Safety stock</td><td>${it.safety} units</td></tr>
+            <tr><td>Category</td><td>${it.category_label || it.category}${
+              it.category_guessed
+                ? ' <span style="color:var(--warn,#e8a33d);font-size:12px">· auto-detected, change if wrong</span>'
+                : ''}</td></tr>
+            <tr><td>Unit price</td><td>${
+              it.price_unset
+                ? '<span style="color:var(--warn,#e8a33d)">not set yet</span>'
+                : 'NT$ ' + it.price}</td></tr>
+            <tr><td>Safety stock</td><td>${it.safety} units${
+              it.safety_src === 'from_stock'
+                ? ' <span style="color:var(--muted);font-size:12px">· same as opening stock</span>'
+                : it.safety_src === 'default'
+                ? ' <span style="color:var(--muted);font-size:12px">· default</span>'
+                : ''}</td></tr>
             <tr><td>Initial stock</td><td>North ${it.stock_north||0} · Central ${it.stock_central||0} · South ${it.stock_south||0}</td></tr>
           </table>
           <div class="hitl-meta">On confirm this is written to items.csv and seed data is regenerated.</div>
