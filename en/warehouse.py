@@ -1338,13 +1338,28 @@ def list_hot_items(
 # ────────────────────────────────────────────────
 # 趨勢 / 庫存可撐幾天 / 建議補貨日 helper
 # ────────────────────────────────────────────────
+_DOS_CACHE: dict = {}          # (sku, days, wh, movements_len) → series
+_DOS_CACHE_MAX = 512
+
+
 def _daily_out_series(sku: str | None, days: int = 30, warehouse: str = "all") -> list[int]:
     """回近 N 天「每日出貨量」list(長度 N、補 0)。給趨勢斜率用。
     warehouse='all' 算三倉合計、否則只算單倉(逐倉補貨建議用)。
     sku=None 算全部商品合計（週轉率等倉級指標用，共享同一套污染防護）。
     ⚠️ 視窗只到昨天：動態模擬把一天壓成幾分鐘，今天的出貨量是平常數十倍，
-    算進日均會讓每個商品都「撐 0 天」（同 stock_audit.py 2026-08-03 的修法）。"""
+    算進日均會讓每個商品都「撐 0 天」（同 stock_audit.py 2026-08-03 的修法）。
+
+    ⚠️ r22 加快取：profile 抓到 `list_low_stock` 1.64s 有 **98% 花在這支**——
+      它被呼叫 **242 次**（60 商品 × 每個算全倉+分倉+趨勢），每次都全掃
+      5,687 筆 movements ＝ 掃了 138 萬次。同樣參數的結果不會變，快取即可。
+    ⚠️ 快取鍵含 `len(movements)`：動態模擬會**持續新增** movements，
+      長度一變就自動失效，不會拿到過期資料（比時間 TTL 精確）。
+    """
     s = state()
+    _ck = (sku, days, warehouse, len(s.movements))
+    _hit = _DOS_CACHE.get(_ck)
+    if _hit is not None:
+        return list(_hit)          # 回複本，呼叫端改了不會污染快取
     end = _snapshot_date() - _td(days=1)
     start = end - _td(days=days - 1)
     by_day: dict[str, int] = {}
@@ -1372,6 +1387,11 @@ def _daily_out_series(sku: str | None, days: int = 30, warehouse: str = "all") -
         _med = nz[len(nz) // 2]
         _cap = max(200, _med * 30)
         series = [v if v <= _cap else _med for v in series]
+    # r22 快取（見函式開頭註解）。超過上限就整個清掉——movements 長度一變
+    #   舊鍵本來就全部失效，逐一淘汰沒意義。
+    if len(_DOS_CACHE) >= _DOS_CACHE_MAX:
+        _DOS_CACHE.clear()
+    _DOS_CACHE[_ck] = list(series)
     return series
 
 
