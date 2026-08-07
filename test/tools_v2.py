@@ -1732,16 +1732,137 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         _cat_map = {"電子": "electronics", "家電": "appliance_kitchen", "食品": "food_beverage",
                      "飲料": "food_beverage", "日用": "daily_goods", "服飾": "apparel", "運動": "sports"}
         _found_cat = next((v for k, v in _cat_map.items() if k in raw_text), "")
-        _price_m = _re.search(r'(\d+)\s*元', raw_text)
-        _safety_m = _re.search(r'安全\s*(\d+)', raw_text)
-        _north_m = _re.search(r'北\S*\s*(\d+)', raw_text)
-        _south_m = _re.search(r'南\S*\s*(\d+)', raw_text)
-        _central_m = _re.search(r'中\S*\s*(\d+)', raw_text)
-        # 去掉已知欄位後剩下的當名稱
+        # ── r22 上架主線（2026-08-07）：**口語價格/安全庫存/倉量** ────────
+        #   原本只認「800元」「安全30」「北50」這種標準寫法，真人講的
+        #   「賣800」「一個350」「安全庫存抓20」「三倉各50」全抽不到 →
+        #   出卡時價格/安全庫存都是 0（假成功，見下方守門註解）。
+        _price_m = (_re.search(r'(\d+)\s*元', raw_text)
+                    or _re.search(r'(?:賣|售價|定價|價格|單價|一個|一件|一支|一台|'
+                                  r'一組|每個|每件)\s*(?:是|賣)?\s*(\d+)', raw_text)
+                    or _re.search(r'(\d+)\s*(?:塊|元整)', raw_text))
+        _safety_m = (_re.search(r'安全\s*(\d+)', raw_text)
+                     or _re.search(r'安全(?:庫存|水位|存量)\s*(?:抓|設|放|留|大概|約)?'
+                                   r'\s*(\d+)', raw_text)
+                     or _re.search(r'(?:警戒|水位)\s*(?:設|抓)?\s*(\d+)', raw_text))
+        # ⚠️ 匹配範圍要**含前後口語詞**——group(0) 會整段移除，範圍不夠
+        #   就留殘字（實測「先進北倉100個」只抽到「北倉100」，剩「先進 個」
+        #   黏在商品名上）。前綴 先/進/放、後綴 個/件/台 都納入。
+        _WH_PRE = r'(?:先|再|另外|然後)?\s*(?:進|放|收|擺|給|到)?\s*'
+        _WH_SUF = r'\s*(?:個|件|台|支|組|箱|包)?'
+        _north_m = (_re.search(_WH_PRE + r'北(?:區)?倉?\s*(?:進|放|收|擺)?\s*(\d+)' + _WH_SUF,
+                               raw_text)
+                    or _re.search(r'北\S*?\s*(\d+)' + _WH_SUF, raw_text))
+        _south_m = (_re.search(_WH_PRE + r'南(?:區)?倉?\s*(?:進|放|收|擺)?\s*(\d+)' + _WH_SUF,
+                               raw_text)
+                    or _re.search(r'南\S*?\s*(\d+)' + _WH_SUF, raw_text))
+        _central_m = (_re.search(_WH_PRE + r'中(?:區)?倉?\s*(?:進|放|收|擺)?\s*(\d+)' + _WH_SUF,
+                                 raw_text)
+                      or _re.search(r'中\S*?\s*(\d+)' + _WH_SUF, raw_text))
+        # 「三倉各50」「每倉各進30」→ 三倉同量
+        _each_m = _re.search(r'(?:三倉|每倉|各倉|三個倉)\s*(?:各|都)?\s*(?:進|放|收)?\s*(\d+)'
+                             r'\s*(?:個|件|台|支|組)?', raw_text)
+        if _each_m and not (_north_m or _south_m or _central_m):
+            _north_m = _south_m = _central_m = _each_m
+        # 裸價格保底：「藍牙喇叭 電子 1500 三倉各50」的 1500 前面沒有價格詞。
+        #   ⚠️ 必須**排除已被其他欄位吃掉的數字**，否則會把倉量當價格。
+        #   判準：句中剩下的、不屬於任何已抽欄位的孤立數字，且只有一個時才收
+        #   （兩個以上代表語意不明確，交給分步流程問，不猜）。
+        if not _price_m:
+            _used = set()
+            for _mm in (_safety_m, _each_m, _north_m, _central_m, _south_m):
+                if _mm:
+                    _used.add(_mm.group(0))
+            _rest = raw_text
+            for _u in _used:
+                _rest = _rest.replace(_u, " ")
+            _free = _re.findall(r'(?<![\d])(\d+)(?![\d])', _rest)
+            if len(_free) == 1:
+                # ⚠️ 要對**原句**再 match 一次——上面是對 _rest（挖空後的字串）
+                #   找的，直接用它的 group(0) 會對不上原句、移除時失敗。
+                _price_m = _re.search(r'(?<![\d])(' + _re.escape(_free[0]) + r')(?![\d])',
+                                      raw_text)
+        # ── r22：**抽到什麼就移除什麼**（結構性做法）─────────────────────
+        #   原本靠一長串 pattern 猜著剝，順序互相干擾：實測舊 pattern
+        #   `北\S*\d+` 搶先把「北倉100」剝掉、只留「先進個」黏在商品名上，
+        #   我後加的 pattern 就沒東西可匹配（跟停用詞表膨脹是同一種病）。
+        #   ⇒ 上面每個欄位都已經 match 到**完整字串**，直接拿 group(0) 移除，
+        #     抽到什麼移除什麼，零順序衝突、也不會誤剝沒抽中的字。
         _name = raw_text
-        for pat in [r'電子\S*', r'家電\S*', r'食品\S*', r'日用\S*', r'服飾\S*', r'運動\S*',
-                     r'\d+元', r'安全\d+', r'北\S*\d+', r'南\S*\d+', r'中\S*\d+', r'新增商品\s*']:
+        for _mm in (_price_m, _safety_m, _each_m, _north_m, _central_m, _south_m):
+            if _mm:
+                _name = _name.replace(_mm.group(0), " ", 1)
+        # ⚠️ 欄位數值已由上面 group(0) 移除，這裡只處理**類別詞與指令詞**。
+        #   舊的 `北\S*\d+` / `\d+元` / `安全\d+` 已移除——它們會搶在
+        #   group(0) 之前把字吃掉造成殘字（見上方註解）。
+        # ⚠️ 類別詞用 `\S*` 貪吃會**剝掉真商品名**（r22 誤傷檢查抓到 4 個）：
+        #     「電解質運動飲」→「電解質」、「運動壓縮臂套」→ 空字串、
+        #     「彈性運動內衣」→「彈性」。成因是 `運動\S*` 把後面整串吃掉。
+        #   ⇒ 只剝**獨立出現**的類別詞（前後是空白或句首句尾），
+        #     商品名內含類別字的不動。
+        #   ⚠️ 分隔符要含**中文標點**——「藍牙鍵盤，電子類，賣800」的
+        #     類別詞被逗號黏住，只認空白會剝不掉（實測殘留「，電子類」）。
+        _CAT_TOK = r'(?:電子|家電|食品|飲料|日用|服飾|運動)'
+        _SEP = r'[\s，,、。.：:；;]'
+        for pat in [r'(?:^|' + _SEP + r')' + _CAT_TOK + r'(?:類|品|用品|的)?'
+                    r'(?=' + _SEP + r'|$)',
+                     r'新增商品\s*',
+                     # r22：**指令詞/口語前綴**沒剝掉 → 混進商品名（實測建出
+                     #   「幫我新增一個藍牙鍵盤，」「我要加一款新商品叫無線
+                     #   充電盤 一個1200 安全庫存抓20」這種垃圾名稱）。
+                     #   ⚠️ 長詞排前面（「新增一個」先於「新增」），否則剝完
+                     #     會留下殘字。
+                     r'(?:幫我|請|麻煩|我要|我想|要)?\s*(?:新增|加入|建立|新建|登錄|上架|加)'
+                     r'\s*(?:一個|一款|一支|一件|一項|個|款)?\s*(?:新的?)?'
+                     r'(?:商品|品項|東西|產品)?\s*(?:叫做|叫|名字是|名稱是|是)?\s*',
+                     # ⚠️ 這條要能吃掉「供應商送來新品」整串——原本只剝到
+                     #   「供應商送來」，剩下的「新品」被下一條的「新」吃掉
+                     #   一半，商品名變成「品 藍牙喇叭」（實測）。
+                     # ⚠️ 「新品」必須排在「新的?」**之前**——否則 `新的?`
+                     #   先吃掉「新」，剩「品」黏在商品名上變成「品 藍牙喇叭」
+                     #   （實測）。這是 alternation 順序的典型坑：長的排前面。
+                     r'^\s*(?:剛到|剛進|剛收到|剛來|供應商(?:送來|送的?|給的?)?|新到|進來)'
+                     r'\s*(?:了)?\s*(?:一批|一箱|一車)?'
+                     r'\s*(?:新品|新的|新|商品|品項|貨品|貨)?\s*',
+                     # 欄位值被 group(0) 移除後可能留下的**引導動詞殘字**
+                     #   （「先進北倉100個」移除「北倉100個」後剩「先進」）。
+                     #   ⚠️ 只剝句尾/獨立的殘字，不碰商品名本體。
+                     r'\s*(?:先|再|另外)?\s*(?:進|放|收|擺|給)\s*$',
+                     r'\s*(?:各|都)\s*$',
+                     r'\d+\s*(?:個|件|台|支|組)']:
             _name = _re.sub(pat, '', _name).strip()
+        _name = _re.sub(r'\s{2,}', ' ', _name).strip(' ，,、。.：:；;-')
+        # ── r22 上架主線（2026-08-07）：**出卡判準收緊**（user 定調
+        #   「一律問到齊才出卡」）。原本只要 name+category 就出確認卡，
+        #   價格/安全庫存抽不到就填 0 ⇒ **假成功**：卡片看起來正常、
+        #   按下去就建出一筆價格 0 的商品，資料庫被汙染且不易察覺。
+        #   實測「幫我新增一個藍牙鍵盤，電子類，賣800，安全庫存30」
+        #   曾出卡成 name='幫我新增一個藍牙鍵盤，' price=0 safety=0。
+        #   ⇒ 價格與安全庫存是**營運關鍵欄位**（影響缺貨警示與估值），
+        #     缺一個就不出卡，交給分步流程逐項補問。
+        #   ⚠️ 倉庫初始量不列入必填——新品可以先建檔、之後再進貨（0 是合理值）。
+        if _name and _found_cat and not (_price_m and _safety_m):
+            _miss = []
+            if not _price_m:
+                _miss.append("售價")
+            if not _safety_m:
+                _miss.append("安全庫存")
+            if any(it["name"] == _name for it in W.state().items):
+                return {"ok": True, "summary": f"⚠️ 商品「{_name}」已存在，請改用其他名稱。",
+                        "view": "item_create_step1",
+                        "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
+            # ⚠️ 一律回 step 3——這道分步是「單價＋安全庫存**一起問**」
+            #   （見下方 elif step == 3：它期待 "150 100" 這種兩個數字）。
+            #   不可回 step 4：那是初始庫存步驟，安全庫存會被當成北倉量。
+            _lbl = W.CATEGORY_LABEL.get(_found_cat, _found_cat)
+            _got = (f"（已記下售價 {_price_m.group(1)} 元）" if _price_m else
+                    f"（已記下安全庫存 {_safety_m.group(1)} 件）" if _safety_m else "")
+            return {"ok": True,
+                    "summary": (f"好的，商品「{_name}」（{_lbl}）。{_got}\n"
+                                f"還差{('、'.join(_miss))}——請輸入：單價 安全庫存\n"
+                                f"例如「150 100」（輸入「取消」可退出）"),
+                    "view": "item_create_step3",
+                    "data": {"step": 3, "name": _name, "category": _found_cat,
+                             "prompt": "格式：單價 安全庫存（例如 150 100，或輸入取消）"}}
         if _name and _found_cat:
             # 防呆：檢查同名
             if any(it["name"] == _name for it in W.state().items):
