@@ -7468,6 +7468,9 @@ async def ws_handler(ws: WebSocket):
                 # r61：只在命中時消耗——沒命中的訊息讓它正常處理，flow 的清理交給
                 # _ctx_absorb（成功回答即清、rejected/guide 存活），亂打不再殺流程
                 if _wf_args is not None:
+                    # r30：set_stock_absolute 的補到/盤點模式要跟著續流走
+                    if _wf56.get("mode"):
+                        _wf_args["mode"] = _wf56["mode"]
                     _write_flow_by_vid.pop(vid, None)
                     import tools_v2 as _tv2_wf
                     _wf_res = getattr(_tv2_wf, _wf56["tool"])(**_wf_args)
@@ -9199,11 +9202,51 @@ async def ws_handler(ws: WebSocket):
                     "ok": True, "view": "clarify", "summary": _neg_msg,
                     "data": {"question": _neg_msg, "options": [], "hint": ""}}})
                 continue
-            # 目標水位式寫入（「出到剩10個」「補到100個」）——語意是「補/出到剩 N」，
-            # 若照數字開卡會異動錯量（危險邊緣），誠實說不支援
-            if _re.search(r"[出進補]到剩?\s*\d+", user_text):
-                _tl_msg = ("「出到剩幾件／補到幾件」這種目標水位操作還不支援，"
-                           "請直接說要異動的數量，例如「北倉出20個衛生紙」。")
+            # ── r30：目標水位式寫入升級（user 待辦「補到100個／盤點絕對值」）——
+            #   「補到100個」（只補不減）「北倉衛生紙庫存改成100」（盤點雙向）
+            #   改開真確認卡：與現量比差算 delta，轉標準 movement 卡（HITL 把關）。
+            #   排除表：config 句（安全/按全=ASR同音/底線/水位/警戒/前置/天數）、
+            #   黑名單鄰居（數字/全部/所有）、採購單語（自動/低庫存/缺貨）。
+            _tl30_ex = ("安全", "按全", "底線", "水位", "警戒", "前置", "天數",
+                        "數字", "全部", "所有", "每個", "全店", "低庫存", "缺貨",
+                        "缺的", "自動")
+            if not any(w in user_text for w in _tl30_ex):
+                _t30 = user_text.strip().strip("!！?？。.~～ ")
+                _wh30_m = _re.search(r"([北中南])(?:區)?倉", _t30)
+                _wh30 = f"{_wh30_m.group(1)}倉" if _wh30_m else ""
+                _rs30 = _re.search(r"^(.*?)(?:補|補滿|補足|補貨)到\s*" + _NUM_PART +
+                                   r"\s*[個件箱瓶罐組盒包袋]?\s*(.*)$", _t30)
+                _ss30 = None if _rs30 else _re.search(
+                    r"^(.*?)庫存\s*(?:改|調|設)(?:成|為|到)\s*" + _NUM_PART +
+                    r"\s*[個件]?\s*(.*)$", _t30)
+                _m30 = _rs30 or _ss30
+                if _m30:
+                    _n30 = _m30.group(2)
+                    _q30 = int(_n30) if _n30.isdigit() else _cn_to_int(_n30)
+                    # 0＝黑名單 probe（「把庫存改成0」）→ 不搶，讓原 probe 路徑處理
+                    if _q30 is not None and _q30 > 0:
+                        _kw30 = (_m30.group(1) or "") + (_m30.group(3) or "")
+                        _kw30 = _re.sub(r"([北中南])(?:區)?倉", "", _kw30)
+                        _kw30 = _re.sub(r"^(?:幫我|幫忙|麻煩|請|把|先|我要|我想)+",
+                                        "", _kw30).strip("的 ，,、")
+                        import tools_v2 as _tv2_30
+                        _md30 = "restock" if _rs30 else "set"
+                        result = _tv2_30.set_stock_absolute(
+                            keyword=_kw30, warehouse=_wh30,
+                            qty=str(_q30), mode=_md30)
+                        log.info(f"[write-edge] r30 目標水位開卡: kw={_kw30!r} "
+                                 f"wh={_wh30!r} q={_q30} mode={_md30}")
+                        for ch in result.get("summary", ""):
+                            await send({"type": "token", "text": ch})
+                            await asyncio.sleep(_TK_DELAY.get())
+                        await send({"type": "done", "result": result})
+                        continue
+            # 「出到剩N」語意仍偏險（出N還是剩N混用），維持誠實閘
+            #（守衛 1491 期望回覆含「目標水位」字樣，改訊息時要保留）
+            if _re.search(r"[出進賣]到剩?\s*\d+", user_text):
+                _tl_msg = ("「出到剩幾件」這種目標水位操作還不支援，"
+                           "請直接說要異動的數量，例如「北倉出20個衛生紙」；"
+                           "補貨到指定數量可以說「北倉衛生紙補到100個」。")
                 log.info(f"[write-edge] 目標水位 → clarify: {user_text!r}")
                 for ch in _tl_msg:
                     await send({"type": "token", "text": ch})
@@ -9751,11 +9794,16 @@ async def ws_handler(ws: WebSocket):
             # ── 改單價攔截（r26，user 實抓「彈珠改成100元」誤路由庫存查詢）──
             #   排除：安全庫存/水位類（歸 manage_config）、所有/全部（破壞
             #   指令歸黑名單 probe）、0/1 元（惡意改價，tools 端也再擋一層）。
+            # r30：動詞擴充——「漲到300／降到100／調漲到／調降至」是改價語
+            #（漲/降天生是價格動詞，不用講「元」也收；user 待辦「改價語詞變體」）
             _pc_m = (_re.search(r'^(.{0,14}?)(?:的)?(?:單價|價格|售價|價錢)\s*'
-                                r'(?:改|調|設)(?:成|為|到|低|高)?\s*(\d+)\s*(?:元|塊)?\s*$',
+                                r'(?:調?漲價?|調?降價?|改|調|設|提高|調高|調低|拉高|降低)'
+                                r'(?:成|為|到|至|低|高)?\s*(\d+)\s*(?:元|塊)?\s*$',
                                 user_text.strip())
-                     or _re.search(r'^(.{0,14}?)(?:的)?\s*(?:改|調|設)(?:成|為|到)\s*'
-                                   r'(\d+)\s*(?:元|塊)\s*$', user_text.strip()))
+                     or _re.search(r'^(.{0,14}?)(?:的)?\s*(?:改|調|設)(?:成|為|到|至)\s*'
+                                   r'(\d+)\s*(?:元|塊)\s*$', user_text.strip())
+                     or _re.search(r'^(.{0,14}?)(?:的)?\s*(?:調?漲價?|調?降價?)(?:到|至|成|為)\s*'
+                                   r'(\d+)\s*(?:元|塊)?\s*$', user_text.strip()))
             if (_pc_m
                     and not any(w in user_text for w in
                                 ("安全", "庫存", "水位", "前置", "天數",
@@ -9770,6 +9818,35 @@ async def ws_handler(ws: WebSocket):
                     await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
+
+            # ── r30：「Ｘ調成200／改成200」沒講「元」也沒講設定項——價格還是
+            #   安全庫存語意兩可，照不猜原則反問（兩個選項都是可直接執行的完整句）──
+            _amb30 = _re.search(r'^(.{1,14}?)(?:的)?\s*(?:改|調|設)(?:成|為|到)\s*'
+                                r'(\d+)\s*$', user_text.strip())
+            if (_amb30
+                    and not any(w in user_text for w in
+                                ("安全", "按全", "庫存", "水位", "前置", "天數", "數字",
+                                 "所有", "全部", "全店", "每個", "警戒", "價", "元", "塊"))):
+                import warehouse as _W_amb30
+                _amb_kw = _amb30.group(1).strip(" ，,、的")
+                _amb_kw = _re.sub(r"^(?:幫我|幫忙|麻煩|請|把|先)+", "", _amb_kw)
+                _amb_ms = _W_amb30.match_items(_amb_kw) if _amb_kw else []
+                if _amb_ms and _amb_ms[0].get("score", 0) >= 3:
+                    _amb_nm = _amb_ms[0]["item"]["name"]
+                    _amb_n = _amb30.group(2)
+                    _amb_msg = (f"「{_amb_nm}」要改的是**價格**還是**安全庫存**？"
+                                "點選項或直接講完整句子。")
+                    log.info(f"[dispatch-ws] r30 改值歧義反問: {_amb_nm!r} × {_amb_n}")
+                    for ch in _amb_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _amb_msg,
+                        "data": {"question": _amb_msg,
+                                 "options": [f"{_amb_nm}改成{_amb_n}元",
+                                             f"{_amb_nm}安全庫存改成{_amb_n}"],
+                                 "hint": ""}}})
+                    continue
 
             # ── 新增商品 keyword 攔截（首次進入流程，per-vid）──
             # r23：觸發判定抽成 _zh_create_trigger（補「建立Ｘ商品」不連續型）

@@ -2748,6 +2748,101 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
             "view": "movement_done", "data": {"trace_id": trace_id, **_done}}
 
 
+def set_stock_absolute(keyword: str = "", warehouse: str = "", qty: str = "",
+                       mode: str = "set", direction: str = "",
+                       is_return: bool = False) -> dict:
+    """r30 目標水位式寫入：「補到100個」（mode=restock，只補不減）、
+    「庫存改成100」（mode=set，盤點絕對值，雙向）。
+    找商品/倉別 → 與現量比差算 delta → 轉成標準 movement 確認卡
+    （view/data 與 create_movement 完全同形，commit 沿用 commit_movement）。
+    direction/is_return 參數只為相容 server r56 續流的重呼叫簽名，不使用。"""
+    _verb = "補到" if mode == "restock" else "改成"
+    try:
+        target = int(str(qty).strip() or -1)
+    except ValueError:
+        target = -1
+    if target < 0:
+        return {"ok": True, "view": "clarify",
+                "summary": f"要{_verb}幾件呢？例如「衛生紙{_verb}100件」。",
+                "data": {"question": f"要{_verb}幾件？", "options": [], "hint": ""}}
+    # 歸零＝黑名單等級破壞值（見 _BL 沿革），server 端攔截層遇 0 也不會進來
+    if target == 0:
+        return {"ok": True, "view": "clarify",
+                "summary": "庫存設成 0 等於清空，這個操作不開放喔。要減少庫存請用「出貨」說確切數量。",
+                "data": {"question": "庫存不能直接設成 0", "options": [], "hint": ""}}
+    if target > 9999:
+        return {"ok": True, "view": "clarify",
+                "summary": (f"目標庫存 {target:,} 件不太尋常（單倉上限 9,999 件），"
+                            "請確認數量後再說一次。"),
+                "data": {"question": f"目標 {target:,} 件？請確認數量",
+                         "options": [], "hint": ""}}
+    if not keyword:
+        return {"ok": True, "view": "clarify",
+                "summary": f"要把哪個商品{_verb} {target} 件呢？講商品名就可以。",
+                "data": {"question": f"要把哪個商品{_verb} {target} 件？",
+                         "options": [], "hint": f"例如「北倉衛生紙{_verb}{target}件」"}}
+
+    scored = W.match_items(keyword)
+    if not scored:
+        return {"ok": True, "view": "clarify",
+                "summary": f"找不到商品「{keyword}」，請確認商品名稱後再說一次。",
+                "data": {"question": f"找不到商品「{keyword}」，請確認商品名稱",
+                         "options": [], "hint": f"例如「北倉衛生紙{_verb}{target}件」"}}
+    if len(scored) > 1:
+        top_score = scored[0]["score"]
+        scored = [m for m in scored if m["score"] * 2 >= top_score]
+    matches = [m["item"] for m in scored]
+    if len(matches) > 1:
+        opts = [it["name"] for it in matches[:5]]
+        return {"ok": True, "view": "clarify",
+                "summary": f"找到 {len(matches)} 筆「{keyword}」相關商品，要調整哪一個？",
+                "data": {"question": f"找到 {len(matches)} 筆「{keyword}」相關商品，要調整哪一個？",
+                         "options": [f"{warehouse or ''}{n}{_verb}{target}件".strip() for n in opts],
+                         "hint": "請輸入完整商品名稱重新描述"}}
+    item = matches[0]
+    sku = item["sku_id"]
+
+    wh_key = _WH_ALIASES_TF.get((warehouse or "").strip(), "")
+    if not wh_key:
+        return {"ok": True, "view": "clarify",
+                "summary": f"「{item['name']}」要調整哪個倉的庫存？",
+                "data": {"question": f"「{item['name']}」要調整哪個倉的庫存？",
+                         "options": [f"北倉{item['name']}{_verb}{target}件",
+                                     f"中倉{item['name']}{_verb}{target}件",
+                                     f"南倉{item['name']}{_verb}{target}件"],
+                         "hint": f"例如「北倉{item['name']}{_verb}{target}件」",
+                         "flow": {"tool": "set_stock_absolute", "await": "warehouse",
+                                  "keyword": item["name"], "qty": str(target),
+                                  "mode": mode}}}
+
+    current = W.state().stock.get(wh_key, {}).get(sku, 0)
+    delta = target - current
+    wh_label = WH_LABEL_MAP[wh_key]
+    if mode == "restock" and delta <= 0:
+        return {"ok": True, "view": "guide",
+                "summary": (f"「{item['name']}」{wh_label}目前有 {current} 件，"
+                            f"已達到目標 {target} 件，不需要補貨。"),
+                "data": {}}
+    if delta == 0:
+        return {"ok": True, "view": "guide",
+                "summary": f"「{item['name']}」{wh_label}目前就是 {target} 件，不用調整。",
+                "data": {}}
+    dir_key = "in" if delta > 0 else "out"
+    dir_label = "進貨" if dir_key == "in" else "出貨"
+    _mode_zh = "補貨到目標" if mode == "restock" else "盤點調整"
+    summary = (f"📦 確認{_mode_zh}（{dir_label}）\n"
+               f"商品：{item['name']}（{sku}）\n"
+               f"倉別：{wh_label}\n"
+               f"目標庫存：{target} 件（{'+' if delta > 0 else '-'}{abs(delta)} 件）\n"
+               f"目前庫存：{current} 件 → {dir_label}後：{target} 件")
+    return {"ok": True, "summary": summary, "view": "movement_confirm",
+            "data": {"pending": True, "sku": sku, "name": item["name"],
+                     "warehouse": wh_key, "warehouse_label": wh_label,
+                     "direction": dir_key, "direction_label": dir_label,
+                     "qty": abs(delta), "before_qty": current, "after_qty": target,
+                     "is_return": False}}
+
+
 # ════════════════════════════════════════════════════════════
 # ⑧b create_transfer / commit_transfer — 跨倉調貨（A 倉 → B 倉）
 #    調貨 = 同時扣來源倉、加目標倉，總量不變。走 HITL 確認卡（同進出貨），
