@@ -1779,6 +1779,110 @@ def _next_sku(category: str) -> str:
 _ZH_ALIAS_PAIRS: list | None = None
 
 
+# ── r25：zh head-noun 自動分類（移植 en 架構；user 2026-08-08 下令啟用）──
+#   中文中心語在**詞尾**：取名字尾端 4→1 字比對手工字尾表。
+#   設計鐵則（同 en 判對83/錯3 的血統）：**判錯比反問傷**——
+#   ①歧義字尾（壺/杯/墊/燈…跨類）一律反問 ②多類命中反問 ③表沒收的反問。
+#   ⚠️ 詞表手工精選（r22 教訓：自動萃取 2622 詞判對率只有 17%）。
+_ZH_HEAD_TABLE = {
+    "electronics": ["滑鼠", "鍵盤", "耳機", "喇叭", "音響", "音箱", "手環",
+                    "相機", "攝影機", "螢幕", "麥克風", "平板", "筆電",
+                    "投影機", "路由器", "充電器", "充電線", "充電盤", "充電座",
+                    "行動電源", "讀卡機", "追蹤器", "閱讀器", "智慧插座",
+                    "延長線", "網路攝影機", "電子書"],
+    "appliance_kitchen": ["烤箱", "烤盤", "微波爐", "電鍋", "電子鍋", "果汁機",
+                          "咖啡機", "磨豆機", "洗碗機", "熨斗", "攪拌棒",
+                          "攪拌機", "快煮壺", "電熱水壺", "鬆餅機", "製冰機",
+                          "吹風機", "保鮮盒", "電烤盤", "壓力鍋", "氣炸鍋",
+                          "平底鍋", "燉鍋", "炒鍋", "湯鍋"],
+    "food_beverage": ["咖啡豆", "茶包", "茶葉", "餅乾", "堅果", "巧克力",
+                      "糖果", "麥片", "燕麥片", "氣泡水", "啤酒", "泡麵",
+                      "鍋底", "果乾", "薑茶", "乳清", "蛋白粉", "海苔",
+                      "罐頭", "蜂蜜", "果醬", "芥末醬", "辣椒醬", "禮盒"],
+    "daily_goods": ["衛生紙", "紙巾", "濕紙巾", "洗衣精", "洗碗精", "沐浴乳",
+                    "洗手乳", "洗手慕斯", "牙膏", "垃圾袋", "清潔劑",
+                    "清潔液", "柔軟精", "除濕盒", "防蚊液", "洗髮精",
+                    "除塵紙", "清潔錠", "衣架", "抹布", "掃把"],
+    "apparel": ["恤", "襯衫", "外套", "大衣", "毛衣", "牛仔褲", "褲", "裙",
+                "襪", "圍巾", "毛帽", "遮陽帽", "背心", "內衣", "睡衣",
+                "風衣", "polo衫", "帽t", "手套組", "防風手套"],
+    "sports": ["瑜珈墊", "瑜珈球", "瑜珈磚", "啞鈴", "壺鈴", "跳繩", "球拍",
+               "帳篷", "睡袋", "登山杖", "護膝", "護腕", "泳鏡", "飛盤",
+               "滑板", "單槓", "健腹輪", "登山背包", "登山水壺", "健身環"],
+    "hardware": ["起子", "扳手", "鉗", "鐵鎚", "捲尺", "水平儀", "電鑽",
+                 "砂紙", "螺絲", "螺栓", "烙鐵", "美工刀", "工具箱",
+                 "梯子", "六角組", "膨脹螺絲組", "斜口鉗", "電動起子"],
+    "beauty": ["精華液", "乳液", "面膜", "口紅", "唇膏", "護唇膏", "眼霜",
+               "粉餅", "蜜粉餅", "洗面乳", "卸妝水", "防曬乳", "香水",
+               "指甲油", "髮膜", "護手霜", "體噴", "鬍後水", "眉筆",
+               "睫毛膏", "化妝水"],
+    "medical": ["口罩", "體溫計", "血壓計", "繃帶", "紗布", "維他命",
+                "維生素", "魚油", "膠囊", "食鹽水", "退熱貼", "輪椅",
+                "聽診器", "棉片", "棉棒", "護踝繃帶", "急救箱"],
+    "stationery": ["原子筆", "鉛筆", "螢光筆", "白板筆", "影印紙", "筆記本",
+                   "資料夾", "檔案盒", "訂書機", "迴紋針", "便利貼",
+                   "計算機", "剪刀", "橡皮擦", "口紅膠", "文件夾"],
+    "pet": ["貓砂", "飼料", "狗鍊", "牽繩", "貓抓板", "逗貓棒", "飼料碗",
+            "除蚤梳", "貓跳台", "胸背帶", "剪毛器", "寵物尿墊"],
+    "automotive": ["雨刷", "機油", "輪胎", "胎壓偵測器", "行車記錄器",
+                   "電瓶", "補胎劑", "雨刷精", "洗車海綿", "汽車芳香劑"],
+    "furniture": ["床墊", "床架", "書櫃", "衣櫃", "衣櫥", "沙發", "枕頭",
+                  "記憶枕", "床頭櫃", "五斗櫃", "穿衣鏡", "掛衣架",
+                  "辦公椅", "電腦桌", "書桌", "餐桌", "餐椅", "斗櫃"],
+    "baby": ["奶瓶", "奶嘴", "尿布", "紙尿布", "學步車", "圍兜", "固齒器",
+             "奶粉", "澡盆", "背巾", "嬰兒床", "指甲剪", "分裝盒"],
+    "media": ["小說", "繪本", "雜誌", "漫畫", "光碟", "唱片", "黑膠",
+              "攝影集", "寫真集", "食譜書", "合訂本", "套書", "cd", "dvd"],
+    "industrial": ["軸承", "馬達", "幫浦", "泵", "閥", "感測器", "齒輪",
+                   "聯軸器", "油封組", "濾芯", "壓縮機", "變頻器",
+                   "繼電器", "滾輪", "軸"],
+    "toys": ["拼圖", "積木", "玩偶", "布偶", "娃娃", "樂高", "桌遊",
+             "遙控車", "遙控汽車", "魔術方塊", "黏土組", "軌道車組",
+             "拼豆組", "布偶熊", "積木火車組"],
+    "luggage": ["行李箱", "登機箱", "後背包", "側背包", "錢包", "皮夾",
+                "護照夾", "化妝包", "腰包", "托特包", "公事包", "旅行袋"],
+}
+# 跨類歧義字尾：光看尾端分不出來 → 一律反問（判錯比反問傷）
+_ZH_AMBIG_HEADS = {
+    "壺", "瓶", "杯", "墊", "袋", "盒", "箱", "架", "燈", "傘", "刀",
+    "鞋", "帽", "球", "手套", "噴霧", "海綿", "拖把", "牙刷", "芳香劑",
+    "推車", "椅", "桌", "鏡", "包", "套", "機", "器", "膠帶", "風扇",
+    "無人機", "腳踏墊", "尿墊", "毛巾", "水壺", "背包", "支架", "掛繩",
+    "收納", "書",
+}
+
+
+def _zh_guess_category(name: str) -> tuple:
+    """從商品名猜類別（尾端 4→1 字）。回 (category|None, reason)。
+    None = 判不出來 → 反問/歸其他（保守派，判錯會靜默寫進主檔）。"""
+    import re as _re
+    nm = (name or "").strip().lower()
+    # r25b：先剝**世代/型號尾標**——「燉鍋二代」「圍欄六號」的尾標會蓋掉
+    #   真中心語（R6 實抓：②區 18 句全被尾標打成其他）。真實商品本來就
+    #   常帶 二代/3號/Pro 這類尾綴，剝掉再比對才是中心語。
+    for _ in range(2):
+        nm2 = _re.sub(r"(?:之[一二三四五六七八九十]|[一二三四五六七八九十百\d]+代|"
+                      r"[一二三四五六七八九十\d]+號|[\d]{1,4}款|"
+                      r"pro|plus|max|mini|mk\d*|series\s*\w)$", "", nm).strip(" -·")
+        if nm2 == nm:
+            break
+        nm = nm2
+    if not nm:
+        return None, "empty"
+    for L in (4, 3, 2, 1):
+        if len(nm) < L:
+            continue
+        suf = nm[-L:]
+        if suf in _ZH_AMBIG_HEADS:
+            return None, f"ambig:{suf}"
+        hits = [c for c, sufs in _ZH_HEAD_TABLE.items() if suf in sufs]
+        if len(hits) == 1:
+            return hits[0], f"head:{suf}"
+        if len(hits) > 1:
+            return None, f"multi:{suf}"
+    return None, "unknown"
+
+
 def _default_price(category: str) -> int:
     """r24c（user 定調：售價不重要、數量重要，但別滿版「尚未設定」）——
     沒講價就給**該類別現有商品的中位數價**當參考價（類別沒商品退全店
@@ -1911,6 +2015,18 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                              r'\s*(?:個|件|台|支|組)?', raw_text)
         if _each_m and not (_north_m or _south_m or _central_m):
             _north_m = _south_m = _central_m = _each_m
+        # r25d（排列探針實抓）：**裸數量**「100個」原本只被剝掉、沒接庫存 →
+        #   當北倉（主倉）初始量（同「北倉80→80/0/0」定調；中南跳缺貨正確）。
+        #   ⚠️ 要先把價格/安全的數字遮掉再找，免得「590元」被當數量。
+        if not (_north_m or _south_m or _central_m):
+            _rest_q = raw_text
+            for _mm in (_price_m, _safety_m):
+                if _mm:
+                    _rest_q = _rest_q.replace(_mm.group(0), "＿" * len(_mm.group(0)), 1)
+            _bq = _re.search(r'(\d+)\s*(?:個|件|台|支|組|箱|包)', _rest_q)
+            if _bq:
+                _north_m = _re.search(r'(' + _re.escape(_bq.group(1))
+                                      + r')\s*(?:個|件|台|支|組|箱|包)', raw_text)
         # 裸價格保底：「藍牙喇叭 電子 1500 三倉各50」的 1500 前面沒有價格詞。
         #   ⚠️ 必須**排除已被其他欄位吃掉的數字**，否則會把倉量當價格。
         #   判準：句中剩下的、不屬於任何已抽欄位的孤立數字，且只有一個時才收
@@ -1958,9 +2074,10 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                      # r23b（語音優先）：ASR 全黏連 →「無線滑鼠電子590元」的
                      #   數字被移除後變「無線滑鼠電子」，類別詞黏在名字尾端、
                      #   前面沒有分隔符 ⇒ 補一條**只看後界**的剝除：類別詞後面
-                     #   是分隔符/句尾才剝。中段類別字（電解質運動飲、運動壓縮
-                     #   臂套）後面是中文字，不會中，r22 的誤傷保護不變。
-                     _CAT_TOK + r'(?:類|品|用品|的)?(?=' + _SEP + r'|$)',
+                     #   是分隔符/數字/句尾才剝（r25d 排列探針：「乙電子100個」
+                     #   的類別詞後面是數字，漏剝）。中段類別字（電解質運動飲、
+                     #   運動壓縮臂套）後面是中文字，不會中，r22 誤傷保護不變。
+                     _CAT_TOK + r'(?:類|品|用品|的)?(?=' + _SEP + r'|\d|$)',
                      r'新增商品\s*',
                      # r22：**指令詞/口語前綴**沒剝掉 → 混進商品名（實測建出
                      #   「幫我新增一個藍牙鍵盤，」「我要加一款新商品叫無線
@@ -1986,7 +2103,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                      #   （「先進北倉100個」移除「北倉100個」後剩「先進」）。
                      #   ⚠️ 只剝句尾/獨立的殘字，不碰商品名本體。
                      r'\s*(?:先|再|另外)?\s*(?:進|放|收|擺|給)\s*$',
-                     r'\s*(?:各|都)\s*$',
+                     r'\s*(?:各|都|共|合計|總共)\s*$',
                      # r23：「建立藍牙耳機商品」→ 前綴剝掉「建立」後，黏在
                      #   名字尾巴的「商品」也要剝（不連續觸發型的殘字）
                      r'(?:商品|產品|品項)\s*$',
@@ -2006,6 +2123,35 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         #   反問**。實務上建檔當下常常還不知道售價（掃碼建檔也是這樣），
         #   安全庫存則可以從初始庫存推（進多少就維持多少水位）。
         #   ⇒ 缺的欄位填合理預設、直接出確認卡，卡上把來源標出來讓人看。
+        # ── r25：沒明講類別 → head-noun 猜（驗證電池：累積332名判錯0、
+        #   名稱池 79% 判對/錯0、歧義16全反問後才接線）。猜的要標出來。
+        _cat_guessed = False
+        if _name and not _found_cat:
+            _g_cat, _g_why = _zh_guess_category(_name)
+            if _g_cat:
+                _found_cat = _g_cat
+                _cat_guessed = True
+            else:
+                # r25d（排列探針）：類別詞在名字**前面**（「電子排列測試庚」）
+                #   ——頭表沒話說時才啟用；「電子鍋」由上面頭表先接走
+                #   （appliance），不會被誤拆成 電子+鍋。
+                for _alL, _ckL in _zh_alias_pairs():
+                    if _name.startswith(_alL) and len(_name) - len(_alL) >= 2:
+                        _found_cat = _ckL
+                        _name = _name[len(_alL):].lstrip("類的 ，,、")
+                        break
+        # r25b：**複合詞勝別名**——「遙控汽車1500元」的別名「汽車」會搶類
+        #   （automotive），但頭表有更長的「遙控汽車」（toys）。頭表命中
+        #   長度 > 別名長度 → 頭表勝（「雨刷汽車450」頭表沒中、別名照贏）。
+        elif _name and _found_cat and not _cat_guessed:
+            _g2, _why2 = _zh_guess_category(_name)
+            if (_g2 and _g2 != _found_cat and _why2.startswith("head:")
+                    and len(_why2.split(":", 1)[1]) > len(_al)):
+                _found_cat, _cat_guessed = _g2, True
+        # r25c：猜不到 → 歸「其他」直接出卡（r24 一步定調：不再反問；
+        #   ⚠️ 不能掉進 step-1 路徑——那條會把**明講的價格丟掉**用預設價）
+        if _name and not _found_cat:
+            _found_cat = "other"
         if _name and _found_cat:
             # 防呆：檢查同名
             if any(it["name"] == _name for it in W.state().items):
@@ -2049,10 +2195,14 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 "stock_central": _c_qty,
                 "stock_south": _s_qty,
                 "sku": new_sku,
+                "category_guessed": _cat_guessed,   # r25：前端標「系統判斷」
                 "price_unset": not bool(_price_m),
                 "safety_src": _safety_src,
             }
             _notes = []
+            if _cat_guessed:
+                _notes.append(f"類別「{W.CATEGORY_LABEL.get(_found_cat, _found_cat)}」"
+                              "（系統判斷，可改）")
             if _safety_src == "from_stock":
                 _notes.append(f"安全庫存 {_safety_val}（同初始庫存）")
             elif _safety_src == "default":
@@ -2094,6 +2244,12 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                             name):
                 _cat24 = _ck24
                 break
+        # r25：別名沒中 → head-noun 猜（判錯0電池驗證過）→ 再退「其他」
+        _g24flag = False
+        if not _cat24:
+            _g24c, _ = _zh_guess_category(name)
+            if _g24c:
+                _cat24, _g24flag = _g24c, True
         _cat24 = _cat24 or "other"
         new_sku = _next_sku(_cat24)
         _p24 = _default_price(_cat24)   # r24c：參考價（同類中位數）
@@ -2103,6 +2259,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             "price": _p24, "safety": _DEFAULT_SAFETY,
             "stock_north": _DEFAULT_SAFETY, "stock_central": _DEFAULT_SAFETY,
             "stock_south": _DEFAULT_SAFETY, "sku": new_sku,
+            "category_guessed": _g24flag,
             "price_unset": True, "safety_src": "default",
         }
         _lbl24 = pending["category_label"]

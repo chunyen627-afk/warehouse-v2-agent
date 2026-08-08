@@ -2071,6 +2071,15 @@ function renderViewCard(view, data, topSummary) {
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
         </div>
       </div>`;
+    // r25：自動分類猜不到歸「其他」→ 附 18 類快選籤，點一下＝重講完整句
+    //   換正確類別（零打字；不帶價格，讓參考價跟著新類別重算）
+    if ((data.item || {}).category === 'other') {
+      const _catQuick = ['電子','家電','食品','日用','服飾','運動','五金','美妝',
+                        '保健','文具','寵物','汽車','家具','母嬰','圖書','工業',
+                        '玩具','箱包'];
+      showSuggestions(_catQuick.map(c => ({label: '歸類：' + c,
+        query: `新增商品${data.item.name}${c}`})));
+    }
   } else if (view === 'movement_confirm') {
     const dirColor = data.direction === 'in' ? 'var(--success)' : 'var(--accent)';
     const dirIcon = data.direction === 'in' ? '📥' : '📤';

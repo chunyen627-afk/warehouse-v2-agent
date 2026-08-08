@@ -290,4 +290,5 @@ def main():
     print("\n".join(out))
 
 
-main()
+if __name__ == "__main__":   # r25：讓名稱池可被 import（驗證電池用）
+    main()

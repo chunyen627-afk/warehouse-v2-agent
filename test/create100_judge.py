@@ -58,7 +58,9 @@ def judge(rec: dict, lang: str):
                  or "哪一類" in reply or "which category" in _rl
                  or "what category" in _rl)
     asked_name = ("步驟 1/4" in reply or "step 1/4" in _rl
-                  or "what is the item called" in _rl)
+                  or "what is the item called" in _rl
+                  or "商品叫什麼名字" in reply or "說商品名稱就好" in reply
+                  or "just say the name" in _rl)
     dup_hit = ("已存在" in reply or "already exists" in reply.lower())
     clarify = ("你想查" in reply or "請問" in reply or "❓" in reply)
 
@@ -81,6 +83,9 @@ def judge(rec: dict, lang: str):
     if card and cat:
         if cat == exp:
             return ("✅", name, cat, "")
+        if cat == "other":
+            # r25：一步設計下猜不到歸「其他」出卡（可改）——保守而非錯
+            return ("❓", name, cat, "歸其他（保守）")
         return ("❌", name, cat, f"期望 {exp} 判成 {cat}")
     if asked_cat:
         return ("❓", name, cat, "反問類別")

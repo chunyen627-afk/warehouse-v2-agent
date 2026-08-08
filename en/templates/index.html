@@ -2091,6 +2091,16 @@ function renderViewCard(view, data, topSummary) {
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
         </div>
       </div>`;
+    // r25：guess 落到 Other → 附 18 類快選籤（點一下＝重講完整句換類別；
+    //   不帶價格，讓參考價跟著新類別重算）
+    if ((data.item || {}).category === 'other') {
+      const _catQuick = ['electronics','kitchen','food','daily','apparel',
+                        'sports','hardware','beauty','medical','stationery',
+                        'pet','automotive','furniture','baby','media',
+                        'industrial','toys','luggage'];
+      showSuggestions(_catQuick.map(c => ({label: 'set: ' + c,
+        query: `add item ${data.item.name} ${c}`})));
+    }
   } else if (view === 'movement_confirm') {
     const dirColor = data.direction === 'in' ? 'var(--success)' : 'var(--accent)';
     const dirIcon = data.direction === 'in' ? '📥' : '📤';

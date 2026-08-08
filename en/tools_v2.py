@@ -2178,6 +2178,10 @@ _EN_AMBIGUOUS_HEADS = {
     #   （真實=廚具）。monitor 螢幕=電子/血壓計=醫療/嬰兒監視器=母嬰、
     #   grinder 磨豆機=廚具/角磨機=五金——head 分不出來 ⇒ 反問（不猜原則）。
     "monitor", "grinder",
+    # r25（create100 r12 實抓四連發）：utility knife→廚(真=五金)、
+    #   car wash sponge→日用(真=汽車)、milk powder dispenser→廚(真=母嬰)、
+    #   air compressor filter→日用(真=工業)——head 單詞跨類，歸 Other 安全桶
+    "knife", "sponge", "dispenser", "filter",
 }
 _EN_NAME_STOP = {"the", "and", "for", "with", "pack", "pcs", "pc", "men",
                  "mens", "women", "womens", "size", "inch", "pair", "person",
@@ -2591,6 +2595,10 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             if _g_cat:
                 _found_cat = _g_cat
                 _cat_guessed = True
+        # r25c：猜不到 → 歸 Other 直接出卡（r24 一步定調：不再反問；
+        #   掉進 step-1 路徑會把**明講的價格丟掉**用預設價——zh 實抓）
+        if _name and not _found_cat:
+            _found_cat = "other"
         # ── r22（user 定調「一句話就進去」）：**不再因為缺欄位反問**。
         #   先前版本缺售價/安全庫存就回 step 3 追問，但實務上：
         #     · 建檔當下**本來就常不知道售價**（掃碼建檔也是這樣）

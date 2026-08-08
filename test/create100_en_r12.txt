@@ -1,0 +1,114 @@
+# create100 第 12 輪語料（en・生成器產出・語音優先黏連句）
+# 真建立模式：確認卡會真的按下去，商品累積不刪（user 定調）
+
+# ══════ ① 19 類各 3 句 ══════
+electronics|add item prime card reader electronics 590
+electronics|create prime bluetooth tracker item electronics 890
+electronics|add a prime ebook reader electronics 1200
+appliance_kitchen|add item prime electric griddle appliance 1800
+appliance_kitchen|create prime pressure cooker item kitchen 2500
+appliance_kitchen|add a prime waffle maker appliance 450
+food_beverage|add item prime seaweed crisps beverage 780
+food_beverage|create prime sparkling juice item beverage 990
+food_beverage|add a prime brown sugar ginger tea food 120
+daily_goods|add item prime fabric softener daily 350
+daily_goods|create prime kitchen paper towels item household 590
+daily_goods|add a prime glass cleaner daily 890
+apparel|add item prime striped shirt apparel 1200
+apparel|create prime water repellent windbreaker item clothing 1800
+apparel|add a prime cotton crew socks apparel 2500
+sports|add item prime pull up bar sports 450
+sports|create prime swim goggles item sports 780
+sports|add a prime wrist support outdoor 990
+hardware|add item prime soldering iron hardware 120
+hardware|create prime sandpaper set item tools 350
+hardware|add a prime expansion bolt set hardware 590
+beauty|add item prime body mist beauty 890
+beauty|create prime nail polish item skincare 1200
+beauty|add a prime pressed powder beauty 1800
+medical|add item prime lutein capsules medical 2500
+medical|create prime fever cooling patch item health 450
+medical|add a prime medical gloves health 780
+stationery|add item prime file box stationery 990
+stationery|create prime whiteboard marker item stationery 120
+stationery|add a prime glue stick office 350
+pet|add item prime flea comb pet 590
+pet|create prime food storage bucket item pet 890
+pet|add a prime cat tree tower pet 1200
+automotive|add item prime wiper fluid automotive 1800
+automotive|create prime car phone mount item automotive 2500
+automotive|add a prime tire sealant automotive 450
+furniture|add item prime memory foam pillow furniture 780
+furniture|create prime folding dining table item bedding 990
+furniture|add a prime dressing mirror furniture 120
+baby|add item prime baby bathtub baby 350
+baby|create prime baby carrier wrap item infant 590
+baby|add a prime baby nail clipper baby 890
+media|add item prime photography album book books 1200
+media|create prime magazine bundle item media 1800
+media|add a prime comic book set media 2500
+industrial|add item prime shaft coupling industrial 450
+industrial|create prime oil seal kit item industrial 780
+industrial|add a prime stepper motor industrial 990
+toys|add item prime clay craft set toys 120
+toys|create prime race track set item toys 350
+toys|add a prime fuse bead kit toys 590
+luggage|add item prime passport holder luggage 890
+luggage|create prime cosmetic pouch item luggage 1200
+luggage|add a prime hiking waist pack luggage 1800
+
+# ══════ ② 不講類別（自動判斷）══════
+electronics|add item prime desk microphone 2500
+appliance_kitchen|add item prime stew pot 450
+food_beverage|add item prime spicy hotpot base 780
+daily_goods|add item prime dehumidifier box 990
+apparel|add item prime fleece vest 120
+sports|add item prime frisbee 350
+hardware|add item prime utility knife 590
+beauty|add item prime aftershave lotion 890
+medical|add item prime fish oil softgels 1200
+stationery|add item prime scissors 1800
+pet|add item prime pet pee pads 2500
+automotive|add item prime car wash sponge 450
+furniture|add item prime five drawer chest 780
+baby|add item prime milk powder dispenser 990
+media|add item prime classic vinyl record 120
+industrial|add item prime air compressor filter 350
+toys|add item prime water play ball set 590
+luggage|add item prime canvas tote bag 890
+
+# ══════ ③ 跨類歧義 ══════
+ambig|add item baby playpen fence type l 1200
+ambig|add item pet carrier basket type l 1800
+ambig|add item tool organizer pouch type l 2500
+ambig|add item coffee thermos mug type l 450
+ambig|add item phone lanyard type l 780
+ambig|add item folding bucket type l 990
+ambig|add item electric air pump type l 120
+ambig|add item beach mat type l 350
+
+# ══════ ④ 欄位變化 ══════
+any|add item testprod alpha ten electronics
+any|add item testprod bravo ten electronics safety 30
+any|add item testprod charlie ten electronics north 80
+any|add item testprod delta ten electronics 500 safety 25
+any|add item testprod echo ten electronics 40 in each warehouse
+any|create testprod foxtrot ten item electronics 1200 north 50 central 30 south 20
+any|add item testprod golf ten electronics sells for 800 keep 15
+any|add a testprod hotel ten electronics thing 350 each
+
+# ══════ ⑤ 口語與現場情境 ══════
+any|just got a shipment of new apex hand wash foam type l daily 590 each
+any|supplier delivered a new product apex smart plug type l electronics 890
+any|please add a apex coffee grinder type l for me kitchen 1200
+any|i want to add a new product called apex smart plug type l electronics 1800
+any|could you create a apex yoga brick type l item sports 2500
+any|thinking of adding item apex hand wash foam type l daily 450
+any|please help me add new product apex hair mask type l beauty 780
+any|add item apex smart plug type l electronics eight hundred
+
+# ══════ ⑥ 邊界與該擋的 ══════
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr512 servo motor industrial 8900
