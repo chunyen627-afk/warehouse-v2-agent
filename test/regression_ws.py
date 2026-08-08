@@ -59,6 +59,11 @@ ACCEPT = {
     "cfg_clarify": lambda v: v in ("clarify", "config_read", "guide"),
     "rel":   lambda v: v in ("related", "related_help", "related_empty"),
     "mvt":   lambda v: v == "movement",
+    # r29：建檔類守衛（鏡射 en 版；zh 過去沒有 crt 線）
+    "crt":   lambda v: v == "item_confirm",
+    "crtq":  lambda v: v in ("item_create_step1", "item_create_step2",
+                             "item_create_step3", "item_create_step4",
+                             "clarify"),
     "vague": lambda v: v in ("clarify", "guide", "rejected", "inventory"),
     "noex":  lambda v: v in ("clarify", "rejected", "error", "related_empty", "guide",
                               "expiring_empty"),

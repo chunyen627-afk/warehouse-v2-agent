@@ -9384,20 +9384,22 @@ async def ws_handler(ws: WebSocket):
                     "ok": True, "view": "guide", "summary": _rp_msg, "data": {}}})
                 continue
 
-            # ── r75：改價句誠實閘（「價格改成299」）——demo 單價是固定資料，
-            #   不支援改價，曾掉守門員教學文 ──
+            # ── r75→r29 翻新：改價句**沒講商品名**的兜底——r26 改價功能上線後
+            #   舊「不支援改價」誠實閘變成說謊（守衛 crtq 抓到）。改成反問
+            #   要改哪個商品（有商品名的句子在前面的 r26 攔截已接走）。
             if (any(w in user_text for w in ("價格", "單價", "售價", "定價"))
                     and any(w in user_text for w in ("改", "調成", "調高", "調低",
                                                       "設成", "變更", "漲", "降"))
                     and not any(w in user_text for w in ("安全", "庫存", "警戒", "水位"))):
-                _pp_msg = ("這個 demo 的商品單價是固定資料，不支援改價喔。"
-                           "可以查單價，例如「藍牙耳機一個賣多少」。")
-                log.info(f"[price-gate] {user_text!r} → 不支援改價")
+                _pp_msg = ("要改哪個商品的價格？講商品名＋新價格就可以，"
+                           "例如「無線滑鼠改成590元」。")
+                log.info(f"[price-gate] 沒講商品名 → 反問: {user_text!r}")
                 for ch in _pp_msg:
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(_TK_DELAY.get())
                 await send({"type": "done", "result": {
-                    "ok": True, "view": "guide", "summary": _pp_msg, "data": {}}})
+                    "ok": True, "view": "clarify", "summary": _pp_msg,
+                    "data": {"question": _pp_msg, "options": [], "hint": ""}}})
                 continue
 
             # ── r74：訂單/預約出貨句（「先看今天要出的單」「有預定出貨嗎」）——

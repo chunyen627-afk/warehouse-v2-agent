@@ -2547,6 +2547,21 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                               r'(?:\s+of\s+the\s+three)?\s+warehouses?\b', _rt_low)
         if _each_en and not (_north_m or _south_m or _central_m):
             _north_m = _south_m = _central_m = _each_en
+        # r29（user 定調，鏡射 zh）：**裸數量**'100 pcs/units' 沒指名倉庫 ⇒
+        #   三倉各 100（同「沒講倉庫量→三倉補安全值」定調）。'350 each' 是
+        #   價格詞已被 _price_m 收走，不會誤入。
+        if not (_north_m or _south_m or _central_m):
+            _rest_q = _rt_low
+            for _mm in (_price_m, _safety_m):
+                if _mm:
+                    _rest_q = _rest_q.replace(_mm.group(0).lower(),
+                                              "＿" * len(_mm.group(0)), 1)
+            _bq = _re.search(r'(\d+)\s*(?:pcs|pieces|units?)\b', _rest_q)
+            if _bq:
+                _bqm = _re.search(r'(' + _re.escape(_bq.group(1))
+                                  + r')\s*(?:pcs|pieces|units?)\b', _rt_low)
+                if _bqm:
+                    _north_m = _central_m = _south_m = _bqm
         # ── r22：**裸價格保底**（同中文版）──────────────────────────
         #   'add hiking backpack, 1500, safety 10' 的 1500 前面沒有價格詞，
         #   所有價格規則都接不到 → 判成缺價格而反問（行為安全但不夠聰明）。

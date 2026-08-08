@@ -2022,8 +2022,10 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                              r'\s*(?:個|件|台|支|組)?', raw_text)
         if _each_m and not (_north_m or _south_m or _central_m):
             _north_m = _south_m = _central_m = _each_m
-        # r25d（排列探針實抓）：**裸數量**「100個」原本只被剝掉、沒接庫存 →
-        #   當北倉（主倉）初始量（同「北倉80→80/0/0」定調；中南跳缺貨正確）。
+        # r25d（排列探針實抓）＋r29（user 定調修正）：**裸數量**「100個」
+        #   沒指名倉庫 ⇒ **三倉各 100**（同「沒講倉庫量→三倉都補安全值」的
+        #   r22 定調；「新增網球50元100個」曾被做成北100/中0/南0，user 抓錯）。
+        #   只有明講「北倉80」才是 80/0/0。
         #   ⚠️ 要先把價格/安全的數字遮掉再找，免得「590元」被當數量。
         if not (_north_m or _south_m or _central_m):
             _rest_q = raw_text
@@ -2032,8 +2034,10 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                     _rest_q = _rest_q.replace(_mm.group(0), "＿" * len(_mm.group(0)), 1)
             _bq = _re.search(r'(\d+)\s*(?:個|件|台|支|組|箱|包)', _rest_q)
             if _bq:
-                _north_m = _re.search(r'(' + _re.escape(_bq.group(1))
-                                      + r')\s*(?:個|件|台|支|組|箱|包)', raw_text)
+                _bqm = _re.search(r'(' + _re.escape(_bq.group(1))
+                                  + r')\s*(?:個|件|台|支|組|箱|包)', raw_text)
+                if _bqm:
+                    _north_m = _central_m = _south_m = _bqm
         # 裸價格保底：「藍牙喇叭 電子 1500 三倉各50」的 1500 前面沒有價格詞。
         #   ⚠️ 必須**排除已被其他欄位吃掉的數字**，否則會把倉量當價格。
         #   判準：句中剩下的、不屬於任何已抽欄位的孤立數字，且只有一個時才收
