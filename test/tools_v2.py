@@ -1822,7 +1822,8 @@ def create_item_start() -> dict:
     """觸發新增商品流程，回第一步問題"""
     return {
         "ok": True,
-        "summary": "好的！第一步：商品叫什麼名字？（任何名稱都可以，例如『環保吸管』）",
+        # r24：一步建檔——名字講完直接出確認卡，文案不再講「第一步/四步」
+        "summary": "好的！商品叫什麼名字？（講完名字我就幫你建好，其他欄位給預設值、確認卡上可改）",
         "view": "item_create_step1",
         "data": {"step": 1, "total_steps": 4, "prompt": "請輸入商品名稱"},
     }
@@ -2090,7 +2091,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 "summary": (f"收到「{name}」！我幫你填了：類別「{_lbl24}」、"
                             f"安全庫存 {_DEFAULT_SAFETY}（預設）、售價未設定。\n"
                             "確認前都可以在卡片上改，或講一句完整的"
-                            "（例如「新增商品{name} 電子 500元」）重來。"),
+                            "（例如「新增商品藍牙耳機電子500元」）重來。"),
                 "view": "item_confirm",
                 "data": {"pending": True, "item": pending}}
     elif step == 2:

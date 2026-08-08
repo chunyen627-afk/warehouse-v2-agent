@@ -2388,7 +2388,9 @@ def create_item_start() -> dict:
     """觸發新增商品流程，回第一步問題"""
     return {
         "ok": True,
-        "summary": "Sure! Step 1: what is the item called? "
+        # r24：一步建檔文案（不再講 Step 1/4）
+        "summary": "Sure! What is the item called? Say the name and I will "
+                   "set it up with defaults you can edit on the confirm card. "
                    '(any name works, e.g. "Reusable Straw")',
         "view": "item_create_step1",
         "data": {"step": 1, "total_steps": 4, "prompt": "Enter the item name"},
