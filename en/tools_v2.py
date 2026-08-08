@@ -2161,7 +2161,23 @@ def _en_spelled_num_normalize(text: str) -> str:
                 cur = 0
         return str(total + cur)
 
-    return pat.sub(conv, text)
+    out = pat.sub(conv, text)
+    # r26b：**語境錨定**的裸數字詞——'forty in each warehouse' / 'safety
+    #   thirty' / 'north fifty'。⚠️ 不能全量轉（名字裡的 one/pair 會被改寫，
+    #   r11 實抓 'one step…'→'1 step…'）；只轉後面跟單位/倉別、或前面是
+    #   safety/keep/倉別 的。放這裡不放 server——建檔流程吃的是
+    #   _text_with_comma 原始文本，server 層轉了也會被繞過（r26 實抓）。
+    import re as _re26
+    _w = "|".join(_EN_NUM_WORDS)
+    out = _re26.sub(
+        rf"\b({_w})\b(?=\s+(?:in\s+each|each|units?|pcs|north|central|south))",
+        lambda m: str(_EN_NUM_WORDS[m.group(1).lower()]), out, flags=_re26.I)
+    out = _re26.sub(
+        rf"\b(safety(?:\s+stock)?|keep|min(?:imum)?|north|central|south|to)"
+        rf"\s+({_w})\b",
+        lambda m: m.group(1) + " " + str(_EN_NUM_WORDS[m.group(2).lower()]),
+        out, flags=_re26.I)
+    return out
 
 
 _EN_AMBIGUOUS_HEADS = {

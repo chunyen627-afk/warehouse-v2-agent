@@ -11103,7 +11103,29 @@ async def ws_handler(ws: WebSocket):
             #   抽不到數量 → 被當查詢回庫存數字（實測）。
             #   語音接上後更關鍵：ASR 常吐 'fifty' 而非 '50'。
             if _is_mostly_english(user_text):
-                _num_norm = _en_words_to_num(user_text)
+                # r26：**建檔句**改錨定式轉換——全量轉換會把商品名裡的
+                #   'one'/'pair' 改寫（'one step test flask'→'1 step…'，
+                #   r11 實抓）。只轉：hundred/thousand 錨定（價格）、
+                #   單位/倉別/safety 語境的數字詞。進出貨句維持原全量轉換
+                #   （'five hundred yoga mat' 數量抽取靠它，r4 S9）。
+                if _en_create_trigger(user_text):
+                    import tools_v2 as _tv2_num
+                    _num_norm = _tv2_num._en_spelled_num_normalize(user_text)
+                    _w_alt = "|".join(w for w in _EN_NUM_WORDS
+                                      if w not in ("hundred",))
+                    _num_norm = _re.sub(
+                        rf"\b({_w_alt})\b(?=\s+(?:in\s+each|each|units?|"
+                        rf"pcs|north|central|south))",
+                        lambda m: str(_EN_NUM_WORDS[m.group(1).lower()]),
+                        _num_norm, flags=_re.I)
+                    _num_norm = _re.sub(
+                        rf"\b(safety(?:\s+stock)?|keep|min(?:imum)?|"
+                        rf"north|central|south|to)\s+({_w_alt})\b",
+                        lambda m: (m.group(1) + " "
+                                   + str(_EN_NUM_WORDS[m.group(2).lower()])),
+                        _num_norm, flags=_re.I)
+                else:
+                    _num_norm = _en_words_to_num(user_text)
                 if _num_norm != user_text:
                     log.info(f"[EN num] {user_text!r} → {_num_norm!r}")
                     user_text = _num_norm
