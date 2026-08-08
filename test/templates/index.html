@@ -1077,6 +1077,26 @@ const CATEGORY_LABEL = {
   industrial: '工業商用', toys: '玩具遊戲', luggage: '箱包行李',
   other: '其他',
 };
+// r28d（user 實抓）：卡上改類別時 SKU 顯示要即時反映——實際號碼由後端
+//   確認時重發（前綴不符自動換號，已實測 TOY-0021），這裡只管畫面不騙人。
+const CATEGORY_PREFIX = {
+  electronics: 'ELE', appliance_kitchen: 'KIT', food_beverage: 'FNB',
+  daily_goods: 'DLY', apparel: 'CLO', sports: 'SPT', hardware: 'HDW',
+  beauty: 'BTY', medical: 'MED', stationery: 'STA', pet: 'PET',
+  automotive: 'AUT', furniture: 'FUR', baby: 'BAB', media: 'BOK',
+  industrial: 'IND', toys: 'TOY', luggage: 'BAG', other: 'OTH',
+};
+function onCardCatChange(sel) {
+  const card = sel.closest('.hitl-card');
+  const cell = card && card.querySelector('.ed-sku');
+  if (!cell) return;
+  if (sel.value === sel.dataset.cat0) {
+    cell.textContent = sel.dataset.sku0 + '（自動產生）';
+  } else {
+    cell.textContent = (CATEGORY_PREFIX[sel.value] || 'OTH')
+      + '-（類別已改，確認後自動編號）';
+  }
+}
 const WAREHOUSE_LABEL = {
   north: '北區倉', central: '中區倉', south: '南區倉', all: '全部倉',
 };
@@ -2053,22 +2073,28 @@ function renderViewCard(view, data, topSummary) {
         <div class="hitl-body">
           <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
             <tr><td>名稱</td><td><b>${it.name}</b></td></tr>
-            <tr><td>SKU</td><td>${it.sku}（自動產生）</td></tr>
-            <tr><td>類別</td><td>${it.category_label || it.category}${
+            <tr><td>SKU</td><td class="ed-sku">${it.sku}（自動產生）</td></tr>
+            <tr><td>類別</td><td><select class="ed-cat" data-sku0="${it.sku}" data-cat0="${it.category}" onchange="onCardCatChange(this)" style="font-size:15px;padding:4px 8px;border-radius:6px">${
+              Object.keys(CATEGORY_LABEL).map(k =>
+                `<option value="${k}" ${k === it.category ? 'selected' : ''}>${CATEGORY_LABEL[k]}</option>`).join('')
+            }</select>${
               it.category_guessed
-                ? ' <span style="color:var(--warn,#e8a33d);font-size:12px">· 系統判斷，不對可以改</span>'
+                ? ' <span style="color:var(--warn,#e8a33d);font-size:12px">· 系統判斷，可改</span>'
                 : ''}</td></tr>
-            <tr><td>單價</td><td>${
+            <tr><td>單價</td><td>NT$ <input class="ed-price" type="number" min="0" max="999999" value="${it.price}" style="width:90px;font-size:15px;padding:4px 6px;border-radius:6px">${
               it.price_unset
-                ? 'NT$ ' + it.price + ' <span style="color:var(--warn,#e8a33d);font-size:12px">· 參考價（同類中位數），可改</span>'
-                : 'NT$ ' + it.price}</td></tr>
-            <tr><td>安全庫存</td><td>${it.safety} 件${
+                ? ' <span style="color:var(--warn,#e8a33d);font-size:12px">· 參考價（同類中位數）</span>'
+                : ''}</td></tr>
+            <tr><td>安全庫存</td><td><input class="ed-safety" type="number" min="0" max="999999" value="${it.safety}" style="width:80px;font-size:15px;padding:4px 6px;border-radius:6px"> 件${
               it.safety_src === 'from_stock'
                 ? ' <span style="color:var(--muted);font-size:12px">· 同初始庫存</span>'
                 : it.safety_src === 'default'
                 ? ' <span style="color:var(--muted);font-size:12px">· 預設值</span>'
                 : ''}</td></tr>
-            <tr><td>初始庫存</td><td>北${it.stock_north||0} 中${it.stock_central||0} 南${it.stock_south||0}</td></tr>
+            <tr><td>初始庫存</td><td>
+              北<input class="ed-n" type="number" min="0" max="999999" value="${it.stock_north||0}" style="width:70px;font-size:15px;padding:4px 6px;border-radius:6px">
+              中<input class="ed-c" type="number" min="0" max="999999" value="${it.stock_central||0}" style="width:70px;font-size:15px;padding:4px 6px;border-radius:6px">
+              南<input class="ed-s" type="number" min="0" max="999999" value="${it.stock_south||0}" style="width:70px;font-size:15px;padding:4px 6px;border-radius:6px"></td></tr>
           </table>
           <div class="hitl-meta">確認後將寫入 items.csv 並自動重生種子資料。</div>
         </div>
@@ -2077,15 +2103,7 @@ function renderViewCard(view, data, topSummary) {
           <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
         </div>
       </div>`;
-    // r25：自動分類猜不到歸「其他」→ 附 18 類快選籤，點一下＝重講完整句
-    //   換正確類別（零打字；不帶價格，讓參考價跟著新類別重算）
-    if ((data.item || {}).category === 'other') {
-      const _catQuick = ['電子','家電','食品','日用','服飾','運動','五金','美妝',
-                        '保健','文具','寵物','汽車','家具','母嬰','圖書','工業',
-                        '玩具','箱包'];
-      showSuggestions(_catQuick.map(c => ({label: '歸類：' + c,
-        query: `新增商品${data.item.name}${c}`})));
-    }
+    // r28d：原 r25 的 18 顆「歸類」快選籤已被卡上類別下拉取代（user 定調拆掉）
   } else if (view === 'price_confirm') {
     // r26：改單價確認卡（「彈珠改成100元」）
     const it = data.item || {};
@@ -2525,6 +2543,33 @@ function renderViewCard(view, data, topSummary) {
 function doConfirm(btn) {
   const action = btn.dataset.action;
   const payload = JSON.parse(btn.dataset.payload || '{}');
+  // r28c（user 定調）：建檔卡上可直接改 類別(下拉)/單價/安全庫存/三倉量——
+  //   按確認時讀卡上目前值回寫 payload；完全沒動就是原預設值照送（零步驟）。
+  if (action === 'item_create') {
+    const cardEl = btn.closest('.hitl-card');
+    const itX = (payload.pending || {}).item;   // 按鈕 payload={pending:data}，item 在 pending.item
+    if (cardEl && itX) {
+      const num = (cls, cur) => {
+        const el = cardEl.querySelector(cls);
+        if (!el) return cur;
+        const v = parseInt(el.value, 10);
+        return (isNaN(v) || v < 0) ? cur : Math.min(v, 999999);
+      };
+      const sel = cardEl.querySelector('.ed-cat');
+      if (sel && sel.value && sel.value !== itX.category) {
+        itX.category = sel.value;
+        itX.category_label = CATEGORY_LABEL[sel.value] || sel.value;
+        itX.category_guessed = false;
+      }
+      const p0 = itX.price;
+      itX.price = num('.ed-price', itX.price);
+      if (itX.price !== p0) itX.price_unset = false;
+      itX.safety = num('.ed-safety', itX.safety);
+      itX.stock_north = num('.ed-n', itX.stock_north || 0);
+      itX.stock_central = num('.ed-c', itX.stock_central || 0);
+      itX.stock_south = num('.ed-s', itX.stock_south || 0);
+    }
+  }
   const btnsEl = btn.closest('.hitl-btns');
   const origHtml = btnsEl ? btnsEl.innerHTML : '';
   if (btnsEl) btnsEl.innerHTML = '<div style="padding:10px;color:var(--muted)">執行中…</div>';

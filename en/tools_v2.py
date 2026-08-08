@@ -2897,6 +2897,18 @@ def commit_create_item(pending: dict, actor: str = "user_confirmed",
     # r75 危險級縱深防禦：名稱空白的商品絕不落地（曾建出商品「」污染主檔）
     if not str(item.get("name", "")).strip():
         return W._err('Item name is empty, cannot add. Please start over with "add item".')
+    # r28c：卡上下拉改了類別 → SKU 前綴不符就重發號；數字欄 clamp（縱深）
+    _want_pfx = _CATEGORY_PREFIX.get(item.get("category", ""), "OTH")
+    if not str(item.get("sku", "")).startswith(_want_pfx):
+        item["sku"] = _next_sku(item.get("category", "other"))
+        item["category_label"] = W.CATEGORY_LABEL.get(item.get("category"),
+                                                      item.get("category"))
+    for _k28 in ("price", "safety", "stock_north", "stock_central",
+                 "stock_south"):
+        try:
+            item[_k28] = max(0, min(int(item.get(_k28) or 0), 999999))
+        except (ValueError, TypeError):
+            item[_k28] = 0
 
     # 1. 寫入 items.csv
     items_path = dd / "master" / "items.csv"
