@@ -4873,6 +4873,15 @@ def _zh_create_trigger(text: str) -> bool:
     if any(w in text for w in _kws):
         return True
     import re as _re23
+    # r27（user 定調：按鈕只是導覽捷徑，隨時講就要能建）——裸「新增Ｘ」
+    #   （「新增手錶」）。受詞含查詢/管理物件（報表/清單/排程…）不算；
+    #   「加」字頭不收（幫我加總 誤傷面）；商品已存在由 dup 檢查回已存在。
+    _mb = _re23.match(r'^(?:幫我|請|麻煩|我要|我想)?(?:新增|建立|新建)'
+                      r'(?!商品|一個|一款|一筆)(\S{1,12})$', text.strip())
+    if _mb and not any(w in _mb.group(1) for w in
+                       ("報表", "清單", "排程", "警示", "規則", "備份",
+                        "快照", "盤點", "紀錄", "連線", "帳號")):
+        return True
     _m = _re23.search(r'(?:建立|新建)(\S{1,12})(?:商品|的?品項)', text)
     if not _m:
         return False

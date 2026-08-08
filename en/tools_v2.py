@@ -2309,6 +2309,18 @@ def classify_add_intent(text: str, has_item_in_master: bool) -> str:
             or re.search(r"售價\s*\d|單價\s*\d|安全庫存\s*\d|\d+\s*元", text or ""):
         return "create"
     # ⑤ 看主檔
+    # r27（user 定調：按鈕只是導覽捷徑，**隨時講就要能建**）——'add watch'：
+    #   前導 add/create/register + 主檔查無 + 無數量/欄位訊號 ⇒ 建檔
+    #   （查無就沒東西可進貨）。⚠️ 'doesnt add up' 的 add 非前導不算；
+    #   守衛 mv 句（add 100 X to 倉）主檔命中走 inbound 不受影響。
+    if not has_item_in_master and re.match(
+            r"^(?:please\s+|can\s+you\s+|help\s+me\s+)?"
+            r"(?:add|create|register)\b(?!\s+up\b)", t) \
+            and not re.search(r"\b\d+\b.*\b(?:to|into|at)\s+"
+                              r"(?:the\s+)?(?:north|central|south)\b", t):
+        # ⚠️ 「add 100 X to central」是進貨形狀——切名偶爾失敗會讓主檔判定
+        #   誤 False，沒這條排除會被搶成建檔（r27 部署當下實抓回歸）
+        return "create"
     return "inbound" if has_item_in_master else "ambiguous"
 
 

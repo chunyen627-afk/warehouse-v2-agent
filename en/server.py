@@ -466,6 +466,13 @@ def is_meaningful_input(text: str) -> bool:
     if re.search(r"\b(?:add|create|register)\b.{0,40}\b(?:item|product|sku)s?\b", s) \
             and not any(k in s for k in ("<script", "select * from", "onerror=")):
         return True
+    # r27（user 定調：隨時講就要能建）——前導 add/create 短句（'add watch'）
+    #   放行進 classify_add_intent 決定建檔/進貨；'add up' 對帳句排除。
+    if re.match(r"^(?:please\s+|can\s+you\s+|help\s+me\s+)?"
+                r"(?:add|create|register)\b(?!\s+up\b)\s+\S", s) \
+            and len(s.split()) <= 8 \
+            and not any(k in s for k in ("<script", "select * from", "onerror=")):
+        return True
     # 黑名單：明顯非倉管領域 → 直接擋
     for kw in _GATEKEEPER_BLACKLIST:
         if kw in s:
