@@ -23,7 +23,12 @@ for k, v in CATEGORIES.items():
 
 
 def parse_card(reply: str, lang: str):
-    """從確認卡 innerText 抽 名稱/類別key。抽不到回 (None, None)。"""
+    """從確認卡 innerText 抽 名稱/類別key。抽不到回 (None, None)。
+
+    r30b：類別**以 SKU 前綴反查為主**——r28 卡上行內編輯把 19 類下拉整包
+    攤進 innerText，「類別」文字解析會吃到下拉第一項「電子產品」（r8 全批
+    誤判 electronics 的假 ❌）。SKU 由所選類別產生、r28d 改類還會重發號，
+    是卡上唯一可靠的類別訊號；文字標籤降為備援（老斷面相容）。"""
     if lang == "zh":
         nm = re.search(r'名稱\s*\t?\s*([^\n\t]+)', reply)
         cm = re.search(r'類別\s*\t?\s*([^\n\t（(]+)', reply)
@@ -32,17 +37,15 @@ def parse_card(reply: str, lang: str):
         cm = re.search(r'Category\s*\t?\s*([^\n\t(（]+)', reply, re.I)
     name = nm.group(1).strip() if nm else None
     cat = None
-    if cm:
+    sm = re.search(r'SKU\s*\t?\s*([A-Z]{3})-\d+', reply)
+    if sm:
+        from categories import CATEGORY_PREFIX
+        _p2c = {v: k for k, v in CATEGORY_PREFIX.items()}
+        cat = _p2c.get(sm.group(1))
+    if cat is None and cm:
         # en 卡片類別欄可能帶「· auto-detected, change if wrong」尾註
         lbl = cm.group(1).split("·")[0].strip()
         cat = LABEL2KEY.get(lbl) or LABEL2KEY.get(lbl.lower())
-    if cat is None:
-        # r10：擷取截斷會吃掉 Category 列 → 用 SKU 前綴反查（ELE-0060→electronics）
-        sm = re.search(r'SKU\s*\t?\s*([A-Z]{3})-\d+', reply)
-        if sm:
-            from categories import CATEGORY_PREFIX
-            _p2c = {v: k for k, v in CATEGORY_PREFIX.items()}
-            cat = _p2c.get(sm.group(1))
     return name, cat
 
 
