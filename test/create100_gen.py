@@ -142,7 +142,11 @@ def pick(cat, slot, rnd):
     zh, en = pair
     if cycle > 0:
         tag = ZH_NUM.get(cycle + 1, str(cycle + 1))
-        zh, en = f"{zh}{tag}代", f"{en} mk{cycle + 1}"
+        # ⚠️ en 標記三鐵則（r6/r10 實抓）：不可帶數字（毀裸價格判定）、
+        #   不可掛尾（'series e' 佔 head-noun 位毀自動分類）→ 用**前綴**
+        #   自然詞（neo X / pro X），head 仍是真品名名詞。
+        en_tag = ["", "pro", "ultra", "neo", "prime", "apex", "nova"][min(cycle, 6)]
+        zh, en = f"{zh}{tag}代", f"{en_tag} {en}".strip()
     return zh, en
 
 

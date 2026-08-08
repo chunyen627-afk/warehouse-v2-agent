@@ -1,0 +1,114 @@
+# create100 第 6 輪語料（en・生成器產出・語音優先黏連句）
+# 真建立模式：確認卡會真的按下去，商品累積不刪（user 定調）
+
+# ══════ ① 19 類各 3 句 ══════
+electronics|add item card reader mk2 electronics 2500
+electronics|create bluetooth tracker mk2 item electronics 450
+electronics|add a ebook reader mk2 electronics 780
+appliance_kitchen|add item electric griddle mk2 appliance 990
+appliance_kitchen|create pressure cooker mk2 item kitchen 120
+appliance_kitchen|add a waffle maker mk2 appliance 350
+food_beverage|add item seaweed crisps mk2 beverage 590
+food_beverage|create sparkling juice mk2 item beverage 890
+food_beverage|add a brown sugar ginger tea mk2 food 1200
+daily_goods|add item fabric softener mk2 daily 1800
+daily_goods|create kitchen paper towels mk2 item household 2500
+daily_goods|add a glass cleaner mk2 daily 450
+apparel|add item striped shirt mk2 apparel 780
+apparel|create water repellent windbreaker mk2 item clothing 990
+apparel|add a cotton crew socks mk2 apparel 120
+sports|add item pull up bar mk2 sports 350
+sports|create swim goggles mk2 item sports 590
+sports|add a wrist support mk2 outdoor 890
+hardware|add item soldering iron mk2 hardware 1200
+hardware|create sandpaper set mk2 item tools 1800
+hardware|add a expansion bolt set mk2 hardware 2500
+beauty|add item body mist mk2 beauty 450
+beauty|create nail polish mk2 item skincare 780
+beauty|add a pressed powder mk2 beauty 990
+medical|add item lutein capsules mk2 medical 120
+medical|create fever cooling patch mk2 item health 350
+medical|add a medical gloves mk2 health 590
+stationery|add item file box mk2 stationery 890
+stationery|create whiteboard marker mk2 item stationery 1200
+stationery|add a glue stick mk2 office 1800
+pet|add item flea comb mk2 pet 2500
+pet|create food storage bucket mk2 item pet 450
+pet|add a cat tree tower mk2 pet 780
+automotive|add item wiper fluid mk2 automotive 990
+automotive|create car phone mount mk2 item automotive 120
+automotive|add a tire sealant mk2 automotive 350
+furniture|add item memory foam pillow mk2 furniture 590
+furniture|create folding dining table mk2 item bedding 890
+furniture|add a dressing mirror mk2 furniture 1200
+baby|add item baby bathtub mk2 baby 1800
+baby|create baby carrier wrap mk2 item infant 2500
+baby|add a baby nail clipper mk2 baby 450
+media|add item photography album book mk2 books 780
+media|create magazine bundle mk2 item media 990
+media|add a comic book set mk2 media 120
+industrial|add item shaft coupling mk2 industrial 350
+industrial|create oil seal kit mk2 item industrial 590
+industrial|add a stepper motor mk2 industrial 890
+toys|add item clay craft set mk2 toys 1200
+toys|create race track set mk2 item toys 1800
+toys|add a fuse bead kit mk2 toys 2500
+luggage|add item passport holder mk2 luggage 450
+luggage|create cosmetic pouch mk2 item luggage 780
+luggage|add a hiking waist pack mk2 luggage 990
+
+# ══════ ② 不講類別（自動判斷）══════
+electronics|add item desk microphone mk2 120
+appliance_kitchen|add item stew pot mk2 350
+food_beverage|add item spicy hotpot base mk2 590
+daily_goods|add item dehumidifier box mk2 890
+apparel|add item fleece vest mk2 1200
+sports|add item frisbee mk2 1800
+hardware|add item utility knife mk2 2500
+beauty|add item aftershave lotion mk2 450
+medical|add item fish oil softgels mk2 780
+stationery|add item scissors mk2 990
+pet|add item pet pee pads mk2 120
+automotive|add item car wash sponge mk2 350
+furniture|add item five drawer chest mk2 590
+baby|add item milk powder dispenser mk2 890
+media|add item classic vinyl record mk2 1200
+industrial|add item air compressor filter mk2 1800
+toys|add item water play ball set mk2 2500
+luggage|add item canvas tote bag mk2 450
+
+# ══════ ③ 跨類歧義 ══════
+ambig|add item baby playpen fence type f 780
+ambig|add item pet carrier basket type f 990
+ambig|add item tool organizer pouch type f 120
+ambig|add item coffee thermos mug type f 350
+ambig|add item phone lanyard type f 590
+ambig|add item folding bucket type f 890
+ambig|add item electric air pump type f 1200
+ambig|add item beach mat type f 1800
+
+# ══════ ④ 欄位變化 ══════
+any|add item testprod alpha seven electronics
+any|add item testprod bravo seven electronics safety 30
+any|add item testprod charlie seven electronics north 80
+any|add item testprod delta seven electronics 500 safety 25
+any|add item testprod echo seven electronics 40 in each warehouse
+any|create testprod foxtrot seven item electronics 1200 north 50 central 30 south 20
+any|add item testprod golf seven electronics sells for 800 keep 15
+any|add a testprod hotel seven electronics thing 350 each
+
+# ══════ ⑤ 口語與現場情境 ══════
+any|just got a shipment of new hand wash foam mk3 type f daily 2500 each
+any|supplier delivered a new product smart plug mk3 type f electronics 450
+any|please add a coffee grinder mk3 type f for me kitchen 780
+any|i want to add a new product called smart plug mk3 type f electronics 990
+any|could you create a yoga brick mk3 type f item sports 120
+any|thinking of adding item hand wash foam mk3 type f daily 350
+any|please help me add new product hair mask mk3 type f beauty 590
+any|add item smart plug mk3 type f electronics eight hundred
+
+# ══════ ⑥ 邊界與該擋的 ══════
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr506 servo motor industrial 8900

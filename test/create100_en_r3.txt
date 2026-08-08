@@ -1,0 +1,114 @@
+# create100 第 3 輪語料（en・生成器產出・語音優先黏連句）
+# 真建立模式：確認卡會真的按下去，商品累積不刪（user 定調）
+
+# ══════ ① 19 類各 3 句 ══════
+electronics|add item gaming mouse electronics 890
+electronics|create noise cancelling headset item electronics 1200
+electronics|add a web camera electronics 1800
+appliance_kitchen|add item air fryer appliance 2500
+appliance_kitchen|create hand mixer item kitchen 450
+appliance_kitchen|add a rapid kettle appliance 780
+food_beverage|add item honey mustard sauce beverage 990
+food_beverage|create oatmeal cereal item beverage 120
+food_beverage|add a dried fruit mix food 350
+daily_goods|add item deodorizer spray daily 590
+daily_goods|create dusting sheets item household 890
+daily_goods|add a toilet cleaning tabs daily 1200
+apparel|add item hooded jacket apparel 1800
+apparel|create casual shorts item clothing 2500
+apparel|add a flannel shirt apparel 450
+sports|add item jump rope sports 780
+sports|create badminton racket item sports 990
+sports|add a ab roller outdoor 120
+hardware|add item tape measure hardware 350
+hardware|create spirit level item tools 590
+hardware|add a diagonal pliers hardware 890
+beauty|add item eye cream beauty 1200
+beauty|create makeup remover item skincare 1800
+beauty|add a lip balm beauty 2500
+medical|add item saline solution medical 450
+medical|create alcohol pads item health 780
+medical|add a ankle support bandage health 990
+stationery|add item highlighter set stationery 120
+stationery|create sticky notes item stationery 350
+stationery|add a paper clip box office 590
+pet|add item cat teaser wand pet 890
+pet|create pet grooming clipper item pet 1200
+pet|add a cat scratcher board pet 1800
+automotive|add item car vacuum cleaner automotive 2500
+automotive|create tire pressure sensor item automotive 450
+automotive|add a dash camera automotive 780
+furniture|add item computer desk furniture 990
+furniture|create coat rack item bedding 120
+furniture|add a bedside table furniture 350
+baby|add item baby walker baby 590
+baby|create baby bib item infant 890
+baby|add a baby monitor baby 1200
+media|add item cookbook books 1800
+media|create mystery novel item media 2500
+media|add a children picture book media 450
+industrial|add item gear set industrial 780
+industrial|create conveyor roller item industrial 990
+industrial|add a industrial sensor industrial 120
+toys|add item rc drone toy toys 350
+toys|create teddy bear plush item toys 590
+toys|add a block train set toys 890
+luggage|add item crossbody bag luggage 1200
+luggage|create travel packing cubes item luggage 1800
+luggage|add a laptop sleeve luggage 2500
+
+# ══════ ② 不講類別（自動判斷）══════
+electronics|add item smart plug 450
+appliance_kitchen|add item coffee grinder 780
+food_beverage|add item cold brew coffee 990
+daily_goods|add item hand wash foam 120
+apparel|add item knit scarf 350
+sports|add item yoga brick 590
+hardware|add item allen key set 890
+beauty|add item hair mask 1200
+medical|add item blood pressure monitor 1800
+stationery|add item desk calculator 2500
+pet|add item pet harness 450
+automotive|add item car air freshener 780
+furniture|add item bean bag sofa 990
+baby|add item teether toy 120
+media|add item language learning book 350
+industrial|add item solenoid valve 590
+toys|add item magic cube 890
+luggage|add item coin purse 1200
+
+# ══════ ③ 跨類歧義 ══════
+ambig|add item cooler bag 1800
+ambig|add item car trash bin 2500
+ambig|add item sports arm sleeve 450
+ambig|add item picnic basket 780
+ambig|add item desk mat 990
+ambig|add item portable fan 120
+ambig|add item yoga outfit 350
+ambig|add item camping seat pad 590
+
+# ══════ ④ 欄位變化 ══════
+any|add item testprod alpha four electronics
+any|add item testprod bravo four electronics safety 30
+any|add item testprod charlie four electronics north 80
+any|add item testprod delta four electronics 500 safety 25
+any|add item testprod echo four electronics 40 in each warehouse
+any|create testprod foxtrot four item electronics 1200 north 50 central 30 south 20
+any|add item testprod golf four electronics sells for 800 keep 15
+any|add a testprod hotel four electronics thing 350 each
+
+# ══════ ⑤ 口語與現場情境 ══════
+any|just got a shipment of new dehumidifier box daily 890 each
+any|supplier delivered a new product desk microphone electronics 1200
+any|please add a stew pot for me kitchen 1800
+any|i want to add a new product called desk microphone electronics 2500
+any|could you create a frisbee item sports 450
+any|thinking of adding item dehumidifier box daily 780
+any|please help me add new product aftershave lotion beauty 990
+any|add item desk microphone electronics eight hundred
+
+# ══════ ⑥ 邊界與該擋的 ══════
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr503 servo motor industrial 8900

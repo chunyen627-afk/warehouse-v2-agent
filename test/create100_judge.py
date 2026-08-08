@@ -36,15 +36,29 @@ def parse_card(reply: str, lang: str):
         # en 卡片類別欄可能帶「· auto-detected, change if wrong」尾註
         lbl = cm.group(1).split("·")[0].strip()
         cat = LABEL2KEY.get(lbl) or LABEL2KEY.get(lbl.lower())
+    if cat is None:
+        # r10：擷取截斷會吃掉 Category 列 → 用 SKU 前綴反查（ELE-0060→electronics）
+        sm = re.search(r'SKU\s*\t?\s*([A-Z]{3})-\d+', reply)
+        if sm:
+            from categories import CATEGORY_PREFIX
+            _p2c = {v: k for k, v in CATEGORY_PREFIX.items()}
+            cat = _p2c.get(sm.group(1))
     return name, cat
 
 
 def judge(rec: dict, lang: str):
     exp, reply, card = rec["expected"], rec["reply"], rec["has_card"]
     name, cat = parse_card(reply, lang)
-    asked_cat = ("步驟 2/4" in reply or "Step 2/4" in reply
-                 or "哪一類" in reply or "which category" in reply.lower())
-    asked_name = ("步驟 1/4" in reply or "Step 1/4" in reply)
+    _rl = reply.lower()
+    # r10：has_card 的 DOM slice 有邊界 race → 卡片以**文字**佐證即可
+    #   （en 卡「please confirm」＋類別列解析成功；zh 卡「請確認」）
+    if not card and cat and ("please confirm" in _rl or "請確認" in reply):
+        card = True
+    asked_cat = ("步驟 2/4" in reply or "step 2/4" in _rl
+                 or "哪一類" in reply or "which category" in _rl
+                 or "what category" in _rl)
+    asked_name = ("步驟 1/4" in reply or "step 1/4" in _rl
+                  or "what is the item called" in _rl)
     dup_hit = ("已存在" in reply or "already exists" in reply.lower())
     clarify = ("你想查" in reply or "請問" in reply or "❓" in reply)
 

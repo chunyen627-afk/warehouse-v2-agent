@@ -1,0 +1,114 @@
+# create100 第 4 輪語料（en・生成器產出・語音優先黏連句）
+# 真建立模式：確認卡會真的按下去，商品累積不刪（user 定調）
+
+# ══════ ① 19 類各 3 句 ══════
+electronics|add item card reader electronics 1200
+electronics|create bluetooth tracker item electronics 1800
+electronics|add a ebook reader electronics 2500
+appliance_kitchen|add item electric griddle appliance 450
+appliance_kitchen|create pressure cooker item kitchen 780
+appliance_kitchen|add a waffle maker appliance 990
+food_beverage|add item seaweed crisps beverage 120
+food_beverage|create sparkling juice item beverage 350
+food_beverage|add a brown sugar ginger tea food 590
+daily_goods|add item fabric softener daily 890
+daily_goods|create kitchen paper towels item household 1200
+daily_goods|add a glass cleaner daily 1800
+apparel|add item striped shirt apparel 2500
+apparel|create water repellent windbreaker item clothing 450
+apparel|add a cotton crew socks apparel 780
+sports|add item pull up bar sports 990
+sports|create swim goggles item sports 120
+sports|add a wrist support outdoor 350
+hardware|add item soldering iron hardware 590
+hardware|create sandpaper set item tools 890
+hardware|add a expansion bolt set hardware 1200
+beauty|add item body mist beauty 1800
+beauty|create nail polish item skincare 2500
+beauty|add a pressed powder beauty 450
+medical|add item lutein capsules medical 780
+medical|create fever cooling patch item health 990
+medical|add a medical gloves health 120
+stationery|add item file box stationery 350
+stationery|create whiteboard marker item stationery 590
+stationery|add a glue stick office 890
+pet|add item flea comb pet 1200
+pet|create food storage bucket item pet 1800
+pet|add a cat tree tower pet 2500
+automotive|add item wiper fluid automotive 450
+automotive|create car phone mount item automotive 780
+automotive|add a tire sealant automotive 990
+furniture|add item memory foam pillow furniture 120
+furniture|create folding dining table item bedding 350
+furniture|add a dressing mirror furniture 590
+baby|add item baby bathtub baby 890
+baby|create baby carrier wrap item infant 1200
+baby|add a baby nail clipper baby 1800
+media|add item photography album book books 2500
+media|create magazine bundle item media 450
+media|add a comic book set media 780
+industrial|add item shaft coupling industrial 990
+industrial|create oil seal kit item industrial 120
+industrial|add a stepper motor industrial 350
+toys|add item clay craft set toys 590
+toys|create race track set item toys 890
+toys|add a fuse bead kit toys 1200
+luggage|add item passport holder luggage 1800
+luggage|create cosmetic pouch item luggage 2500
+luggage|add a hiking waist pack luggage 450
+
+# ══════ ② 不講類別（自動判斷）══════
+electronics|add item smart doorbell 780
+appliance_kitchen|add item slow juicer 990
+food_beverage|add item spicy hotpot base 120
+daily_goods|add item lint roller 350
+apparel|add item fleece vest 590
+sports|add item resistance band 890
+hardware|add item utility knife 1200
+beauty|add item cleansing oil 1800
+medical|add item fish oil softgels 2500
+stationery|add item scissors 450
+pet|add item pet pee pads 780
+automotive|add item car wash sponge 990
+furniture|add item five drawer chest 120
+baby|add item milk powder dispenser 350
+media|add item classic vinyl record 590
+industrial|add item air compressor filter 890
+toys|add item water play ball set 1200
+luggage|add item canvas tote bag 1800
+
+# ══════ ③ 跨類歧義 ══════
+ambig|add item baby playpen fence type d 2500
+ambig|add item pet carrier basket type d 450
+ambig|add item tool organizer pouch type d 780
+ambig|add item coffee thermos mug type d 990
+ambig|add item phone lanyard type d 120
+ambig|add item folding bucket type d 350
+ambig|add item electric air pump type d 590
+ambig|add item beach mat type d 890
+
+# ══════ ④ 欄位變化 ══════
+any|add item testprod alpha five electronics
+any|add item testprod bravo five electronics safety 30
+any|add item testprod charlie five electronics north 80
+any|add item testprod delta five electronics 500 safety 25
+any|add item testprod echo five electronics 40 in each warehouse
+any|create testprod foxtrot five item electronics 1200 north 50 central 30 south 20
+any|add item testprod golf five electronics sells for 800 keep 15
+any|add a testprod hotel five electronics thing 350 each
+
+# ══════ ⑤ 口語與現場情境 ══════
+any|just got a shipment of new hand wash foam mk2 type d daily 1200 each
+any|supplier delivered a new product smart plug mk2 type d electronics 1800
+any|please add a coffee grinder mk2 type d for me kitchen 2500
+any|i want to add a new product called smart plug mk2 type d electronics 450
+any|could you create a yoga brick mk2 type d item sports 780
+any|thinking of adding item hand wash foam mk2 type d daily 990
+any|please help me add new product hair mask mk2 type d beauty 120
+any|add item smart plug mk2 type d electronics eight hundred
+
+# ══════ ⑥ 邊界與該擋的 ══════
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr504 servo motor industrial 8900

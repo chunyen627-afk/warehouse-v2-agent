@@ -1,0 +1,114 @@
+# create100 第 10 輪語料（en・生成器產出・語音優先黏連句）
+# 真建立模式：確認卡會真的按下去，商品累積不刪（user 定調）
+
+# ══════ ① 19 類各 3 句 ══════
+electronics|add item card reader series e electronics 120
+electronics|create bluetooth tracker series e item electronics 350
+electronics|add a ebook reader series e electronics 590
+appliance_kitchen|add item electric griddle series e appliance 890
+appliance_kitchen|create pressure cooker series e item kitchen 1200
+appliance_kitchen|add a waffle maker series e appliance 1800
+food_beverage|add item seaweed crisps series e beverage 2500
+food_beverage|create sparkling juice series e item beverage 450
+food_beverage|add a brown sugar ginger tea series e food 780
+daily_goods|add item fabric softener series e daily 990
+daily_goods|create kitchen paper towels series e item household 120
+daily_goods|add a glass cleaner series e daily 350
+apparel|add item striped shirt series e apparel 590
+apparel|create water repellent windbreaker series e item clothing 890
+apparel|add a cotton crew socks series e apparel 1200
+sports|add item pull up bar series e sports 1800
+sports|create swim goggles series e item sports 2500
+sports|add a wrist support series e outdoor 450
+hardware|add item soldering iron series e hardware 780
+hardware|create sandpaper set series e item tools 990
+hardware|add a expansion bolt set series e hardware 120
+beauty|add item body mist series e beauty 350
+beauty|create nail polish series e item skincare 590
+beauty|add a pressed powder series e beauty 890
+medical|add item lutein capsules series e medical 1200
+medical|create fever cooling patch series e item health 1800
+medical|add a medical gloves series e health 2500
+stationery|add item file box series e stationery 450
+stationery|create whiteboard marker series e item stationery 780
+stationery|add a glue stick series e office 990
+pet|add item flea comb series e pet 120
+pet|create food storage bucket series e item pet 350
+pet|add a cat tree tower series e pet 590
+automotive|add item wiper fluid series e automotive 890
+automotive|create car phone mount series e item automotive 1200
+automotive|add a tire sealant series e automotive 1800
+furniture|add item memory foam pillow series e furniture 2500
+furniture|create folding dining table series e item bedding 450
+furniture|add a dressing mirror series e furniture 780
+baby|add item baby bathtub series e baby 990
+baby|create baby carrier wrap series e item infant 120
+baby|add a baby nail clipper series e baby 350
+media|add item photography album book series e books 590
+media|create magazine bundle series e item media 890
+media|add a comic book set series e media 1200
+industrial|add item shaft coupling series e industrial 1800
+industrial|create oil seal kit series e item industrial 2500
+industrial|add a stepper motor series e industrial 450
+toys|add item clay craft set series e toys 780
+toys|create race track set series e item toys 990
+toys|add a fuse bead kit series e toys 120
+luggage|add item passport holder series e luggage 350
+luggage|create cosmetic pouch series e item luggage 590
+luggage|add a hiking waist pack series e luggage 890
+
+# ══════ ② 不講類別（自動判斷）══════
+electronics|add item desk microphone series e 1200
+appliance_kitchen|add item stew pot series e 1800
+food_beverage|add item spicy hotpot base series e 2500
+daily_goods|add item dehumidifier box series e 450
+apparel|add item fleece vest series e 780
+sports|add item frisbee series e 990
+hardware|add item utility knife series e 120
+beauty|add item aftershave lotion series e 350
+medical|add item fish oil softgels series e 590
+stationery|add item scissors series e 890
+pet|add item pet pee pads series e 1200
+automotive|add item car wash sponge series e 1800
+furniture|add item five drawer chest series e 2500
+baby|add item milk powder dispenser series e 450
+media|add item classic vinyl record series e 780
+industrial|add item air compressor filter series e 990
+toys|add item water play ball set series e 120
+luggage|add item canvas tote bag series e 350
+
+# ══════ ③ 跨類歧義 ══════
+ambig|add item baby playpen fence type j 590
+ambig|add item pet carrier basket type j 890
+ambig|add item tool organizer pouch type j 1200
+ambig|add item coffee thermos mug type j 1800
+ambig|add item phone lanyard type j 2500
+ambig|add item folding bucket type j 450
+ambig|add item electric air pump type j 780
+ambig|add item beach mat type j 990
+
+# ══════ ④ 欄位變化 ══════
+any|add item testprod alpha ten electronics
+any|add item testprod bravo ten electronics safety 30
+any|add item testprod charlie ten electronics north 80
+any|add item testprod delta ten electronics 500 safety 25
+any|add item testprod echo ten electronics 40 in each warehouse
+any|create testprod foxtrot ten item electronics 1200 north 50 central 30 south 20
+any|add item testprod golf ten electronics sells for 800 keep 15
+any|add a testprod hotel ten electronics thing 350 each
+
+# ══════ ⑤ 口語與現場情境 ══════
+any|just got a shipment of new hand wash foam series f type j daily 120 each
+any|supplier delivered a new product smart plug series f type j electronics 350
+any|please add a coffee grinder series f type j for me kitchen 590
+any|i want to add a new product called smart plug series f type j electronics 890
+any|could you create a yoga brick series f type j item sports 1200
+any|thinking of adding item hand wash foam series f type j daily 1800
+any|please help me add new product hair mask series f type j beauty 2500
+any|add item smart plug series f type j electronics eight hundred
+
+# ══════ ⑥ 邊界與該擋的 ══════
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr510 servo motor industrial 8900

@@ -7089,7 +7089,15 @@ async def reset_demo_data_api(req: Request):
         _pending_by_vid.clear()   # r32：舊卡片記憶（資料都換掉了，卡片內容已失效）
         _ctx_by_vid.clear()       # r32：舊 context（last_sku 可能指向已刪除的商品）
         await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
-        log.info("[reset_demo] 展示資料已重置")
+        # r24（2026-08-08 實抓）：State.reset() 之外仍有 in-memory 殘留
+        #   （重置後查詢答得到重置前建立的測試商品）——與其獵每一個快取，
+        #   直接**自動重啟服務**：os._exit(1) + systemd Restart=on-failure
+        #   保證跟開機一樣乾淨。展場按重置 ≈ 1 分鐘後全新狀態。
+        res["summary"] = (res.get("summary", "") +
+                          "\n🔄 系統將自動重啟完成重置，約 1 分鐘後恢復服務。")
+        log.info("[reset_demo] 展示資料已重置 → 1.5s 後自動重啟服務（r24 根治殘留）")
+        import os as _os24
+        asyncio.get_event_loop().call_later(1.5, _os24._exit, 1)
     return JSONResponse(res, headers=NO_CACHE)
 
 

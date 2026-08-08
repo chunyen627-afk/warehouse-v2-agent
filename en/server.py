@@ -460,6 +460,12 @@ def is_meaningful_input(text: str) -> bool:
             and not re.search(r"\b(?:database|table|everything|all data|"
                               r"all items|all stock|system)\b", s)):
         return True
+    # r23（create100 en r1）：**建檔句豁免**——'create rice cooker item 3200'
+    #   觸發詞不連續（create…item 中間隔商品名）被擋成 rejected。
+    #   注入字串類不豁免（前端會渲染商品名）。
+    if re.search(r"\b(?:add|create|register)\b.{0,40}\b(?:item|product|sku)s?\b", s) \
+            and not any(k in s for k in ("<script", "select * from", "onerror=")):
+        return True
     # 黑名單：明顯非倉管領域 → 直接擋
     for kw in _GATEKEEPER_BLACKLIST:
         if kw in s:
@@ -499,6 +505,32 @@ _GK_GLUED_RE = re.compile(
     r"\b(?:howmany|howmuch|whatabout|isthere|arethere|doyou|dowe|"
     r"themouse|theearphones|thestock|instock|stok|stcok|invetory|inventry)\b",
     re.I)
+
+
+def _en_create_trigger(text: str) -> bool:
+    """建檔觸發判定（r23 抽出共用，http/ws 三個攔截點同一判準）。
+
+    字面觸發詞之外補**不連續型**：'create rice cooker item 3200' 的
+    create…item 中間隔著商品名，字面表對不到（create100 en r1 實測掉去
+    守門員 rejected / 類別查詢）。中段含查詢功能詞不觸發。
+    誤傷掃描 2026-08-08：en 守衛 1002 句中命中的 10 句全是 crt 建檔正解。
+    """
+    t = (text or "").lower()
+    _kws = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品",
+            "增加商品", "新建商品",
+            "add item", "add a item", "add an item", "add new item",
+            "add a new item", "create item", "create a item",
+            "create an item", "create a new item", "new item",
+            "new product", "add product", "add a product",
+            "register item", "register a new item")
+    if any(w in t or w in (text or "") for w in _kws):
+        return True
+    m = re.search(r"\b(?:add|create|register)\b(.{0,40}?)\b(?:item|product|sku)s?\b", t)
+    if not m:
+        return False
+    return not any(w in m.group(1) for w in
+                   ("stock", "list", "report", "low", "expiring", "hot",
+                    "selling", "alert", "schedule", "history", "record"))
 
 
 def _GATEKEEPER_BLACKLIST_HIT(text: str) -> bool:
@@ -1229,6 +1261,10 @@ def _is_guide_request(text: str) -> bool:
     """
     s = text.strip().lower()
     if len(s) < 2:
+        return False
+    # r23（create100 en r1）：'help me add an item' 的 help 曾把建檔句搶成
+    #   導覽頁 → 建檔觸發句一律不當 guide
+    if _en_create_trigger(text):
         return False
     # r78：「那全部倉都改150好了」——帶數字的設定句不是引導請求
     # （「全部」是 GUIDE_WORDS 曾把 config 意圖吃掉）
@@ -10159,7 +10195,7 @@ async def api_query(req: Request):
                           "create an item", "create a new item", "new item",
                           "new product", "add product", "add a product",
                           "register item", "register a new item")
-    if any(w in user_text for w in _create_item_kws):
+    if _en_create_trigger(user_text):   # r23：補不連續型（create…item）
         import tools_v2 as _tv2
         log.info(f"[dispatch] 新增商品攔截: {user_text!r}")
         raw = user_text
@@ -10773,7 +10809,14 @@ async def reset_demo_data_api(req: Request):
         _pending_by_vid.clear()   # r32：舊卡片記憶（資料都換掉了，卡片內容已失效）
         _ctx_by_vid.clear()       # r32：舊 context（last_sku 可能指向已刪除的商品）
         await push_display({"type": "snapshot", "snapshot": finance.dashboard_snapshot()})
-        log.info("[reset_demo] 展示資料已重置")
+        # r24（2026-08-08 實抓）：State.reset() 之外仍有 in-memory 殘留 →
+        #   自動重啟服務根治（os._exit(1) + systemd Restart=on-failure）。
+        res["summary"] = (res.get("summary", "") +
+                          "\n🔄 The system will restart to complete the reset "
+                          "— back in about a minute.")
+        log.info("[reset_demo] 展示資料已重置 → 1.5s 後自動重啟服務（r24 根治殘留）")
+        import os as _os24
+        asyncio.get_event_loop().call_later(1.5, _os24._exit, 1)
     return JSONResponse(res, headers=NO_CACHE)
 
 
@@ -12315,6 +12358,17 @@ async def ws_handler(ws: WebSocket):
                 _bl_hit_ws = None
                 _gk_admin_pass = True   # 同排程豁免：後面還有守門員，要一起放行
 
+            # r23（create100 en r1）：**建檔句豁免**——'add a music cd' /
+            #   'add a board game' 的 music/game 是商品名不是閒聊；
+            #   破壞/注入類（_BL_NEVER_EXEMPT）照擋。守門員側已另行放行。
+            if (_bl_hit_ws and _en_create_trigger(user_text)
+                    and not any(w in user_text.lower() for w in _BL_NEVER_EXEMPT)
+                    and not _re.search(r"\b(?:database|table|everything|all data|"
+                                       r"password|system prompt|ignore)\b",
+                                       user_text, _re.I)):
+                log.info(f"[gate-豁免] 建檔句放行（黑名單 {_bl_hit_ws!r}）: {user_text!r}")
+                _bl_hit_ws = None
+                _gk_admin_pass = True
             if _bl_hit_ws:
                 log.info(f"[gate] 黑名單命中 {_bl_hit_ws!r} → rejected")
                 await push_display({"type": "trace", "stage": "rejected",
@@ -13938,6 +13992,14 @@ async def ws_handler(ws: WebSocket):
                     continue
 
             # ── item_create 流程中 → 攔截處理，不進 LLM（per-vid）──
+            # r23：流程中打了一句**完整的新建句** → 放棄舊流程當新句重來
+            #   （zh 版同款修法；en r2 實測 'create building blocks set item
+            #   toys 1200' 被吞成上一流程的 step-2 類別答案 → 連環吞）。
+            #   要放在查詢閘門之前。
+            if _ic_st.get("active") and _en_create_trigger(user_text):
+                log.info(f"[create-gate] 流程中偵測到新建句 → 重啟流程: {user_text!r}")
+                _item_create_state_ws.pop(vid, None)
+                _ic_st = {}
             if _ic_st.get("active"):
                 # r32：流程中訪客常常改問別的（「無線滑鼠還剩幾個」），過去整句被
                 #   吞成欄位值 → 商品類別變成「無線滑鼠還剩幾個」。明顯的查詢句不
@@ -14029,7 +14091,7 @@ async def ws_handler(ws: WebSocket):
                           "create an item", "create a new item", "new item",
                           "new product", "add product", "add a product",
                           "register item", "register a new item")
-            if any(w in user_text for w in _create_item_kws_ws2):
+            if _en_create_trigger(user_text):   # r23：補不連續型（create…item）
                 import tools_v2 as _tv2_ci2
                 # r22：用**保留逗號**的版本（切段法靠逗號分段，見 en-comma 註解）
                 raw = _text_with_comma or user_text
@@ -14040,6 +14102,12 @@ async def ws_handler(ws: WebSocket):
                 for _fw75 in ("幫我", "幫忙", "麻煩", "請", "我要", "我想", "想要",
                               "一下", "喔", "啊", "吧", "了"):
                     raw = raw.replace(_fw75, "").strip()
+                # r23（en r10 實抓）：'help me add an item' 剝掉觸發詞剩
+                # 'help me' 被當商品名建檔。英文贅詞也要剝（只剝獨立詞）。
+                raw = _re.sub(r"\b(?:help me|please|can you|could you|for me|"
+                              r"i want to|i would like to|thinking of|kindly)\b",
+                              " ", raw, flags=_re.I)
+                raw = _re.sub(r"\s+", " ", raw).strip(" ,.-")
                 result = _tv2_ci2.create_item_collect(step=1, raw_text=raw) if raw else _tv2_ci2.create_item_start()
                 if result.get("view") != "item_confirm":
                     d = result.get("data", {})
@@ -15018,7 +15086,12 @@ async def ws_handler(ws: WebSocket):
                     except Exception:
                         pass
                     _ci0_intent = _tv2_ci0.classify_add_intent(user_text, _ci0_has)
-                    if _ci0_intent == "create" and not _ci0_has:
+                    # r23：明確建檔句不再被主檔命中擋下（'add a gaming keyboard
+                    #   electronics 2500' 曾因 keyboard 撞 Mechanical Keyboard 被
+                    #   搶去進貨）。classify 回 create 都是**明確訊號**（品項名詞/
+                    #   建檔動詞/建檔欄位/類別+數字+動詞），真重複由建檔流程的
+                    #   dup 檢查回「already exists」，比進錯路安全。
+                    if _ci0_intent == "create":
                         _raw_ci0 = _text_with_comma or user_text
                         for _kw_ci0 in ("新增商品", "建立商品", "加一個商品",
                                         "新增一個", "加入商品", "增加商品",
@@ -16520,6 +16593,11 @@ async def ws_handler(ws: WebSocket):
                                 break
 
                 # ── dispatch-ws：item_create 分步流程（per-vid）──
+                # r23：完整新建句 → 重啟流程（同前段 create-gate 的修法）
+                if (_item_create_state_ws.get(vid, {}).get("active")
+                        and _en_create_trigger(user_text)):
+                    log.info(f"[dispatch-ws] 流程中偵測到新建句 → 重啟流程: {user_text!r}")
+                    _item_create_state_ws.pop(vid, None)
                 if _item_create_state_ws.get(vid, {}).get("active"):
                     # EN build：原本寫死 == "取消"，英文訪客講 cancel / never mind
                     #   出不來＝卡在新增流程裡（_ABORT_WORDS 已含英文，改用共用表）
@@ -16574,7 +16652,7 @@ async def ws_handler(ws: WebSocket):
                           "create an item", "create a new item", "new item",
                           "new product", "add product", "add a product",
                           "register item", "register a new item")
-                if any(w in user_text for w in _create_item_kws_ws):
+                if _en_create_trigger(user_text):   # r23：補不連續型（create…item）
                     import tools_v2 as _tv2_ci
                     log.info(f"[dispatch-ws] 新增商品攔截: {user_text!r}")
                     # r22：同上，用保留逗號的版本餵切段法

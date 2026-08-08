@@ -2109,6 +2109,46 @@ _EN_CAT_KW = {
 # 天生跨類別的容器/配件詞——一律問，不猜（保守派核心）
 #   實測這類佔反問的絕大多數，而且**該問**：手機殼是電子、垃圾袋是日用、
 #   水壺是運動，光看詞不可能分辨。
+_EN_NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                 "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+                 "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+                 "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+                 "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
+                 "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80,
+                 "ninety": 90}
+
+
+def _en_spelled_num_normalize(text: str) -> str:
+    """語音會唸英文數字（'eight hundred' / 'one thousand two hundred'）→
+    正規化成阿拉伯數字，價格規則才接得到（r23 鏡射 zh 的「八百元」轉換；
+    r11 實抓 'electronics eight hundred' 整串混進商品名）。
+    只轉**帶 hundred/thousand 的序列**——裸 'two' 可能是型號的一部分不動。"""
+    import re as _re
+    _w = "|".join(_EN_NUM_WORDS)
+    pat = _re.compile(
+        rf"\b(?:(?:{_w})\s+)?(?:hundred|thousand)"
+        rf"(?:\s+(?:and\s+)?(?:{_w}))?(?:\s+(?:{_w}))?\b"
+        rf"|\b(?:{_w})\s+(?:hundred|thousand)"
+        rf"(?:\s+(?:and\s+)?(?:{_w})(?:\s+(?:{_w}))?)?\b", _re.I)
+
+    def conv(m):
+        total, cur = 0, 0
+        for t in _re.findall(r"[a-z]+", m.group(0).lower()):
+            if t in _EN_NUM_WORDS:
+                cur += _EN_NUM_WORDS[t]
+            elif t == "hundred":
+                cur = (cur or 1) * 100
+                total += cur
+                cur = 0
+            elif t == "thousand":
+                cur = (cur or 1) * 1000
+                total += cur
+                cur = 0
+        return str(total + cur)
+
+    return pat.sub(conv, text)
+
+
 _EN_AMBIGUOUS_HEADS = {
     "towel", "set", "sets", "mug", "case", "bag", "bags", "kit", "bottle",
     "box", "holder", "stand", "cover", "pad", "rack", "tray", "basket",
@@ -2118,6 +2158,11 @@ _EN_AMBIGUOUS_HEADS = {
     #   辦公椅=家具、露營椅=運動；桌燈=家具、露營燈=運動；電扇=電子、
     #   吊扇=家具。這些光看 head 分不出來 ⇒ 一律讓修飾詞決定或反問。
     "chair", "chairs", "table", "tables", "lamp", "mirror", "clock",
+    # r23（create100 r11 實抓）：'blood pressure monitor' 被 head=monitor
+    #   判成電子（真實=醫療）、'coffee grinder' 被 mod=coffee 拉去食品
+    #   （真實=廚具）。monitor 螢幕=電子/血壓計=醫療/嬰兒監視器=母嬰、
+    #   grinder 磨豆機=廚具/角磨機=五金——head 分不出來 ⇒ 反問（不猜原則）。
+    "monitor", "grinder",
 }
 _EN_NAME_STOP = {"the", "and", "for", "with", "pack", "pcs", "pc", "men",
                  "mens", "women", "womens", "size", "inch", "pair", "person",
@@ -2199,6 +2244,25 @@ def classify_add_intent(text: str, has_item_in_master: bool) -> str:
             or re.search(r"進貨|收到|入庫|到貨|補貨|"
                          r"[北中南](?:區)?倉?\s*(?:進|收|補)\s*\d", text or ""):
         return "inbound"
+    # ④b r23（create100 en r1）：'add a gaming keyboard electronics 2500'——
+    #   **類別詞＋裸數字＋add/create 動詞**三條件同時 ⇒ 建檔（先前被 ⑤ 的
+    #   主檔模糊比對搶去進貨：keyboard 撞 Mechanical Keyboard）。
+    #   r22 誤傷的 89 句是裸類別詞（'electronics stock' 無數字無動詞），
+    #   三條件版在 en 守衛複掃只命中 crt 建檔正解。
+    if re.search(r"\b(?:add|create|register|new)\b", t) \
+            and re.search(r"(?<!\d)\d{2,6}(?!\d)", t) \
+            and not re.search(r"\b(?:to|into|at)\s+(?:the\s+)?"
+                              r"(?:north|central|south|warehouse)\b", t):
+        # r24 誤傷修（en 守衛實抓）：'add 100 whey drink to south' 是對既有
+        #   商品的**進貨**——「to 倉別」方向詞在場就不搶建檔
+        try:
+            from categories import CATEGORIES as _C19ai
+            for _cv_ai in _C19ai.values():
+                for _a_ai in list(_cv_ai["aliases_en"]) + [_cv_ai["label_en"].lower()]:
+                    if re.search(rf"\b{re.escape(_a_ai)}\b", t):
+                        return "create"
+        except Exception:
+            pass
     # ④ 建檔專屬欄位——⚠️ **只認「欄位+數值」的組合**，不可只看詞。
     #   誤傷檢查（守衛 981 句）抓到：原本「含類別詞 → create」誤傷 **89 句**
     #   查詢（'electronics stock' / 'kitchen appliances' / 'daily goods stock'
@@ -2339,28 +2403,66 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
     # 如果 raw_text 有內容，嘗試從中解析多個欄位（老手一句話模式）
     if raw_text and step == 1:
         import re as _re
+        # r23：拼字數字先正規化（'eight hundred' → 800），見 helper 註解
+        raw_text = _en_spelled_num_normalize(raw_text)
         # 嘗試解析：名稱 + 類別 + 價格 + 安全庫存 + 倉庫庫存
         # ⚠️ r23（中文詞表掃描）：**這段原本全中文** → 英文的「老手一句話」
         #   完全不支援：`add item Bluetooth Keyboard electronics price 800`
         #   整串被當成商品名（Name recorded: "Bluetooth Keyboard electronics
         #   price 800 safety 30"），走完流程會建出名字荒謬的商品。
+        # ── r23（create100）：類別詞認 **19 類**（categories.py 單一來源）──
+        #   舊版硬編 6 個 seed 類 → 'pet' / 'hardware' 等 13 類明講也抽不到。
+        #   ⚠️ 順序照 CATEGORIES 定義序——'hiking backpack outdoor' 要讓
+        #     sports 的 outdoor 先命中，不能被 luggage 的 backpack 搶走
+        #     （generic 別名 bag/backpack 排在後面的類別，只當兜底）。
         _cat_map = {"電子": "electronics", "家電": "appliance_kitchen", "食品": "food_beverage",
-                     "飲料": "food_beverage", "日用": "daily_goods", "服飾": "apparel", "運動": "sports",
-                     # EN：類別英文說法（含底線值本身與常見口語）
-                     "electronics": "electronics", "electronic": "electronics",
-                     "appliance": "appliance_kitchen", "kitchen": "appliance_kitchen",
-                     "appliance_kitchen": "appliance_kitchen",
-                     "food": "food_beverage", "beverage": "food_beverage",
-                     "drink": "food_beverage", "food_beverage": "food_beverage",
-                     "daily": "daily_goods", "daily_goods": "daily_goods",
-                     "household": "daily_goods",
-                     "apparel": "apparel", "clothing": "apparel", "clothes": "apparel",
-                     "sports": "sports", "sport": "sports", "outdoor": "sports"}
+                     "飲料": "food_beverage", "日用": "daily_goods", "服飾": "apparel", "運動": "sports"}
         _rt_low = raw_text.lower()
+        _trail_cat_tok = ""     # r23b：名字尾端類別詞（見下方語音無逗號註解）
         _found_cat = next(
-            (v for k, v in _cat_map.items()
-             if ((k in raw_text) if not k.isascii()
-                 else bool(_re.search(rf"\b{k}\b", _rt_low)))), "")
+            (v for k, v in _cat_map.items() if k in raw_text), "")
+        if not _found_cat:
+            from categories import CATEGORIES as _C19cm
+            # r23b：**先切商品名、把名字挖掉再找類別詞**——'oolong tea bags 180'
+            #   的 bags 是商品名一部分，整句掃會被 luggage 的 bags 別名搶走
+            #   （en r1 實測判錯 luggage）。名字挖掉後剩的才是真的「講類別」。
+            _rt_for_cat = _rt_low
+            try:
+                if _is_mostly_en_text(raw_text):
+                    _nm_pre = _en_cut_item_name(raw_text)
+                    if _nm_pre:
+                        _rt_for_cat = _rt_low.replace(_nm_pre.lower(), " ", 1)
+            except Exception:
+                pass
+            # r23c：多個類別詞同時在句中（'kitchen paper towels … household'）
+            #   → 取**位置最後**的那個——講類別的慣例在名字後面；名字裡的
+            #   類別字（kitchen）在前面，不該贏。
+            _best_pos, _best_cat = -1, ""
+            for _ck, _cv in _C19cm.items():
+                for _a in list(_cv["aliases_en"]) + [_ck, _cv["label_en"].lower()]:
+                    for _m_a in _re.finditer(rf"\b{_re.escape(_a)}\b", _rt_for_cat):
+                        if _m_a.start() > _best_pos:
+                            _best_pos, _best_cat = _m_a.start(), _ck
+            if _best_cat:
+                _found_cat = _best_cat
+            # r23b（語音無逗號）：'add item wiper blades automotive 450' 的
+            #   類別詞被切名法**吸進名字尾端** → 挖名後的殘句找不到類別。
+            #   ⇒ 名字尾 token 若是**非通用**類別別名 → 當類別、名字剝尾。
+            #   通用詞（car/food/bag/game…）常是商品名結尾（rc car/dog food/
+            #   sleeping bag），不做尾端判定、留給保守猜測（錯建比反問傷）。
+            if not _found_cat and _nm_pre:
+                _toks_nm = _nm_pre.lower().split()
+                _GENERIC_TAIL = {"car", "auto", "food", "drink", "snack",
+                                 "bag", "bags", "backpack", "book", "toy",
+                                 "game", "games", "music", "water"}
+                if len(_toks_nm) >= 2 and _toks_nm[-1] not in _GENERIC_TAIL:
+                    for _ck, _cv in _C19cm.items():
+                        _als = list(_cv["aliases_en"]) + [_ck,
+                                                          _cv["label_en"].lower()]
+                        if _toks_nm[-1] in _als:
+                            _found_cat = _ck
+                            _trail_cat_tok = _toks_nm[-1]
+                            break
         # 價格：中文「500元」／英文 price 800 / $800 / 800 dollars
         _price_m = (_re.search(r'(\d+)\s*元', raw_text)
                     or _re.search(r'\bprice\s*(?:is|:)?\s*(\d+)', _rt_low)
@@ -2389,6 +2491,13 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                     or _re.search(r'\bsouth\s*:?\s*(\d+)', _rt_low))
         _central_m = (_re.search(r'中\S*\s*(\d+)', raw_text)
                       or _re.search(r'\bcentral\s*:?\s*(\d+)', _rt_low))
+        # r23：'40 in each warehouse' / '40 each warehouse' → 三倉同量
+        #   （沒這條時 40 會被裸價格保底吃成單價；中文版本來就有「三倉各40」）
+        #   ⚠️ 要求後面有 warehouse 字樣——'350 each' 是單價，不能搶。
+        _each_en = _re.search(r'(\d+)\s*(?:units?\s*)?(?:in\s+)?each'
+                              r'(?:\s+of\s+the\s+three)?\s+warehouses?\b', _rt_low)
+        if _each_en and not (_north_m or _south_m or _central_m):
+            _north_m = _south_m = _central_m = _each_en
         # ── r22：**裸價格保底**（同中文版）──────────────────────────
         #   'add hiking backpack, 1500, safety 10' 的 1500 前面沒有價格詞，
         #   所有價格規則都接不到 → 判成缺價格而反問（行為安全但不夠聰明）。
@@ -2411,6 +2520,33 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         #   中文維持原剝除法（中文要剝的詞有限，且 r22 已修好）。
         if _is_mostly_en_text(raw_text):
             _name = _en_cut_item_name(raw_text)
+            # r23b：尾端 token 已判定為類別 → 從名字剝掉
+            #   （'wiper blades automotive' → 名 'wiper blades' 類 automotive）
+            if (_trail_cat_tok and _name
+                    and _name.lower().split()[-1:] == [_trail_cat_tok]):
+                _name = _name[:_name.lower().rfind(_trail_cat_tok)].strip(" ,-")
+            # r23c：切段法整段切空的兜底（'kitchen paper towels' 因段內含
+            #   類別字 kitchen 被屬性段降權整段丟掉）→ 改剝除法救回：
+            #   拿掉欄位值/指令詞/**已判定的類別詞**後剩下的就是名字。
+            if not _name and _found_cat:
+                _nm2 = raw_text
+                for _mm in (_price_m, _safety_m, _north_m, _central_m, _south_m):
+                    if _mm:
+                        _nm2 = _nm2.replace(_mm.group(0), " ", 1)
+                _nm2 = _re.sub(r"\b(?:add|create|register|new|item|product|sku|"
+                               r"a|an|the|please|help|me|for|thing|each|called)\b",
+                               " ", _nm2, flags=_re.I)
+                from categories import CATEGORIES as _C19nb
+                _cv_nb = _C19nb.get(_found_cat, {})
+                for _a2 in (list(_cv_nb.get("aliases_en", [])) + [_found_cat]
+                            + [_cv_nb.get("label_en", "").lower()]):
+                    if _a2:
+                        _nm2 = _re.sub(rf"\b{_re.escape(_a2)}\b", " ", _nm2,
+                                       flags=_re.I)
+                _nm2 = _re.sub(r"\d+", " ", _nm2)
+                _nm2 = _re.sub(r"\s+", " ", _nm2).strip(" ,.-&")
+                if _nm2 and not _en_name_is_suspicious(_nm2):
+                    _name = _nm2
             # ⚠️ 最後一道保險（r22）：切出來的名稱看起來不像真商品名
             #   （'some stuff' / 'a thing' / 單一過短 token）→ **不往下走**，
             #   回第一步重問。世界上的商品名無限，切名規則不可能永遠對；
@@ -2464,7 +2600,10 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             if _safety_m:
                 _safety_val, _safety_src = int(_safety_m.group(1)), "stated"
             elif _init_total > 0:
-                _safety_val, _safety_src = _init_total, "from_stock"
+                # r23：從初始庫存推的水位取**單倉最大值**不是總和——缺貨判定
+                #   是每倉各自 < 安全庫存，'40 in each warehouse' 推成 120
+                #   會讓三倉建完立刻全跳缺貨（假成功；中文版函式探針實抓）
+                _safety_val, _safety_src = max(_n_qty, _c_qty, _s_qty), "from_stock"
             else:
                 _safety_val, _safety_src = _DEFAULT_SAFETY, "default"
             # ⚠️ **沒講倉庫量 → 三倉都補成安全庫存值**（user 定調
@@ -2526,13 +2665,32 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                            "Please use a different name.",
                     "view": "item_create_step1",
                     "data": {"step": 1, "prompt": "Please enter a different item name"}}
+        # r24（user 定調 2026-08-08）：**one step——名字進來直接出確認卡**。
+        #   原四步流程展場太拖。類別先讓 head-noun 猜（實測判對 83%/錯 3%），
+        #   猜不到歸 Other；價格未定、安全庫存/三倉給預設。
+        #   卡上全看得到、可改可取消（HITL 確認關卡不變）。
+        _g24, _ = _en_guess_category(name)
+        _cat24 = _g24 or "other"
+        new_sku = _next_sku(_cat24)
+        pending = {
+            "name": name, "category": _cat24,
+            "category_label": W.CATEGORY_LABEL.get(_cat24, _cat24),
+            "price": 0, "safety": _DEFAULT_SAFETY,
+            "stock_north": _DEFAULT_SAFETY, "stock_central": _DEFAULT_SAFETY,
+            "stock_south": _DEFAULT_SAFETY, "sku": new_sku,
+            "category_guessed": bool(_g24),
+            "price_unset": True, "safety_src": "default",
+        }
+        _lbl24 = pending["category_label"]
         return {"ok": True,
-                "summary": f'Name recorded: "{name}"\n'
-                           "Step 2: which category? electronics / appliance & "
-                           "kitchen / food & beverage / daily goods / apparel / "
-                           'sports (say "cancel" to exit)',
-                "view": "item_create_step2",
-                "data": {"step": 2, "name": name, "prompt": 'Choose a category (or say "cancel" to exit)'}}
+                "summary": (f'Got it — "{name}"! I filled in: category '
+                            f'"{_lbl24}", safety stock {_DEFAULT_SAFETY} '
+                            "(default), price not set.\n"
+                            "Change anything on the card before confirming, "
+                            f'or say the full thing (e.g. "add item {name} '
+                            'electronics 500") to redo.'),
+                "view": "item_confirm",
+                "data": {"pending": True, "item": pending}}
     elif step == 2:
         # r75：類別欄要驗證＋正規化成主檔 key——「陶瓷馬克杯」曾被當類別吸收
         # 造成整條流程欄位錯位；中文原字入檔會生出幻影類別（SKU 也拿到 x 前綴）
@@ -2559,13 +2717,28 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                        "運動": "sports"}
         _cat_key = next((v for k, v in _cat_zh2key.items()
                          if k in (category or "").lower()), "")
-        if not _cat_key and category in _cat_zh2key.values():
-            _cat_key = category
+        # r23：6 類以外 → 查 categories.py 全 19 類別名（step-2 卡死修補）
+        if not _cat_key:
+            from categories import CATEGORIES as _C19s2
+            _clow = (category or "").lower()
+            for _ck, _cv in _C19s2.items():
+                _als = list(_cv["aliases_en"]) + [_ck, _cv["label_en"].lower()] \
+                       + [a for a in _cv["aliases_zh"] if len(a) >= 2]
+                if any((a in _clow) if a.isascii() else (a in (category or ""))
+                       for a in _als):
+                    _cat_key = _ck
+                    break
+        if not _cat_key:
+            from categories import CATEGORIES as _C19chk
+            if category in _C19chk:
+                _cat_key = category
         if not _cat_key:
             return {"ok": True,
-                    "summary": (f'"{category}" is not a category. Please pick one of: '
-                                "electronics / appliance & kitchen / food & beverage / "
-                                'daily goods / apparel / sports (say "cancel" to exit)'),
+                    "summary": (f'"{category}" is not a category. You can say: '
+                                "electronics / kitchen / food / daily / apparel / sports / "
+                                "hardware / beauty / medical / stationery / pet / automotive / "
+                                "furniture / baby / media / industrial / toys / luggage "
+                                '(say "cancel" to exit)'),
                     "view": "item_create_step2",
                     "data": {"step": 2, "name": name,
                              # r8：類別填錯時的**重問**路徑（happy path 的

@@ -1,0 +1,114 @@
+# create100 第 5 輪語料（en・生成器產出・語音優先黏連句）
+# 真建立模式：確認卡會真的按下去，商品累積不刪（user 定調）
+
+# ══════ ① 19 類各 3 句 ══════
+electronics|add item gaming mouse mk2 electronics 1800
+electronics|create noise cancelling headset mk2 item electronics 2500
+electronics|add a web camera mk2 electronics 450
+appliance_kitchen|add item air fryer mk2 appliance 780
+appliance_kitchen|create hand mixer mk2 item kitchen 990
+appliance_kitchen|add a rapid kettle mk2 appliance 120
+food_beverage|add item honey mustard sauce mk2 beverage 350
+food_beverage|create oatmeal cereal mk2 item beverage 590
+food_beverage|add a dried fruit mix mk2 food 890
+daily_goods|add item deodorizer spray mk2 daily 1200
+daily_goods|create dusting sheets mk2 item household 1800
+daily_goods|add a toilet cleaning tabs mk2 daily 2500
+apparel|add item hooded jacket mk2 apparel 450
+apparel|create casual shorts mk2 item clothing 780
+apparel|add a flannel shirt mk2 apparel 990
+sports|add item jump rope mk2 sports 120
+sports|create badminton racket mk2 item sports 350
+sports|add a ab roller mk2 outdoor 590
+hardware|add item tape measure mk2 hardware 890
+hardware|create spirit level mk2 item tools 1200
+hardware|add a diagonal pliers mk2 hardware 1800
+beauty|add item eye cream mk2 beauty 2500
+beauty|create makeup remover mk2 item skincare 450
+beauty|add a lip balm mk2 beauty 780
+medical|add item saline solution mk2 medical 990
+medical|create alcohol pads mk2 item health 120
+medical|add a ankle support bandage mk2 health 350
+stationery|add item highlighter set mk2 stationery 590
+stationery|create sticky notes mk2 item stationery 890
+stationery|add a paper clip box mk2 office 1200
+pet|add item cat teaser wand mk2 pet 1800
+pet|create pet grooming clipper mk2 item pet 2500
+pet|add a cat scratcher board mk2 pet 450
+automotive|add item car vacuum cleaner mk2 automotive 780
+automotive|create tire pressure sensor mk2 item automotive 990
+automotive|add a dash camera mk2 automotive 120
+furniture|add item computer desk mk2 furniture 350
+furniture|create coat rack mk2 item bedding 590
+furniture|add a bedside table mk2 furniture 890
+baby|add item baby walker mk2 baby 1200
+baby|create baby bib mk2 item infant 1800
+baby|add a baby monitor mk2 baby 2500
+media|add item cookbook mk2 books 450
+media|create mystery novel mk2 item media 780
+media|add a children picture book mk2 media 990
+industrial|add item gear set mk2 industrial 120
+industrial|create conveyor roller mk2 item industrial 350
+industrial|add a industrial sensor mk2 industrial 590
+toys|add item rc drone toy mk2 toys 890
+toys|create teddy bear plush mk2 item toys 1200
+toys|add a block train set mk2 toys 1800
+luggage|add item crossbody bag mk2 luggage 2500
+luggage|create travel packing cubes mk2 item luggage 450
+luggage|add a laptop sleeve mk2 luggage 780
+
+# ══════ ② 不講類別（自動判斷）══════
+electronics|add item smart plug mk2 990
+appliance_kitchen|add item coffee grinder mk2 120
+food_beverage|add item cold brew coffee mk2 350
+daily_goods|add item hand wash foam mk2 590
+apparel|add item knit scarf mk2 890
+sports|add item yoga brick mk2 1200
+hardware|add item allen key set mk2 1800
+beauty|add item hair mask mk2 2500
+medical|add item blood pressure monitor mk2 450
+stationery|add item desk calculator mk2 780
+pet|add item pet harness mk2 990
+automotive|add item car air freshener mk2 120
+furniture|add item bean bag sofa mk2 350
+baby|add item teether toy mk2 590
+media|add item language learning book mk2 890
+industrial|add item solenoid valve mk2 1200
+toys|add item magic cube mk2 1800
+luggage|add item coin purse mk2 2500
+
+# ══════ ③ 跨類歧義 ══════
+ambig|add item cooler bag type e 450
+ambig|add item car trash bin type e 780
+ambig|add item sports arm sleeve type e 990
+ambig|add item picnic basket type e 120
+ambig|add item desk mat type e 350
+ambig|add item portable fan type e 590
+ambig|add item yoga outfit type e 890
+ambig|add item camping seat pad type e 1200
+
+# ══════ ④ 欄位變化 ══════
+any|add item testprod alpha six electronics
+any|add item testprod bravo six electronics safety 30
+any|add item testprod charlie six electronics north 80
+any|add item testprod delta six electronics 500 safety 25
+any|add item testprod echo six electronics 40 in each warehouse
+any|create testprod foxtrot six item electronics 1200 north 50 central 30 south 20
+any|add item testprod golf six electronics sells for 800 keep 15
+any|add a testprod hotel six electronics thing 350 each
+
+# ══════ ⑤ 口語與現場情境 ══════
+any|just got a shipment of new dehumidifier box mk2 type e daily 1800 each
+any|supplier delivered a new product desk microphone mk2 type e electronics 2500
+any|please add a stew pot mk2 type e for me kitchen 450
+any|i want to add a new product called desk microphone mk2 type e electronics 780
+any|could you create a frisbee mk2 type e item sports 990
+any|thinking of adding item dehumidifier box mk2 type e daily 120
+any|please help me add new product aftershave lotion mk2 type e beauty 350
+any|add item desk microphone mk2 type e electronics eight hundred
+
+# ══════ ⑥ 邊界與該擋的 ══════
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr505 servo motor industrial 8900

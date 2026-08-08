@@ -29,11 +29,54 @@ def cdp_pages():
         return [t for t in json.load(r) if t["type"] == "page"]
 
 
-def page_ws(port):
+def _browser_call(method, **params):
+    with urllib.request.urlopen("http://127.0.0.1:9222/json/version",
+                                timeout=5) as r:
+        burl = json.load(r)["webSocketDebuggerUrl"]
+    bws = wsc.connect(burl, max_size=None)
+    bws.send(json.dumps({"id": 1, "method": method, "params": params}))
+    while True:
+        m = json.loads(bws.recv())
+        if m.get("id") == 1:
+            bws.close()
+            return m.get("result", {})
+
+
+def page_ws(port, fast=False):
+    """找目標分頁；fast=True 用/開一個 ?fast=1 分頁（打字動畫 0，
+    同 code path 只省等待——en r5 實測 8ms/字 × 大卡片讓每互動 30-60s，
+    批次測試不開 fast 撐不完）。kiosk 本頁不動，訪客畫面不受影響。"""
+    want = "fast=1" if fast else None
     for t in cdp_pages():
-        if f":{port}" in t.get("url", ""):
+        u = t.get("url", "")
+        if f":{port}" in u and ((want in u) if want else ("fast=1" not in u)):
+            if fast:
+                # ⚠️ 背景分頁會被 Chromium 節流/凍結：timers 停擺 → WS 斷了
+                #   reconnect 永不觸發，批次打進黑洞（r7/r8 實抓：5 分鐘後
+                #   伺服器再沒收到任何 User）。帶到前景才能長跑。
+                _browser_call("Target.activateTarget", targetId=t["id"])
             return t["webSocketDebuggerUrl"]
-    raise SystemExit(f"port {port} 的頁面不在 CDP 裡")
+    if not fast:
+        raise SystemExit(f"port {port} 的頁面不在 CDP 裡")
+    # 開新分頁（Target.createTarget；不可從 SSH 起 chromium——缺 X11）
+    with urllib.request.urlopen("http://127.0.0.1:9222/json/version",
+                                timeout=5) as r:
+        burl = json.load(r)["webSocketDebuggerUrl"]
+    bws = wsc.connect(burl, max_size=None)
+    bws.send(json.dumps({"id": 1, "method": "Target.createTarget",
+                         "params": {"url": f"https://localhost:{port}/?fast=1"}}))
+    while True:
+        m = json.loads(bws.recv())
+        if m.get("id") == 1:
+            break
+    bws.close()
+    for _ in range(30):
+        time.sleep(2)
+        for t in cdp_pages():
+            if f":{port}" in t.get("url", "") and "fast=1" in t.get("url", ""):
+                _browser_call("Target.activateTarget", targetId=t["id"])
+                return t["webSocketDebuggerUrl"]
+    raise SystemExit(f"開 {port} fast 分頁逾時")
 
 
 class CDP:
@@ -74,9 +117,30 @@ def msg_count(c):
     return c.js("document.querySelectorAll('#messages > *').length") or 0
 
 
+def page_sig(c):
+    """畫面簽章 = 訊息數×1e7 + 全文字長。⚠️ 只看訊息數會踩 race：
+    token 串流塞在同一顆泡泡裡、訊息數不動，推論靜默期就被誤判「講完了」
+    （r6 實抓：擷取到半句 + 卡片還沒渲染）。字長每個 token 都會動。"""
+    return c.js("(document.querySelectorAll('#messages > *').length * 10000000)"
+                " + ((document.getElementById('messages')||{innerText:''})"
+                ".innerText||'').length") or 0
+
+
 def send_text(c, text):
     """填字＋送出；送不出去（輸入框沒清空）最多重按 3 次。
-    en r3 實抓：頁面忙碌時 click 無效 → 整句 EMPTY。"""
+    en r3 實抓：頁面忙碌時 click 無效 → 整句 EMPTY。
+    en r4b 實抓：**送出鈕卡 disabled**（done frame 沒到就永久鎖）→ 先等
+    解鎖最多 60s，仍鎖住就強制解鎖（並回報 stuck，這是前端看門狗缺口）。"""
+    for _ in range(90):                     # 等前端 busy 解除（最多 45s）
+        if not c.js("document.getElementById('send-btn').disabled"):
+            break
+        time.sleep(0.5)
+    if c.js("document.getElementById('send-btn').disabled"):
+        print("    ⚠️ 送出鈕卡 disabled 45s → setSending(false) 強制復位",
+              flush=True)
+        # ⚠️ 只解 disabled 不夠——onclick 還會擋 isSending 旗標（r4c 實抓）
+        c.js("try { setSending(false); } catch(e) { "
+             "document.getElementById('send-btn').disabled = false; }")
     esc = json.dumps(text)
     for _try in range(3):
         c.js(f"""(() => {{
@@ -103,13 +167,13 @@ def wait_reply(c, before_cnt, max_stream=80):
     prev, stable = -1, 0
     for _ in range(max_stream):
         time.sleep(0.7)
-        cnt = msg_count(c)
-        if cnt == prev:
+        sig = page_sig(c)
+        if sig == prev:
             stable += 1
             if stable >= 8:
                 break
         else:
-            prev, stable = cnt, 0
+            prev, stable = sig, 0
     time.sleep(0.5)
 
 
@@ -122,20 +186,39 @@ def new_msgs_text(c, before_cnt, limit=2000):
 
 def main():
     args = sys.argv[1:]
-    port, confirm_mode = 8001, False
+    port, confirm_mode, fast = 8001, False, False
     while args and args[0].startswith("--"):
         if args[0] == "--port":
             port = int(args[1]); args = args[2:]
         elif args[0] == "--confirm":
             confirm_mode = True; args = args[1:]
+        elif args[0] == "--fast":
+            fast = True; args = args[1:]
         else:
             raise SystemExit(f"unknown flag {args[0]}")
     corpus_path, out_path = args[0], args[1]
     rows = load_corpus(corpus_path)
     lang = "zh" if port == 8001 else "en"
-    print(f"語料 {len(rows)} 句，port {port}，confirm={confirm_mode}", flush=True)
+    print(f"語料 {len(rows)} 句，port {port}，confirm={confirm_mode}，fast={fast}",
+          flush=True)
 
-    c = CDP(page_ws(port))
+    # 關動態模擬要在**載頁之前**——模擬吃滿事件圈時 index 頁根本載不進
+    # （r8 實抓：關模擬步驟原在載頁後，雞生蛋、三次重試全逾時）
+    try:
+        import ssl as _ssl
+        _ctx0 = _ssl.create_default_context()
+        _ctx0.check_hostname = False
+        _ctx0.verify_mode = _ssl.CERT_NONE
+        _rq0 = urllib.request.Request(
+            f"https://localhost:{port}/api/live_mode",
+            data=json.dumps({"action": "stop"}).encode(),
+            headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(_rq0, context=_ctx0, timeout=30)
+        print("live 模擬已關（載頁前）", flush=True)
+    except Exception as _e0:
+        print(f"live 模擬預關失敗（{_e0!r}），照跑", flush=True)
+
+    c = CDP(page_ws(port, fast=fast))
     c.send("Page.enable")
     c.send("Runtime.enable")
     c.send("Network.enable")
@@ -149,7 +232,8 @@ def main():
             c.send("Page.reload", ignoreCache=True)
         else:
             print(f"頁面載入失敗，第 {_attempt+1} 次重新導航…", flush=True)
-            c.send("Page.navigate", url=f"https://localhost:{port}/")
+            c.send("Page.navigate",
+                   url=f"https://localhost:{port}/" + ("?fast=1" if fast else ""))
         for _ in range(60):
             time.sleep(1)
             try:
@@ -164,6 +248,21 @@ def main():
     if not _page_ok:
         raise SystemExit("頁面三次都載不出輸入框，中止（檢查 server/health）")
     time.sleep(8)
+    # 關動態模擬（live_mode docstring：跑測試前務必關）——它持續灌 movements
+    # 會讓 en 的 len(movements) 快取鍵永遠失效 → 每查全掃 30s（r7 實抓）
+    try:
+        import ssl as _ssl
+        _ctx = _ssl.create_default_context()
+        _ctx.check_hostname = False
+        _ctx.verify_mode = _ssl.CERT_NONE
+        _rq = urllib.request.Request(
+            f"https://localhost:{port}/api/live_mode",
+            data=json.dumps({"action": "stop"}).encode(),
+            headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(_rq, context=_ctx, timeout=10)
+        print("live 模擬已關（測試模式）", flush=True)
+    except Exception as _e_lv:
+        print(f"live 模擬關閉失敗（{_e_lv!r}），照跑", flush=True)
     print("頁面已硬重載，開跑", flush=True)
 
     out = open(out_path, "w", encoding="utf-8")
@@ -171,26 +270,43 @@ def main():
     for n, (exp, s) in enumerate(rows, 1):
         # 送句前先等前一句**完全**沉澱（en r1 實測：LLM 慢句串流溢到下一句
         # 的擷取窗，回覆整批錯位 → 判定出幻影 ❌）
-        prev_cnt, quiet = msg_count(c), 0
+        prev_sig, quiet = page_sig(c), 0
         for _ in range(120):
             time.sleep(0.5)
-            cur = msg_count(c)
-            if cur == prev_cnt:
+            cur = page_sig(c)
+            if cur == prev_sig:
                 quiet += 1
                 if quiet >= 10:         # 5s 靜默才算前一句真的結束
                     break
             else:
-                prev_cnt, quiet = cur, 0
+                prev_sig, quiet = cur, 0
+        # 逐句 WS 健康檢查：斷線的送出會**靜默蒸發**（r8b 實抓：WS 死了
+        # 兩小時、73 句全打黑洞）→ 斷了就重載頁面重連再送
+        if not c.js("typeof ws !== 'undefined' && !!ws && ws.readyState === 1"):
+            print(f"    ⚠️ [{n}] 前端 WS 斷線 → 重載頁面重連", flush=True)
+            c.send("Page.navigate",
+                   url=f"https://localhost:{port}/" + ("?fast=1" if fast else ""))
+            for _ in range(60):
+                time.sleep(1)
+                try:
+                    if c.js("!!document.getElementById('input-text') && "
+                            "typeof ws !== 'undefined' && !!ws && ws.readyState === 1"):
+                        break
+                except Exception:
+                    pass
+            time.sleep(5)
         before_cnt = msg_count(c)
         if not send_text(c, s):
             print(f"    ⚠️ [{n}] 送出失敗（重試 3 次仍未清空）", flush=True)
         wait_reply(c, before_cnt)
         reply = new_msgs_text(c, before_cnt)
-        has_card = bool(c.js(f"""(() => {{
-            const m = [...document.querySelectorAll('#messages > *')].slice({before_cnt});
+        # r10：slice(before_cnt) 有邊界 race（卡片文字在、按鈕判不在）→
+        #   改掃**最後 8 則**訊息找按鈕（上一句的卡按過就消失，不會誤按舊卡）
+        has_card = bool(c.js("""(() => {
+            const m = [...document.querySelectorAll('#messages > *')].slice(-8);
             return m.some(e => e.querySelector &&
                 e.querySelector('button.hitl-approve[data-action="item_create"]'));
-        }})()"""))
+        })()"""))
         created, query_ok, create_reply, query_reply, item_name = False, None, "", "", ""
         # 名稱從確認卡抽（查詢驗證要用）
         if lang == "zh":
@@ -201,15 +317,15 @@ def main():
             item_name = nm.group(1).strip()
         if confirm_mode and has_card:
             b2 = msg_count(c)
-            clicked = c.js(f"""(() => {{
-                const m = [...document.querySelectorAll('#messages > *')].slice({before_cnt});
-                for (let i = m.length - 1; i >= 0; i--) {{
+            clicked = c.js("""(() => {
+                const m = [...document.querySelectorAll('#messages > *')].slice(-8);
+                for (let i = m.length - 1; i >= 0; i--) {
                     const b = m[i].querySelector &&
                         m[i].querySelector('button.hitl-approve[data-action="item_create"]');
-                    if (b) {{ b.click(); return true; }}
-                }}
+                    if (b) { b.click(); return true; }
+                }
                 return false;
-            }})()""")
+            })()""")
             if clicked:
                 wait_reply(c, b2, max_stream=40)
                 create_reply = new_msgs_text(c, b2, 600)

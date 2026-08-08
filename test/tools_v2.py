@@ -2062,9 +2062,37 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             return {"ok": True, "summary": f"⚠️ 商品「{name}」已存在（SKU: {existing[0]['sku_id']}），請改用其他名稱。",
                     "view": "item_create_step1",
                     "data": {"step": 1, "prompt": "請輸入不同的商品名稱"}}
-        return {"ok": True, "summary": f"已記錄商品名稱：「{name}」\n第二步：屬於哪一類？（輸入「取消」可退出）",
-                "view": "item_create_step2",
-                "data": {"step": 2, "name": name, "prompt": "請選擇類別（或輸入「取消」退出）"}}
+        # r24（user 定調 2026-08-08）：**念完名字就完事**——原四步流程
+        #   （名稱→類別→價格→庫存）展場太拖。名字進來直接出確認卡：
+        #   類別從名字裡認（黏連別名判定），認不出先歸「其他」；
+        #   價格未定、安全庫存/三倉給預設。卡上全看得到、可改可取消
+        #   （HITL 確認關卡不變，零風險寫入）。
+        import re as _re24
+        _cat24 = ""
+        for _al24, _ck24 in _zh_alias_pairs():
+            if _re24.search(_re24.escape(_al24)
+                            + r'(?:類|品|用品|的)?(?=[\s，,、。.：:；;]|\d|$)',
+                            name):
+                _cat24 = _ck24
+                break
+        _cat24 = _cat24 or "other"
+        new_sku = _next_sku(_cat24)
+        pending = {
+            "name": name, "category": _cat24,
+            "category_label": W.CATEGORY_LABEL.get(_cat24, _cat24),
+            "price": 0, "safety": _DEFAULT_SAFETY,
+            "stock_north": _DEFAULT_SAFETY, "stock_central": _DEFAULT_SAFETY,
+            "stock_south": _DEFAULT_SAFETY, "sku": new_sku,
+            "price_unset": True, "safety_src": "default",
+        }
+        _lbl24 = pending["category_label"]
+        return {"ok": True,
+                "summary": (f"收到「{name}」！我幫你填了：類別「{_lbl24}」、"
+                            f"安全庫存 {_DEFAULT_SAFETY}（預設）、售價未設定。\n"
+                            "確認前都可以在卡片上改，或講一句完整的"
+                            "（例如「新增商品{name} 電子 500元」）重來。"),
+                "view": "item_confirm",
+                "data": {"pending": True, "item": pending}}
     elif step == 2:
         # r75：類別欄要驗證＋正規化成主檔 key——「陶瓷馬克杯」曾被當類別吸收
         # 造成整條流程欄位錯位；中文原字入檔會生出幻影類別（SKU 也拿到 x 前綴）

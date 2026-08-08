@@ -1,0 +1,139 @@
+# Create-item test corpus (English 100 - VOICE-FIRST) - reusable asset, run every round
+# Design baseline (user 2026-08-08): voice input first - ASR output is lowercase,
+# run-on, no punctuation, no commas, no dollar signs. Text input second, same style.
+# Format: expected_category_key|sentence   (expected = judged per categories.py)
+#   ambig  = cross-category item; any reasonable category passes; clarify also passes
+#   any    = category not scored (tests parsing, not classification)
+# Run via CDP (create100_run.py); do NOT click the confirm card - zero write pollution
+# Verdicts: correct / acceptable(cross-cat) / wrong(fix) / clarify(not wrong)
+
+# ====== (1) 3 sentences per category x 19 (57) ======
+# ELE Electronics
+electronics|add item wireless trackball mouse electronics 590
+electronics|create bluetooth earphones pro item electronics 1200 safety 30
+electronics|add a gaming keyboard electronics 2500
+# KIT Appliance & Kitchen
+appliance_kitchen|add item nonstick frying pan appliance 890
+appliance_kitchen|create electric kettle item kitchen 1200
+appliance_kitchen|add a juice blender appliance 1800 safety 10
+# FNB Food & Beverage
+food_beverage|add item grape sparkling water food 35
+food_beverage|create dark roast coffee beans item beverage 450
+food_beverage|add a mixed nuts gift box food 320
+# DLY Daily Goods
+daily_goods|add item thick wet wipes daily 120
+daily_goods|create laundry detergent pods item household 250
+daily_goods|add a trash bag roll daily 89
+# CLO Apparel
+apparel|add item cotton polo shirt apparel 390
+apparel|create down vest item clothing 2890
+apparel|add a windproof glove set apparel 350
+# SPT Sports & Outdoors
+sports|add item yoga ball sports 780
+sports|create kettlebell item sports 1500
+sports|add a hiking backpack outdoor 4500
+# HDW Hardware & Tools
+hardware|add item electric screwdriver hardware 2200
+hardware|create hex wrench set item tools 450
+hardware|add a claw hammer hardware 320
+# BTY Beauty & Personal Care
+beauty|add item moisturizing serum beauty 890
+beauty|create sunscreen lotion item skincare 420
+beauty|add a lipstick beauty 650
+# MED Health & Medical
+medical|add item medical masks medical 199
+medical|create digital thermometer item health 890
+medical|add a multivitamin bottle health 550
+# STA Office & Stationery
+stationery|add item ballpoint pen stationery 25
+stationery|create copy paper item stationery 210
+stationery|add a stapler office 120
+# PET Pet Supplies
+pet|add item dog leash pet 380
+pet|create cat litter item pet 450
+pet|add a pet food bowl pet 220
+# AUT Automotive
+automotive|add item wiper blades car 450
+automotive|create engine oil item automotive 890
+automotive|add a car floor mat set car 1200
+# FUR Furniture & Bedding
+furniture|add item office chair furniture 3500
+furniture|create queen mattress item bedding 12000
+furniture|add a bookcase furniture 4800
+# BAB Baby & Toddler
+baby|add item baby stroller baby 8900
+baby|create feeding bottle item infant 350
+baby|add a baby crib baby 6500
+# BOK Books & Media
+media|add item business management book books 480
+media|create bluray disc item media 590
+media|add a music cd media 350
+# IND Industrial & Business
+industrial|add item ball bearing industrial 1500
+industrial|create servo motor item industrial 8900
+industrial|add a pneumatic valve industrial 2200
+# TOY Toys & Games
+toys|add item jigsaw puzzle toys 450
+toys|create building blocks set item toys 1200
+toys|add a board game toys 890
+# BAG Luggage & Bags
+luggage|add item hardshell suitcase luggage 3900
+luggage|create travel backpack item bags 1500
+luggage|add a leather wallet luggage 2200
+
+# ====== (2) No category given (auto-classification, 19) ======
+electronics|add item wireless charging dock 1500
+appliance_kitchen|create rice cooker item 3200
+food_beverage|add item oolong tea bags 180
+daily_goods|add item dish soap 95
+apparel|create cargo pants item 1290
+sports|add item trekking poles 1800
+hardware|add item phillips screwdriver 250
+beauty|create facial cleanser item 320
+medical|add item medical bandage 150
+stationery|add item file folder 45
+pet|create dog food item 890
+automotive|add item car battery 2800
+furniture|add item wooden wardrobe 8900
+baby|create baby pacifier item 450
+media|add item english novel 380
+industrial|add item hydraulic pump 15000
+toys|create remote control car item 1500
+luggage|add item carry on suitcase 2900
+ambig|add item camping folding table 1200
+
+# ====== (3) Cross-category ambiguity (clarify or any reasonable category, 8) ======
+ambig|add item sports headband 250
+ambig|add item phone stand 390
+ambig|add item insulated water bottle 690
+ambig|add item camping light 890
+ambig|add item coffee dripper 120
+ambig|add item storage box 450
+ambig|add item jogging shoes 2200
+ambig|add item picnic blanket 780
+
+# ====== (4) Field variations (default-value rules, 8) ======
+any|add item testprod a electronics
+any|add item testprod b electronics safety 30
+any|add item testprod c electronics north 80
+any|add item testprod d electronics 500 safety 25
+any|add item testprod e electronics 40 in each warehouse
+any|create testprod f item electronics 1200 north 50 central 30 south 20
+any|add item testprod g electronics sells for 800 keep 15
+any|add a testprod h electronics thing 350 each
+
+# ====== (5) Colloquial voice phrasing (8) ======
+any|just got a shipment of new thermal flasks daily 350 each
+any|supplier delivered a new product bluetooth microphone electronics 1500
+any|please add a ceramic mug for me kitchen 280
+any|i want to add a new product called wireless charging pad electronics 1200
+any|could you create a sports water bottle item sports 450
+any|thinking of adding item folding umbrella daily 390
+any|please help me add new product hand cream beauty 220
+any|add item bluetooth keyboard electronics eight hundred
+
+# ====== (6) Edge cases & should-block (4) ======
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr500 servo motor industrial 8900

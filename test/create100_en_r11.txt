@@ -1,0 +1,114 @@
+# create100 第 11 輪語料（en・生成器產出・語音優先黏連句）
+# 真建立模式：確認卡會真的按下去，商品累積不刪（user 定調）
+
+# ══════ ① 19 類各 3 句 ══════
+electronics|add item prime gaming mouse electronics 350
+electronics|create prime noise cancelling headset item electronics 590
+electronics|add a prime web camera electronics 890
+appliance_kitchen|add item prime air fryer appliance 1200
+appliance_kitchen|create prime hand mixer item kitchen 1800
+appliance_kitchen|add a prime rapid kettle appliance 2500
+food_beverage|add item prime honey mustard sauce beverage 450
+food_beverage|create prime oatmeal cereal item beverage 780
+food_beverage|add a prime dried fruit mix food 990
+daily_goods|add item prime deodorizer spray daily 120
+daily_goods|create prime dusting sheets item household 350
+daily_goods|add a prime toilet cleaning tabs daily 590
+apparel|add item prime hooded jacket apparel 890
+apparel|create prime casual shorts item clothing 1200
+apparel|add a prime flannel shirt apparel 1800
+sports|add item prime jump rope sports 2500
+sports|create prime badminton racket item sports 450
+sports|add a prime ab roller outdoor 780
+hardware|add item prime tape measure hardware 990
+hardware|create prime spirit level item tools 120
+hardware|add a prime diagonal pliers hardware 350
+beauty|add item prime eye cream beauty 590
+beauty|create prime makeup remover item skincare 890
+beauty|add a prime lip balm beauty 1200
+medical|add item prime saline solution medical 1800
+medical|create prime alcohol pads item health 2500
+medical|add a prime ankle support bandage health 450
+stationery|add item prime highlighter set stationery 780
+stationery|create prime sticky notes item stationery 990
+stationery|add a prime paper clip box office 120
+pet|add item prime cat teaser wand pet 350
+pet|create prime pet grooming clipper item pet 590
+pet|add a prime cat scratcher board pet 890
+automotive|add item prime car vacuum cleaner automotive 1200
+automotive|create prime tire pressure sensor item automotive 1800
+automotive|add a prime dash camera automotive 2500
+furniture|add item prime computer desk furniture 450
+furniture|create prime coat rack item bedding 780
+furniture|add a prime bedside table furniture 990
+baby|add item prime baby walker baby 120
+baby|create prime baby bib item infant 350
+baby|add a prime baby monitor baby 590
+media|add item prime cookbook books 890
+media|create prime mystery novel item media 1200
+media|add a prime children picture book media 1800
+industrial|add item prime gear set industrial 2500
+industrial|create prime conveyor roller item industrial 450
+industrial|add a prime industrial sensor industrial 780
+toys|add item prime rc drone toy toys 990
+toys|create prime teddy bear plush item toys 120
+toys|add a prime block train set toys 350
+luggage|add item prime crossbody bag luggage 590
+luggage|create prime travel packing cubes item luggage 890
+luggage|add a prime laptop sleeve luggage 1200
+
+# ══════ ② 不講類別（自動判斷）══════
+electronics|add item prime smart plug 1800
+appliance_kitchen|add item prime coffee grinder 2500
+food_beverage|add item prime cold brew coffee 450
+daily_goods|add item prime hand wash foam 780
+apparel|add item prime knit scarf 990
+sports|add item prime yoga brick 120
+hardware|add item prime allen key set 350
+beauty|add item prime hair mask 590
+medical|add item prime blood pressure monitor 890
+stationery|add item prime desk calculator 1200
+pet|add item prime pet harness 1800
+automotive|add item prime car air freshener 2500
+furniture|add item prime bean bag sofa 450
+baby|add item prime teether toy 780
+media|add item prime language learning book 990
+industrial|add item prime solenoid valve 120
+toys|add item prime magic cube 350
+luggage|add item prime coin purse 590
+
+# ══════ ③ 跨類歧義 ══════
+ambig|add item cooler bag type k 890
+ambig|add item car trash bin type k 1200
+ambig|add item sports arm sleeve type k 1800
+ambig|add item picnic basket type k 2500
+ambig|add item desk mat type k 450
+ambig|add item portable fan type k 780
+ambig|add item yoga outfit type k 990
+ambig|add item camping seat pad type k 120
+
+# ══════ ④ 欄位變化 ══════
+any|add item testprod alpha ten electronics
+any|add item testprod bravo ten electronics safety 30
+any|add item testprod charlie ten electronics north 80
+any|add item testprod delta ten electronics 500 safety 25
+any|add item testprod echo ten electronics 40 in each warehouse
+any|create testprod foxtrot ten item electronics 1200 north 50 central 30 south 20
+any|add item testprod golf ten electronics sells for 800 keep 15
+any|add a testprod hotel ten electronics thing 350 each
+
+# ══════ ⑤ 口語與現場情境 ══════
+any|just got a shipment of new prime dehumidifier box type k daily 350 each
+any|supplier delivered a new product prime desk microphone type k electronics 590
+any|please add a prime stew pot type k for me kitchen 890
+any|i want to add a new product called prime desk microphone type k electronics 1200
+any|could you create a prime frisbee type k item sports 1800
+any|thinking of adding item prime dehumidifier box type k daily 2500
+any|please help me add new product prime aftershave lotion type k beauty 450
+any|add item prime desk microphone type k electronics eight hundred
+
+# ══════ ⑥ 邊界與該擋的 ══════
+dup|add item wireless mouse electronics 590
+noname|help me add an item
+noname|add item
+any|add item xr511 servo motor industrial 8900

@@ -1049,12 +1049,12 @@ crt|create wireless charger, electronics, sells for 1200, keep 20
 crt|add item usb hub, electronics, 690, safety 20
 crt|create item ceramic frying pan, 890 each, keep 15
 crt|register new product desk lamp, daily goods, 450, safety 10
-crtq|add item hex wrench set, 450 each, keep 20
+crt|add item hex wrench set, 450 each, keep 20
 crt|create item SKF 6204 ball bearing, 890 each, keep 6
-crtq|add item zorblax widget, price 999, safety 10
-crtq|create item Logitech MX Master 3S, price 3290, safety 10
+crt|add item zorblax widget, price 999, safety 10
+crt|create item Logitech MX Master 3S, price 3290, safety 10
 crt|add item stainless steel water bottle, daily goods, 350, safety 25
-crtq|add item ceramic mug
+crt|add item ceramic mug
 crt|new product yoga block
 crtq|add item wireless mouse, electronics, 590, safety 20
 mvq|add 50 wireless mouse

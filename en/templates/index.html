@@ -1099,6 +1099,13 @@ function setSending(sending) {
   btn.classList.toggle('sending', sending);
   btn.textContent = sending ? '⟳' : '▶';
   // 底部處理中文字讓位給右下角效能徽章：只保留送出鈕轉圈，狀態改在對話氣泡呈現
+  // r23 看門狗（create100 en r4b 實抓）：done frame 迷路或 handler 例外時
+  // setSending(false) 沒跑到 → 送出鈕**永久鎖死**、訪客只能重整頁面。
+  // 90 秒沒解鎖就強制恢復（正常回覆再慢也遠低於 90s）。
+  if (window._sendWatchdog) { clearTimeout(window._sendWatchdog); window._sendWatchdog = null; }
+  if (sending) {
+    window._sendWatchdog = setTimeout(() => { if (isSending) setSending(false); }, 90000);
+  }
 }
 
 function connectWS() {

@@ -1346,8 +1346,37 @@ def list_hot_items(
 # ────────────────────────────────────────────────
 # 趨勢 / 庫存可撐幾天 / 建議補貨日 helper
 # ────────────────────────────────────────────────
-_DOS_CACHE: dict = {}          # (sku, days, wh, movements_len) → series
-_DOS_CACHE_MAX = 512
+# r23：移植 zh 版 2026-08-05 的 `_mv_day_index` 查表（zh 已修、en 漏移植）。
+#   r22 的 len(movements) 快取鍵在 live 模擬/建檔批次下**永遠冷**（movements
+#   一直長），每查全掃 → 190+ SKU 累積資料時單查詢 30s、警示掃描追不上
+#   間隔把 CPU 吃滿 100%（idle 也滿），index 頁 300s 逾時、kiosk 載不進
+#   （create100 en r7-r9 實抓）。
+_MV_DAYIDX: dict = {"key": None, "sku": None, "wh": None}
+
+
+def _mv_day_index() -> tuple[dict, dict]:
+    """出貨日索引 {(sku,wh,date):qty} 與 {(wh,date):qty}，O(N) 建一次。
+    ⚠️ 為什麼敢快取：撐天/週轉視窗**排除今天**，而執行期寫入（模擬/訪客）
+    全記在今天 ⇒ 索引刻意不含今天，之後怎麼寫入都不會失效。
+    只在 State 換新（reset）或換日時重建。"""
+    s = state()
+    key = (id(s), _snapshot_date().isoformat())
+    if _MV_DAYIDX["key"] != key:
+        today_s = _snapshot_date().isoformat()
+        idx_sku: dict = {}
+        idx_wh: dict = {}
+        for m in s.movements:
+            d = m.get("date") or ""
+            if m.get("direction") != "out" or len(d) != 10 or d >= today_s:
+                continue
+            ks = (m["sku_id"], m["warehouse"], d)
+            idx_sku[ks] = idx_sku.get(ks, 0) + m["qty"]
+            kw = (m["warehouse"], d)
+            idx_wh[kw] = idx_wh.get(kw, 0) + m["qty"]
+        _MV_DAYIDX["key"] = key
+        _MV_DAYIDX["sku"] = idx_sku
+        _MV_DAYIDX["wh"] = idx_wh
+    return _MV_DAYIDX["sku"], _MV_DAYIDX["wh"]
 
 
 def _daily_out_series(sku: str | None, days: int = 30, warehouse: str = "all") -> list[int]:
@@ -1356,36 +1385,18 @@ def _daily_out_series(sku: str | None, days: int = 30, warehouse: str = "all") -
     sku=None 算全部商品合計（週轉率等倉級指標用，共享同一套污染防護）。
     ⚠️ 視窗只到昨天：動態模擬把一天壓成幾分鐘，今天的出貨量是平常數十倍，
     算進日均會讓每個商品都「撐 0 天」（同 stock_audit.py 2026-08-03 的修法）。
-
-    ⚠️ r22 加快取：profile 抓到 `list_low_stock` 1.64s 有 **98% 花在這支**——
-      它被呼叫 **242 次**（60 商品 × 每個算全倉+分倉+趨勢），每次都全掃
-      5,687 筆 movements ＝ 掃了 138 萬次。同樣參數的結果不會變，快取即可。
-    ⚠️ 快取鍵含 `len(movements)`：動態模擬會**持續新增** movements，
-      長度一變就自動失效，不會拿到過期資料（比時間 TTL 精確）。
-    """
-    s = state()
-    _ck = (sku, days, warehouse, len(s.movements))
-    _hit = _DOS_CACHE.get(_ck)
-    if _hit is not None:
-        return list(_hit)          # 回複本，呼叫端改了不會污染快取
+    r23 起走 _mv_day_index 查表（O(N) 全掃在資料灌大後燒死 CPU）。"""
+    idx_sku, idx_wh = _mv_day_index()
     end = _snapshot_date() - _td(days=1)
     start = end - _td(days=days - 1)
-    by_day: dict[str, int] = {}
-    for m in s.movements:
-        if (sku is not None and m["sku_id"] != sku) or m["direction"] != "out":
-            continue
-        if warehouse != "all" and m["warehouse"] != warehouse:
-            continue
-        try:
-            d = _date.fromisoformat(m["date"])
-        except Exception:
-            continue
-        if start <= d <= end:
-            by_day[m["date"]] = by_day.get(m["date"], 0) + m["qty"]
+    whs = ("north", "central", "south") if warehouse == "all" else (warehouse,)
     series = []
     for i in range(days):
         d = (start + _td(days=i)).isoformat()
-        series.append(by_day.get(d, 0))
+        if sku is None:
+            series.append(sum(idx_wh.get((w, d), 0) for w in whs))
+        else:
+            series.append(sum(idx_sku.get((sku, w, d), 0) for w in whs))
     # 換日防護：過去某天若殘留動態模擬肥單（展場第2/3天早上忘了 reset），
     # 該天出貨量會是正常日的數百倍 → 「排除今天」擋不住、日均照樣被灌爆。
     # 單日量 > max(200, 中位數×30) 視為污染日，以中位數替代
@@ -1395,11 +1406,6 @@ def _daily_out_series(sku: str | None, days: int = 30, warehouse: str = "all") -
         _med = nz[len(nz) // 2]
         _cap = max(200, _med * 30)
         series = [v if v <= _cap else _med for v in series]
-    # r22 快取（見函式開頭註解）。超過上限就整個清掉——movements 長度一變
-    #   舊鍵本來就全部失效，逐一淘汰沒意義。
-    if len(_DOS_CACHE) >= _DOS_CACHE_MAX:
-        _DOS_CACHE.clear()
-    _DOS_CACHE[_ck] = list(series)
     return series
 
 
