@@ -3546,6 +3546,83 @@ _PROTECTED_SKUS = {
 }
 
 
+def change_item_price(keyword: str = "", price: int = 0) -> dict:
+    """r26（zh 同款鏡射）：改單價流程。找商品 → HITL 確認 → commit。"""
+    if not keyword:
+        return {"ok": True, "view": "clarify",
+                "summary": 'Which item do you want to reprice? e.g. "marble set price to 100".',
+                "data": {"question": "Which item do you want to reprice?",
+                         "options": [], "hint": "item name + price to + amount"}}
+    if price <= 1:
+        return W._err("Price must be greater than 1.")
+    matches = W.match_items(keyword)
+    if not matches:
+        return {"ok": True, "view": "clarify",
+                "summary": f'No item matching "{keyword}" — price unchanged.',
+                "data": {"question": f'No item matching "{keyword}"',
+                         "options": [], "hint": ""}}
+    _top = matches[0].get("score", 0)
+    _tied = [m["item"] for m in matches if m.get("score", 0) == _top]
+    # r26b：同分裡有**完全同名**的直接擇定——不然「smart doorbell」跟
+    #   smart 家族同分，clarify 選項點了又回同一題（實測無限迴圈）
+    _exact = [it for it in _tied
+              if _norm_item_name(it["name"]) == _norm_item_name(keyword)]
+    if len(_exact) == 1:
+        _tied = _exact
+    if len(_tied) > 1:
+        return {"ok": True, "view": "clarify",
+                "summary": f'"{keyword}" matches {len(_tied)} items — which one?',
+                "data": {"question": "Which one do you want to reprice?",
+                         "options": [f"{it['name']} price to {price}"
+                                     for it in _tied[:5]], "hint": ""}}
+    it = _tied[0]
+    pending = {"sku": it["sku_id"], "name": it["name"],
+               "price_old": it.get("unit_price") or 0, "price_new": int(price)}
+    return {"ok": True, "view": "price_confirm",
+            "summary": (f'"{it["name"]}" unit price NT$ {pending["price_old"]:,} → '
+                        f"NT$ {pending['price_new']:,} — confirm to save."),
+            "data": {"pending": True, "item": pending}}
+
+
+def commit_change_item_price(pending: dict, actor: str = "user_confirmed",
+                             trace_id: str | None = None) -> dict:
+    """HITL 確認後改單價：改寫 items.csv 該列 + 熱更新 State + audit。"""
+    import csv
+    dd = _data_dir()
+    ts = datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"price-{ts}"
+    item = pending.get("item") or pending
+    sku = item.get("sku", "")
+    new_p = int(item.get("price_new") or 0)
+    if not sku or new_p <= 1:
+        return W._err("Incomplete reprice data — nothing changed.")
+    items_path = dd / "master" / "items.csv"
+    rows = list(csv.reader(open(items_path, encoding="utf-8-sig")))
+    hit = False
+    with _STOCK_LOCK:
+        for r in rows[1:]:
+            if r and r[0] == sku:
+                r[4] = str(new_p)
+                hit = True
+                break
+        if not hit:
+            return W._err(f"{sku} not found in items.csv — nothing changed.")
+        with open(items_path, "w", encoding="utf-8-sig", newline="") as f:
+            csv.writer(f).writerows(rows)
+        _it = W.state()._items_by_sku.get(sku)
+        if _it:
+            _it["unit_price"] = new_p
+        audit_dir = dd / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        with open(audit_dir / f"{ts[:10]}_changes.log", "a", encoding="utf-8") as f:
+            f.write(f"{ts}\t{trace_id}\t{actor}\tprice_change\t{sku}\t"
+                    f"{item.get('price_old')}→{new_p}\n")
+    return {"ok": True, "view": "price_done",
+            "summary": (f'✅ "{item.get("name", sku)}" unit price updated to '
+                        f"NT$ {new_p:,}."),
+            "data": {"sku": sku, "price": new_p, "trace_id": trace_id}}
+
+
 def delete_item_start(keyword: str = "") -> dict:
     """觸發刪除流程：找商品 → HITL 確認 → 軟刪除"""
     if not keyword:

@@ -11000,6 +11000,10 @@ async def ws_handler(ws: WebSocket):
                                            "job": res.get("data", {}).get("job", {})})
                         # 2026-08-06 user 定調（ZH 同款）：排程建立後不再立跑
                         #   示範；警示立跑檢查保留。
+                    elif act == "item_price":
+                        # r26：改單價（zh 同款鏡射）
+                        res = tools_v2.commit_change_item_price(
+                            data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                     elif act == "item_create":
                         res = tools_v2.commit_create_item(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
@@ -14076,6 +14080,23 @@ async def ws_handler(ws: WebSocket):
                     _new_st = {k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}
                     _new_st["active"] = True
                     _item_create_state_ws[vid] = _new_st
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
+                await send({"type": "done", "result": result})
+                continue
+
+            # ── 改單價攔截（r26，zh 同款鏡射）──
+            _pc_m = (_re.search(r"^(?:change|set|update)\s+(.{0,30}?)(?:'s)?\s+price\s+(?:to\s+)?(\d+)\s*$", user_text.strip(), _re.I)
+                     or _re.search(r"^(.{0,30}?)(?:'s)?\s+price\s+to\s+(\d+)\s*$", user_text.strip(), _re.I))
+            if (_pc_m
+                    and not _re.search(r"safety|stock|all\s+items|every|warehouse|lead\s*time",
+                                       user_text, _re.I)):
+                import tools_v2 as _tv2_pc
+                _pc_kw = _pc_m.group(1).strip(" ,.-")
+                log.info(f"[dispatch-ws] price-change: {_pc_kw!r} -> {_pc_m.group(2)}")
+                result = _tv2_pc.change_item_price(keyword=_pc_kw,
+                                                   price=int(_pc_m.group(2)))
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(_TK_DELAY.get() * 1.5)

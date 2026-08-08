@@ -6985,6 +6985,15 @@ def _asr_normalize(text: str) -> str:
     out = text
     for pat, rep in _ASR_FIX:
         out = pat.sub(rep, out)
+    # r26（腔調實測：TTS 變速/變調/電話頻寬壓測）：**建檔觸發詞**的同音
+    #   變形修復——「新增」被聽成 新分/新真/新曾 4/6 次、「商品」聽成
+    #   桑品/傷品 → 觸發詞死掉整句掉去 LLM。只掛 ASR 出口，打字訪客不受
+    #   影響（誤傷面=0，守衛全是打字路徑）。
+    out = _re.sub(r"[新心欣辛][增真針曾蒸分憎]商品", "新增商品", out)
+    if any(k in out for k in ("新增", "建立", "新建", "加一款", "新商品")):
+        out = out.replace("桑品", "商品").replace("傷品", "商品")
+        # 「家電」聽成「加墊/家墊」（腔調實測）——限建檔語境才改
+        out = out.replace("加墊", "家電").replace("家墊", "家電")
     return out
 
 
@@ -7253,6 +7262,10 @@ async def ws_handler(ws: WebSocket):
                         #   立跑已移除；警示的立跑檢查（上面 alert 分支）保留。
                     elif act == "item_create":
                         res = tools_v2.commit_create_item(
+                            data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
+                    elif act == "item_price":
+                        # r26：改單價（user 實抓「彈珠改成100元」誤路由）
+                        res = tools_v2.commit_change_item_price(
                             data.get("pending", {}), actor="user_confirmed", trace_id=trace_id)
                     elif act == "item_delete":
                         res = tools_v2.commit_delete_item(
@@ -9700,6 +9713,29 @@ async def ws_handler(ws: WebSocket):
                     _new_st = {k: v for k, v in d.items() if k in ("step", "name", "category", "price", "safety", "stock_north", "stock_central", "stock_south")}
                     _new_st["active"] = True
                     _item_create_state_ws[vid] = _new_st
+                for ch in result.get("summary", ""):
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get() * 1.5)
+                await send({"type": "done", "result": result})
+                continue
+
+            # ── 改單價攔截（r26，user 實抓「彈珠改成100元」誤路由庫存查詢）──
+            #   排除：安全庫存/水位類（歸 manage_config）、所有/全部（破壞
+            #   指令歸黑名單 probe）、0/1 元（惡意改價，tools 端也再擋一層）。
+            _pc_m = (_re.search(r'^(.{0,14}?)(?:的)?(?:單價|價格|售價|價錢)\s*'
+                                r'(?:改|調|設)(?:成|為|到|低|高)?\s*(\d+)\s*(?:元|塊)?\s*$',
+                                user_text.strip())
+                     or _re.search(r'^(.{0,14}?)(?:的)?\s*(?:改|調|設)(?:成|為|到)\s*'
+                                   r'(\d+)\s*(?:元|塊)\s*$', user_text.strip()))
+            if (_pc_m
+                    and not any(w in user_text for w in
+                                ("安全", "庫存", "水位", "前置", "天數",
+                                 "所有", "全部", "全店", "每個", "警戒"))):
+                import tools_v2 as _tv2_pc
+                _pc_kw = _pc_m.group(1).strip(" ，,、的")
+                log.info(f"[dispatch-ws] 改價攔截: {_pc_kw!r} → {_pc_m.group(2)}")
+                result = _tv2_pc.change_item_price(keyword=_pc_kw,
+                                                   price=int(_pc_m.group(2)))
                 for ch in result.get("summary", ""):
                     await send({"type": "token", "text": ch})
                     await asyncio.sleep(_TK_DELAY.get() * 1.5)

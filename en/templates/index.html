@@ -1077,9 +1077,16 @@ async function triggerAlertCheck() {
 }
 
 const CATEGORY_LABEL = {
+  // r26：補滿 19 類（user 實抓：庫存查詢按鈕點開只有 6 類）
   electronics: 'Electronics', appliance_kitchen: 'Kitchen Appliances',
   food_beverage: 'Food & Beverage', daily_goods: 'Daily Goods',
   apparel: 'Apparel', sports: 'Sports & Outdoors',
+  hardware: 'Hardware & Tools', beauty: 'Beauty & Personal Care',
+  medical: 'Health & Medical', stationery: 'Office & Stationery',
+  pet: 'Pet Supplies', automotive: 'Automotive',
+  furniture: 'Furniture & Bedding', baby: 'Baby & Toddler',
+  media: 'Books & Media', industrial: 'Industrial & Business',
+  toys: 'Toys & Games', luggage: 'Luggage & Bags', other: 'Other',
 };
 const WAREHOUSE_LABEL = {
   north: 'North', central: 'Central', south: 'South', all: 'All warehouses',
@@ -2101,6 +2108,27 @@ function renderViewCard(view, data, topSummary) {
       showSuggestions(_catQuick.map(c => ({label: 'set: ' + c,
         query: `add item ${data.item.name} ${c}`})));
     }
+  } else if (view === 'price_confirm') {
+    // r26：改單價確認卡（zh 同款鏡射）
+    const it = data.item || {};
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header warn">💰 Change unit price — please confirm</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>Field</th><th>Details</th></tr>
+            <tr><td>Item</td><td><b>${it.name}</b> (${it.sku})</td></tr>
+            <tr><td>Unit price</td><td>NT$ ${(it.price_old||0).toLocaleString()} → <b style="color:var(--accent)">NT$ ${(it.price_new||0).toLocaleString()}</b></td></tr>
+          </table>
+          <div class="hitl-meta">Confirming rewrites items.csv and logs to audit.</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_price" data-payload='${JSON.stringify({pending:data})}'>✅ Confirm</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ Cancel</button>
+        </div>
+      </div>`;
+  } else if (view === 'price_done') {
+    card.innerHTML = `<div class="label">💰 Unit price updated</div>
+      <div style="padding:8px;font-size:14px">NT$ ${(data.price||0).toLocaleString()} (${data.sku||''})</div>`;
   } else if (view === 'movement_confirm') {
     const dirColor = data.direction === 'in' ? 'var(--success)' : 'var(--accent)';
     const dirIcon = data.direction === 'in' ? '📥' : '📤';
@@ -2778,7 +2806,11 @@ document.querySelectorAll('#chips-bar .chip').forEach(c => {
     const a = c.dataset.action;
     if (a === 'show-inventory-menu') {
       currentBotMsg = appendBot('Which category do you want to check?');
-      const cats = ['electronics', 'appliance_kitchen', 'food_beverage', 'daily_goods', 'apparel', 'sports'];
+      // r26：19 類全列（空類別會老實說沒商品，這是設計）
+      const cats = ['electronics', 'appliance_kitchen', 'food_beverage',
+                    'daily_goods', 'apparel', 'sports', 'hardware', 'beauty',
+                    'medical', 'stationery', 'pet', 'automotive', 'furniture',
+                    'baby', 'media', 'industrial', 'toys', 'luggage'];
       showSuggestions(cats.map(c => ({
         label: CATEGORY_LABEL[c],
         query: `${CATEGORY_LABEL[c]} stock`,

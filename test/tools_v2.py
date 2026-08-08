@@ -2948,6 +2948,87 @@ def commit_reset_demo_data(password: str = "", actor: str = "user_confirmed",
             "view": "reset_done", "data": {"trace_id": trace_id}}
 
 
+def change_item_price(keyword: str = "", price: int = 0) -> dict:
+    """r26（user 實抓「彈珠改成100元」誤路由庫存查詢）：改單價流程。
+    找商品 → HITL 確認卡 → commit 寫 items.csv + 熱更新。"""
+    if not keyword:
+        return {"ok": True, "view": "clarify",
+                "summary": "要改哪個商品的價格？例如「彈珠改成100元」。",
+                "data": {"question": "要改哪個商品的價格？", "options": [],
+                         "hint": "商品名＋改成＋新價格"}}
+    if price <= 1:
+        # 0元/1元 是黑名單等級的破壞值（見 _BL_NEVER_EXEMPT 沿革）
+        return W._err("價格要大於 1 元才能設定。")
+    matches = W.match_items(keyword)
+    if not matches:
+        return {"ok": True, "view": "clarify",
+                "summary": f"找不到商品「{keyword}」，價格沒有改動。",
+                "data": {"question": f"找不到「{keyword}」，請確認商品名稱",
+                         "options": [], "hint": ""}}
+    _top = matches[0].get("score", 0)
+    _tied = [m["item"] for m in matches if m.get("score", 0) == _top]
+    # r26b：同分裡有**完全同名**的直接擇定（en 實測 clarify 無限迴圈）
+    _exact = [it for it in _tied
+              if it["name"].replace(" ", "").lower()
+                 == keyword.replace(" ", "").lower()]
+    if len(_exact) == 1:
+        _tied = _exact
+    if len(_tied) > 1:
+        return {"ok": True, "view": "clarify",
+                "summary": f"「{keyword}」對應到 {len(_tied)} 個商品，要改哪一個？",
+                "data": {"question": "要改哪一個的價格？",
+                         "options": [f"{it['name']}改成{price}元"
+                                     for it in _tied[:5]], "hint": ""}}
+    it = _tied[0]
+    pending = {"sku": it["sku_id"], "name": it["name"],
+               "price_old": it.get("unit_price") or 0, "price_new": int(price)}
+    return {"ok": True, "view": "price_confirm",
+            "summary": (f"「{it['name']}」單價 NT$ {pending['price_old']:,} → "
+                        f"NT$ {pending['price_new']:,}，確認後寫入。"),
+            "data": {"pending": True, "item": pending}}
+
+
+def commit_change_item_price(pending: dict, actor: str = "user_confirmed",
+                             trace_id: str | None = None) -> dict:
+    """HITL 確認後改單價：改寫 items.csv 該列 + 熱更新 State + audit。"""
+    import csv
+    dd = _data_dir()
+    ts = datetime.now().isoformat(timespec="seconds")
+    trace_id = trace_id or f"price-{ts}"
+    item = pending.get("item") or pending
+    sku = item.get("sku", "")
+    new_p = int(item.get("price_new") or 0)
+    if not sku or new_p <= 1:
+        return W._err("改價資料不完整，沒有改動。")
+    items_path = dd / "master" / "items.csv"
+    rows = list(csv.reader(open(items_path, encoding="utf-8-sig")))
+    hit = False
+    with _STOCK_LOCK:
+        for r in rows[1:]:
+            if r and r[0] == sku:
+                r[4] = str(new_p)      # unit_price 欄
+                hit = True
+                break
+        if not hit:
+            return W._err(f"items.csv 找不到 {sku}，沒有改動。")
+        with open(items_path, "w", encoding="utf-8-sig", newline="") as f:
+            csv.writer(f).writerows(rows)
+        # 熱更新記憶體（同 create commit 的做法：不等重載）
+        _it = W.state()._items_by_sku.get(sku)
+        if _it:
+            _it["unit_price"] = new_p
+        # audit
+        audit_dir = dd / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        with open(audit_dir / f"{ts[:10]}_changes.log", "a", encoding="utf-8") as f:
+            f.write(f"{ts}\t{trace_id}\t{actor}\tprice_change\t{sku}\t"
+                    f"{item.get('price_old')}→{new_p}\n")
+    return {"ok": True, "view": "price_done",
+            "summary": (f"✅ 「{item.get('name', sku)}」單價已改為 "
+                        f"NT$ {new_p:,}。"),
+            "data": {"sku": sku, "price": new_p, "trace_id": trace_id}}
+
+
 # 原始 60 項商品的 SKU 白名單（不可刪除）
 _PROTECTED_SKUS = {
     f"{p}{i:02d}"

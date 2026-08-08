@@ -1067,9 +1067,15 @@ async function triggerAlertCheck() {
 }
 
 const CATEGORY_LABEL = {
+  // r26：補滿 19 類（user 實抓：庫存查詢按鈕點開只有 6 類）
   electronics: '電子產品', appliance_kitchen: '家電廚具',
   food_beverage: '食品飲料', daily_goods: '日用品',
   apparel: '服飾', sports: '運動用品',
+  hardware: '五金工具', beauty: '美妝保養', medical: '醫療保健',
+  stationery: '文具事務', pet: '寵物用品', automotive: '汽機車',
+  furniture: '家具寢具', baby: '母嬰用品', media: '圖書影音',
+  industrial: '工業商用', toys: '玩具遊戲', luggage: '箱包行李',
+  other: '其他',
 };
 const WAREHOUSE_LABEL = {
   north: '北區倉', central: '中區倉', south: '南區倉', all: '全部倉',
@@ -2080,6 +2086,27 @@ function renderViewCard(view, data, topSummary) {
       showSuggestions(_catQuick.map(c => ({label: '歸類：' + c,
         query: `新增商品${data.item.name}${c}`})));
     }
+  } else if (view === 'price_confirm') {
+    // r26：改單價確認卡（「彈珠改成100元」）
+    const it = data.item || {};
+    card.innerHTML = `
+      <div class="hitl-card">
+        <div class="hitl-header warn">💰 修改單價 — 請確認</div>
+        <div class="hitl-body">
+          <table class="exp-table"><tr><th>欄位</th><th>內容</th></tr>
+            <tr><td>商品</td><td><b>${it.name}</b>（${it.sku}）</td></tr>
+            <tr><td>單價</td><td>NT$ ${(it.price_old||0).toLocaleString()} → <b style="color:var(--accent)">NT$ ${(it.price_new||0).toLocaleString()}</b></td></tr>
+          </table>
+          <div class="hitl-meta">確認後將改寫 items.csv 並記入 audit log。</div>
+        </div>
+        <div class="hitl-btns">
+          <button class="hitl-approve" onclick="doConfirm(this)" data-action="item_price" data-payload='${JSON.stringify({pending:data})}'>✅ 確認改價</button>
+          <button class="hitl-reject" onclick="this.closest('.view-card').remove()">❌ 取消</button>
+        </div>
+      </div>`;
+  } else if (view === 'price_done') {
+    card.innerHTML = `<div class="label">💰 單價已更新</div>
+      <div style="padding:8px;font-size:14px">NT$ ${(data.price||0).toLocaleString()}（${data.sku||''}）</div>`;
   } else if (view === 'movement_confirm') {
     const dirColor = data.direction === 'in' ? 'var(--success)' : 'var(--accent)';
     const dirIcon = data.direction === 'in' ? '📥' : '📤';
@@ -2758,7 +2785,11 @@ document.querySelectorAll('#chips-bar .chip').forEach(c => {
     const a = c.dataset.action;
     if (a === 'show-inventory-menu') {
       currentBotMsg = appendBot('想查哪一類庫存？');
-      const cats = ['electronics', 'appliance_kitchen', 'food_beverage', 'daily_goods', 'apparel', 'sports'];
+      // r26：19 類全列（user 實抓只有 6 類；空類別會老實說沒商品，這是設計）
+      const cats = ['electronics', 'appliance_kitchen', 'food_beverage',
+                    'daily_goods', 'apparel', 'sports', 'hardware', 'beauty',
+                    'medical', 'stationery', 'pet', 'automotive', 'furniture',
+                    'baby', 'media', 'industrial', 'toys', 'luggage'];
       showSuggestions(cats.map(c => ({
         label: CATEGORY_LABEL[c],
         query: `${CATEGORY_LABEL[c]}庫存`,
