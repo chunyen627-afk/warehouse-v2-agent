@@ -2074,7 +2074,7 @@ function renderViewCard(view, data, topSummary) {
                 : ''}</td></tr>
             <tr><td>Unit price</td><td>${
               it.price_unset
-                ? '<span style="color:var(--warn,#e8a33d)">not set yet</span>'
+                ? 'NT$ ' + it.price + ' <span style="color:var(--warn,#e8a33d);font-size:12px">· reference price (category median), editable</span>'
                 : 'NT$ ' + it.price}</td></tr>
             <tr><td>Safety stock</td><td>${it.safety} units${
               it.safety_src === 'from_stock'

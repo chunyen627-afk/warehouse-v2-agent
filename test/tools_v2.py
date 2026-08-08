@@ -1778,6 +1778,22 @@ def _next_sku(category: str) -> str:
 
 _ZH_ALIAS_PAIRS: list | None = None
 
+
+def _default_price(category: str) -> int:
+    """r24c（user 定調：售價不重要、數量重要，但別滿版「尚未設定」）——
+    沒講價就給**該類別現有商品的中位數價**當參考價（類別沒商品退全店
+    中位數、再退 100），取整到十位。卡上標參考價、可改。"""
+    prices = [it.get("unit_price") or 0 for it in W.state().items
+              if it.get("category") == category and (it.get("unit_price") or 0) > 0]
+    if not prices:
+        prices = [it.get("unit_price") or 0 for it in W.state().items
+                  if (it.get("unit_price") or 0) > 0]
+    if not prices:
+        return 100
+    prices.sort()
+    med = prices[len(prices) // 2]
+    return max(10, int(round(med / 10.0)) * 10)
+
 _ZH_DIGITS = {"零": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4,
               "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 
@@ -2020,17 +2036,19 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             #   （實測確認）。補成等於水位 ⇒ 剛好不觸發、展場也查得到數字。
             if _init_total == 0 and _safety_val > 0:
                 _n_qty = _c_qty = _s_qty = _safety_val
+            # r24c：沒講價 → 給類別中位數參考價（user 定調：售價不重要、
+            #   別滿版「尚未設定」；price_unset 保留讓報表知道是參考價）
+            _price_val = (int(_price_m.group(1)) if _price_m
+                          else _default_price(_found_cat))
             pending = {
                 "name": _name, "category": _found_cat,
                 "category_label": W.CATEGORY_LABEL.get(_found_cat, _found_cat),
-                "price": int(_price_m.group(1)) if _price_m else 0,
+                "price": _price_val,
                 "safety": _safety_val,
                 "stock_north": _n_qty,
                 "stock_central": _c_qty,
                 "stock_south": _s_qty,
                 "sku": new_sku,
-                # 價格沒講 → 標記未定價（跟「真的賣 0 元」區分開，
-                #   庫存價值統計可據此排除，不汙染報表）
                 "price_unset": not bool(_price_m),
                 "safety_src": _safety_src,
             }
@@ -2040,7 +2058,7 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             elif _safety_src == "default":
                 _notes.append(f"安全庫存 {_safety_val}（預設值）")
             if not _price_m:
-                _notes.append("售價未設定")
+                _notes.append(f"參考價 {_price_val} 元（同類中位數，可改）")
             _sum = ("已解析商品資訊，請確認" if not _notes else
                     "已解析商品資訊——我幫你填了「" + "、".join(_notes)
                     + "」，確認前可以在卡片上改。")
@@ -2078,10 +2096,11 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
                 break
         _cat24 = _cat24 or "other"
         new_sku = _next_sku(_cat24)
+        _p24 = _default_price(_cat24)   # r24c：參考價（同類中位數）
         pending = {
             "name": name, "category": _cat24,
             "category_label": W.CATEGORY_LABEL.get(_cat24, _cat24),
-            "price": 0, "safety": _DEFAULT_SAFETY,
+            "price": _p24, "safety": _DEFAULT_SAFETY,
             "stock_north": _DEFAULT_SAFETY, "stock_central": _DEFAULT_SAFETY,
             "stock_south": _DEFAULT_SAFETY, "sku": new_sku,
             "price_unset": True, "safety_src": "default",
@@ -2089,7 +2108,8 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         _lbl24 = pending["category_label"]
         return {"ok": True,
                 "summary": (f"收到「{name}」！我幫你填了：類別「{_lbl24}」、"
-                            f"安全庫存 {_DEFAULT_SAFETY}（預設）、售價未設定。\n"
+                            f"安全庫存 {_DEFAULT_SAFETY}（預設）、"
+                            f"參考價 {_p24} 元（可改）。\n"
                             "確認前都可以在卡片上改，或講一句完整的"
                             "（例如「新增商品藍牙耳機電子500元」）重來。"),
                 "view": "item_confirm",

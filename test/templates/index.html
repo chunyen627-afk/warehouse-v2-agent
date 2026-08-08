@@ -2054,7 +2054,7 @@ function renderViewCard(view, data, topSummary) {
                 : ''}</td></tr>
             <tr><td>單價</td><td>${
               it.price_unset
-                ? '<span style="color:var(--warn,#e8a33d)">尚未設定</span>'
+                ? 'NT$ ' + it.price + ' <span style="color:var(--warn,#e8a33d);font-size:12px">· 參考價（同類中位數），可改</span>'
                 : 'NT$ ' + it.price}</td></tr>
             <tr><td>安全庫存</td><td>${it.safety} 件${
               it.safety_src === 'from_stock'

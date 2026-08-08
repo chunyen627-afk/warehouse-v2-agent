@@ -2109,6 +2109,21 @@ _EN_CAT_KW = {
 # 天生跨類別的容器/配件詞——一律問，不猜（保守派核心）
 #   實測這類佔反問的絕大多數，而且**該問**：手機殼是電子、垃圾袋是日用、
 #   水壺是運動，光看詞不可能分辨。
+def _default_price(category: str) -> int:
+    """r24c（user 定調：售價不重要、數量重要，別滿版 not set）——沒講價
+    給**該類別現有商品中位數價**當參考價（退全店中位數、再退 100）。"""
+    prices = [it.get("unit_price") or 0 for it in W.state().items
+              if it.get("category") == category and (it.get("unit_price") or 0) > 0]
+    if not prices:
+        prices = [it.get("unit_price") or 0 for it in W.state().items
+                  if (it.get("unit_price") or 0) > 0]
+    if not prices:
+        return 100
+    prices.sort()
+    med = prices[len(prices) // 2]
+    return max(10, int(round(med / 10.0)) * 10)
+
+
 _EN_NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
                  "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
                  "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
@@ -2615,7 +2630,9 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             #   （實測確認）。補成等於水位 ⇒ 剛好不觸發、展場也查得到數字。
             if _init_total == 0 and _safety_val > 0:
                 _n_qty = _c_qty = _s_qty = _safety_val
-            _price_val = int(_price_m.group(1)) if _price_m else 0
+            # r24c：沒講價 → 類別中位數參考價（price_unset 保留標記）
+            _price_val = (int(_price_m.group(1)) if _price_m
+                          else _default_price(_found_cat))
             pending = {
                 "name": _name, "category": _found_cat,
                 "category_label": W.CATEGORY_LABEL.get(_found_cat, _found_cat),
@@ -2642,7 +2659,8 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
             elif _safety_src == "default":
                 _notes.append(f"safety stock {_safety_val} (default)")
             if not _price_m:
-                _notes.append("price not set")
+                _notes.append(f"reference price NT$ {_price_val} "
+                              "(category median, editable)")
             _sum = ("Item details parsed — please confirm" if not _notes else
                     "Item details parsed — I filled in " + ", ".join(_notes)
                     + ". Change anything on the card before confirming.")
@@ -2674,10 +2692,11 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         _g24, _ = _en_guess_category(name)
         _cat24 = _g24 or "other"
         new_sku = _next_sku(_cat24)
+        _p24 = _default_price(_cat24)   # r24c：參考價（同類中位數）
         pending = {
             "name": name, "category": _cat24,
             "category_label": W.CATEGORY_LABEL.get(_cat24, _cat24),
-            "price": 0, "safety": _DEFAULT_SAFETY,
+            "price": _p24, "safety": _DEFAULT_SAFETY,
             "stock_north": _DEFAULT_SAFETY, "stock_central": _DEFAULT_SAFETY,
             "stock_south": _DEFAULT_SAFETY, "sku": new_sku,
             "category_guessed": bool(_g24),
@@ -2687,7 +2706,8 @@ def create_item_collect(step: int = 1, name: str = "", category: str = "",
         return {"ok": True,
                 "summary": (f'Got it — "{name}"! I filled in: category '
                             f'"{_lbl24}", safety stock {_DEFAULT_SAFETY} '
-                            "(default), price not set.\n"
+                            f"(default), reference price NT$ {_p24} "
+                            "(editable).\n"
                             "Change anything on the card before confirming, "
                             f'or say the full thing (e.g. "add item {name} '
                             'electronics 500") to redo.'),
