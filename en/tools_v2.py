@@ -3319,6 +3319,132 @@ def commit_movement(pending: dict, actor: str = "user_confirmed",
             "view": "movement_done", "data": {"trace_id": trace_id, **_done}}
 
 
+def set_stock_absolute(keyword: str = "", warehouse: str = "", qty: str = "",
+                       mode: str = "set", direction: str = "",
+                       is_return: bool = False) -> dict:
+    """r30 目標水位式寫入（zh 同款鏡射）："restock X to 100"（mode=restock，
+    只補不減）、"set X stock to 100"（mode=set，盤點絕對值，雙向）。
+    找商品/倉別 → 與現量比差算 delta → 轉標準 movement 確認卡
+    （view/data 與 create_movement 同形，commit 沿用 commit_movement）。
+    direction/is_return 只為相容 server r56 續流重呼叫簽名，不使用。"""
+    _verb = "restock" if mode == "restock" else "set"
+    _ex = (f'e.g. "restock north wireless mouse to 100"' if mode == "restock"
+           else 'e.g. "set north wireless mouse stock to 100"')
+    try:
+        target = int(str(qty).strip() or -1)
+    except ValueError:
+        target = -1
+    if target < 0:
+        return {"ok": True, "view": "clarify",
+                "summary": f"What target quantity do you want? {_ex}.",
+                "data": {"question": "What target quantity?", "options": [],
+                         "hint": _ex}}
+    # 歸零＝黑名單等級破壞值（zh 同款）；server 攔截層遇 0 也不會進來
+    if target == 0:
+        return {"ok": True, "view": "clarify",
+                "summary": ("Setting stock to 0 would wipe it out — that is not "
+                            "allowed here. To reduce stock, ship an exact "
+                            'quantity, e.g. "north shipped 20 wireless mouse".'),
+                "data": {"question": "Stock cannot be set straight to 0",
+                         "options": [], "hint": ""}}
+    if target > 9999:
+        return {"ok": True, "view": "clarify",
+                "summary": (f"A target of {target:,} units is unusual "
+                            "(limit is 9,999 per warehouse). "
+                            "Please confirm the quantity and try again."),
+                "data": {"question": f"Target {target:,} units? Please confirm",
+                         "options": [], "hint": ""}}
+    if not keyword:
+        return {"ok": True, "view": "clarify",
+                "summary": f"Which item do you want to {_verb} to {target}? "
+                           f"Just tell me the item name. {_ex}.",
+                "data": {"question": f"Which item to {_verb} to {target}?",
+                         "options": [], "hint": _ex}}
+
+    scored = W.match_items(keyword)
+    if not scored:
+        return {"ok": True, "view": "clarify",
+                "summary": f'No item found for "{keyword}". '
+                           'Please check the item name and try again.',
+                "data": {"question": f'No item found for "{keyword}". '
+                                     'Please check the item name',
+                         "options": [], "hint": _ex}}
+    if len(scored) > 1:
+        top_score = scored[0]["score"]
+        scored = [m for m in scored if m["score"] * 2 >= top_score]
+        # EN build：同 create_movement——濾掉只靠共用修飾詞命中的候選
+        if len(scored) > 1 and keyword:
+            _q_toks = [t for t in re.split(r"[\s\-/]+", str(keyword).lower())
+                       if len(t) >= 3 and t.isascii()]
+            if _q_toks:
+                _top_nm = scored[0]["item"]["name"].lower()
+                _disc = [t for t in _q_toks if t in _top_nm]
+                if _disc:
+                    scored = [m for m in scored
+                              if m is scored[0]
+                              or all(t in m["item"]["name"].lower() for t in _disc)]
+    matches = [m["item"] for m in scored]
+    if len(matches) > 1:
+        opts = [it["name"] for it in matches[:5]]
+        _wh_txt = f"{warehouse} " if warehouse else ""
+        _tail = f"to {target}" if mode == "restock" else f"stock to {target}"
+        return {"ok": True, "view": "clarify",
+                "summary": f'"{keyword}" matches {len(matches)} items. '
+                           'Which one do you want to adjust?',
+                "data": {"question": f'"{keyword}" matches {len(matches)} items. '
+                                     'Which one do you want to adjust?',
+                         # options 是送回後端的查詢字串 → 完整英文寫入句
+                         "options": [f"{_wh_txt}{'restock' if mode == 'restock' else 'set'} "
+                                     f"{n} {_tail}".strip() for n in opts],
+                         "hint": "Please give the full item name"}}
+    item = matches[0]
+    sku = item["sku_id"]
+
+    wh_key = _WH_ALIASES_TF.get((warehouse or "").strip(), "")
+    if not wh_key:
+        _tail = f"to {target}" if mode == "restock" else f"stock to {target}"
+        _vb = "restock" if mode == "restock" else "set"
+        return {"ok": True, "view": "clarify",
+                "summary": f'Which warehouse for "{item["name"]}"?',
+                "data": {"question": f'Which warehouse for "{item["name"]}"?',
+                         "options": [f"{_vb} north {item['name']} {_tail}",
+                                     f"{_vb} central {item['name']} {_tail}",
+                                     f"{_vb} south {item['name']} {_tail}"],
+                         "hint": f'e.g. "{_vb} north {item["name"]} {_tail}"',
+                         "flow": {"tool": "set_stock_absolute", "await": "warehouse",
+                                  "keyword": item["name"], "qty": str(target),
+                                  "mode": mode}}}
+
+    current = W.state().stock.get(wh_key, {}).get(sku, 0)
+    delta = target - current
+    wh_label = WH_LABEL_MAP[wh_key]
+    if mode == "restock" and delta <= 0:
+        return {"ok": True, "view": "guide",
+                "summary": (f'"{item["name"]}" already has {current} units in '
+                            f"{wh_label} — at or above the target of {target}, "
+                            "no restock needed."),
+                "data": {}}
+    if delta == 0:
+        return {"ok": True, "view": "guide",
+                "summary": f'"{item["name"]}" is already at {target} units in '
+                           f"{wh_label} — nothing to adjust.",
+                "data": {}}
+    dir_key = "in" if delta > 0 else "out"
+    dir_label = "Inbound" if dir_key == "in" else "Outbound"
+    _mode_en = "Restock to target" if mode == "restock" else "Stock count adjustment"
+    summary = (f"📦 Confirm {_mode_en} ({dir_label})\n"
+               f"Item: {item['name']} ({sku})\n"
+               f"Warehouse: {wh_label}\n"
+               f"Target stock: {target} units ({'+' if delta > 0 else '-'}{abs(delta)})\n"
+               f"Current stock: {current} → after: {target} units")
+    return {"ok": True, "summary": summary, "view": "movement_confirm",
+            "data": {"pending": True, "sku": sku, "name": item["name"],
+                     "warehouse": wh_key, "warehouse_label": wh_label,
+                     "direction": dir_key, "direction_label": dir_label,
+                     "qty": abs(delta), "before_qty": current, "after_qty": target,
+                     "is_return": False}}
+
+
 # ════════════════════════════════════════════════════════════
 # ⑧b create_transfer / commit_transfer — 跨倉調貨（A 倉 → B 倉）
 #    調貨 = 同時扣來源倉、加目標倉，總量不變。走 HITL 確認卡（同進出貨），

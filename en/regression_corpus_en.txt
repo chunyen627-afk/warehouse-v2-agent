@@ -1065,3 +1065,17 @@ inv|kitchen appliances stock
 low|which items need reordering
 hot|top selling items
 exp|expiring stock list
+
+# ═══ r30 (2026-08-08): target-level writes + price verb variants (zh 同款鏡射) ═══
+# restock to N = top-up to target (up only); set stock to N = absolute count adjust
+mv|restock north electric toothbrush to 9999|Restock to target
+mv|top up juice blender to 9999 at south|Restock to target
+mv|set north usb fan stock to 9998|Stock count adjustment
+mvq|restock electric toothbrush to 9999|Which warehouse
+# raise/lower are price-native verbs
+any|raise wireless mouse price to 300|300
+any|lower the price of usb fan to 99|99
+# "set X to N" with no unit and no config word -> price/safety-stock clarify (no guessing)
+vague|set wireless mouse to 200|safety stock
+# target-level shipping stays honest-gated (Down Jacket mis-match trap)
+vague|sell down to 10 left|not supported

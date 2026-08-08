@@ -11202,6 +11202,19 @@ async def ws_handler(ws: WebSocket):
                                     "qty": _wf56.get("qty", ""),
                                     "is_return": bool(_wf56.get("is_return")),
                                     "warehouse": _m_wh56.group(3) + "倉"}
+                    else:
+                        # r30：英文短答（"north" / "at north" / "the north warehouse"）
+                        #   原 regex 只認中文倉名——英文訪客答 north 接不回流程
+                        _m_wh30 = _re.fullmatch(
+                            r"(?:in\s+|at\s+|the\s+)*\s*(north|central|south)"
+                            r"(?:\s+warehouse)?\s*(?:please)?\s*",
+                            _wf_t, _re.I)
+                        if _m_wh30:
+                            _wf_args = {"keyword": _wf56.get("keyword", ""),
+                                        "direction": _wf56.get("direction", ""),
+                                        "qty": _wf56.get("qty", ""),
+                                        "is_return": bool(_wf56.get("is_return")),
+                                        "warehouse": _m_wh30.group(1).lower()}
                 elif _wf56.get("await") == "qty":
                     _m_q56 = _re.fullmatch(
                         r"(進貨?|出貨?|調貨?)?\s*([0-9]{1,7})\s*(個|件|箱|台|支|包|盒|罐|瓶|組|雙)?(就好|好了|吧|喔)?",
@@ -11244,6 +11257,9 @@ async def ws_handler(ws: WebSocket):
                 # r61：只在命中時消耗——沒命中的訊息讓它正常處理，flow 的清理交給
                 # _ctx_absorb（成功回答即清、rejected/guide 存活），亂打不再殺流程
                 if _wf_args is not None:
+                    # r30：set_stock_absolute 的補到/盤點模式要跟著續流走
+                    if _wf56.get("mode"):
+                        _wf_args["mode"] = _wf56["mode"]
                     _write_flow_by_vid.pop(vid, None)
                     import tools_v2 as _tv2_wf
                     _wf_res = getattr(_tv2_wf, _wf56["tool"])(**_wf_args)
@@ -13549,8 +13565,73 @@ async def ws_handler(ws: WebSocket):
                     "ok": True, "view": "clarify", "summary": _neg_msg,
                     "data": {"question": _neg_msg, "options": [], "hint": ""}}})
                 continue
-            # 目標水位式寫入（「出到剩10個」「補到100個」）——語意是「補/出到剩 N」，
-            # 若照數字開卡會異動錯量（危險邊緣），誠實說不支援
+            # ── r30（EN 移植）：目標水位式寫入——"restock X to N"（只補不減）、
+            #   "set X stock to N"（盤點絕對值）開真確認卡。原 zh regex 殘留
+            #   （[出進補]到剩）英文永遠打不中：實測 "restock mouse to 100" 被
+            #   當 +100 相對量（危險）、"sell down to 10 left" 誤配 Down Jacket。
+            #   排除表用 \b 邊界（small≠all）；refill 當動詞收、當商品名 token
+            #   （mosquito repellent refill）時後面沒有 to N 不會誤觸。
+            _tl30_ex = _re.search(
+                r"\b(?:safety|minimum|threshold|buffer|target|lead|days?|"
+                r"all|every|each|alert|auto|automatic|shortage|number|numbers)\b",
+                user_text, _re.I)
+            if not _tl30_ex:
+                _t30 = user_text.strip().strip("!！?？。.~～ ")
+                _wh30_m = _re.search(r"\b(north|central|south)\b", _t30, _re.I)
+                _wh30 = _wh30_m.group(1).lower() if _wh30_m else ""
+                # 倉別片語先剝（in/at the north warehouse）再抽商品名
+                _t30c = _re.sub(r"\b(?:in|at|to|for)?\s*(?:the\s+)?"
+                                r"(?:north|central|south)\s*(?:warehouse)?\b",
+                                " ", _t30, flags=_re.I)
+                _t30c = _re.sub(r"\s+", " ", _t30c).strip()
+                _rs30 = _re.search(
+                    r"^(?:please\s+|can\s+you\s+|could\s+you\s+|help\s+me\s+)?"
+                    r"(?:restock|top\s+up|refill|bring)\s+(.+?)\s+"
+                    r"(?:back\s+)?(?:up\s+)?to\s+(\d+)\s*(?:units?|pcs|pieces)?\s*$",
+                    _t30c, _re.I)
+                _ss30 = None if _rs30 else _re.search(
+                    r"^(?:please\s+|can\s+you\s+)?(?:set|change|update|adjust|make)\s+"
+                    r"(?:the\s+)?(.+?)(?:'s)?\s+(?:stock|inventory|count|quantity)\s+"
+                    r"(?:to|at)\s+(\d+)\s*(?:units?|pcs)?\s*$", _t30c, _re.I)
+                _m30 = _rs30 or _ss30
+                # 0＝黑名單等級破壞值 → 不搶，讓原路徑（config guide/probe）處理
+                if _m30 and int(_m30.group(2)) > 0:
+                    _kw30 = _re.sub(r"^(?:the|my|our)\s+", "",
+                                    _m30.group(1).strip(" ,."), flags=_re.I)
+                    import tools_v2 as _tv2_30
+                    _md30 = "restock" if _rs30 else "set"
+                    result = _tv2_30.set_stock_absolute(
+                        keyword=_kw30, warehouse=_wh30,
+                        qty=_m30.group(2), mode=_md30)
+                    log.info(f"[write-edge] r30 target-level: kw={_kw30!r} "
+                             f"wh={_wh30!r} q={_m30.group(2)} mode={_md30}")
+                    for ch in result.get("summary", ""):
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": result})
+                    continue
+            # "sell down to 10 left" 目標水位出貨——誠實閘（實測曾誤配
+            #  Lightweight Down Jacket 開出貨流程＝危險邊緣）
+            if (_re.search(r"\b(?:sell|ship|draw)\s+(?:\w+\s+){0,3}down\s+to\s+\d+",
+                           user_text, _re.I)
+                    or _re.search(r"\bdown\s+to\s+\d+\s+(?:left|remaining)\b",
+                                  user_text, _re.I)
+                    or _re.search(r"\buntil\s+(?:only\s+)?\d+\s+(?:are\s+)?left\b",
+                                  user_text, _re.I)):
+                _tl_msg = ('"Sell down to N left" style target-level shipping is '
+                           "not supported yet. Please give the exact quantity, "
+                           'e.g. "north shipped 20 wireless mouse". To restock '
+                           'to a target you can say '
+                           '"restock north wireless mouse to 100".')
+                log.info(f"[write-edge] target-level ship → clarify: {user_text!r}")
+                for ch in _tl_msg:
+                    await send({"type": "token", "text": ch})
+                    await asyncio.sleep(_TK_DELAY.get())
+                await send({"type": "done", "result": {
+                    "ok": True, "view": "clarify", "summary": _tl_msg,
+                    "data": {"question": _tl_msg, "options": [], "hint": ""}}})
+                continue
+            # zh 殘句照舊（英文版偶有中文輸入）
             if _re.search(r"[出進補]到剩?\s*\d+", user_text):
                 _tl_msg = ("「出到剩幾件／補到幾件」這種目標水位操作還不支援，"
                            "請直接說要異動的數量，例如「北倉出20個衛生紙」。")
@@ -14117,9 +14198,12 @@ async def ws_handler(ws: WebSocket):
                 await send({"type": "done", "result": result})
                 continue
 
-            # ── 改單價攔截（r26，zh 同款鏡射）──
+            # ── 改單價攔截（r26，zh 同款鏡射；r30 動詞擴充 raise/lower/…-of 形）──
             _pc_m = (_re.search(r"^(?:change|set|update)\s+(.{0,30}?)(?:'s)?\s+price\s+(?:to\s+)?(\d+)\s*$", user_text.strip(), _re.I)
-                     or _re.search(r"^(.{0,30}?)(?:'s)?\s+price\s+to\s+(\d+)\s*$", user_text.strip(), _re.I))
+                     or _re.search(r"^(.{0,30}?)(?:'s)?\s+price\s+(?:up\s+|down\s+)?to\s+(\d+)\s*$", user_text.strip(), _re.I)
+                     or _re.search(r"^(?:raise|increase|bump|lower|drop|reduce|cut|decrease)\s+"
+                                   r"(?:the\s+)?price\s+(?:of|for)\s+(.+?)\s+to\s+(\d+)\s*$",
+                                   user_text.strip(), _re.I))
             if (_pc_m
                     and not _re.search(r"safety|stock|all\s+items|every|warehouse|lead\s*time",
                                        user_text, _re.I)):
@@ -14133,6 +14217,35 @@ async def ws_handler(ws: WebSocket):
                     await asyncio.sleep(_TK_DELAY.get() * 1.5)
                 await send({"type": "done", "result": result})
                 continue
+
+            # ── r30：「set X to 200」沒講 price 也沒講 stock——價格/安全庫存兩可，
+            #   照不猜原則反問（zh 同款鏡射；選項是可直接執行的完整句）──
+            _amb30 = _re.search(r"^(?:set|change|update)\s+(?:the\s+)?(.+?)\s+to\s+(\d+)\s*$",
+                                user_text.strip(), _re.I)
+            if (_amb30
+                    and not _re.search(
+                        r"\b(?:price|stock|inventory|safety|minimum|threshold|target|"
+                        r"lead|days?|alert|schedule|quantity|count|warehouse|all|every)\b",
+                        user_text, _re.I)):
+                import warehouse as _W_amb30
+                _amb_kw = _amb30.group(1).strip(" ,.")
+                _amb_ms = _W_amb30.match_items(_amb_kw) if _amb_kw else []
+                if _amb_ms and _amb_ms[0].get("score", 0) >= 3:
+                    _amb_nm = _amb_ms[0]["item"]["name"]
+                    _amb_n = _amb30.group(2)
+                    _amb_msg = (f'For "{_amb_nm}" — do you mean the **price** or the '
+                                "**safety stock**? Pick an option or say the full sentence.")
+                    log.info(f"[dispatch-ws] r30 set-to ambiguity: {_amb_nm!r} x {_amb_n}")
+                    for ch in _amb_msg:
+                        await send({"type": "token", "text": ch})
+                        await asyncio.sleep(_TK_DELAY.get())
+                    await send({"type": "done", "result": {
+                        "ok": True, "view": "clarify", "summary": _amb_msg,
+                        "data": {"question": _amb_msg,
+                                 "options": [f"set {_amb_nm} price to {_amb_n}",
+                                             f"set {_amb_nm} safety stock to {_amb_n}"],
+                                 "hint": ""}}})
+                    continue
 
             # ── 新增商品 keyword 攔截（首次進入流程，per-vid）──
             _create_item_kws_ws2 = ("新增商品", "建立商品", "加一個商品", "新增一個", "加入商品", "增加商品", "新建商品",
